@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_window_title">PnP Üretim Takipçisi</string>
+    <string name="app_status_running">Uygulama çalışıyor.</string>
+    <string name="app_version_label">Sürüm %1$s</string>
+</resources>

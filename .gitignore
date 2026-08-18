@@ -1,0 +1,27 @@
+# Gradle
+.gradle/
+**/build/
+gradle-app.setting
+local.properties
+
+# Kotlin
+.kotlin/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# Local databases (application data must never live in the repo)
+*.db
+*.db-shm
+*.db-wal
+
+# Local, non-anonymised input data
+/local-input/
+/Kitap1(1).xlsx
+
+# OS
+.DS_Store
