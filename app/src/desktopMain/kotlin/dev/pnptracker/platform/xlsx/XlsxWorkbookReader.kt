@@ -6,18 +6,21 @@ import dev.pnptracker.domain.spreadsheet.SheetSnapshot
 import dev.pnptracker.domain.spreadsheet.SheetVisibility
 import dev.pnptracker.domain.spreadsheet.SpreadsheetCellKind
 import dev.pnptracker.domain.spreadsheet.WorkbookSnapshot
+import org.apache.poi.EmptyFileException
 import org.apache.poi.EncryptedDocumentException
+import org.apache.poi.OldFileFormatException
 import org.apache.poi.UnsupportedFileFormatException
 import org.apache.poi.ooxml.POIXMLException
 import org.apache.poi.openxml4j.exceptions.InvalidFormatException
-import org.apache.poi.openxml4j.exceptions.InvalidOperationException
 import org.apache.poi.openxml4j.exceptions.OLE2NotOfficeXmlFileException
+import org.apache.poi.openxml4j.exceptions.OpenXML4JRuntimeException
 import org.apache.poi.openxml4j.opc.OPCPackage
 import org.apache.poi.openxml4j.opc.PackageAccess
 import org.apache.poi.ss.usermodel.CellType
 import org.apache.poi.ss.usermodel.DataFormatter
 import org.apache.poi.ss.usermodel.FillPatternType
 import org.apache.poi.ss.usermodel.FormulaError
+import org.apache.poi.util.RecordFormatException
 import org.apache.poi.xssf.model.ThemesTable
 import org.apache.poi.xssf.usermodel.XSSFCell
 import org.apache.poi.xssf.usermodel.XSSFCellStyle
@@ -63,12 +66,26 @@ class XlsxWorkbookReader(
             pkg = OPCPackage.open(file.toFile(), PackageAccess.READ)
             workbook = XSSFWorkbook(pkg)
             return snapshotOf(workbook, fileName)
+            // Each of these is a way the library reports a file it cannot use.
+            // Nothing broader is caught: turning the snapshot together happens
+            // inside this block too, so a blanket `RuntimeException` would dress
+            // up a bug of ours as a complaint about the user's file.
         } catch (cause: IOException) {
-            throw XlsxReadException(failureOf(cause), fileName, cause)
+            reportUnusable(cause, fileName)
         } catch (cause: InvalidFormatException) {
-            throw XlsxReadException(failureOf(cause), fileName, cause)
-        } catch (cause: RuntimeException) {
-            throw XlsxReadException(failureOf(cause), fileName, cause)
+            reportUnusable(cause, fileName)
+        } catch (cause: EncryptedDocumentException) {
+            reportUnusable(cause, fileName)
+        } catch (cause: EmptyFileException) {
+            reportUnusable(cause, fileName)
+        } catch (cause: UnsupportedFileFormatException) {
+            reportUnusable(cause, fileName)
+        } catch (cause: OpenXML4JRuntimeException) {
+            reportUnusable(cause, fileName)
+        } catch (cause: POIXMLException) {
+            reportUnusable(cause, fileName)
+        } catch (cause: RecordFormatException) {
+            reportUnusable(cause, fileName)
         } finally {
             if (workbook != null) workbook.close() else pkg?.revert()
         }
@@ -219,29 +236,62 @@ class XlsxWorkbookReader(
 }
 
 /**
- * Maps a library failure onto the narrow set of reasons the application knows.
+ * Reports [cause] as a file the application cannot use — but only if it really
+ * is one.
  *
- * Fatal virtual machine problems are not failures of the file and are left to
- * propagate, so nothing here catches `Error` or a bare `Throwable`.
+ * Anything the classifier does not recognise is thrown on untouched, as the very
+ * same object, so a null dereference or a broken invariant of ours surfaces as
+ * the bug it is instead of as "this file is damaged".
  */
-internal fun failureOf(cause: Throwable): XlsxReadFailure =
+internal fun reportUnusable(
+    cause: Throwable,
+    fileName: String,
+): Nothing {
+    val failure = failureOf(cause) ?: throw cause
+    throw XlsxReadException(failure, fileName, cause)
+}
+
+/**
+ * Maps a library failure onto the narrow set of reasons the application knows,
+ * or to null when the failure is not about the file at all.
+ *
+ * Only the exception type decides, because the type is the library's contract.
+ * The one exception is the safety limits below, which the library reports as a
+ * plain [IOException] with no type of their own.
+ *
+ * Fatal virtual machine problems are not failures of a file: nothing here
+ * catches `Error` or a bare `Throwable`, and an unrecognised cause is refused
+ * rather than guessed at.
+ */
+internal fun failureOf(cause: Throwable): XlsxReadFailure? =
     when (cause) {
-        is EncryptedDocumentException -> XlsxReadFailure.ENCRYPTED
+        // Both of these are subclasses of the more general format failure below.
         is OLE2NotOfficeXmlFileException -> XlsxReadFailure.LEGACY_XLS_FILE
+        is OldFileFormatException -> XlsxReadFailure.LEGACY_XLS_FILE
+        is EncryptedDocumentException -> XlsxReadFailure.ENCRYPTED
         is UnsupportedFileFormatException -> XlsxReadFailure.NOT_AN_XLSX_FILE
+        is EmptyFileException -> XlsxReadFailure.NOT_AN_XLSX_FILE
+        is InvalidFormatException -> XlsxReadFailure.NOT_AN_XLSX_FILE
+        // Both of these are subclasses of IOException.
         is NoSuchFileException -> XlsxReadFailure.FILE_NOT_FOUND
         is AccessDeniedException -> XlsxReadFailure.NOT_READABLE
-        is InvalidFormatException -> XlsxReadFailure.NOT_AN_XLSX_FILE
-        is InvalidOperationException -> XlsxReadFailure.DAMAGED_FILE
+        is OpenXML4JRuntimeException -> XlsxReadFailure.DAMAGED_FILE
         is POIXMLException -> XlsxReadFailure.DAMAGED_FILE
-        is IOException -> if (isSafetyLimit(cause)) XlsxReadFailure.REJECTED_BY_SAFETY_LIMIT else XlsxReadFailure.DAMAGED_FILE
-        else -> XlsxReadFailure.DAMAGED_FILE
+        is RecordFormatException -> XlsxReadFailure.DAMAGED_FILE
+        is IOException ->
+            if (isSafetyLimit(cause)) XlsxReadFailure.REJECTED_BY_SAFETY_LIMIT else XlsxReadFailure.DAMAGED_FILE
+
+        else -> null
     }
 
-/** The library reports its zip bomb and size guards as ordinary IO failures. */
+/**
+ * The zip bomb and file count guards raise a bare [IOException], so their own
+ * wording is the only thing that sets them apart from an ordinary broken
+ * archive. These two stems are the ones the library actually formats its
+ * messages from.
+ */
 private fun isSafetyLimit(cause: IOException): Boolean {
     val message = cause.message ?: return false
-    return message.contains("Zip bomb", ignoreCase = true) ||
-        message.contains("ratio", ignoreCase = true) ||
-        message.contains("exceeds the max", ignoreCase = true)
+    return message.startsWith("Zip bomb detected!") ||
+        message.startsWith("The file appears to be potentially malicious")
 }

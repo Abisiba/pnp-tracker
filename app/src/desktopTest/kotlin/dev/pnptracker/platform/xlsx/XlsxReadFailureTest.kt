@@ -1,8 +1,12 @@
 package dev.pnptracker.platform.xlsx
 
+import org.apache.poi.EmptyFileException
 import org.apache.poi.EncryptedDocumentException
 import org.apache.poi.hssf.usermodel.HSSFWorkbook
+import org.apache.poi.ooxml.POIXMLException
+import org.apache.poi.openxml4j.exceptions.InvalidOperationException
 import org.apache.poi.openxml4j.exceptions.ODFNotOfficeXmlFileException
+import org.apache.poi.util.RecordFormatException
 import java.io.IOException
 import java.nio.file.AccessDeniedException
 import java.nio.file.Files
@@ -15,7 +19,10 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlin.test.fail
 
 /**
  * What the reader says when a file cannot be read.
@@ -141,12 +148,101 @@ class XlsxReadFailureTest {
     @Test
     fun `other library failures map to the reason that fits them`() {
         assertEquals(XlsxReadFailure.NOT_AN_XLSX_FILE, failureOf(ODFNotOfficeXmlFileException("odf")))
+        assertEquals(XlsxReadFailure.NOT_AN_XLSX_FILE, failureOf(EmptyFileException()))
         assertEquals(XlsxReadFailure.NOT_READABLE, failureOf(AccessDeniedException("f")))
         assertEquals(XlsxReadFailure.FILE_NOT_FOUND, failureOf(java.nio.file.NoSuchFileException("f")))
+    }
+
+    @Test
+    fun `a broken package is damage rather than a wrong format`() {
+        assertEquals(XlsxReadFailure.DAMAGED_FILE, failureOf(InvalidOperationException("part missing")))
+        assertEquals(XlsxReadFailure.DAMAGED_FILE, failureOf(POIXMLException("bad part")))
+        assertEquals(XlsxReadFailure.DAMAGED_FILE, failureOf(RecordFormatException("bad record")))
         assertEquals(XlsxReadFailure.DAMAGED_FILE, failureOf(IOException("truncated entry")))
+    }
+
+    @Test
+    fun `the library safety guards are told apart from ordinary damage`() {
+        // These two are raised as bare IOExceptions with no type of their own,
+        // so their wording is all there is to go on.
         assertEquals(
             XlsxReadFailure.REJECTED_BY_SAFETY_LIMIT,
-            failureOf(IOException("Zip bomb detected! The file would exceed the max")),
+            failureOf(IOException("Zip bomb detected! The file would exceed the max. ratio")),
         )
+        assertEquals(
+            XlsxReadFailure.REJECTED_BY_SAFETY_LIMIT,
+            failureOf(IOException("The file appears to be potentially malicious. This file embeds more")),
+        )
+        // A message that merely mentions a ratio is not one of the guards.
+        assertEquals(XlsxReadFailure.DAMAGED_FILE, failureOf(IOException("unexpected compression ratio field")))
+    }
+
+    @Test
+    fun `a failure that is not about the file is not classified at all`() {
+        assertNull(failureOf(IllegalStateException("our own invariant broke")))
+        assertNull(failureOf(NullPointerException()))
+        assertNull(failureOf(IllegalArgumentException("a snapshot requirement failed")))
+        assertNull(failureOf(StackOverflowError()))
+    }
+
+    @Test
+    fun `an unexpected runtime failure comes back untouched rather than as a file complaint`() {
+        val broken = IllegalStateException("this is a bug, not a bad file")
+
+        val thrown = assertFailsWith<IllegalStateException> { reportUnusable(broken, "a.xlsx") }
+
+        assertSame(broken, thrown, "the original exception must be rethrown, not repackaged")
+    }
+
+    @Test
+    fun `an unexpected null dereference is never wrapped in a read exception`() {
+        val bug = NullPointerException("cell was null")
+
+        val thrown = assertFailsWith<NullPointerException> { reportUnusable(bug, "a.xlsx") }
+
+        assertSame(bug, thrown)
+    }
+
+    @Test
+    fun `a fatal virtual machine error is passed straight through`() {
+        val fatal = OutOfMemoryError("heap")
+
+        val thrown = assertFailsWith<OutOfMemoryError> { reportUnusable(fatal, "a.xlsx") }
+
+        assertSame(fatal, thrown)
+    }
+
+    @Test
+    fun `a known file failure is still reported as one`() {
+        val cause = ODFNotOfficeXmlFileException("odf")
+
+        val thrown = assertFailsWith<XlsxReadException> { reportUnusable(cause, "a.xlsx") }
+
+        assertEquals(XlsxReadFailure.NOT_AN_XLSX_FILE, thrown.failure)
+        assertSame(cause, thrown.cause)
+    }
+
+    @Test
+    fun `the reader catches nothing that could hide a bug`() {
+        val source = readerSource()
+        val caught =
+            Regex("""catch \(\w+: ([\w.]+)\)""").findAll(source).map { it.groupValues[1] }.toSet()
+
+        assertTrue(caught.isNotEmpty(), "no catch clauses were found to check")
+        listOf("Throwable", "Error", "RuntimeException", "Exception").forEach { forbidden ->
+            assertTrue(forbidden !in caught, "the reader catches $forbidden, which can hide a bug")
+        }
+    }
+
+    private fun readerSource(): String {
+        var candidate: Path? = Path.of("").toAbsolutePath().normalize()
+        while (candidate != null) {
+            listOf(candidate, candidate.resolve("app"))
+                .map { it.resolve("src/desktopMain/kotlin/dev/pnptracker/platform/xlsx/XlsxWorkbookReader.kt") }
+                .firstOrNull { Files.isRegularFile(it) }
+                ?.let { return Files.readString(it) }
+            candidate = candidate.parent
+        }
+        fail("Could not find XlsxWorkbookReader.kt from ${Path.of("").toAbsolutePath()}")
     }
 }
