@@ -60,7 +60,7 @@ class AppDatabaseTest {
         }
 
     @Test
-    fun `schema version 1 is created in the temporary file`() =
+    fun `the current schema version is created in the temporary file`() =
         runBlocking {
             database.gameDao().activeCount()
 
@@ -72,7 +72,7 @@ class AppDatabaseTest {
                         statement.getLong(0)
                     }
                 }
-            assertEquals(1L, version)
+            assertEquals(2L, version)
         }
 
     @Test
@@ -92,9 +92,12 @@ class AppDatabaseTest {
             database.gameDao().activeCount()
 
             val definitions =
-                queryScalars("SELECT sql FROM sqlite_master WHERE type = 'table' AND name IN ('games', 'items')")
+                queryScalars(
+                    "SELECT sql FROM sqlite_master WHERE type = 'table' " +
+                        "AND name IN ('games', 'items', 'colors', 'color_aliases', 'tasks', 'task_colors')",
+                )
 
-            assertEquals(2, definitions.size)
+            assertEquals(6, definitions.size)
             definitions.forEach { definition ->
                 assertFalse(definition.uppercase().contains("AUTOINCREMENT"), "unexpected autoincrement in: $definition")
             }

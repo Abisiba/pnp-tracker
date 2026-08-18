@@ -2,8 +2,11 @@ package dev.pnptracker.data.database
 
 import dev.pnptracker.data.database.entity.GameEntity
 import dev.pnptracker.data.database.entity.ItemEntity
+import dev.pnptracker.data.database.entity.TaskEntity
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
+import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.model.TrackingMode
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.assertTrue
@@ -90,3 +93,38 @@ fun anItem(
         createdAt = createdAt,
         updatedAt = createdAt,
     )
+
+fun aTask(
+    itemId: EntityId,
+    id: EntityId = IdGenerator.Random.newId(),
+    poolType: PoolType = PoolType.THREE_D,
+    trackingMode: TrackingMode = TrackingMode.THREE_D_BATCH,
+    name: String = "Gri token",
+    requiredQuantity: Int? = 14,
+): TaskEntity =
+    TaskEntity(
+        id = id,
+        itemId = itemId,
+        poolType = poolType,
+        trackingMode = trackingMode,
+        name = name,
+        requiredQuantity = requiredQuantity,
+        createdAt = createdAt,
+        updatedAt = createdAt,
+    )
+
+/** Inserts a game, an item below it and a task below that, returning the task. */
+suspend fun insertGameItemAndTask(
+    database: AppDatabase,
+    gameName: String = "Harmonies",
+    itemName: String = "Token",
+    task: (EntityId) -> TaskEntity = { itemId -> aTask(itemId) },
+): TaskEntity {
+    val game = aGame(name = gameName)
+    val item = anItem(gameId = game.id, name = itemName)
+    val created = task(item.id)
+    database.gameDao().insert(game)
+    database.itemDao().insert(item)
+    database.taskDao().insert(created)
+    return created
+}

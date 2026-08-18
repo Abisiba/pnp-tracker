@@ -1,7 +1,10 @@
 package dev.pnptracker.data.database.converter
 
 import androidx.room3.ColumnTypeConverter
+import dev.pnptracker.domain.model.ColorRelation
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.model.TrackingMode
 import kotlin.time.Instant
 
 /**
@@ -11,6 +14,9 @@ import kotlin.time.Instant
  *
  * Timestamps are stored as epoch milliseconds, so persisted time has millisecond
  * precision; anything finer that an [Instant] carries is lost on the way to disk.
+ *
+ * Enums are stored under their declared names rather than their ordinals, so
+ * reordering a declaration cannot silently reinterpret existing rows.
  */
 object DatabaseConverters {
     @ColumnTypeConverter
@@ -24,4 +30,22 @@ object DatabaseConverters {
 
     @ColumnTypeConverter
     fun epochMillisecondsToInstant(epochMilliseconds: Long): Instant = Instant.fromEpochMilliseconds(epochMilliseconds)
+
+    @ColumnTypeConverter
+    fun poolTypeToText(poolType: PoolType): String = poolType.name
+
+    @ColumnTypeConverter
+    fun textToPoolType(name: String): PoolType = PoolType.valueOf(name)
+
+    @ColumnTypeConverter
+    fun trackingModeToText(trackingMode: TrackingMode): String = trackingMode.name
+
+    @ColumnTypeConverter
+    fun textToTrackingMode(name: String): TrackingMode = TrackingMode.valueOf(name)
+
+    @ColumnTypeConverter
+    fun colorRelationToText(relation: ColorRelation): String = relation.name
+
+    @ColumnTypeConverter
+    fun textToColorRelation(name: String): ColorRelation = ColorRelation.valueOf(name)
 }
