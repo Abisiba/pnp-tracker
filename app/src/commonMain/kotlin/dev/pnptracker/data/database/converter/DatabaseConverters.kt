@@ -3,7 +3,11 @@ package dev.pnptracker.data.database.converter
 import androidx.room3.ColumnTypeConverter
 import dev.pnptracker.domain.model.ColorRelation
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.HintDecision
+import dev.pnptracker.domain.model.ImportBatchStatus
+import dev.pnptracker.domain.model.ImportSourceFormat
 import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.model.SourceColumnType
 import dev.pnptracker.domain.model.TrackingMode
 import kotlin.time.Instant
 
@@ -48,4 +52,28 @@ object DatabaseConverters {
 
     @ColumnTypeConverter
     fun textToColorRelation(name: String): ColorRelation = ColorRelation.valueOf(name)
+
+    @ColumnTypeConverter
+    fun importBatchStatusToText(status: ImportBatchStatus): String = status.name
+
+    @ColumnTypeConverter
+    fun textToImportBatchStatus(name: String): ImportBatchStatus = ImportBatchStatus.valueOf(name)
+
+    @ColumnTypeConverter
+    fun importSourceFormatToText(format: ImportSourceFormat): String = format.name
+
+    @ColumnTypeConverter
+    fun textToImportSourceFormat(name: String): ImportSourceFormat = ImportSourceFormat.valueOf(name)
+
+    @ColumnTypeConverter
+    fun sourceColumnTypeToText(sourceColumnType: SourceColumnType): String = sourceColumnType.name
+
+    @ColumnTypeConverter
+    fun textToSourceColumnType(name: String): SourceColumnType = SourceColumnType.valueOf(name)
+
+    @ColumnTypeConverter
+    fun hintDecisionToText(decision: HintDecision): String = decision.name
+
+    @ColumnTypeConverter
+    fun textToHintDecision(name: String): HintDecision = HintDecision.valueOf(name)
 }

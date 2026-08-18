@@ -72,7 +72,7 @@ class AppDatabaseTest {
                         statement.getLong(0)
                     }
                 }
-            assertEquals(2L, version)
+            assertEquals(3L, version)
         }
 
     @Test
@@ -94,10 +94,11 @@ class AppDatabaseTest {
             val definitions =
                 queryScalars(
                     "SELECT sql FROM sqlite_master WHERE type = 'table' " +
-                        "AND name IN ('games', 'items', 'colors', 'color_aliases', 'tasks', 'task_colors')",
+                        "AND name IN ('games', 'items', 'colors', 'color_aliases', 'tasks', 'task_colors', " +
+                        "'import_batches', 'raw_import_blocks', 'draft_tasks')",
                 )
 
-            assertEquals(6, definitions.size)
+            assertEquals(9, definitions.size)
             definitions.forEach { definition ->
                 assertFalse(definition.uppercase().contains("AUTOINCREMENT"), "unexpected autoincrement in: $definition")
             }

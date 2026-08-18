@@ -28,11 +28,19 @@ import kotlin.time.Instant
             onDelete = ForeignKey.RESTRICT,
             onUpdate = ForeignKey.RESTRICT,
         ),
+        ForeignKey(
+            entity = RawImportBlockEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["source_raw_import_block_id"],
+            onDelete = ForeignKey.RESTRICT,
+            onUpdate = ForeignKey.RESTRICT,
+        ),
     ],
     indices = [
         Index(value = ["item_id"]),
         Index(value = ["pool_type"]),
         Index(value = ["deleted_at"]),
+        Index(value = ["source_raw_import_block_id"]),
     ],
 )
 data class TaskEntity(
@@ -59,6 +67,9 @@ data class TaskEntity(
     val updatedAt: Instant,
     @ColumnInfo(name = "deleted_at")
     val deletedAt: Instant? = null,
+    /** The imported cell this task was built from, or null when it was typed by hand. */
+    @ColumnInfo(name = "source_raw_import_block_id")
+    val sourceRawImportBlockId: EntityId? = null,
 ) {
     init {
         require(name.isNotBlank()) { "A task needs a name." }

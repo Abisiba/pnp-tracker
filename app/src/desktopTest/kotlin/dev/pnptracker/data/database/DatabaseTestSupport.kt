@@ -1,11 +1,16 @@
 package dev.pnptracker.data.database
 
+import dev.pnptracker.data.database.entity.DraftTaskEntity
 import dev.pnptracker.data.database.entity.GameEntity
+import dev.pnptracker.data.database.entity.ImportBatchEntity
 import dev.pnptracker.data.database.entity.ItemEntity
+import dev.pnptracker.data.database.entity.RawImportBlockEntity
 import dev.pnptracker.data.database.entity.TaskEntity
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
+import dev.pnptracker.domain.model.ImportSourceFormat
 import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.model.SourceColumnType
 import dev.pnptracker.domain.model.TrackingMode
 import java.nio.file.Files
 import java.nio.file.Path
@@ -128,3 +133,79 @@ suspend fun insertGameItemAndTask(
     database.taskDao().insert(created)
     return created
 }
+
+const val SHA_256_ONE = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+const val SHA_256_TWO = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+
+fun anImportBatch(
+    id: EntityId = IdGenerator.Random.newId(),
+    fileName: String = "Kitap.xlsx",
+    sha256: String = SHA_256_ONE,
+    sourceFormat: ImportSourceFormat = ImportSourceFormat.XLSX,
+    sheetName: String = "Sayfa1",
+    startRowIndex: Int? = 0,
+    endRowIndex: Int? = 4,
+    startColumnIndex: Int? = 0,
+    endColumnIndex: Int? = 6,
+    createdGameCount: Int = 0,
+    rawBlockCount: Int = 0,
+    createdTaskCount: Int = 0,
+    status: dev.pnptracker.domain.model.ImportBatchStatus = dev.pnptracker.domain.model.ImportBatchStatus.DRAFT,
+): ImportBatchEntity =
+    ImportBatchEntity(
+        id = id,
+        fileName = fileName,
+        sha256 = sha256,
+        sourceFormat = sourceFormat,
+        sheetName = sheetName,
+        startRowIndex = startRowIndex,
+        endRowIndex = endRowIndex,
+        startColumnIndex = startColumnIndex,
+        endColumnIndex = endColumnIndex,
+        createdGameCount = createdGameCount,
+        rawBlockCount = rawBlockCount,
+        createdTaskCount = createdTaskCount,
+        status = status,
+        importedAt = createdAt,
+        updatedAt = createdAt,
+    )
+
+fun aRawImportBlock(
+    importBatchId: EntityId,
+    id: EntityId = IdGenerator.Random.newId(),
+    rawText: String = "15 KIRMIZI** 19 YEŞİL**",
+    sheetName: String = "Sayfa1",
+    rowIndex: Int = 1,
+    columnIndex: Int = 1,
+    sourceColumnType: SourceColumnType = SourceColumnType.THREE_D,
+    fillColorArgb: Int? = null,
+): RawImportBlockEntity =
+    RawImportBlockEntity(
+        id = id,
+        importBatchId = importBatchId,
+        rawText = rawText,
+        sheetName = sheetName,
+        rowIndex = rowIndex,
+        columnIndex = columnIndex,
+        sourceColumnType = sourceColumnType,
+        fillColorArgb = fillColorArgb,
+        createdAt = createdAt,
+        updatedAt = createdAt,
+    )
+
+fun aDraftTask(
+    rawImportBlockId: EntityId,
+    id: EntityId = IdGenerator.Random.newId(),
+    name: String = "Kırmızı token",
+    selectionStartIndex: Int? = null,
+    selectionEndIndex: Int? = null,
+): DraftTaskEntity =
+    DraftTaskEntity(
+        id = id,
+        rawImportBlockId = rawImportBlockId,
+        name = name,
+        selectionStartIndex = selectionStartIndex,
+        selectionEndIndex = selectionEndIndex,
+        createdAt = createdAt,
+        updatedAt = createdAt,
+    )

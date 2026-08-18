@@ -2,6 +2,7 @@ package dev.pnptracker.data.database.entity
 
 import androidx.room3.ColumnInfo
 import androidx.room3.Entity
+import androidx.room3.ForeignKey
 import androidx.room3.Index
 import androidx.room3.PrimaryKey
 import dev.pnptracker.domain.model.EntityId
@@ -13,7 +14,16 @@ import kotlin.time.Instant
  */
 @Entity(
     tableName = "games",
-    indices = [Index(value = ["deleted_at"])],
+    foreignKeys = [
+        ForeignKey(
+            entity = ImportBatchEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["source_import_batch_id"],
+            onDelete = ForeignKey.RESTRICT,
+            onUpdate = ForeignKey.RESTRICT,
+        ),
+    ],
+    indices = [Index(value = ["deleted_at"]), Index(value = ["source_import_batch_id"])],
 )
 data class GameEntity(
     @PrimaryKey
@@ -33,4 +43,7 @@ data class GameEntity(
     val updatedAt: Instant,
     @ColumnInfo(name = "deleted_at")
     val deletedAt: Instant? = null,
+    /** The import this game came from, or null when the user created it by hand. */
+    @ColumnInfo(name = "source_import_batch_id")
+    val sourceImportBatchId: EntityId? = null,
 )

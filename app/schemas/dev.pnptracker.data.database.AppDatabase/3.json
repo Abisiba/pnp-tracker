@@ -1,0 +1,962 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 3,
+    "identityHash": "365515a74ea2fdde77758444472e6cb3",
+    "entities": [
+      {
+        "tableName": "games",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `notes` TEXT, `is_manually_completed` INTEGER NOT NULL DEFAULT 0, `completed_at` INTEGER, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `deleted_at` INTEGER, `source_import_batch_id` TEXT, PRIMARY KEY(`id`), FOREIGN KEY(`source_import_batch_id`) REFERENCES `import_batches`(`id`) ON UPDATE RESTRICT ON DELETE RESTRICT )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "isManuallyCompleted",
+            "columnName": "is_manually_completed",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "completedAt",
+            "columnName": "completed_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deletedAt",
+            "columnName": "deleted_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sourceImportBatchId",
+            "columnName": "source_import_batch_id",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_games_deleted_at",
+            "unique": false,
+            "columnNames": [
+              "deleted_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_games_deleted_at` ON `${TABLE_NAME}` (`deleted_at`)"
+          },
+          {
+            "name": "index_games_source_import_batch_id",
+            "unique": false,
+            "columnNames": [
+              "source_import_batch_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_games_source_import_batch_id` ON `${TABLE_NAME}` (`source_import_batch_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "import_batches",
+            "onDelete": "RESTRICT",
+            "onUpdate": "RESTRICT",
+            "columns": [
+              "source_import_batch_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "items",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `game_id` TEXT NOT NULL, `name` TEXT NOT NULL, `notes` TEXT, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `deleted_at` INTEGER, PRIMARY KEY(`id`), FOREIGN KEY(`game_id`) REFERENCES `games`(`id`) ON UPDATE RESTRICT ON DELETE RESTRICT )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gameId",
+            "columnName": "game_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deletedAt",
+            "columnName": "deleted_at",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_items_game_id",
+            "unique": false,
+            "columnNames": [
+              "game_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_items_game_id` ON `${TABLE_NAME}` (`game_id`)"
+          },
+          {
+            "name": "index_items_deleted_at",
+            "unique": false,
+            "columnNames": [
+              "deleted_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_items_deleted_at` ON `${TABLE_NAME}` (`deleted_at`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "games",
+            "onDelete": "RESTRICT",
+            "onUpdate": "RESTRICT",
+            "columns": [
+              "game_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "colors",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `canonical_name` TEXT NOT NULL, `normalized_name` TEXT NOT NULL, `hex` TEXT NOT NULL, `sort_order` INTEGER NOT NULL, `is_archived` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "canonicalName",
+            "columnName": "canonical_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "normalizedName",
+            "columnName": "normalized_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hex",
+            "columnName": "hex",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sortOrder",
+            "columnName": "sort_order",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isArchived",
+            "columnName": "is_archived",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_colors_normalized_name",
+            "unique": true,
+            "columnNames": [
+              "normalized_name"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_colors_normalized_name` ON `${TABLE_NAME}` (`normalized_name`)"
+          }
+        ]
+      },
+      {
+        "tableName": "color_aliases",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`color_id` TEXT NOT NULL, `alias` TEXT NOT NULL, `normalized_alias` TEXT NOT NULL, PRIMARY KEY(`color_id`, `normalized_alias`), FOREIGN KEY(`color_id`) REFERENCES `colors`(`id`) ON UPDATE RESTRICT ON DELETE RESTRICT )",
+        "fields": [
+          {
+            "fieldPath": "colorId",
+            "columnName": "color_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "alias",
+            "columnName": "alias",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "normalizedAlias",
+            "columnName": "normalized_alias",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "color_id",
+            "normalized_alias"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_color_aliases_normalized_alias",
+            "unique": true,
+            "columnNames": [
+              "normalized_alias"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_color_aliases_normalized_alias` ON `${TABLE_NAME}` (`normalized_alias`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "colors",
+            "onDelete": "RESTRICT",
+            "onUpdate": "RESTRICT",
+            "columns": [
+              "color_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "tasks",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `item_id` TEXT NOT NULL, `pool_type` TEXT NOT NULL, `tracking_mode` TEXT NOT NULL, `name` TEXT NOT NULL, `required_quantity` INTEGER, `notes` TEXT, `is_archived` INTEGER NOT NULL DEFAULT 0, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `deleted_at` INTEGER, `source_raw_import_block_id` TEXT, PRIMARY KEY(`id`), FOREIGN KEY(`item_id`) REFERENCES `items`(`id`) ON UPDATE RESTRICT ON DELETE RESTRICT , FOREIGN KEY(`source_raw_import_block_id`) REFERENCES `raw_import_blocks`(`id`) ON UPDATE RESTRICT ON DELETE RESTRICT )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemId",
+            "columnName": "item_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "poolType",
+            "columnName": "pool_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trackingMode",
+            "columnName": "tracking_mode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requiredQuantity",
+            "columnName": "required_quantity",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "isArchived",
+            "columnName": "is_archived",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deletedAt",
+            "columnName": "deleted_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sourceRawImportBlockId",
+            "columnName": "source_raw_import_block_id",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_tasks_item_id",
+            "unique": false,
+            "columnNames": [
+              "item_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tasks_item_id` ON `${TABLE_NAME}` (`item_id`)"
+          },
+          {
+            "name": "index_tasks_pool_type",
+            "unique": false,
+            "columnNames": [
+              "pool_type"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tasks_pool_type` ON `${TABLE_NAME}` (`pool_type`)"
+          },
+          {
+            "name": "index_tasks_deleted_at",
+            "unique": false,
+            "columnNames": [
+              "deleted_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tasks_deleted_at` ON `${TABLE_NAME}` (`deleted_at`)"
+          },
+          {
+            "name": "index_tasks_source_raw_import_block_id",
+            "unique": false,
+            "columnNames": [
+              "source_raw_import_block_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tasks_source_raw_import_block_id` ON `${TABLE_NAME}` (`source_raw_import_block_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "items",
+            "onDelete": "RESTRICT",
+            "onUpdate": "RESTRICT",
+            "columns": [
+              "item_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "raw_import_blocks",
+            "onDelete": "RESTRICT",
+            "onUpdate": "RESTRICT",
+            "columns": [
+              "source_raw_import_block_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "task_colors",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`task_id` TEXT NOT NULL, `color_id` TEXT NOT NULL, `relation` TEXT NOT NULL, `is_selected` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`task_id`, `color_id`), FOREIGN KEY(`task_id`) REFERENCES `tasks`(`id`) ON UPDATE RESTRICT ON DELETE RESTRICT , FOREIGN KEY(`color_id`) REFERENCES `colors`(`id`) ON UPDATE RESTRICT ON DELETE RESTRICT )",
+        "fields": [
+          {
+            "fieldPath": "taskId",
+            "columnName": "task_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "colorId",
+            "columnName": "color_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "relation",
+            "columnName": "relation",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isSelected",
+            "columnName": "is_selected",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "task_id",
+            "color_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_task_colors_color_id",
+            "unique": false,
+            "columnNames": [
+              "color_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_task_colors_color_id` ON `${TABLE_NAME}` (`color_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tasks",
+            "onDelete": "RESTRICT",
+            "onUpdate": "RESTRICT",
+            "columns": [
+              "task_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "colors",
+            "onDelete": "RESTRICT",
+            "onUpdate": "RESTRICT",
+            "columns": [
+              "color_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "import_batches",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `file_name` TEXT NOT NULL, `sha256` TEXT NOT NULL, `source_format` TEXT NOT NULL, `sheet_name` TEXT NOT NULL, `start_row_index` INTEGER, `end_row_index` INTEGER, `start_column_index` INTEGER, `end_column_index` INTEGER, `created_game_count` INTEGER NOT NULL DEFAULT 0, `raw_block_count` INTEGER NOT NULL DEFAULT 0, `created_task_count` INTEGER NOT NULL DEFAULT 0, `status` TEXT NOT NULL, `imported_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileName",
+            "columnName": "file_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sha256",
+            "columnName": "sha256",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceFormat",
+            "columnName": "source_format",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sheetName",
+            "columnName": "sheet_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startRowIndex",
+            "columnName": "start_row_index",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "endRowIndex",
+            "columnName": "end_row_index",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "startColumnIndex",
+            "columnName": "start_column_index",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "endColumnIndex",
+            "columnName": "end_column_index",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "createdGameCount",
+            "columnName": "created_game_count",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "rawBlockCount",
+            "columnName": "raw_block_count",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "createdTaskCount",
+            "columnName": "created_task_count",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "importedAt",
+            "columnName": "imported_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_import_batches_sha256",
+            "unique": false,
+            "columnNames": [
+              "sha256"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_import_batches_sha256` ON `${TABLE_NAME}` (`sha256`)"
+          },
+          {
+            "name": "index_import_batches_status",
+            "unique": false,
+            "columnNames": [
+              "status"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_import_batches_status` ON `${TABLE_NAME}` (`status`)"
+          }
+        ]
+      },
+      {
+        "tableName": "raw_import_blocks",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `import_batch_id` TEXT NOT NULL, `raw_text` TEXT NOT NULL, `sheet_name` TEXT NOT NULL, `row_index` INTEGER NOT NULL, `column_index` INTEGER NOT NULL, `source_column_type` TEXT NOT NULL, `fill_color_argb` INTEGER, `game_completion_hint` TEXT NOT NULL DEFAULT 'NONE', `is_processed` INTEGER NOT NULL DEFAULT 0, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`import_batch_id`) REFERENCES `import_batches`(`id`) ON UPDATE RESTRICT ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "importBatchId",
+            "columnName": "import_batch_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rawText",
+            "columnName": "raw_text",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sheetName",
+            "columnName": "sheet_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rowIndex",
+            "columnName": "row_index",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "columnIndex",
+            "columnName": "column_index",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceColumnType",
+            "columnName": "source_column_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fillColorArgb",
+            "columnName": "fill_color_argb",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "gameCompletionHint",
+            "columnName": "game_completion_hint",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'NONE'"
+          },
+          {
+            "fieldPath": "isProcessed",
+            "columnName": "is_processed",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_raw_import_blocks_import_batch_id",
+            "unique": false,
+            "columnNames": [
+              "import_batch_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_raw_import_blocks_import_batch_id` ON `${TABLE_NAME}` (`import_batch_id`)"
+          },
+          {
+            "name": "index_raw_import_blocks_is_processed",
+            "unique": false,
+            "columnNames": [
+              "is_processed"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_raw_import_blocks_is_processed` ON `${TABLE_NAME}` (`is_processed`)"
+          },
+          {
+            "name": "index_raw_import_blocks_import_batch_id_sheet_name_row_index_column_index",
+            "unique": true,
+            "columnNames": [
+              "import_batch_id",
+              "sheet_name",
+              "row_index",
+              "column_index"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_raw_import_blocks_import_batch_id_sheet_name_row_index_column_index` ON `${TABLE_NAME}` (`import_batch_id`, `sheet_name`, `row_index`, `column_index`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "import_batches",
+            "onDelete": "CASCADE",
+            "onUpdate": "RESTRICT",
+            "columns": [
+              "import_batch_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "draft_tasks",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `raw_import_block_id` TEXT NOT NULL, `name` TEXT NOT NULL, `suggested_pool_type` TEXT, `selected_pool_type` TEXT, `selected_tracking_mode` TEXT, `required_quantity` INTEGER, `notes` TEXT, `target_item_id` TEXT, `selection_start_index` INTEGER, `selection_end_index` INTEGER, `completion_hint` TEXT NOT NULL DEFAULT 'NONE', `is_missing` INTEGER NOT NULL DEFAULT 0, `is_borrowed` INTEGER NOT NULL DEFAULT 0, `needs_info` INTEGER NOT NULL DEFAULT 0, `needs_classification` INTEGER NOT NULL DEFAULT 0, `materialized_task_id` TEXT, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`raw_import_block_id`) REFERENCES `raw_import_blocks`(`id`) ON UPDATE RESTRICT ON DELETE CASCADE , FOREIGN KEY(`target_item_id`) REFERENCES `items`(`id`) ON UPDATE RESTRICT ON DELETE RESTRICT , FOREIGN KEY(`materialized_task_id`) REFERENCES `tasks`(`id`) ON UPDATE RESTRICT ON DELETE RESTRICT )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rawImportBlockId",
+            "columnName": "raw_import_block_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "suggestedPoolType",
+            "columnName": "suggested_pool_type",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "selectedPoolType",
+            "columnName": "selected_pool_type",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "selectedTrackingMode",
+            "columnName": "selected_tracking_mode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "requiredQuantity",
+            "columnName": "required_quantity",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "targetItemId",
+            "columnName": "target_item_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "selectionStartIndex",
+            "columnName": "selection_start_index",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "selectionEndIndex",
+            "columnName": "selection_end_index",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "completionHint",
+            "columnName": "completion_hint",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'NONE'"
+          },
+          {
+            "fieldPath": "isMissing",
+            "columnName": "is_missing",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "isBorrowed",
+            "columnName": "is_borrowed",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "needsInfo",
+            "columnName": "needs_info",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "needsClassification",
+            "columnName": "needs_classification",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "materializedTaskId",
+            "columnName": "materialized_task_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_draft_tasks_raw_import_block_id",
+            "unique": false,
+            "columnNames": [
+              "raw_import_block_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_draft_tasks_raw_import_block_id` ON `${TABLE_NAME}` (`raw_import_block_id`)"
+          },
+          {
+            "name": "index_draft_tasks_target_item_id",
+            "unique": false,
+            "columnNames": [
+              "target_item_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_draft_tasks_target_item_id` ON `${TABLE_NAME}` (`target_item_id`)"
+          },
+          {
+            "name": "index_draft_tasks_materialized_task_id",
+            "unique": true,
+            "columnNames": [
+              "materialized_task_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_draft_tasks_materialized_task_id` ON `${TABLE_NAME}` (`materialized_task_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "raw_import_blocks",
+            "onDelete": "CASCADE",
+            "onUpdate": "RESTRICT",
+            "columns": [
+              "raw_import_block_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "items",
+            "onDelete": "RESTRICT",
+            "onUpdate": "RESTRICT",
+            "columns": [
+              "target_item_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "tasks",
+            "onDelete": "RESTRICT",
+            "onUpdate": "RESTRICT",
+            "columns": [
+              "materialized_task_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '365515a74ea2fdde77758444472e6cb3')"
+    ]
+  }
+}

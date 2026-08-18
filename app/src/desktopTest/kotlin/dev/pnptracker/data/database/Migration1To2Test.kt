@@ -1,12 +1,9 @@
 package dev.pnptracker.data.database
 
 import androidx.room3.useReaderConnection
-import androidx.sqlite.driver.bundled.BundledSQLiteDriver
-import androidx.sqlite.execSQL
 import dev.pnptracker.domain.model.IdGenerator
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
-import java.nio.file.Path
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -14,7 +11,6 @@ import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
-import kotlin.test.fail
 
 /**
  * Upgrades a real version 1 database to version 2.
@@ -43,60 +39,13 @@ class Migration1To2Test {
 
     /** Creates the version 1 database exactly as the committed schema describes it. */
     private fun createVersion1DatabaseWithData() {
-        val schema = readSchema(version = 1)
-        val driver = BundledSQLiteDriver()
-        val connection = driver.open(directory.databaseFile.toAbsolutePath().toString())
-        try {
-            connection.execSQL("PRAGMA foreign_keys = ON")
-            schema.createStatements.forEach(connection::execSQL)
-            schema.setupQueries.forEach(connection::execSQL)
-            connection.execSQL("PRAGMA user_version = 1")
-            connection
-                .prepare(
-                    "INSERT INTO games (id, name, notes, is_manually_completed, completed_at, " +
-                        "created_at, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                ).use { statement ->
-                    statement.bindText(1, gameId.toString())
-                    statement.bindText(2, "Harmonies")
-                    statement.bindText(3, "eski not")
-                    statement.bindInt(4, 1)
-                    statement.bindLong(5, EPOCH_MILLISECONDS_UPDATED)
-                    statement.bindLong(6, EPOCH_MILLISECONDS_CREATED)
-                    statement.bindLong(7, EPOCH_MILLISECONDS_UPDATED)
-                    statement.bindNull(8)
-                    statement.step()
-                }
-            connection
-                .prepare(
-                    "INSERT INTO items (id, game_id, name, notes, created_at, updated_at, deleted_at) " +
-                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                ).use { statement ->
-                    statement.bindText(1, itemId.toString())
-                    statement.bindText(2, gameId.toString())
-                    statement.bindText(3, "Token")
-                    statement.bindNull(4)
-                    statement.bindLong(5, EPOCH_MILLISECONDS_CREATED)
-                    statement.bindLong(6, EPOCH_MILLISECONDS_CREATED)
-                    statement.bindNull(7)
-                    statement.step()
-                }
-        } finally {
-            connection.close()
+        CommittedSchema.createDatabase(directory.databaseFile, version = 1) { connection ->
+            insertVersion1Game(connection, gameId)
+            insertVersion1Item(connection, itemId = itemId, gameId = gameId)
         }
     }
 
-    private fun readVersion(): Long {
-        val driver = BundledSQLiteDriver()
-        val connection = driver.open(directory.databaseFile.toAbsolutePath().toString())
-        return try {
-            connection.prepare("PRAGMA user_version").use { statement ->
-                statement.step()
-                statement.getLong(0)
-            }
-        } finally {
-            connection.close()
-        }
-    }
+    private fun readVersion(): Long = CommittedSchema.readVersion(directory.databaseFile)
 
     @Test
     fun `version 1 data survives the upgrade and the catalogue is seeded`() =
@@ -106,7 +55,7 @@ class Migration1To2Test {
 
             val database = DatabaseFactory().open(directory.databaseFile)
             try {
-                // Room validates the version 2 schema while opening; a mismatch throws here.
+                // Room validates the current schema while opening; a mismatch throws here.
                 val games = database.gameDao().allGamesIncludingDeleted()
                 val items = database.itemDao().allItemsIncludingDeleted()
 
@@ -130,7 +79,8 @@ class Migration1To2Test {
                 database.close()
             }
 
-            assertEquals(2L, readVersion())
+            // Opening through the factory applies every migration it knows, not just this one.
+            assertEquals(3L, readVersion())
         }
 
     @Test
@@ -161,7 +111,7 @@ class Migration1To2Test {
                     listOf("colors"),
                     foreignKeyTargets(database, "color_aliases"),
                 )
-                assertEquals(listOf("items"), foreignKeyTargets(database, "tasks"))
+                assertEquals(listOf("items", "raw_import_blocks"), foreignKeyTargets(database, "tasks").sorted())
                 assertEquals(listOf("colors", "tasks"), foreignKeyTargets(database, "task_colors").sorted())
             } finally {
                 database.close()
@@ -217,60 +167,4 @@ class Migration1To2Test {
         database: AppDatabase,
         table: String,
     ): List<String> = queryTexts(database, "SELECT \"table\" FROM pragma_foreign_key_list('$table')")
-
-    private class SchemaVersion(
-        val createStatements: List<String>,
-        val setupQueries: List<String>,
-    )
-
-    private fun readSchema(version: Int): SchemaVersion {
-        val file = schemaDirectory().resolve("$version.json")
-        val text = Files.readString(file)
-        val createStatements = mutableListOf<String>()
-        var currentTable = ""
-        // Room writes each entity's "tableName" before the "createSql" entries that
-        // belong to it, so tracking the latest name is enough to expand ${TABLE_NAME}.
-        TABLE_OR_CREATE_SQL.findAll(text).forEach { match ->
-            val (key, value) = match.destructured
-            if (key == "tableName") {
-                currentTable = value
-            } else {
-                createStatements += unescape(value).replace("\${TABLE_NAME}", currentTable)
-            }
-        }
-        val setupQueries =
-            SETUP_QUERIES
-                .find(text)
-                ?.groupValues
-                ?.get(1)
-                ?.let { body -> QUOTED.findAll(body).map { unescape(it.groupValues[1]) }.toList() }
-                .orEmpty()
-        check(createStatements.isNotEmpty() && setupQueries.isNotEmpty()) {
-            "could not read the version $version schema from $file"
-        }
-        return SchemaVersion(createStatements = createStatements, setupQueries = setupQueries)
-    }
-
-    private fun schemaDirectory(): Path {
-        var candidate: Path? = Path.of("").toAbsolutePath().normalize()
-        while (candidate != null) {
-            listOf(candidate, candidate.resolve("app"))
-                .map { it.resolve("schemas/dev.pnptracker.data.database.AppDatabase") }
-                .firstOrNull { Files.isDirectory(it) }
-                ?.let { return it }
-            candidate = candidate.parent
-        }
-        fail("Could not locate the committed schema directory from ${Path.of("").toAbsolutePath()}")
-    }
-
-    private fun unescape(raw: String): String = raw.replace("\\\"", "\"").replace("\\\\", "\\")
-
-    private companion object {
-        const val TABLE_NAME = "TABLE_NAME"
-
-        val TABLE_OR_CREATE_SQL =
-            Regex("\"(tableName|createSql)\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"")
-        val SETUP_QUERIES = Regex("\"setupQueries\"\\s*:\\s*\\[(.*?)]", RegexOption.DOT_MATCHES_ALL)
-        val QUOTED = Regex("\"((?:[^\"\\\\]|\\\\.)*)\"")
-    }
 }
