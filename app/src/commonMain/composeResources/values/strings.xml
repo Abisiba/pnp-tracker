@@ -1,5 +1,32 @@
 <resources>
+    <!-- Application identity -->
+    <string name="app_name">PnP Üretim Takipçisi</string>
     <string name="app_window_title">PnP Üretim Takipçisi</string>
-    <string name="app_status_running">Uygulama çalışıyor.</string>
     <string name="app_version_label">Sürüm %1$s</string>
+
+    <!-- Navigation names -->
+    <string name="navigation_section_label">Bölümler</string>
+    <string name="navigation_home">Ana Sayfa</string>
+    <string name="navigation_games">Oyunlar</string>
+    <string name="navigation_import">İçe Aktarma</string>
+
+    <!-- Screen titles -->
+    <string name="home_title">Ana Sayfa</string>
+    <string name="games_title">Oyunlar</string>
+    <string name="import_title">İçe Aktarma</string>
+
+    <!-- Screen descriptions -->
+    <string name="home_description">Oyunların ve üretim havuzlarının özetleri bu ekranda toplanacak. Şu anda yalnızca uygulama kabuğu hazır.</string>
+    <string name="games_description">Oyun kayıtları bu ekrandan yönetilecek: oyun arama, aktif ve tamamlanan oyun ayrımı ve oyun detayına geçiş buraya gelecek.</string>
+    <string name="import_description">Excel ve CSV içe aktarma taslakları bu ekranda yönetilecek. Ham hücre metni değiştirilmeden saklanır, görev taslakları ham metinden elle oluşturulur.</string>
+
+    <!-- Theme -->
+    <string name="theme_section_label">Görünüm</string>
+    <string name="theme_switch_to_dark">Koyu temaya geç</string>
+    <string name="theme_switch_to_light">Açık temaya geç</string>
+
+    <!-- Accessibility descriptions -->
+    <string name="navigation_accessibility_label">Ana bölüm gezinmesi</string>
+    <string name="navigation_state_selected">seçili</string>
+    <string name="navigation_state_not_selected">seçili değil</string>
 </resources>
