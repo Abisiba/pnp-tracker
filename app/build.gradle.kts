@@ -28,6 +28,8 @@ kotlin {
             dependencies {
                 implementation(compose.desktop.currentOs)
                 implementation(libs.sqlite.bundled)
+                // Reading .xlsx is a JVM concern; the snapshot model it produces is common.
+                implementation(libs.poi.ooxml)
             }
         }
     }
