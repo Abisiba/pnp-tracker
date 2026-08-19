@@ -31,6 +31,16 @@ class ImportReviewController(
     var draftBatches: List<EarlierImport> by mutableStateOf(emptyList())
         private set
 
+    /**
+     * The draft the user is writing, if any.
+     *
+     * Kept apart from [state], which mirrors the database: this is what someone is
+     * typing and has not saved, so it must not be replaced when a new workspace
+     * arrives, and it must leave no trace if they change their mind.
+     */
+    var composer: DraftComposer? by mutableStateOf(null)
+        private set
+
     private var selectedBlockId: EntityId? = null
     private var lastWorkspace: ImportReviewWorkspace? = null
 
@@ -52,6 +62,7 @@ class ImportReviewController(
     suspend fun observe(batchId: EntityId) {
         selectedBlockId = null
         lastWorkspace = null
+        composer = null
         state = ImportReviewState.Loading
         review.observeWorkspace(batchId).collect { workspace -> show(workspace) }
     }
@@ -61,6 +72,48 @@ class ImportReviewController(
         val workspace = lastWorkspace ?: return
         selectedBlockId = blockId?.takeIf { id -> workspace.rawBlocks.any { it.id == id } }
         show(workspace)
+    }
+
+    /**
+     * Starts a draft from a cell, with the cell's text already in it.
+     *
+     * The text is a starting point and not a decision: everything the file said is
+     * there, and the user cuts it down to the task they actually mean.
+     */
+    fun startDraft(blockId: EntityId) {
+        val block = lastWorkspace?.rawBlocks?.firstOrNull { it.id == blockId } ?: return
+        composer = DraftComposer(blockId = blockId, name = block.rawText)
+    }
+
+    fun editDraftName(name: String) {
+        composer = composer?.copy(name = name)
+    }
+
+    /** Changes nothing anywhere; the draft was never written. */
+    fun cancelDraft() {
+        composer = null
+    }
+
+    /**
+     * Saves the draft being written, if it says anything.
+     *
+     * A name that is empty or only spaces is refused before anything is written,
+     * because a draft with no name tells the user nothing later. A draft that does
+     * not save leaves the form open with what they typed still in it.
+     */
+    suspend fun saveDraft() {
+        val current = composer ?: return
+        if (!current.canSave || isSaving) return
+        isSaving = true
+        try {
+            review.addDraftTask(current.blockId, current.name)
+            composer = null
+            clearFailure()
+        } catch (failure: ImportReviewException) {
+            reportFailure(failure)
+        } finally {
+            isSaving = false
+        }
     }
 
     /**
@@ -84,6 +137,14 @@ class ImportReviewController(
         } finally {
             isSaving = false
         }
+    }
+
+    /** A task draft in the making, before it is anywhere but on screen. */
+    data class DraftComposer(
+        val blockId: EntityId,
+        val name: String,
+    ) {
+        val canSave: Boolean get() = name.isNotBlank()
     }
 
     private fun show(workspace: ImportReviewWorkspace?) {

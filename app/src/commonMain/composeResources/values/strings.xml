@@ -131,4 +131,13 @@
     <!-- Import review: accessibility -->
     <string name="review_select_cell_accessibility">Ham hücreyi seç</string>
     <string name="review_processed_accessibility">Bu ham hücre işlendi olarak işaretli</string>
+    <!-- Import review: writing a task draft -->
+    <string name="review_create_draft">Bu hücreden görev taslağı oluştur</string>
+    <string name="review_draft_form_title">Yeni görev taslağı</string>
+    <string name="review_draft_name_label">Görev adı</string>
+    <string name="review_draft_source">Kaynak: satır %1$d · sütun %2$d</string>
+    <string name="review_draft_save">Taslağı kaydet</string>
+    <string name="review_draft_discard">Vazgeç</string>
+    <string name="review_draft_name_required">Görev adı boş olamaz.</string>
+    <string name="review_draft_only_note">Bu bir taslaktır; gerçek görev oluşturmaz.</string>
 </resources>

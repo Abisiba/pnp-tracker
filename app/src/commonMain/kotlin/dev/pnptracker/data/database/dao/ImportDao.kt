@@ -214,6 +214,30 @@ abstract class ImportDao {
         insertDraftTaskRow(draft)
     }
 
+    /**
+     * Stores a draft made while reviewing an import that is still a draft itself.
+     *
+     * The status is checked in the same transaction as the insert, so a draft can
+     * never be attached to an import that has already been confirmed or undone.
+     * Adding a draft says nothing about the cell it came from: the cell keeps
+     * whatever review mark it had, because deciding a cell is dealt with is a
+     * separate judgement from having made something out of it.
+     *
+     * @throws IllegalArgumentException if the cell is unknown or its import is no
+     *   longer a draft; nothing is written in that case.
+     */
+    @Transaction
+    open suspend fun addDraftTaskUnderReview(draft: DraftTaskEntity) {
+        val block = rawBlockById(draft.rawImportBlockId)
+        requireNotNull(block) { "There is no raw cell ${draft.rawImportBlockId} to draft from." }
+        val batch = batchById(block.importBatchId)
+        requireNotNull(batch) { "The raw cell ${block.id} belongs to no import batch." }
+        require(batch.status == ImportBatchStatus.DRAFT) {
+            "Drafts can only be added while the import is a draft, but ${batch.id} is ${batch.status}."
+        }
+        addDraftTask(draft)
+    }
+
     /** Replaces a draft with an edited version, under the same selection check. */
     @Transaction
     open suspend fun editDraftTask(draft: DraftTaskEntity) {

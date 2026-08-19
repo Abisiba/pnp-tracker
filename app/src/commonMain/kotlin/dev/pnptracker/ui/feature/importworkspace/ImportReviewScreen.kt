@@ -13,12 +13,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -94,11 +96,16 @@ fun ImportReviewScreen(
             is ImportReviewState.Content ->
                 ContentPanes(
                     state = state,
+                    composer = controller.composer,
                     isSaving = controller.isSaving,
                     onSelect = { blockId -> controller.select(blockId) },
                     onToggleProcessed = { block ->
                         scope.launch { controller.setProcessed(block.id, !block.isProcessed) }
                     },
+                    onStartDraft = { block -> controller.startDraft(block.id) },
+                    onEditDraftName = { name -> controller.editDraftName(name) },
+                    onSaveDraft = { scope.launch { controller.saveDraft() } },
+                    onDiscardDraft = { controller.cancelDraft() },
                 )
         }
     }
@@ -107,9 +114,14 @@ fun ImportReviewScreen(
 @Composable
 private fun ContentPanes(
     state: ImportReviewState.Content,
+    composer: ImportReviewController.DraftComposer?,
     isSaving: Boolean,
     onSelect: (EntityId) -> Unit,
     onToggleProcessed: (ReviewRawBlock) -> Unit,
+    onStartDraft: (ReviewRawBlock) -> Unit,
+    onEditDraftName: (String) -> Unit,
+    onSaveDraft: () -> Unit,
+    onDiscardDraft: () -> Unit,
 ) {
     val workspace = state.workspace
 
@@ -138,10 +150,16 @@ private fun ContentPanes(
             isSaving = isSaving,
             onSelect = onSelect,
             onToggleProcessed = onToggleProcessed,
+            onStartDraft = onStartDraft,
             modifier = Modifier.weight(1f).fillMaxHeight(),
         )
         DraftPane(
             state = state,
+            composer = composer,
+            isSaving = isSaving,
+            onEditDraftName = onEditDraftName,
+            onSaveDraft = onSaveDraft,
+            onDiscardDraft = onDiscardDraft,
             modifier = Modifier.weight(1f).fillMaxHeight(),
         )
     }
@@ -153,6 +171,7 @@ private fun RawBlockPane(
     isSaving: Boolean,
     onSelect: (EntityId) -> Unit,
     onToggleProcessed: (ReviewRawBlock) -> Unit,
+    onStartDraft: (ReviewRawBlock) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -172,6 +191,7 @@ private fun RawBlockPane(
                     isSaving = isSaving,
                     onSelect = { onSelect(block.id) },
                     onToggleProcessed = { onToggleProcessed(block) },
+                    onStartDraft = { onStartDraft(block) },
                 )
             }
         }
@@ -186,6 +206,7 @@ private fun RawBlockRow(
     isSaving: Boolean,
     onSelect: () -> Unit,
     onToggleProcessed: () -> Unit,
+    onStartDraft: () -> Unit,
 ) {
     val selectCell = stringResource(Strings.Review.selectCellAccessibility)
     Card(
@@ -251,12 +272,19 @@ private fun RawBlockRow(
                 )
             }
 
-            OutlinedButton(onClick = onToggleProcessed, enabled = !isSaving) {
-                Text(
-                    stringResource(
-                        if (block.isProcessed) Strings.Review.markUnprocessed else Strings.Review.markProcessed,
-                    ),
-                )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onToggleProcessed, enabled = !isSaving) {
+                    Text(
+                        stringResource(
+                            if (block.isProcessed) Strings.Review.markUnprocessed else Strings.Review.markProcessed,
+                        ),
+                    )
+                }
+                if (isSelected) {
+                    Button(onClick = onStartDraft, enabled = !isSaving) {
+                        Text(stringResource(Strings.Review.createDraft))
+                    }
+                }
             }
         }
     }
@@ -265,9 +293,24 @@ private fun RawBlockRow(
 @Composable
 private fun DraftPane(
     state: ImportReviewState.Content,
+    composer: ImportReviewController.DraftComposer?,
+    isSaving: Boolean,
+    onEditDraftName: (String) -> Unit,
+    onSaveDraft: () -> Unit,
+    onDiscardDraft: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (composer != null) {
+            DraftComposerCard(
+                composer = composer,
+                sourceBlock = state.workspace.blockOrNull(composer.blockId),
+                isSaving = isSaving,
+                onEditDraftName = onEditDraftName,
+                onSaveDraft = onSaveDraft,
+                onDiscardDraft = onDiscardDraft,
+            )
+        }
         Text(
             text =
                 stringResource(
@@ -293,6 +336,65 @@ private fun DraftPane(
             text = stringResource(Strings.Review.noRealRecords),
             style = MaterialTheme.typography.labelMedium,
         )
+    }
+}
+
+@Composable
+private fun DraftComposerCard(
+    composer: ImportReviewController.DraftComposer,
+    sourceBlock: ReviewRawBlock?,
+    isSaving: Boolean,
+    onEditDraftName: (String) -> Unit,
+    onSaveDraft: () -> Unit,
+    onDiscardDraft: () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = stringResource(Strings.Review.draftFormTitle),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            if (sourceBlock != null) {
+                Text(
+                    text =
+                        stringResource(
+                            Strings.Review.draftSource,
+                            sourceBlock.rowIndex + 1,
+                            sourceBlock.columnIndex + 1,
+                        ),
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+            OutlinedTextField(
+                value = composer.name,
+                onValueChange = onEditDraftName,
+                label = { Text(stringResource(Strings.Review.draftNameLabel)) },
+                isError = !composer.canSave,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (!composer.canSave) {
+                Text(
+                    text = stringResource(Strings.Review.draftNameRequired),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            Text(
+                text = stringResource(Strings.Review.draftOnlyNote),
+                style = MaterialTheme.typography.labelMedium,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onSaveDraft, enabled = composer.canSave && !isSaving) {
+                    Text(stringResource(Strings.Review.draftSave))
+                }
+                OutlinedButton(onClick = onDiscardDraft, enabled = !isSaving) {
+                    Text(stringResource(Strings.Review.draftDiscard))
+                }
+            }
+        }
     }
 }
 

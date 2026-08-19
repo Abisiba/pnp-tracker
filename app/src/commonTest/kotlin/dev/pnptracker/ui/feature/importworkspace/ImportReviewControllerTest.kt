@@ -23,6 +23,7 @@ import kotlinx.coroutines.yield
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -69,6 +70,7 @@ private class FakeReview(
     val draftBatches = MutableStateFlow<List<EarlierImport>>(emptyList())
     var failWith: ImportReviewFailure? = null
     val processedCalls = mutableListOf<Pair<EntityId, Boolean>>()
+    val draftCalls = mutableListOf<Pair<EntityId, String>>()
 
     override fun observeDraftBatches(): Flow<List<EarlierImport>> = draftBatches
 
@@ -84,6 +86,19 @@ private class FakeReview(
         workspace.value =
             current.copy(
                 rawBlocks = current.rawBlocks.map { if (it.id == blockId) it.copy(isProcessed = isProcessed) else it },
+            )
+    }
+
+    override suspend fun addDraftTask(
+        blockId: EntityId,
+        name: String,
+    ) {
+        failWith?.let { throw ImportReviewException(it) }
+        draftCalls += blockId to name
+        val current = workspace.value ?: return
+        workspace.value =
+            current.copy(
+                draftTasks = current.draftTasks + ReviewDraftTask(IdGenerator.Random.newId(), blockId, name),
             )
     }
 }
@@ -301,6 +316,136 @@ class ImportReviewControllerTest {
             }
 
         assertIs<IllegalStateException>(thrown, "a defect must travel out as it is, not become a save failure")
+    }
+
+    @Test
+    fun `starting a draft fills the form with the cell text`() {
+        val awkward = "  12 KIRMIZI**\n8 MAVİ  "
+        val one = block(awkward, 1, 1)
+        withObserving(FakeReview(workspaceOf(listOf(one)))) { controller ->
+            controller.startDraft(one.id)
+
+            val composer = assertNotNull(controller.composer)
+            assertEquals(one.id, composer.blockId)
+            assertEquals(awkward, composer.name, "the cell text must arrive untouched")
+        }
+    }
+
+    @Test
+    fun `starting a draft from a cell that is not there opens no form`() {
+        withObserving(FakeReview(workspaceOf(listOf(block("bir", 1, 1))))) { controller ->
+            controller.startDraft(IdGenerator.Random.newId())
+
+            assertNull(controller.composer)
+        }
+    }
+
+    @Test
+    fun `a blank draft name cannot be saved and writes nothing`() {
+        val one = block("bir", 1, 1)
+        val review = FakeReview(workspaceOf(listOf(one)))
+        withObserving(review) { controller ->
+            controller.startDraft(one.id)
+            controller.editDraftName("   ")
+
+            assertTrue(!assertNotNull(controller.composer).canSave)
+            controller.saveDraft()
+
+            assertEquals(emptyList(), review.draftCalls)
+            assertNotNull(controller.composer, "the form stays open so the name can be fixed")
+        }
+    }
+
+    @Test
+    fun `changing one's mind writes nothing at all`() {
+        val one = block("bir", 1, 1)
+        val review = FakeReview(workspaceOf(listOf(one)))
+        withObserving(review) { controller ->
+            controller.startDraft(one.id)
+            controller.editDraftName("Kırmızı token")
+            controller.cancelDraft()
+
+            assertNull(controller.composer)
+            assertEquals(emptyList(), review.draftCalls)
+            assertEquals(emptyList(), review.processedCalls)
+            assertEquals(0, assertIs<ImportReviewState.Content>(controller.state).workspace.draftTaskCount)
+        }
+    }
+
+    @Test
+    fun `saving writes one draft with the edited name and closes the form`() {
+        val one = block("12 KIRMIZI**", 1, 1)
+        val review = FakeReview(workspaceOf(listOf(one)))
+        withObserving(review) { controller ->
+            controller.startDraft(one.id)
+            controller.editDraftName("Kırmızı token")
+            controller.saveDraft()
+            yield()
+
+            assertEquals(listOf(one.id to "Kırmızı token"), review.draftCalls)
+            assertNull(controller.composer)
+            assertEquals(1, assertIs<ImportReviewState.Content>(controller.state).workspace.draftTaskCount)
+        }
+    }
+
+    @Test
+    fun `a draft leaves the cell unmarked and the import a draft`() {
+        val one = block("bir", 1, 1)
+        val review = FakeReview(workspaceOf(listOf(one)))
+        withObserving(review) { controller ->
+            controller.startDraft(one.id)
+            controller.editDraftName("Kırmızı token")
+            controller.saveDraft()
+            yield()
+
+            val state = assertIs<ImportReviewState.Content>(controller.state)
+            assertTrue(
+                !state.workspace.rawBlocks
+                    .single()
+                    .isProcessed,
+            )
+            assertTrue(state.workspace.isStillADraft)
+            assertEquals(emptyList(), review.processedCalls)
+        }
+    }
+
+    @Test
+    fun `several drafts can be made from one cell`() {
+        val one = block("bir", 1, 1)
+        val review = FakeReview(workspaceOf(listOf(one)))
+        withObserving(review) { controller ->
+            controller.startDraft(one.id)
+            controller.editDraftName("Kırmızı token")
+            controller.saveDraft()
+            yield()
+            controller.startDraft(one.id)
+            controller.editDraftName("Mavi token")
+            controller.saveDraft()
+            yield()
+
+            assertEquals(listOf(one.id to "Kırmızı token", one.id to "Mavi token"), review.draftCalls)
+            controller.select(one.id)
+            assertEquals(2, assertIs<ImportReviewState.Content>(controller.state).visibleDrafts.size)
+        }
+    }
+
+    @Test
+    fun `a draft that could not be saved keeps the form open with what was typed`() {
+        val one = block("bir", 1, 1)
+        val review = FakeReview(workspaceOf(listOf(one)))
+        review.failWith = ImportReviewFailure.COULD_NOT_SAVE
+        withObserving(review) { controller ->
+            controller.startDraft(one.id)
+            controller.editDraftName("Kırmızı token")
+            controller.saveDraft()
+
+            assertEquals("Kırmızı token", assertNotNull(controller.composer).name)
+            assertEquals(
+                ImportReviewFailure.COULD_NOT_SAVE,
+                assertIs<ImportReviewState.Content>(controller.state).failure,
+            )
+            assertEquals(0, assertIs<ImportReviewState.Content>(controller.state).workspace.draftTaskCount)
+        }
     }
 
     @Test

@@ -10,6 +10,7 @@ import dev.pnptracker.domain.importreview.ImportReviewWorkspace
 import dev.pnptracker.domain.importreview.ReviewDraftTask
 import dev.pnptracker.domain.importreview.ReviewRawBlock
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.IdGenerator
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -40,10 +41,28 @@ interface ImportReview {
         blockId: EntityId,
         isProcessed: Boolean,
     )
+
+    /**
+     * Stores one task draft made from a cell.
+     *
+     * [name] is written as the user left it. It is not trimmed, tidied or stripped
+     * of markers: they were shown the cell text and then edited it, so what they
+     * ended up with is the answer.
+     *
+     * The draft is only a draft. No game, item or task comes of it here, the cell
+     * it came from keeps its review mark, and the import stays a draft.
+     *
+     * @throws ImportReviewException if the draft did not reach the database.
+     */
+    suspend fun addDraftTask(
+        blockId: EntityId,
+        name: String,
+    )
 }
 
 class ImportReviewStore(
     private val importDao: ImportDao,
+    private val idGenerator: IdGenerator = IdGenerator.Random,
     private val clock: Clock = Clock.System,
 ) : ImportReview {
     override fun observeDraftBatches(): Flow<List<EarlierImport>> =
@@ -77,6 +96,26 @@ class ImportReviewStore(
         // travels out as it is, because it is a defect and not a saved-or-not.
         try {
             importDao.setRawBlockProcessed(blockId, isProcessed, clock.now())
+        } catch (cause: SQLiteException) {
+            throw ImportReviewException(ImportReviewFailure.COULD_NOT_SAVE, cause)
+        }
+    }
+
+    override suspend fun addDraftTask(
+        blockId: EntityId,
+        name: String,
+    ) {
+        val moment = clock.now()
+        val draft =
+            DraftTaskEntity(
+                id = idGenerator.newId(),
+                rawImportBlockId = blockId,
+                name = name,
+                createdAt = moment,
+                updatedAt = moment,
+            )
+        try {
+            importDao.addDraftTaskUnderReview(draft)
         } catch (cause: SQLiteException) {
             throw ImportReviewException(ImportReviewFailure.COULD_NOT_SAVE, cause)
         }

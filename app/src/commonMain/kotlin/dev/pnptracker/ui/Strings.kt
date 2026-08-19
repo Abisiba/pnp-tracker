@@ -67,7 +67,15 @@ import dev.pnptracker.resources.review_back
 import dev.pnptracker.resources.review_cell_location
 import dev.pnptracker.resources.review_completion_hint_pending
 import dev.pnptracker.resources.review_could_not_save
+import dev.pnptracker.resources.review_create_draft
 import dev.pnptracker.resources.review_draft_count
+import dev.pnptracker.resources.review_draft_discard
+import dev.pnptracker.resources.review_draft_form_title
+import dev.pnptracker.resources.review_draft_name_label
+import dev.pnptracker.resources.review_draft_name_required
+import dev.pnptracker.resources.review_draft_only_note
+import dev.pnptracker.resources.review_draft_save
+import dev.pnptracker.resources.review_draft_source
 import dev.pnptracker.resources.review_drafts_empty
 import dev.pnptracker.resources.review_drafts_empty_hint
 import dev.pnptracker.resources.review_drafts_of_selected
@@ -248,6 +256,17 @@ object Strings {
         val greenHintPending = Res.string.review_green_hint_pending
         val completionHintPending = Res.string.review_completion_hint_pending
         val noRealRecords = Res.string.review_no_real_records
+
+        val createDraft = Res.string.review_create_draft
+        val draftFormTitle = Res.string.review_draft_form_title
+        val draftNameLabel = Res.string.review_draft_name_label
+
+        /** Takes the one based row and column numbers of the cell it came from. */
+        val draftSource = Res.string.review_draft_source
+        val draftSave = Res.string.review_draft_save
+        val draftDiscard = Res.string.review_draft_discard
+        val draftNameRequired = Res.string.review_draft_name_required
+        val draftOnlyNote = Res.string.review_draft_only_note
 
         val selectCellAccessibility = Res.string.review_select_cell_accessibility
         val processedAccessibility = Res.string.review_processed_accessibility
