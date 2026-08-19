@@ -7,6 +7,7 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import dev.pnptracker.data.database.DatabaseFactory
 import dev.pnptracker.data.repository.ImportDraftStore
+import dev.pnptracker.platform.awt.applyLinuxFileDialogPolicy
 import dev.pnptracker.platform.files.AppDirectoryInitializer
 import dev.pnptracker.platform.files.XdgAppPathsResolver
 import dev.pnptracker.platform.xlsx.AwtXlsxFilePicker
@@ -25,6 +26,10 @@ private const val MINIMUM_WINDOW_HEIGHT = 460
 private const val FILE_DIALOG_TITLE = "Excel dosyası seç"
 
 fun main() {
+    // First of all, and before anything can touch AWT: the file dialog choice
+    // is read once while the toolkit is being created.
+    applyLinuxFileDialogPolicy()
+
     val paths = XdgAppPathsResolver().resolve()
     AppDirectoryInitializer().ensureDirectories(paths)
     val database = DatabaseFactory().open(paths.databaseFile)
