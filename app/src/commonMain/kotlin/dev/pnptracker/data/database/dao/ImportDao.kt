@@ -30,6 +30,35 @@ abstract class ImportDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     abstract suspend fun insertRawBlock(block: RawImportBlockEntity)
 
+    /**
+     * Writes a whole import at once: the batch and every raw cell it read.
+     *
+     * All of it or none of it. If any cell is refused — two cells claiming the
+     * same coordinates, a batch id that is already taken — the batch goes back
+     * with them, so a half written import can never be left behind for the user
+     * to puzzle over.
+     *
+     * @throws IllegalArgumentException if the counts do not describe what is
+     *   being written, or if the batch is not a draft.
+     */
+    @Transaction
+    open suspend fun saveDraftBatch(
+        batch: ImportBatchEntity,
+        blocks: List<RawImportBlockEntity>,
+    ) {
+        require(batch.status == ImportBatchStatus.DRAFT) {
+            "An import is saved as a draft first, but this one is ${batch.status}."
+        }
+        require(batch.rawBlockCount == blocks.size) {
+            "The batch says it holds ${batch.rawBlockCount} cells but ${blocks.size} were given."
+        }
+        require(blocks.all { it.importBatchId == batch.id }) {
+            "Every cell must belong to the batch being written."
+        }
+        insertBatch(batch)
+        blocks.forEach { insertRawBlock(it) }
+    }
+
     @Query("SELECT * FROM import_batches WHERE status = 'DRAFT' ORDER BY imported_at DESC")
     abstract suspend fun draftBatches(): List<ImportBatchEntity>
 

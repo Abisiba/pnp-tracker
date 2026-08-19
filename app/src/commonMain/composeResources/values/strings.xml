@@ -29,4 +29,75 @@
     <string name="navigation_accessibility_label">Ana bölüm gezinmesi</string>
     <string name="navigation_state_selected">seçili</string>
     <string name="navigation_state_not_selected">seçili değil</string>
+
+    <!-- Import screen: actions -->
+    <string name="import_choose_file">Excel dosyası seç</string>
+    <string name="import_choose_another_file">Başka dosya seç</string>
+    <string name="import_save_draft">Taslak olarak kaydet</string>
+    <string name="import_cancel">İptal</string>
+    <string name="import_import_anyway">Yine de içe aktar</string>
+
+    <!-- Import screen: progress -->
+    <string name="import_choosing_file">Dosya seçiliyor…</string>
+    <string name="import_reading_file">Dosya okunuyor ve parmak izi hesaplanıyor…</string>
+    <string name="import_saving">Taslak kaydediliyor…</string>
+
+    <!-- Import screen: summary -->
+    <string name="import_idle_hint">Referans yapıdaki bir Excel dosyası seçin. Dosya yalnızca okunur, hiçbir zaman değiştirilmez.</string>
+    <string name="import_file_label">Dosya: %1$s</string>
+    <string name="import_sheet_label">Çalışma sayfası: %1$s</string>
+    <string name="import_sheet_selection_title">Hangi çalışma sayfası içe aktarılsın?</string>
+    <string name="import_sheet_visibility_visible">görünür</string>
+    <string name="import_sheet_visibility_hidden">gizli</string>
+    <string name="import_sheet_visibility_very_hidden">çok gizli</string>
+    <string name="import_sheet_cell_count">%1$d dolu hücre</string>
+    <string name="import_summary_title">İçe aktarma özeti</string>
+    <string name="import_raw_block_count">Kaydedilecek ham hücre: %1$d</string>
+    <string name="import_game_cell_count">Algılanan oyun adı hücresi: %1$d</string>
+    <string name="import_green_hint_count">Onay bekleyen yeşil oyun hücresi: %1$d</string>
+    <string name="import_multiline_cell_count">Çok satırlı hücre: %1$d</string>
+    <string name="import_column_counts_title">Sütun türüne göre hücreler</string>
+    <string name="import_column_count_row">%1$s: %2$d</string>
+    <string name="import_nothing_created_note">Bu adımda oyun, öge veya görev oluşturulmaz. Yalnızca ham hücreler taslak olarak saklanır.</string>
+
+    <!-- Import screen: source column names -->
+    <string name="source_column_game">Oyun</string>
+    <string name="source_column_three_d">3D</string>
+    <string name="source_column_card">Kart</string>
+    <string name="source_column_board">Mukavva</string>
+    <string name="source_column_special">Özel</string>
+    <string name="source_column_missing">Eksik</string>
+    <string name="source_column_borrowed">Ödünç Parçalar</string>
+
+    <!-- Import screen: warnings -->
+    <string name="import_warnings_title">Dikkat edilecekler</string>
+    <string name="import_warning_row_without_game_name">Şu satırlarda görev var ama oyun adı yok: %1$s. Oyun adı üst satırdan devralınmaz.</string>
+    <string name="import_warning_hidden_sheet">Bu çalışma sayfası kaynak dosyada gizliydi.</string>
+
+    <!-- Import screen: duplicate -->
+    <string name="import_duplicate_title">Bu dosya daha önce içe aktarılmış</string>
+    <string name="import_duplicate_count">Aynı parmak izine sahip %1$d içe aktarma bulundu.</string>
+    <string name="import_duplicate_entry">%1$s — %2$s — %3$s</string>
+    <string name="import_duplicate_question">Yine de yeni bir taslak oluşturmak istiyor musunuz?</string>
+
+    <!-- Import screen: saved -->
+    <string name="import_saved_title">Taslak kaydedildi</string>
+    <string name="import_saved_summary">%1$s dosyasının %2$s sayfasından %3$d ham hücre taslak olarak kaydedildi.</string>
+
+    <!-- Import screen: failures -->
+    <string name="import_error_title">İçe aktarma yapılamadı</string>
+    <string name="import_error_file_not_found">Dosya bulunamadı.</string>
+    <string name="import_error_not_readable">Dosya okunamadı. Okuma izniniz olmayabilir.</string>
+    <string name="import_error_not_xlsx">Bu dosya geçerli bir .xlsx dosyası değil.</string>
+    <string name="import_error_legacy_xls">Bu eski bir .xls dosyası. Lütfen .xlsx olarak kaydedip tekrar deneyin.</string>
+    <string name="import_error_damaged">Dosya bozuk görünüyor ve okunamadı.</string>
+    <string name="import_error_encrypted">Dosya parola korumalı. Şifreli dosyalar okunamıyor.</string>
+    <string name="import_error_safety_limit">Dosya güvenlik sınırları nedeniyle reddedildi.</string>
+    <string name="import_error_file_changed">Dosya okunurken değişti. Hiçbir şey kaydedilmedi, lütfen dosyayı yeniden seçin.</string>
+    <string name="import_error_unsupported_layout">Bu çalışma sayfasının başlık satırı tanınmadı. Bu sürüm yalnızca yedi sütunlu referans yapıyı okuyabiliyor.</string>
+    <string name="import_error_unsupported_column">%1$d numaralı sütun bu sürümde desteklenmiyor. Hiçbir hücre kaydedilmedi.</string>
+    <string name="import_error_empty_sheet">Bu çalışma sayfasında içe aktarılacak veri yok.</string>
+
+    <!-- Import screen: accessibility -->
+    <string name="import_sheet_accessibility_label">İçe aktarılacak çalışma sayfası</string>
 </resources>
