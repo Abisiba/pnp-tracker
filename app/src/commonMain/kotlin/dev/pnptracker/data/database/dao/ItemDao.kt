@@ -4,8 +4,10 @@ import androidx.room3.Dao
 import androidx.room3.Insert
 import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
+import androidx.room3.Transaction
 import dev.pnptracker.data.database.entity.ItemEntity
 import dev.pnptracker.domain.model.EntityId
+import kotlinx.coroutines.flow.Flow
 import kotlin.time.Instant
 
 /**
@@ -38,6 +40,44 @@ interface ItemDao {
         """,
     )
     suspend fun activeItemsOfGame(gameId: EntityId): List<ItemEntity>
+
+    /**
+     * The items of one game, in the order the list shows them.
+     *
+     * The join is what keeps a game's items to itself: no other game's row can
+     * come back from here, whatever id is passed in.
+     */
+    @Query(
+        """
+        SELECT items.* FROM items
+        INNER JOIN games ON games.id = items.game_id
+        WHERE items.game_id = :gameId AND items.deleted_at IS NULL AND games.deleted_at IS NULL
+        ORDER BY items.name, items.id
+        """,
+    )
+    fun observeActiveItemsOfGame(gameId: EntityId): Flow<List<ItemEntity>>
+
+    /** 1 while the game exists and has not been deleted, 0 otherwise. */
+    @Query("SELECT COUNT(*) FROM games WHERE id = :gameId AND deleted_at IS NULL")
+    suspend fun activeGameCount(gameId: EntityId): Int
+
+    /**
+     * Adds an item under a game that is really there.
+     *
+     * The foreign key already refuses an unknown game, but not a soft deleted one:
+     * its row still exists. Checking in the same transaction as the insert closes
+     * that gap, so an item can never end up under a game the user has thrown away.
+     *
+     * @throws IllegalArgumentException if the game is missing or deleted; nothing
+     *   is written in that case.
+     */
+    @Transaction
+    suspend fun addItemToActiveGame(item: ItemEntity) {
+        require(activeGameCount(item.gameId) == 1) {
+            "There is no game ${item.gameId} to add an item to."
+        }
+        insert(item)
+    }
 
     @Query(
         """

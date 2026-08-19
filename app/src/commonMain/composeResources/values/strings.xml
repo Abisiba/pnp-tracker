@@ -140,4 +140,30 @@
     <string name="review_draft_discard">Vazgeç</string>
     <string name="review_draft_name_required">Görev adı boş olamaz.</string>
     <string name="review_draft_only_note">Bu bir taslaktır; gerçek görev oluşturmaz.</string>
+    <!-- Games: setting up games and items -->
+    <string name="games_loading">Oyunlar yükleniyor…</string>
+    <string name="games_empty_title">Henüz oyun yok</string>
+    <string name="games_empty_hint">İlk oyununuzu oluşturun; ögeleri ve görevleri bunun altında toplanır.</string>
+    <string name="games_create">Yeni oyun oluştur</string>
+    <string name="games_name_label">Oyun adı</string>
+    <string name="games_name_required">Oyun adı boş olamaz.</string>
+    <string name="games_save">Oyunu kaydet</string>
+    <string name="games_discard">Vazgeç</string>
+    <string name="games_open">Aç</string>
+    <string name="games_back">Oyun listesine dön</string>
+    <string name="games_completed_badge">Tamamlandı</string>
+    <string name="games_mark_completed">Tamamlandı olarak işaretle</string>
+    <string name="games_mark_active">Yeniden aç</string>
+    <string name="games_completion_note">Tamamlanma yalnızca sizin kararınızdır; ögeleri ve görevleri değiştirmez.</string>
+    <string name="games_unavailable_title">Oyun bulunamadı</string>
+    <string name="games_unavailable">Bu oyun artık kayıtlı değil.</string>
+    <string name="games_items_title">Ögeler</string>
+    <string name="games_items_empty">Bu oyunun henüz ögesi yok.</string>
+    <string name="games_items_empty_hint">Token, kart destesi veya oyun tahtası gibi bir öge ekleyin.</string>
+    <string name="games_item_create">Yeni öge ekle</string>
+    <string name="games_item_name_label">Öge adı</string>
+    <string name="games_item_name_required">Öge adı boş olamaz.</string>
+    <string name="games_item_save">Ögeyi kaydet</string>
+    <string name="games_error_could_not_save">Değişiklik kaydedilemedi; hiçbir şey yazılmadı.</string>
+    <string name="games_error_game_unavailable">Bu oyun artık kayıtlı değil, bu yüzden değişiklik uygulanamadı.</string>
 </resources>

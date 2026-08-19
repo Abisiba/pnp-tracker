@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import dev.pnptracker.AppInfo
+import dev.pnptracker.ui.feature.games.GamesController
 import dev.pnptracker.ui.feature.importreview.ImportController
 import dev.pnptracker.ui.feature.importworkspace.ImportReviewController
 import dev.pnptracker.ui.navigation.AppNavigationState
@@ -26,6 +27,7 @@ fun PnpTrackerApp(
     appInfo: AppInfo,
     importController: ImportController,
     reviewController: ImportReviewController,
+    gamesController: GamesController,
 ) {
     val navigation = remember { AppNavigationState() }
     var themeMode by remember { mutableStateOf(ThemeMode.LIGHT) }
@@ -38,6 +40,7 @@ fun PnpTrackerApp(
             onToggleTheme = { themeMode = themeMode.toggled() },
             importController = importController,
             reviewController = reviewController,
+            gamesController = gamesController,
         )
     }
 }

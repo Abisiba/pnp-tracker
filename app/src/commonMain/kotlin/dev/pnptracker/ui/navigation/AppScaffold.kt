@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.pnptracker.AppInfo
 import dev.pnptracker.ui.Strings
+import dev.pnptracker.ui.feature.games.GamesController
 import dev.pnptracker.ui.feature.games.GamesScreen
 import dev.pnptracker.ui.feature.home.HomeScreen
 import dev.pnptracker.ui.feature.importreview.ImportController
@@ -64,6 +65,7 @@ fun AppScaffold(
     onToggleTheme: () -> Unit,
     importController: ImportController,
     reviewController: ImportReviewController,
+    gamesController: GamesController,
     modifier: Modifier = Modifier,
 ) {
     Surface(modifier = modifier.fillMaxSize()) {
@@ -78,7 +80,7 @@ fun AppScaffold(
             Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                 when (navigation.currentScreen) {
                     Screen.Home -> HomeScreen()
-                    Screen.Games -> GamesScreen()
+                    Screen.Games -> GamesScreen(gamesController)
                     Screen.Import -> ImportSection(importController, reviewController)
                 }
             }

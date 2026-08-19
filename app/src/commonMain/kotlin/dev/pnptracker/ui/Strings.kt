@@ -4,8 +4,33 @@ import dev.pnptracker.resources.Res
 import dev.pnptracker.resources.app_name
 import dev.pnptracker.resources.app_version_label
 import dev.pnptracker.resources.app_window_title
+import dev.pnptracker.resources.games_back
+import dev.pnptracker.resources.games_completed_badge
+import dev.pnptracker.resources.games_completion_note
+import dev.pnptracker.resources.games_create
 import dev.pnptracker.resources.games_description
+import dev.pnptracker.resources.games_discard
+import dev.pnptracker.resources.games_empty_hint
+import dev.pnptracker.resources.games_empty_title
+import dev.pnptracker.resources.games_error_could_not_save
+import dev.pnptracker.resources.games_error_game_unavailable
+import dev.pnptracker.resources.games_item_create
+import dev.pnptracker.resources.games_item_name_label
+import dev.pnptracker.resources.games_item_name_required
+import dev.pnptracker.resources.games_item_save
+import dev.pnptracker.resources.games_items_empty
+import dev.pnptracker.resources.games_items_empty_hint
+import dev.pnptracker.resources.games_items_title
+import dev.pnptracker.resources.games_loading
+import dev.pnptracker.resources.games_mark_active
+import dev.pnptracker.resources.games_mark_completed
+import dev.pnptracker.resources.games_name_label
+import dev.pnptracker.resources.games_name_required
+import dev.pnptracker.resources.games_open
+import dev.pnptracker.resources.games_save
 import dev.pnptracker.resources.games_title
+import dev.pnptracker.resources.games_unavailable
+import dev.pnptracker.resources.games_unavailable_title
 import dev.pnptracker.resources.home_description
 import dev.pnptracker.resources.home_title
 import dev.pnptracker.resources.import_cancel
@@ -211,6 +236,41 @@ object Strings {
         val savedSummary = Res.string.import_saved_summary
 
         val sheetAccessibilityLabel = Res.string.import_sheet_accessibility_label
+    }
+
+    /** Setting up the games and items the user tracks. */
+    object Games {
+        val loading = Res.string.games_loading
+        val emptyTitle = Res.string.games_empty_title
+        val emptyHint = Res.string.games_empty_hint
+
+        val create = Res.string.games_create
+        val nameLabel = Res.string.games_name_label
+        val nameRequired = Res.string.games_name_required
+        val save = Res.string.games_save
+        val discard = Res.string.games_discard
+
+        val open = Res.string.games_open
+        val back = Res.string.games_back
+
+        val completedBadge = Res.string.games_completed_badge
+        val markCompleted = Res.string.games_mark_completed
+        val markActive = Res.string.games_mark_active
+        val completionNote = Res.string.games_completion_note
+
+        val unavailableTitle = Res.string.games_unavailable_title
+        val unavailable = Res.string.games_unavailable
+
+        val itemsTitle = Res.string.games_items_title
+        val itemsEmpty = Res.string.games_items_empty
+        val itemsEmptyHint = Res.string.games_items_empty_hint
+        val itemCreate = Res.string.games_item_create
+        val itemNameLabel = Res.string.games_item_name_label
+        val itemNameRequired = Res.string.games_item_name_required
+        val itemSave = Res.string.games_item_save
+
+        val errorCouldNotSave = Res.string.games_error_could_not_save
+        val errorGameUnavailable = Res.string.games_error_game_unavailable
     }
 
     /** The two-pane workspace where a saved import is reviewed. */
