@@ -31,6 +31,7 @@ import dev.pnptracker.data.repository.EarlierImport
 import dev.pnptracker.domain.importprep.ImportWarning
 import dev.pnptracker.domain.importprep.ImportWarningKind
 import dev.pnptracker.domain.importprep.PreparedImportDraft
+import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.ui.Strings
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -47,6 +48,7 @@ private val MAX_CONTENT_WIDTH = 720.dp
 @Composable
 fun ImportScreen(
     controller: ImportController,
+    onOpenReview: (EntityId) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -115,6 +117,7 @@ fun ImportScreen(
                     sheetName = state.summary.sheetName,
                     rawBlockCount = state.summary.rawBlockCount,
                     onChooseAnother = { scope.launch { controller.chooseFile() } },
+                    onOpenReview = { onOpenReview(state.summary.batchId) },
                 )
 
             is ImportScreenState.Failed ->
@@ -374,6 +377,7 @@ private fun SavedSection(
     sheetName: String,
     rawBlockCount: Int,
     onChooseAnother: () -> Unit,
+    onOpenReview: () -> Unit,
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -384,6 +388,9 @@ private fun SavedSection(
             style = MaterialTheme.typography.titleMedium,
         )
         Text(stringResource(Strings.Import.savedSummary, fileName, sheetName, rawBlockCount))
+        Button(onClick = onOpenReview) {
+            Text(stringResource(Strings.Review.open))
+        }
         OutlinedButton(onClick = onChooseAnother) {
             Text(stringResource(Strings.Import.chooseAnotherFile))
         }

@@ -63,6 +63,34 @@ import dev.pnptracker.resources.navigation_import
 import dev.pnptracker.resources.navigation_section_label
 import dev.pnptracker.resources.navigation_state_not_selected
 import dev.pnptracker.resources.navigation_state_selected
+import dev.pnptracker.resources.review_back
+import dev.pnptracker.resources.review_cell_location
+import dev.pnptracker.resources.review_completion_hint_pending
+import dev.pnptracker.resources.review_could_not_save
+import dev.pnptracker.resources.review_draft_count
+import dev.pnptracker.resources.review_drafts_empty
+import dev.pnptracker.resources.review_drafts_empty_hint
+import dev.pnptracker.resources.review_drafts_of_selected
+import dev.pnptracker.resources.review_drafts_title
+import dev.pnptracker.resources.review_empty
+import dev.pnptracker.resources.review_empty_title
+import dev.pnptracker.resources.review_green_hint_pending
+import dev.pnptracker.resources.review_loading
+import dev.pnptracker.resources.review_mark_processed
+import dev.pnptracker.resources.review_mark_unprocessed
+import dev.pnptracker.resources.review_no_real_records
+import dev.pnptracker.resources.review_open
+import dev.pnptracker.resources.review_processed_accessibility
+import dev.pnptracker.resources.review_processed_badge
+import dev.pnptracker.resources.review_progress
+import dev.pnptracker.resources.review_raw_blocks_title
+import dev.pnptracker.resources.review_resumable_entry
+import dev.pnptracker.resources.review_resumable_hint
+import dev.pnptracker.resources.review_resumable_title
+import dev.pnptracker.resources.review_select_cell_accessibility
+import dev.pnptracker.resources.review_title
+import dev.pnptracker.resources.review_unavailable
+import dev.pnptracker.resources.review_unavailable_title
 import dev.pnptracker.resources.source_column_board
 import dev.pnptracker.resources.source_column_borrowed
 import dev.pnptracker.resources.source_column_card
@@ -175,6 +203,54 @@ object Strings {
         val savedSummary = Res.string.import_saved_summary
 
         val sheetAccessibilityLabel = Res.string.import_sheet_accessibility_label
+    }
+
+    /** The two-pane workspace where a saved import is reviewed. */
+    object Review {
+        val title = Res.string.review_title
+        val open = Res.string.review_open
+        val back = Res.string.review_back
+
+        val resumableTitle = Res.string.review_resumable_title
+        val resumableHint = Res.string.review_resumable_hint
+
+        /** Takes the file name and the sheet name. */
+        val resumableEntry = Res.string.review_resumable_entry
+
+        val loading = Res.string.review_loading
+        val unavailableTitle = Res.string.review_unavailable_title
+        val unavailable = Res.string.review_unavailable
+        val emptyTitle = Res.string.review_empty_title
+
+        /** Takes the file name and the sheet name. */
+        val empty = Res.string.review_empty
+
+        val rawBlocksTitle = Res.string.review_raw_blocks_title
+        val draftsTitle = Res.string.review_drafts_title
+        val draftsOfSelected = Res.string.review_drafts_of_selected
+        val draftsEmpty = Res.string.review_drafts_empty
+        val draftsEmptyHint = Res.string.review_drafts_empty_hint
+
+        val markProcessed = Res.string.review_mark_processed
+        val markUnprocessed = Res.string.review_mark_unprocessed
+        val processedBadge = Res.string.review_processed_badge
+
+        /** Takes the one based row and column numbers. */
+        val cellLocation = Res.string.review_cell_location
+
+        /** Takes how many cells are marked done and how many there are. */
+        val progress = Res.string.review_progress
+
+        /** Takes how many drafts there are. */
+        val draftCount = Res.string.review_draft_count
+
+        val couldNotSave = Res.string.review_could_not_save
+        val greenHintPending = Res.string.review_green_hint_pending
+        val completionHintPending = Res.string.review_completion_hint_pending
+        val noRealRecords = Res.string.review_no_real_records
+
+        val selectCellAccessibility = Res.string.review_select_cell_accessibility
+        val processedAccessibility = Res.string.review_processed_accessibility
     }
 
     object SheetVisibilityNames {

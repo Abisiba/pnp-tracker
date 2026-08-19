@@ -59,6 +59,13 @@ class TemporaryDatabaseDirectory {
     }
 }
 
+/** A clock that never moves, so rows written together can be compared exactly. */
+class StoppedClock(
+    private val fixed: Instant,
+) : kotlin.time.Clock {
+    override fun now(): Instant = fixed
+}
+
 const val EPOCH_MILLISECONDS_CREATED = 1_700_000_000_000L
 const val EPOCH_MILLISECONDS_UPDATED = 1_700_000_600_000L
 const val EPOCH_MILLISECONDS_DELETED = 1_700_001_200_000L

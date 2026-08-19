@@ -172,7 +172,9 @@ class ImportDraftTest {
             val block = insertBatchWithBlock()
 
             // The only ways to touch a raw cell are inserting it, reading it, marking it
-            // processed and answering its hint; there is no general text or coordinate update.
+            // processed and answering its hint; there is no general text or coordinate
+            // update. Reads may be added freely — `observeRawBlocksOfBatch` is one — but
+            // every name here that writes must be checked against that rule by hand.
             val rawBlockApi =
                 ImportDao::class.java.methods
                     // Value class parameters make Kotlin mangle the JVM name after a dash.
@@ -185,8 +187,12 @@ class ImportDraftTest {
                     "insertRawBlock",
                     "rawBlockById",
                     "rawBlocksOfBatch",
+                    "observeRawBlocksOfBatch",
                     "unprocessedRawBlocksOfBatch",
+                    // Writes: both only ever set `is_processed`, and the guarded one
+                    // reaches the table through the other.
                     "markRawBlockProcessed",
+                    "setRawBlockProcessed",
                 ),
                 rawBlockApi,
             )

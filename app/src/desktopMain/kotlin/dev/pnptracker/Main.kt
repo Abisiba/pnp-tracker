@@ -7,6 +7,7 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import dev.pnptracker.data.database.DatabaseFactory
 import dev.pnptracker.data.repository.ImportDraftStore
+import dev.pnptracker.data.repository.ImportReviewStore
 import dev.pnptracker.platform.awt.applyLinuxFileDialogPolicy
 import dev.pnptracker.platform.files.AppDirectoryInitializer
 import dev.pnptracker.platform.files.XdgAppPathsResolver
@@ -15,6 +16,7 @@ import dev.pnptracker.platform.xlsx.XlsxImportFileGateway
 import dev.pnptracker.ui.PnpTrackerApp
 import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.feature.importreview.ImportController
+import dev.pnptracker.ui.feature.importworkspace.ImportReviewController
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.compose.resources.stringResource
 import java.awt.Dimension
@@ -44,6 +46,7 @@ fun main() {
             gateway = XlsxImportFileGateway(AwtXlsxFilePicker(title = FILE_DIALOG_TITLE)),
             store = ImportDraftStore(database.importDao()),
         )
+    val reviewController = ImportReviewController(ImportReviewStore(database.importDao()))
 
     application {
         Window(
@@ -57,7 +60,7 @@ fun main() {
             // Below this the sidebar and the open section stop being usable
             // together, so the window manager is not allowed to go smaller.
             window.minimumSize = Dimension(MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT)
-            PnpTrackerApp(AppInfo.Current, importController)
+            PnpTrackerApp(AppInfo.Current, importController, reviewController)
         }
     }
 }

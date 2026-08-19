@@ -40,7 +40,8 @@ import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.feature.games.GamesScreen
 import dev.pnptracker.ui.feature.home.HomeScreen
 import dev.pnptracker.ui.feature.importreview.ImportController
-import dev.pnptracker.ui.feature.importreview.ImportScreen
+import dev.pnptracker.ui.feature.importworkspace.ImportReviewController
+import dev.pnptracker.ui.feature.importworkspace.ImportSection
 import dev.pnptracker.ui.textsOf
 import dev.pnptracker.ui.theme.ThemeMode
 import org.jetbrains.compose.resources.stringResource
@@ -62,6 +63,7 @@ fun AppScaffold(
     themeMode: ThemeMode,
     onToggleTheme: () -> Unit,
     importController: ImportController,
+    reviewController: ImportReviewController,
     modifier: Modifier = Modifier,
 ) {
     Surface(modifier = modifier.fillMaxSize()) {
@@ -77,7 +79,7 @@ fun AppScaffold(
                 when (navigation.currentScreen) {
                     Screen.Home -> HomeScreen()
                     Screen.Games -> GamesScreen()
-                    Screen.Import -> ImportScreen(importController)
+                    Screen.Import -> ImportSection(importController, reviewController)
                 }
             }
         }

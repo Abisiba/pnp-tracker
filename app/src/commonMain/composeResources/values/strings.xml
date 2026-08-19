@@ -100,4 +100,35 @@
 
     <!-- Import screen: accessibility -->
     <string name="import_sheet_accessibility_label">İçe aktarılacak çalışma sayfası</string>
+    <!-- Import review workspace -->
+    <string name="review_title">İçe aktarma incelemesi</string>
+    <string name="review_open">İncelemeyi aç</string>
+    <string name="review_back">İçe aktarma ekranına dön</string>
+    <string name="review_resumable_title">Devam eden içe aktarmalar</string>
+    <string name="review_resumable_hint">Onaylanmamış içe aktarmalar burada kalır ve istediğiniz zaman açılabilir.</string>
+    <string name="review_resumable_entry">%1$s — %2$s</string>
+    <string name="review_loading">İnceleme yükleniyor…</string>
+    <string name="review_unavailable_title">İçe aktarma bulunamadı</string>
+    <string name="review_unavailable">Bu içe aktarma artık kayıtlı değil.</string>
+    <string name="review_empty_title">İncelenecek hücre yok</string>
+    <string name="review_empty">%1$s dosyasının %2$s sayfasından kaydedilmiş ham hücre yok.</string>
+    <string name="review_raw_blocks_title">Ham hücreler</string>
+    <string name="review_drafts_title">Görev taslakları</string>
+    <string name="review_drafts_of_selected">Seçili hücrenin taslakları</string>
+    <string name="review_drafts_empty">Henüz görev taslağı yok.</string>
+    <string name="review_drafts_empty_hint">Soldan bir ham hücre seçerek başlayın.</string>
+    <string name="review_mark_processed">İşlendi olarak işaretle</string>
+    <string name="review_mark_unprocessed">İşareti kaldır</string>
+    <string name="review_processed_badge">İşlendi</string>
+    <string name="review_cell_location">Satır %1$d · Sütun %2$d</string>
+    <string name="review_progress">%1$d / %2$d hücre işlendi</string>
+    <string name="review_draft_count">%1$d görev taslağı</string>
+    <string name="review_could_not_save">Değişiklik kaydedilemedi; önceki değer korundu.</string>
+    <string name="review_green_hint_pending">Yeşil hücre ipucu onay bekliyor</string>
+    <string name="review_completion_hint_pending">Tamamlanma ipucu onay bekliyor</string>
+    <string name="review_no_real_records">Bu ekranda oyun, öge veya görev oluşturulmaz. İçe aktarma onaylanana kadar taslak kalır.</string>
+
+    <!-- Import review: accessibility -->
+    <string name="review_select_cell_accessibility">Ham hücreyi seç</string>
+    <string name="review_processed_accessibility">Bu ham hücre işlendi olarak işaretli</string>
 </resources>

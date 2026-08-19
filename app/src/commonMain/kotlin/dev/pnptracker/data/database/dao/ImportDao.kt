@@ -12,6 +12,7 @@ import dev.pnptracker.data.database.entity.RawImportBlockEntity
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.HintDecision
 import dev.pnptracker.domain.model.ImportBatchStatus
+import kotlinx.coroutines.flow.Flow
 import kotlin.time.Instant
 
 /**
@@ -96,6 +97,53 @@ abstract class ImportDao {
     @Query("SELECT * FROM raw_import_blocks WHERE id = :id")
     abstract suspend fun rawBlockById(id: EntityId): RawImportBlockEntity?
 
+    /**
+     * The batch being reviewed, and null once it is gone.
+     *
+     * The three observing queries below are what the review workspace is built
+     * from: Room re-runs them whenever the tables change, so marking a cell done
+     * or adding a draft shows up without anything having to remember to reload.
+     */
+    @Query("SELECT * FROM import_batches WHERE id = :id")
+    abstract fun observeBatch(id: EntityId): Flow<ImportBatchEntity?>
+
+    /**
+     * Every cell of a batch, in the order it appeared in the file.
+     *
+     * Sheet, row and column are already unique together for one batch, so the
+     * order cannot tie; `id` is named last anyway so the order stays fixed even
+     * if that ever stops being true.
+     */
+    @Query(
+        """
+        SELECT * FROM raw_import_blocks
+        WHERE import_batch_id = :batchId
+        ORDER BY sheet_name, row_index, column_index, id
+        """,
+    )
+    abstract fun observeRawBlocksOfBatch(batchId: EntityId): Flow<List<RawImportBlockEntity>>
+
+    /**
+     * Every draft of a batch, oldest first, reached through the cells it came from
+     * so a draft of another import can never appear in this one's workspace.
+     *
+     * Two drafts written in the same millisecond are separated by `id`, which
+     * keeps the list from reshuffling between reads.
+     */
+    @Query(
+        """
+        SELECT draft_tasks.* FROM draft_tasks
+        JOIN raw_import_blocks ON raw_import_blocks.id = draft_tasks.raw_import_block_id
+        WHERE raw_import_blocks.import_batch_id = :batchId
+        ORDER BY draft_tasks.created_at, draft_tasks.id
+        """,
+    )
+    abstract fun observeDraftTasksOfBatch(batchId: EntityId): Flow<List<DraftTaskEntity>>
+
+    /** Imports the user can still come back to, newest first. */
+    @Query("SELECT * FROM import_batches WHERE status = 'DRAFT' ORDER BY imported_at DESC, id")
+    abstract fun observeDraftBatches(): Flow<List<ImportBatchEntity>>
+
     @Query("UPDATE raw_import_blocks SET is_processed = :isProcessed, updated_at = :updatedAt WHERE id = :id")
     abstract suspend fun markRawBlockProcessed(
         id: EntityId,
@@ -109,6 +157,36 @@ abstract class ImportDao {
         decision: HintDecision,
         updatedAt: Instant,
     ): Int
+
+    /**
+     * Records how far the user has got with one cell.
+     *
+     * Reviewing progress is only meaningful while the import is still a draft, so
+     * the cell has to exist and its batch has to be one; otherwise nothing is
+     * written and the previous value stands.
+     *
+     * This says nothing about drafts. A cell can be marked done with no drafts on
+     * it, and a cell with drafts stays unmarked until the user says otherwise:
+     * the two are separate decisions and neither implies the other.
+     *
+     * @throws IllegalArgumentException if the cell is unknown or its import is no
+     *   longer a draft; nothing is written in that case.
+     */
+    @Transaction
+    open suspend fun setRawBlockProcessed(
+        blockId: EntityId,
+        isProcessed: Boolean,
+        updatedAt: Instant,
+    ) {
+        val block = rawBlockById(blockId)
+        requireNotNull(block) { "There is no raw cell $blockId to mark." }
+        val batch = batchById(block.importBatchId)
+        requireNotNull(batch) { "The raw cell $blockId belongs to no import batch." }
+        require(batch.status == ImportBatchStatus.DRAFT) {
+            "Only a draft import can be reviewed, but ${batch.id} is ${batch.status}."
+        }
+        markRawBlockProcessed(blockId, isProcessed, updatedAt)
+    }
 
     @Query("SELECT * FROM draft_tasks WHERE raw_import_block_id = :blockId ORDER BY created_at, name")
     abstract suspend fun draftTasksOfBlock(blockId: EntityId): List<DraftTaskEntity>
