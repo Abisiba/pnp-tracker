@@ -509,7 +509,72 @@ Orijinal metin hiçbir zaman sessizce değiştirilmez veya kaybedilmez.
 - Yeşil oyun hücresi ipucunu kabul et/reddet
 - Görevi mevcut bir `Item` altına bağla
 - Ham bloğu işlendi olarak işaretle
-- İçe aktarma grubunu topluca onayla veya geri al
+- İçe aktarma grubunu topluca onayla (geri alma Faz 2 kapsamındadır)
+
+### 11.4.1 Oyun ve öge kurulumu
+
+Hedef yapıyı yalnızca kullanıcı kurar.
+
+- İçe aktarma hiçbir zaman `Game` veya `Item` kaydını kendiliğinden oluşturmaz.
+- Oyun adı hücresinden otomatik `Game` türetilmez.
+- `Item` adı ham bloktan tahmin edilmez.
+- Kullanıcı oyunları ve ögeleri oyun listesi ve oyun ayrıntısı ekranlarından elle
+  oluşturur.
+- Elle oluşturulan bir oyunun `sourceImportBatchId` alanı boştur.
+- Oyun tamamlanma durumu yalnızca açık kullanıcı eylemiyle değişir; bir oyunu
+  tamamlamak ögelerini veya görevlerini değiştirmez.
+
+### 11.4.2 İçe aktarmayı onaylama
+
+Onay, taslakları gerçek görevlere çeviren tek adımdır.
+
+Ön koşullar:
+
+- Kullanıcı her `DraftTask` için mevcut ve aktif bir hedef `Item` seçer.
+- `selectedPoolType` ve `selectedTrackingMode` görev üretiminden önce zorunludur.
+- `requiredQuantity` havuz ve takip kurallarına göre doğrulanır.
+- Bir taslak eksik veya geçersizse bütün batch onayı engellenir; hiçbir taslak
+  sessizce atlanmaz.
+- Hiç `Item` yoksa onay yapılamaz; kullanıcı önce oyun ve öge oluşturur.
+- İşlenmemiş ham blok bulunması onayı doğrudan engellemez. Kullanıcıya işlenmemiş
+  blok sayısı ve açık bir uyarı gösterilir; devam etmek için ayrıca onay vermesi
+  gerekir.
+
+Onayın kendisi:
+
+- Onay tek bir Room transaction’ında gerçekleşir.
+- Her geçerli `DraftTask` tam olarak bir gerçek `Task` üretir.
+- Üretilen görev, taslağın `targetItemId` değerine bağlanır.
+- `tasks.sourceRawImportBlockId` kaynak ham bloğu korur.
+- `draft_tasks.materializedTaskId` oluşturulan görevin kimliğiyle doldurulur.
+
+Transaction’ın herhangi bir noktasında hata olursa hiçbir görev kalmaz, hiçbir
+`materializedTaskId` yazılmaz, sayaçlar değişmez ve batch `DRAFT` kalır.
+
+Başarılı onay sonunda:
+
+- Batch `CONFIRMED` olur.
+- `createdTaskCount`, transaction içinde gerçekten oluşturulan görev sayısına eşit
+  olur.
+- Bu sürüm otomatik oyun oluşturmadığı için `createdGameCount` sıfır kalır.
+- Batch’in `updatedAt` alanı aynı transaction içinde güncellenir.
+
+İkinci bir onay çağrısı yeni kayıt üretmeden açık bir “zaten onaylanmış” sonucu
+döndürür. Bu, başarılı bir tekrar uygulama değil, korumalı bir reddediştir.
+
+### 11.4.3 Taslağı kapatma, yeniden açma ve onay sonrası
+
+- Ham bloklar ve taslaklar onaydan sonra silinmez; kaynak ve denetim izi olarak
+  korunur.
+- `CONFIRMED` bir batch salt okunur görüntülenebilir, düzenlenemez.
+- Ham bloğun işlenmiş durumunu değiştirme, taslak düzenleme ve hedef öge
+  değiştirme yalnızca `DRAFT` bir batch’te mümkündür.
+- “Taslağı kapatma” yalnızca ekrandan veya gezinmeden çıkmaktır; yeni bir
+  veritabanı durumu oluşturmaz.
+- “Yeniden açma” yalnızca `DRAFT` bir batch’i tekrar düzenleme ekranında açmaktır.
+- `CONFIRMED` bir batch’in düzenlenebilir biçimde yeniden açılması yoktur.
+- `CONFIRMED → ROLLED_BACK` geçişi ve oluşturulan kayıtların korumalı geri
+  alınması Faz 2 kapsamındadır.
 
 ### 11.5 Excel biçim işaretleri
 
@@ -610,6 +675,7 @@ Mukavva
 
 ### 12.3 Oyunlar ekranı
 
+- Yeni oyun oluşturma
 - Oyun adına göre arama
 - Aktif/tamamlanan filtresi
 - Manuel tamamla/yeniden aç eylemi
@@ -620,6 +686,8 @@ Mukavva
 
 - Oyun başlığı ve manuel tamamlanma durumu
 - Notlar
+- Oyunun ögeleri
+- Yeni öge ekleme
 - Havuzlara göre görev bölümleri
 - Yeni görev ekleme
 - Ham içe aktarma kaynağına geri dönme
@@ -857,7 +925,12 @@ Linux’ta çalışan uygulama iskeletini, kalıcı domain modelini ve en riskli
 13. İki bölmeli içe aktarma inceleme ekranının çalışan prototipini yap.
 14. Ham metinden manuel seçim/elle yazma yoluyla görev taslağı oluştur.
 15. Import batch’i onaylama, taslak olarak kapatma ve yeniden açmayı uygula.
-16. Oyun listesi ve manuel oyun tamamlanma durumunu temel düzeyde göster.
+16. Oyun listesini, manuel oyun ve öge kurulumunu ve manuel oyun tamamlanma
+    durumunu uygula.
+
+**Sıra:** İş 16, İş 15’ten önce uygulanır. Onay akışı `Game → Item → Task`
+zincirine yazar; bu zincirin üst iki halkası yalnızca kullanıcı tarafından
+kurulduğu için oyun ve öge kurulumu onaydan önce gelmelidir.
 
 #### Faz 1 testleri
 
@@ -871,15 +944,22 @@ Linux’ta çalışan uygulama iskeletini, kalıcı domain modelini ve en riskli
 - Yeşil oyun hücresi ipucunun algılanması
 - Aynı dosyanın parmak iziyle tekrar tanınması
 - Import taslağının uygulama yeniden açılınca devam etmesi
+- Elle oluşturulan oyun ve ögelerin korunması
+- Öge listesinin yalnızca kendi oyununu göstermesi
 - Import onayının transaction içinde tamamlanması
+- Eksik veya geçersiz bir taslağın bütün onayı engellemesi
+- İkinci onayın yeni kayıt üretmemesi
 
 #### Faz 1 tamamlanma ölçütü
 
 - Uygulama Garuda Linux’ta açılır.
 - Referans yapısındaki Excel dosyası okunur.
 - Hiçbir dolu hücre veya ham metin kaybolmaz.
-- Kullanıcı en az bir ham bloktan elle görev taslağı oluşturup oyuna kaydedebilir.
-- Uygulama kapatılıp açıldığında oyunlar, ham bloklar ve taslaklar korunur.
+- Kullanıcı elle oyun ve öge oluşturabilir.
+- Kullanıcı en az bir ham bloktan elle görev taslağı oluşturup, seçtiği bir ögeye
+  bağlayarak onaylayabilir ve bundan gerçek bir görev oluşur.
+- Uygulama kapatılıp açıldığında oyunlar, ögeler, ham bloklar, taslaklar ve
+  onaylanmış görevler korunur.
 - Test ve lint kontrolleri başarılıdır.
 
 ### Faz 2 — Üretim havuzları ve tam günlük kullanım
