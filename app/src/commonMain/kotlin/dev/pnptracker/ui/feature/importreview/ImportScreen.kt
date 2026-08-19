@@ -2,6 +2,7 @@ package dev.pnptracker.ui.feature.importreview
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -50,6 +51,7 @@ fun ImportScreen(
     controller: ImportController,
     onOpenReview: (EntityId) -> Unit,
     modifier: Modifier = Modifier,
+    footer: @Composable ColumnScope.() -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
 
@@ -126,6 +128,11 @@ fun ImportScreen(
                     onChooseAnother = { scope.launch { controller.chooseFile() } },
                 )
         }
+
+        // Anything the section wants below the flow shares this one scrolling
+        // column; a second scroll wrapped around this one would leave the inner
+        // one with no height to measure against.
+        footer()
     }
 }
 

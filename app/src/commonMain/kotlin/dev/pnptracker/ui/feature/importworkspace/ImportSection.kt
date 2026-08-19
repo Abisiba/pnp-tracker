@@ -2,11 +2,8 @@ package dev.pnptracker.ui.feature.importworkspace
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -58,15 +55,13 @@ fun ImportSection(
         return
     }
 
-    Column(
-        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+    // The file picking screen already scrolls; the resumable list goes inside that
+    // same column rather than into a second one wrapped around it.
+    ImportScreen(
+        controller = importController,
+        onOpenReview = { savedBatchId -> openBatchId = savedBatchId },
+        modifier = modifier,
     ) {
-        ImportScreen(
-            controller = importController,
-            onOpenReview = { savedBatchId -> openBatchId = savedBatchId },
-            modifier = Modifier.fillMaxWidth(),
-        )
         ResumableImports(
             controller = reviewController,
             onOpen = { resumedBatchId -> openBatchId = resumedBatchId },
