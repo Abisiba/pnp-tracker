@@ -4,6 +4,7 @@ import dev.pnptracker.domain.importconfirm.ImportConfirmationFailure
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.ui.Strings
+import dev.pnptracker.ui.poolNameOf
 import org.jetbrains.compose.resources.StringResource
 
 /**
@@ -28,14 +29,8 @@ fun messageOf(failure: ImportConfirmationFailure): StringResource =
         ImportConfirmationFailure.COULD_NOT_SAVE -> Strings.Confirm.errorCouldNotSave
     }
 
-/** The pool names, which are already the words the rest of the screen uses. */
-fun labelOf(poolType: PoolType): String =
-    when (poolType) {
-        PoolType.THREE_D -> "3D"
-        PoolType.CARD -> "Kart"
-        PoolType.BOARD -> "Tahta"
-        PoolType.SPECIAL -> "Özel"
-    }
+/** The pool names, taken from the one place that decides them. */
+fun labelOf(poolType: PoolType): StringResource = poolNameOf(poolType)
 
 fun labelOf(trackingMode: TrackingMode): String =
     when (trackingMode) {

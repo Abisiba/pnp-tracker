@@ -4,16 +4,11 @@ import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.tasks.TaskSetupFailure
 import dev.pnptracker.ui.Strings
+import dev.pnptracker.ui.poolNameOf
 import org.jetbrains.compose.resources.StringResource
 
-/** The pool names, under the words PLAN 3.4 uses for them. */
-fun labelOf(poolType: PoolType): StringResource =
-    when (poolType) {
-        PoolType.THREE_D -> Strings.Pools.threeD
-        PoolType.CARD -> Strings.Pools.card
-        PoolType.BOARD -> Strings.Pools.board
-        PoolType.SPECIAL -> Strings.Pools.special
-    }
+/** The pool names, taken from the one place that decides them. */
+fun labelOf(poolType: PoolType): StringResource = poolNameOf(poolType)
 
 fun labelOf(trackingMode: TrackingMode): StringResource =
     when (trackingMode) {

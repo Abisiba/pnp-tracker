@@ -582,7 +582,7 @@ private fun DraftAiming(
                     // Changing the pool drops a mode the new pool does not allow.
                     onAim(draft.targetItemId, pool, ImportConfirmationController.onlyTrackingModeOf(pool))
                 },
-                label = { Text(labelOf(pool)) },
+                label = { Text(stringResource(labelOf(pool))) },
             )
         }
     }
