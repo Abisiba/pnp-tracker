@@ -127,6 +127,10 @@ import dev.pnptracker.resources.navigation_import
 import dev.pnptracker.resources.navigation_section_label
 import dev.pnptracker.resources.navigation_state_not_selected
 import dev.pnptracker.resources.navigation_state_selected
+import dev.pnptracker.resources.pool_board
+import dev.pnptracker.resources.pool_card
+import dev.pnptracker.resources.pool_special
+import dev.pnptracker.resources.pool_three_d
 import dev.pnptracker.resources.review_back
 import dev.pnptracker.resources.review_cell_location
 import dev.pnptracker.resources.review_completion_hint_pending
@@ -170,9 +174,38 @@ import dev.pnptracker.resources.source_column_game
 import dev.pnptracker.resources.source_column_missing
 import dev.pnptracker.resources.source_column_special
 import dev.pnptracker.resources.source_column_three_d
+import dev.pnptracker.resources.tasks_create
+import dev.pnptracker.resources.tasks_empty
+import dev.pnptracker.resources.tasks_empty_hint
+import dev.pnptracker.resources.tasks_error_could_not_save
+import dev.pnptracker.resources.tasks_error_item_unavailable
+import dev.pnptracker.resources.tasks_item_label
+import dev.pnptracker.resources.tasks_item_required
+import dev.pnptracker.resources.tasks_loading
+import dev.pnptracker.resources.tasks_name_label
+import dev.pnptracker.resources.tasks_name_required
+import dev.pnptracker.resources.tasks_needs_item
+import dev.pnptracker.resources.tasks_notes_label
+import dev.pnptracker.resources.tasks_pool_label
+import dev.pnptracker.resources.tasks_pool_required
+import dev.pnptracker.resources.tasks_quantity_hint
+import dev.pnptracker.resources.tasks_quantity_label
+import dev.pnptracker.resources.tasks_quantity_unusable
+import dev.pnptracker.resources.tasks_row_from_import
+import dev.pnptracker.resources.tasks_row_item
+import dev.pnptracker.resources.tasks_row_quantity
+import dev.pnptracker.resources.tasks_row_quantity_unknown
+import dev.pnptracker.resources.tasks_save
+import dev.pnptracker.resources.tasks_title
+import dev.pnptracker.resources.tasks_tracking_label
+import dev.pnptracker.resources.tasks_tracking_required
 import dev.pnptracker.resources.theme_section_label
 import dev.pnptracker.resources.theme_switch_to_dark
 import dev.pnptracker.resources.theme_switch_to_light
+import dev.pnptracker.resources.tracking_checklist
+import dev.pnptracker.resources.tracking_counted
+import dev.pnptracker.resources.tracking_pipeline
+import dev.pnptracker.resources.tracking_three_d_batch
 
 /**
  * Every text the user can read, in one place.
@@ -310,6 +343,60 @@ object Strings {
 
         val errorCouldNotSave = Res.string.games_error_could_not_save
         val errorGameUnavailable = Res.string.games_error_game_unavailable
+    }
+
+    /**
+     * The tasks section of the game detail screen.
+     *
+     * There is no word for "finished" anywhere in here, because the section does
+     * not show one; a task's completion is worked out from pool counters that do
+     * not exist yet.
+     */
+    object Tasks {
+        val title = Res.string.tasks_title
+        val loading = Res.string.tasks_loading
+        val empty = Res.string.tasks_empty
+        val emptyHint = Res.string.tasks_empty_hint
+        val needsItem = Res.string.tasks_needs_item
+
+        val create = Res.string.tasks_create
+        val nameLabel = Res.string.tasks_name_label
+        val nameRequired = Res.string.tasks_name_required
+        val itemLabel = Res.string.tasks_item_label
+        val itemRequired = Res.string.tasks_item_required
+        val poolLabel = Res.string.tasks_pool_label
+        val poolRequired = Res.string.tasks_pool_required
+        val trackingLabel = Res.string.tasks_tracking_label
+        val trackingRequired = Res.string.tasks_tracking_required
+        val quantityLabel = Res.string.tasks_quantity_label
+        val quantityHint = Res.string.tasks_quantity_hint
+        val quantityUnusable = Res.string.tasks_quantity_unusable
+        val notesLabel = Res.string.tasks_notes_label
+        val save = Res.string.tasks_save
+
+        val rowItem = Res.string.tasks_row_item
+        val rowQuantity = Res.string.tasks_row_quantity
+        val rowQuantityUnknown = Res.string.tasks_row_quantity_unknown
+        val rowFromImport = Res.string.tasks_row_from_import
+
+        val errorCouldNotSave = Res.string.tasks_error_could_not_save
+        val errorItemUnavailable = Res.string.tasks_error_item_unavailable
+    }
+
+    /** The four production pools, under the names PLAN 3.4 gives them. */
+    object Pools {
+        val threeD = Res.string.pool_three_d
+        val card = Res.string.pool_card
+        val board = Res.string.pool_board
+        val special = Res.string.pool_special
+    }
+
+    /** How progress on a task is counted. */
+    object Tracking {
+        val threeDBatch = Res.string.tracking_three_d_batch
+        val pipeline = Res.string.tracking_pipeline
+        val checklist = Res.string.tracking_checklist
+        val counted = Res.string.tracking_counted
     }
 
     /** Turning a reviewed import into real tasks. */

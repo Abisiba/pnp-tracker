@@ -211,4 +211,39 @@
     <string name="aim_ready">Hazır</string>
     <string name="aim_no_items">Önce bir oyun ve öge oluşturun.</string>
     <string name="aim_materialized">Bu taslak gerçek göreve dönüştürüldü.</string>
+
+    <!-- Görevler bölümü: elle görev oluşturma ve havuzlara göre listeleme -->
+    <string name="tasks_title">Görevler</string>
+    <string name="tasks_loading">Görevler yükleniyor…</string>
+    <string name="tasks_empty">Bu oyunun henüz görevi yok.</string>
+    <string name="tasks_empty_hint">Bir ögenin altına ilk görevi ekleyin; görevler havuzlarına göre gruplanır.</string>
+    <string name="tasks_needs_item">Görev ekleyebilmek için önce bir öge oluşturun.</string>
+    <string name="tasks_create">Yeni görev ekle</string>
+    <string name="tasks_name_label">Görev adı</string>
+    <string name="tasks_name_required">Görev adı boş olamaz.</string>
+    <string name="tasks_item_label">Hedef öge</string>
+    <string name="tasks_item_required">Görevin bağlanacağı ögeyi seçin.</string>
+    <string name="tasks_pool_label">Üretim havuzu</string>
+    <string name="tasks_pool_required">Bir üretim havuzu seçin.</string>
+    <string name="tasks_tracking_label">Takip biçimi</string>
+    <string name="tasks_tracking_required">Bu havuz için takip biçimini seçin.</string>
+    <string name="tasks_quantity_label">Gerekli adet</string>
+    <string name="tasks_quantity_hint">Boş bırakılırsa adet bilinmiyor sayılır.</string>
+    <string name="tasks_quantity_unusable">Adet sıfırdan büyük bir tam sayı olmalı.</string>
+    <string name="tasks_notes_label">Not</string>
+    <string name="tasks_save">Görevi kaydet</string>
+    <string name="tasks_row_item">Öge: %1$s</string>
+    <string name="tasks_row_quantity">Gerekli adet: %1$s</string>
+    <string name="tasks_row_quantity_unknown">Gerekli adet bilinmiyor</string>
+    <string name="tasks_row_from_import">İçe aktarmadan geldi</string>
+    <string name="tasks_error_could_not_save">Görev kaydedilemedi; hiçbir şey yazılmadı.</string>
+    <string name="tasks_error_item_unavailable">Bu öge artık kayıtlı değil, bu yüzden görev oluşturulamadı.</string>
+    <string name="pool_three_d">3D Baskı</string>
+    <string name="pool_card">Kart</string>
+    <string name="pool_board">Mukavva</string>
+    <string name="pool_special">Özel</string>
+    <string name="tracking_three_d_batch">Parti</string>
+    <string name="tracking_pipeline">Aşamalı</string>
+    <string name="tracking_checklist">Kontrol listesi</string>
+    <string name="tracking_counted">Sayılı</string>
 </resources>

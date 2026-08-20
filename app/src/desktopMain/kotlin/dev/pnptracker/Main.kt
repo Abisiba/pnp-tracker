@@ -10,6 +10,7 @@ import dev.pnptracker.data.repository.GameSetupStore
 import dev.pnptracker.data.repository.ImportConfirmationStore
 import dev.pnptracker.data.repository.ImportDraftStore
 import dev.pnptracker.data.repository.ImportReviewStore
+import dev.pnptracker.data.repository.TaskSetupStore
 import dev.pnptracker.platform.awt.applyLinuxFileDialogPolicy
 import dev.pnptracker.platform.files.AppDirectoryInitializer
 import dev.pnptracker.platform.files.XdgAppPathsResolver
@@ -17,6 +18,7 @@ import dev.pnptracker.platform.xlsx.AwtXlsxFilePicker
 import dev.pnptracker.platform.xlsx.XlsxImportFileGateway
 import dev.pnptracker.ui.PnpTrackerApp
 import dev.pnptracker.ui.Strings
+import dev.pnptracker.ui.feature.games.GameTasksController
 import dev.pnptracker.ui.feature.games.GamesController
 import dev.pnptracker.ui.feature.importreview.ImportController
 import dev.pnptracker.ui.feature.importworkspace.ImportConfirmationController
@@ -56,6 +58,7 @@ fun main() {
             ImportConfirmationStore(database.importDao(), database.itemDao(), database.gameDao()),
         )
     val gamesController = GamesController(GameSetupStore(database.gameDao(), database.itemDao()))
+    val gameTasksController = GameTasksController(TaskSetupStore(database.taskDao()))
 
     application {
         Window(
@@ -75,6 +78,7 @@ fun main() {
                 reviewController,
                 confirmationController,
                 gamesController,
+                gameTasksController,
             )
         }
     }

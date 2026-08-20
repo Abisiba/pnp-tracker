@@ -3,17 +3,20 @@ package dev.pnptracker.ui.feature.games
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -29,7 +32,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.pnptracker.domain.games.GameSetupFailure
 import dev.pnptracker.domain.games.GameSummary
+import dev.pnptracker.domain.games.ItemSummary
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.tasks.TaskSetupFailure
+import dev.pnptracker.domain.tasks.TaskSummary
 import dev.pnptracker.ui.Strings
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.StringResource
@@ -46,6 +54,7 @@ private val MAX_CONTENT_WIDTH = 720.dp
 @Composable
 fun GamesScreen(
     controller: GamesController,
+    tasks: GameTasksController,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -55,6 +64,12 @@ fun GamesScreen(
 
     val openGameId = state.openGameId
     LaunchedEffect(openGameId) { openGameId?.let { controller.observeItems(it) } }
+    LaunchedEffect(openGameId) {
+        // Cleared first, so the game being opened never shows the last one's
+        // tasks for the moment before its own arrive.
+        tasks.forget()
+        openGameId?.let { tasks.observeTasks(it) }
+    }
 
     Column(
         modifier = modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 28.dp),
@@ -74,6 +89,7 @@ fun GamesScreen(
         } else {
             GameDetail(
                 state = state,
+                tasks = tasks,
                 isSaving = controller.isSaving,
                 onBack = { controller.closeGame() },
                 onStartComposer = { controller.startItemComposer() },
@@ -182,9 +198,18 @@ private fun GameRow(
     }
 }
 
+/**
+ * One game: what it is, the items under it, and its tasks by pool.
+ *
+ * The whole detail is a single scrolling list. Two lists that scroll inside a
+ * column that also scrolls is how the review workspace once ended up measuring
+ * itself as infinitely tall, and a game with many tasks is exactly the shape
+ * that would find it again.
+ */
 @Composable
 private fun GameDetail(
     state: GamesScreenState,
+    tasks: GameTasksController,
     isSaving: Boolean,
     onBack: () -> Unit,
     onStartComposer: () -> Unit,
@@ -208,35 +233,315 @@ private fun GameDetail(
             )
 
         is GameDetailState.Empty ->
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                GameHeader(detail.game, isSaving, onSetCompleted)
-                ItemComposerOrButton(state, isSaving, onStartComposer, onEditName, onSave, onDiscard)
+            DetailBody(state, detail.game, emptyList(), tasks, isSaving, onStartComposer, onEditName, onSave, onDiscard, onSetCompleted)
+
+        is GameDetailState.Content ->
+            DetailBody(state, detail.game, detail.items, tasks, isSaving, onStartComposer, onEditName, onSave, onDiscard, onSetCompleted)
+    }
+}
+
+@Composable
+private fun DetailBody(
+    state: GamesScreenState,
+    game: GameSummary,
+    items: List<ItemSummary>,
+    tasks: GameTasksController,
+    isSaving: Boolean,
+    onStartComposer: () -> Unit,
+    onEditName: (String) -> Unit,
+    onSave: () -> Unit,
+    onDiscard: () -> Unit,
+    onSetCompleted: (GameSummary) -> Unit,
+) {
+    // Read here, in composition, rather than inside the list builder below, so
+    // the screen redraws on a change without depending on when that builder runs.
+    val tasksState = tasks.state
+    val isSavingTask = tasks.isSaving
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().widthIn(max = MAX_CONTENT_WIDTH),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item(key = "header") { GameHeader(game, isSaving, onSetCompleted) }
+
+        item(key = "items-title") {
+            Text(text = stringResource(Strings.Games.itemsTitle), style = MaterialTheme.typography.titleMedium)
+        }
+        item(key = "items-composer") {
+            ItemComposerOrButton(state, isSaving, onStartComposer, onEditName, onSave, onDiscard)
+        }
+        if (items.isEmpty()) {
+            item(key = "items-empty") {
                 MessageCard(
                     title = stringResource(Strings.Games.itemsEmpty),
                     body = stringResource(Strings.Games.itemsEmptyHint),
                 )
             }
-
-        is GameDetailState.Content ->
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                GameHeader(detail.game, isSaving, onSetCompleted)
-                ItemComposerOrButton(state, isSaving, onStartComposer, onEditName, onSave, onDiscard)
-                Text(
-                    text = stringResource(Strings.Games.itemsTitle),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize().widthIn(max = MAX_CONTENT_WIDTH),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(detail.items, key = { it.id.toString() }) { item ->
-                        Card(modifier = Modifier.fillMaxWidth()) {
-                            Text(text = item.name, modifier = Modifier.padding(12.dp))
-                        }
-                    }
+        } else {
+            items(items, key = { "item-${it.id}" }) { item ->
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Text(text = item.name, modifier = Modifier.padding(12.dp))
                 }
             }
+        }
+
+        tasksSection(tasksState, isSavingTask, items, tasks)
     }
+}
+
+/**
+ * The game's tasks, under a pool heading each.
+ *
+ * The items above stay where they are: this section lists tasks and offers the
+ * form that makes one, and it never becomes a second place to manage items.
+ */
+private fun LazyListScope.tasksSection(
+    tasksState: GameTasksScreenState,
+    isSaving: Boolean,
+    items: List<ItemSummary>,
+    tasks: GameTasksController,
+) {
+    item(key = "tasks-title") {
+        Text(text = stringResource(Strings.Tasks.title), style = MaterialTheme.typography.titleMedium)
+    }
+    item(key = "tasks-failure") { TaskFailureLine(tasksState.failure) }
+    item(key = "tasks-composer") { TaskComposerOrButton(tasksState.composer, isSaving, items, tasks) }
+
+    when (val shown = tasksState.tasks) {
+        GameTasksState.Loading -> item(key = "tasks-loading") { BusyRow(stringResource(Strings.Tasks.loading)) }
+
+        GameTasksState.Empty ->
+            item(key = "tasks-empty") {
+                MessageCard(
+                    title = stringResource(Strings.Tasks.empty),
+                    body = stringResource(Strings.Tasks.emptyHint),
+                )
+            }
+
+        is GameTasksState.Content ->
+            shown.groups.forEach { group ->
+                item(key = "pool-${group.poolType}") {
+                    Text(
+                        text = stringResource(labelOf(group.poolType)),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                items(group.tasks, key = { "task-${it.id}" }) { task -> TaskRow(task) }
+            }
+    }
+}
+
+/**
+ * One task.
+ *
+ * It names the item it belongs to, because the sections above it are pools
+ * rather than items. An unknown amount is said to be unknown rather than shown
+ * as a zero nobody typed. Nothing here says whether the task is finished.
+ */
+@Composable
+private fun TaskRow(task: TaskSummary) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(text = task.name, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = stringResource(Strings.Tasks.rowItem, task.itemName),
+                style = MaterialTheme.typography.labelMedium,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text =
+                        task.requiredQuantity?.let { stringResource(Strings.Tasks.rowQuantity, it.toString()) }
+                            ?: stringResource(Strings.Tasks.rowQuantityUnknown),
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                Text(text = stringResource(labelOf(task.trackingMode)), style = MaterialTheme.typography.labelMedium)
+                if (task.isFromImport) {
+                    Text(
+                        text = stringResource(Strings.Tasks.rowFromImport),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
+            task.notes?.let { note -> Text(text = note, style = MaterialTheme.typography.bodyMedium) }
+        }
+    }
+}
+
+@Composable
+private fun TaskComposerOrButton(
+    composer: TaskComposer?,
+    isSaving: Boolean,
+    items: List<ItemSummary>,
+    tasks: GameTasksController,
+) {
+    val scope = rememberCoroutineScope()
+
+    if (items.isEmpty()) {
+        Text(text = stringResource(Strings.Tasks.needsItem), style = MaterialTheme.typography.labelMedium)
+        return
+    }
+
+    if (composer == null) {
+        Button(onClick = { tasks.startComposer(items.singleOrNull()?.id) }, enabled = !isSaving) {
+            Text(stringResource(Strings.Tasks.create))
+        }
+        return
+    }
+
+    TaskForm(
+        composer = composer,
+        items = items,
+        isSaving = isSaving,
+        onChooseItem = { id -> tasks.chooseItem(id) },
+        onEditName = { name -> tasks.editName(name) },
+        onChoosePool = { pool -> tasks.choosePool(pool) },
+        onChooseTracking = { mode -> tasks.chooseTracking(mode) },
+        onEditQuantity = { quantity -> tasks.editQuantity(quantity) },
+        onEditNotes = { notes -> tasks.editNotes(notes) },
+        onSave = { scope.launch { tasks.save() } },
+        onDiscard = { tasks.cancelComposer() },
+    )
+}
+
+/**
+ * The one form that makes a task.
+ *
+ * The pool decides the tracking mode wherever it leaves no choice, and only the
+ * special pool, which allows two, asks. Saving stays out of reach until the form
+ * is complete, and is refused while a save is already on its way.
+ */
+@Composable
+private fun TaskForm(
+    composer: TaskComposer,
+    items: List<ItemSummary>,
+    isSaving: Boolean,
+    onChooseItem: (EntityId) -> Unit,
+    onEditName: (String) -> Unit,
+    onChoosePool: (PoolType) -> Unit,
+    onChooseTracking: (TrackingMode) -> Unit,
+    onEditQuantity: (String) -> Unit,
+    onEditNotes: (String) -> Unit,
+    onSave: () -> Unit,
+    onDiscard: () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth().widthIn(max = MAX_CONTENT_WIDTH)) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedTextField(
+                value = composer.name,
+                onValueChange = onEditName,
+                label = { Text(stringResource(Strings.Tasks.nameLabel)) },
+                isError = composer.name.isBlank(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (composer.name.isBlank()) {
+                RequiredLine(stringResource(Strings.Tasks.nameRequired))
+            }
+
+            Text(text = stringResource(Strings.Tasks.itemLabel), style = MaterialTheme.typography.labelMedium)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items.forEach { item ->
+                    FilterChip(
+                        selected = item.id == composer.itemId,
+                        enabled = !isSaving,
+                        onClick = { onChooseItem(item.id) },
+                        label = { Text(item.name) },
+                    )
+                }
+            }
+            if (composer.itemId == null) RequiredLine(stringResource(Strings.Tasks.itemRequired))
+
+            Text(text = stringResource(Strings.Tasks.poolLabel), style = MaterialTheme.typography.labelMedium)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                PoolType.entries.forEach { pool ->
+                    FilterChip(
+                        selected = pool == composer.poolType,
+                        enabled = !isSaving,
+                        onClick = { onChoosePool(pool) },
+                        label = { Text(stringResource(labelOf(pool))) },
+                    )
+                }
+            }
+            if (composer.poolType == null) RequiredLine(stringResource(Strings.Tasks.poolRequired))
+
+            if (composer.offersTrackingChoice) {
+                val poolType = composer.poolType
+                Text(text = stringResource(Strings.Tasks.trackingLabel), style = MaterialTheme.typography.labelMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    poolType?.let(::trackingModesOf).orEmpty().forEach { mode ->
+                        FilterChip(
+                            selected = mode == composer.trackingMode,
+                            enabled = !isSaving,
+                            onClick = { onChooseTracking(mode) },
+                            label = { Text(stringResource(labelOf(mode))) },
+                        )
+                    }
+                }
+                if (composer.trackingMode == null) RequiredLine(stringResource(Strings.Tasks.trackingRequired))
+            }
+
+            OutlinedTextField(
+                value = composer.quantity,
+                onValueChange = onEditQuantity,
+                label = { Text(stringResource(Strings.Tasks.quantityLabel)) },
+                isError = composer.hasUnusableQuantity,
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                text =
+                    if (composer.hasUnusableQuantity) {
+                        stringResource(Strings.Tasks.quantityUnusable)
+                    } else {
+                        stringResource(Strings.Tasks.quantityHint)
+                    },
+                style = MaterialTheme.typography.labelMedium,
+                color =
+                    if (composer.hasUnusableQuantity) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+            )
+
+            OutlinedTextField(
+                value = composer.notes,
+                onValueChange = onEditNotes,
+                label = { Text(stringResource(Strings.Tasks.notesLabel)) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onSave, enabled = composer.canSave && !isSaving) {
+                    Text(stringResource(Strings.Tasks.save))
+                }
+                OutlinedButton(onClick = onDiscard, enabled = !isSaving) {
+                    Text(stringResource(Strings.Games.discard))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RequiredLine(text: String) {
+    Text(text = text, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+}
+
+@Composable
+private fun TaskFailureLine(failure: TaskSetupFailure?) {
+    if (failure == null) return
+    Text(
+        text = stringResource(messageOf(failure)),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.error,
+    )
 }
 
 @Composable
