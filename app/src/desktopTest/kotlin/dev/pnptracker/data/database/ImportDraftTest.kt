@@ -189,6 +189,7 @@ class ImportDraftTest {
                     "rawBlocksOfBatch",
                     "observeRawBlocksOfBatch",
                     "unprocessedRawBlocksOfBatch",
+                    "unprocessedRawBlockCount",
                     // Writes: both only ever set `is_processed`, and the guarded one
                     // reaches the table through the other.
                     "markRawBlockProcessed",
