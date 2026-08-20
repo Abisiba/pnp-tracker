@@ -1,9 +1,48 @@
 package dev.pnptracker.ui
 
 import dev.pnptracker.resources.Res
+import dev.pnptracker.resources.aim_choose_item
+import dev.pnptracker.resources.aim_choose_pool
+import dev.pnptracker.resources.aim_choose_tracking
+import dev.pnptracker.resources.aim_item_label
+import dev.pnptracker.resources.aim_materialized
+import dev.pnptracker.resources.aim_no_items
+import dev.pnptracker.resources.aim_none
+import dev.pnptracker.resources.aim_ready
+import dev.pnptracker.resources.aim_title
 import dev.pnptracker.resources.app_name
 import dev.pnptracker.resources.app_version_label
 import dev.pnptracker.resources.app_window_title
+import dev.pnptracker.resources.confirm_action
+import dev.pnptracker.resources.confirm_dialog_accept
+import dev.pnptracker.resources.confirm_dialog_body
+import dev.pnptracker.resources.confirm_dialog_cancel
+import dev.pnptracker.resources.confirm_dialog_cancel_note
+import dev.pnptracker.resources.confirm_dialog_title
+import dev.pnptracker.resources.confirm_done_body
+import dev.pnptracker.resources.confirm_done_title
+import dev.pnptracker.resources.confirm_error_already_confirmed
+import dev.pnptracker.resources.confirm_error_batch_not_found
+import dev.pnptracker.resources.confirm_error_could_not_save
+import dev.pnptracker.resources.confirm_error_no_drafts
+import dev.pnptracker.resources.confirm_error_no_items
+import dev.pnptracker.resources.confirm_error_not_a_draft
+import dev.pnptracker.resources.confirm_error_pool_missing
+import dev.pnptracker.resources.confirm_error_target_missing
+import dev.pnptracker.resources.confirm_error_target_unavailable
+import dev.pnptracker.resources.confirm_error_tracking_missing
+import dev.pnptracker.resources.confirm_error_unprocessed
+import dev.pnptracker.resources.confirm_loading
+import dev.pnptracker.resources.confirm_no_games_created
+import dev.pnptracker.resources.confirm_problems_title
+import dev.pnptracker.resources.confirm_read_only
+import dev.pnptracker.resources.confirm_ready
+import dev.pnptracker.resources.confirm_running
+import dev.pnptracker.resources.confirm_section_title
+import dev.pnptracker.resources.confirm_summary
+import dev.pnptracker.resources.confirm_unavailable
+import dev.pnptracker.resources.confirm_unprocessed_acknowledge
+import dev.pnptracker.resources.confirm_unprocessed_warning
 import dev.pnptracker.resources.games_back
 import dev.pnptracker.resources.games_completed_badge
 import dev.pnptracker.resources.games_completion_note
@@ -271,6 +310,71 @@ object Strings {
 
         val errorCouldNotSave = Res.string.games_error_could_not_save
         val errorGameUnavailable = Res.string.games_error_game_unavailable
+    }
+
+    /** Turning a reviewed import into real tasks. */
+    object Confirm {
+        val sectionTitle = Res.string.confirm_section_title
+        val loading = Res.string.confirm_loading
+        val unavailable = Res.string.confirm_unavailable
+
+        /** Takes how many drafts there are and how many are ready. */
+        val summary = Res.string.confirm_summary
+
+        /** Takes how many tasks would be created. */
+        val ready = Res.string.confirm_ready
+
+        val noGamesCreated = Res.string.confirm_no_games_created
+        val action = Res.string.confirm_action
+        val dialogTitle = Res.string.confirm_dialog_title
+
+        /** Takes how many tasks would be created. */
+        val dialogBody = Res.string.confirm_dialog_body
+
+        val dialogAccept = Res.string.confirm_dialog_accept
+        val dialogCancel = Res.string.confirm_dialog_cancel
+        val dialogCancelNote = Res.string.confirm_dialog_cancel_note
+        val running = Res.string.confirm_running
+
+        /** Takes how many cells are still unreviewed. */
+        val unprocessedWarning = Res.string.confirm_unprocessed_warning
+
+        val unprocessedAcknowledge = Res.string.confirm_unprocessed_acknowledge
+        val doneTitle = Res.string.confirm_done_title
+
+        /** Takes how many tasks and how many games were created. */
+        val doneBody = Res.string.confirm_done_body
+
+        val readOnly = Res.string.confirm_read_only
+        val problemsTitle = Res.string.confirm_problems_title
+
+        val errorBatchNotFound = Res.string.confirm_error_batch_not_found
+        val errorAlreadyConfirmed = Res.string.confirm_error_already_confirmed
+        val errorNotADraft = Res.string.confirm_error_not_a_draft
+        val errorNoDrafts = Res.string.confirm_error_no_drafts
+        val errorNoItems = Res.string.confirm_error_no_items
+        val errorUnprocessed = Res.string.confirm_error_unprocessed
+        val errorTargetMissing = Res.string.confirm_error_target_missing
+        val errorTargetUnavailable = Res.string.confirm_error_target_unavailable
+        val errorPoolMissing = Res.string.confirm_error_pool_missing
+        val errorTrackingMissing = Res.string.confirm_error_tracking_missing
+        val errorCouldNotSave = Res.string.confirm_error_could_not_save
+    }
+
+    /** Choosing where one draft's task will go. */
+    object Aim {
+        val title = Res.string.aim_title
+        val none = Res.string.aim_none
+
+        /** Takes the game name and the item name. */
+        val itemLabel = Res.string.aim_item_label
+
+        val chooseItem = Res.string.aim_choose_item
+        val choosePool = Res.string.aim_choose_pool
+        val chooseTracking = Res.string.aim_choose_tracking
+        val ready = Res.string.aim_ready
+        val noItems = Res.string.aim_no_items
+        val materialized = Res.string.aim_materialized
     }
 
     /** The two-pane workspace where a saved import is reviewed. */

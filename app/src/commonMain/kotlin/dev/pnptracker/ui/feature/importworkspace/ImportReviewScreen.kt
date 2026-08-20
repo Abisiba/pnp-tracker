@@ -3,6 +3,7 @@ package dev.pnptracker.ui.feature.importworkspace
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,10 +14,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -34,10 +38,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.pnptracker.domain.importconfirm.ImportConfirmationSummary
+import dev.pnptracker.domain.importconfirm.TargetItemChoice
 import dev.pnptracker.domain.importreview.ReviewDraftTask
 import dev.pnptracker.domain.importreview.ReviewRawBlock
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.HintDecision
+import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.feature.importreview.nameOf
 import kotlinx.coroutines.launch
@@ -54,6 +62,7 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 fun ImportReviewScreen(
     controller: ImportReviewController,
+    confirmation: ImportConfirmationController,
     batchId: EntityId,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -61,6 +70,8 @@ fun ImportReviewScreen(
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(batchId) { controller.observe(batchId) }
+    LaunchedEffect(batchId) { confirmation.refresh(batchId) }
+    LaunchedEffect(Unit) { confirmation.observeTargetItems() }
 
     Column(
         modifier = modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 28.dp),
@@ -96,6 +107,8 @@ fun ImportReviewScreen(
             is ImportReviewState.Content ->
                 ContentPanes(
                     state = state,
+                    confirmation = confirmation,
+                    batchId = batchId,
                     composer = controller.composer,
                     isSaving = controller.isSaving,
                     onSelect = { blockId -> controller.select(blockId) },
@@ -114,6 +127,8 @@ fun ImportReviewScreen(
 @Composable
 private fun ContentPanes(
     state: ImportReviewState.Content,
+    confirmation: ImportConfirmationController,
+    batchId: EntityId,
     composer: ImportReviewController.DraftComposer?,
     isSaving: Boolean,
     onSelect: (EntityId) -> Unit,
@@ -141,6 +156,12 @@ private fun ContentPanes(
         )
     }
 
+    ConfirmationSection(
+        confirmation = confirmation,
+        batchId = batchId,
+        drafts = workspace.draftTasks,
+    )
+
     Row(
         modifier = Modifier.fillMaxSize(),
         horizontalArrangement = Arrangement.spacedBy(20.dp),
@@ -155,6 +176,8 @@ private fun ContentPanes(
         )
         DraftPane(
             state = state,
+            confirmation = confirmation,
+            batchId = batchId,
             composer = composer,
             isSaving = isSaving,
             onEditDraftName = onEditDraftName,
@@ -293,6 +316,8 @@ private fun RawBlockRow(
 @Composable
 private fun DraftPane(
     state: ImportReviewState.Content,
+    confirmation: ImportConfirmationController,
+    batchId: EntityId,
     composer: ImportReviewController.DraftComposer?,
     isSaving: Boolean,
     onEditDraftName: (String) -> Unit,
@@ -327,7 +352,14 @@ private fun DraftPane(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items(drafts, key = { it.id.toString() }) { draft -> DraftRow(draft) }
+                items(drafts, key = { it.id.toString() }) { draft ->
+                    DraftRow(
+                        draft = draft,
+                        confirmation = confirmation,
+                        batchId = batchId,
+                        isEditable = state.workspace.isStillADraft,
+                    )
+                }
             }
         }
 
@@ -421,11 +453,17 @@ private fun EmptyDraftPane() {
 }
 
 @Composable
-private fun DraftRow(draft: ReviewDraftTask) {
+private fun DraftRow(
+    draft: ReviewDraftTask,
+    confirmation: ImportConfirmationController,
+    batchId: EntityId,
+    isEditable: Boolean,
+) {
+    val scope = rememberCoroutineScope()
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(text = draft.name, style = MaterialTheme.typography.bodyLarge)
             if (draft.completionHint == HintDecision.PENDING) {
@@ -434,8 +472,322 @@ private fun DraftRow(draft: ReviewDraftTask) {
                     style = MaterialTheme.typography.labelMedium,
                 )
             }
+
+            val target = confirmation.targetItems.firstOrNull { it.itemId == draft.targetItemId }
+            Text(
+                text =
+                    if (target == null) {
+                        stringResource(Strings.Aim.none)
+                    } else {
+                        stringResource(Strings.Aim.itemLabel, target.gameName, target.itemName)
+                    },
+                style = MaterialTheme.typography.labelMedium,
+                color =
+                    if (target == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            )
+
+            if (draft.materializedTaskId != null) {
+                // A confirmed draft is evidence now, not something to edit.
+                Text(
+                    text = stringResource(Strings.Aim.materialized),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            } else if (isEditable) {
+                DraftAiming(
+                    draft = draft,
+                    targetItems = confirmation.targetItems,
+                    isBusy = confirmation.isBusy,
+                    onAim = { itemId, poolType, trackingMode ->
+                        scope.launch {
+                            confirmation.aim(batchId, draft.id, itemId, poolType, trackingMode)
+                        }
+                    },
+                )
+            }
+
+            if (draft.isReady) {
+                Text(
+                    text = stringResource(Strings.Aim.ready),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
         }
     }
+}
+
+/**
+ * Choosing the item, the pool and — only when the pool leaves a choice — the
+ * tracking mode for one draft.
+ *
+ * A pool that allows exactly one mode sets that mode outright rather than
+ * offering a list of one, but the value is still written explicitly; nothing
+ * later guesses it.
+ */
+@Composable
+private fun DraftAiming(
+    draft: ReviewDraftTask,
+    targetItems: List<TargetItemChoice>,
+    isBusy: Boolean,
+    onAim: (EntityId?, PoolType?, TrackingMode?) -> Unit,
+) {
+    if (targetItems.isEmpty()) {
+        Text(
+            text = stringResource(Strings.Aim.noItems),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.error,
+        )
+        return
+    }
+
+    val poolType = draft.selectedPoolType
+    val trackingMode = draft.selectedTrackingMode
+
+    Text(text = stringResource(Strings.Aim.chooseItem), style = MaterialTheme.typography.labelMedium)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        targetItems.forEach { choice ->
+            FilterChip(
+                selected = choice.itemId == draft.targetItemId,
+                enabled = !isBusy,
+                onClick = { onAim(choice.itemId, poolType, trackingMode) },
+                label = { Text(stringResource(Strings.Aim.itemLabel, choice.gameName, choice.itemName)) },
+            )
+        }
+    }
+
+    Text(text = stringResource(Strings.Aim.choosePool), style = MaterialTheme.typography.labelMedium)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        PoolType.entries.forEach { pool ->
+            FilterChip(
+                selected = pool == poolType,
+                enabled = !isBusy,
+                onClick = {
+                    // Changing the pool drops a mode the new pool does not allow.
+                    onAim(draft.targetItemId, pool, ImportConfirmationController.onlyTrackingModeOf(pool))
+                },
+                label = { Text(labelOf(pool)) },
+            )
+        }
+    }
+
+    val modes = poolType?.let(ImportConfirmationController::trackingModesOf).orEmpty()
+    if (modes.size > 1) {
+        Text(text = stringResource(Strings.Aim.chooseTracking), style = MaterialTheme.typography.labelMedium)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            modes.forEach { mode ->
+                FilterChip(
+                    selected = mode == trackingMode,
+                    enabled = !isBusy,
+                    onClick = { onAim(draft.targetItemId, poolType, mode) },
+                    label = { Text(labelOf(mode)) },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The confirmation step: what would be created, what is stopping it, and the
+ * one action that writes it.
+ */
+@Composable
+private fun ConfirmationSection(
+    confirmation: ImportConfirmationController,
+    batchId: EntityId,
+    drafts: List<ReviewDraftTask>,
+) {
+    val scope = rememberCoroutineScope()
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = stringResource(Strings.Confirm.sectionTitle),
+                style = MaterialTheme.typography.titleMedium,
+            )
+
+            when (val state = confirmation.state) {
+                ImportConfirmationState.Loading -> BusyRow(stringResource(Strings.Confirm.loading))
+
+                ImportConfirmationState.Unavailable ->
+                    Text(
+                        text = stringResource(Strings.Confirm.unavailable),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+
+                is ImportConfirmationState.Confirmed -> {
+                    Text(
+                        text = stringResource(Strings.Confirm.doneTitle),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        text =
+                            stringResource(
+                                Strings.Confirm.doneBody,
+                                state.result.createdTaskCount,
+                                state.result.createdGameCount,
+                            ),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        text = stringResource(Strings.Confirm.readOnly),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+
+                is ImportConfirmationState.Ready ->
+                    ConfirmationBody(
+                        summary = state.summary,
+                        failure = state.failure,
+                        drafts = drafts,
+                        confirmation = confirmation,
+                        onConfirm = { scope.launch { confirmation.confirm(batchId) } },
+                    )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConfirmationBody(
+    summary: ImportConfirmationSummary,
+    failure: dev.pnptracker.domain.importconfirm.ImportConfirmationFailure?,
+    drafts: List<ReviewDraftTask>,
+    confirmation: ImportConfirmationController,
+    onConfirm: () -> Unit,
+) {
+    if (summary.isConfirmed) {
+        // Reopened after a confirmation: read only, and it says so.
+        Text(
+            text = stringResource(Strings.Confirm.readOnly),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    } else {
+        Text(
+            text = stringResource(Strings.Confirm.summary, summary.draftTaskCount, summary.readyTaskCount),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        if (summary.canConfirm) {
+            Text(
+                text = stringResource(Strings.Confirm.ready, summary.readyTaskCount),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        Text(
+            text = stringResource(Strings.Confirm.noGamesCreated),
+            style = MaterialTheme.typography.labelMedium,
+        )
+    }
+
+    if (summary.problems.isNotEmpty()) {
+        Text(
+            text = stringResource(Strings.Confirm.problemsTitle),
+            style = MaterialTheme.typography.titleSmall,
+        )
+        summary.problems.forEach { problem ->
+            Text(
+                // The draft's own name, which the user is already looking at.
+                text = "• ${problem.draftTaskName}: ${stringResource(messageOf(problem.failure))}",
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
+    }
+
+    if (summary.isStillADraft && summary.needsUnprocessedAcknowledgement) {
+        Text(
+            text = stringResource(Strings.Confirm.unprocessedWarning, summary.unprocessedBlockCount),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(
+                checked = confirmation.hasAcknowledgedUnprocessed,
+                enabled = !confirmation.isBusy,
+                onCheckedChange = { confirmation.acknowledgeUnprocessed(it) },
+            )
+            Text(
+                text = stringResource(Strings.Confirm.unprocessedAcknowledge),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
+
+    if (failure != null) {
+        Text(
+            text = stringResource(messageOf(failure)),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+
+    if (confirmation.isBusy) {
+        BusyRow(stringResource(Strings.Confirm.running))
+    }
+
+    if (summary.isStillADraft) {
+        val canAct =
+            summary.canConfirm &&
+                !confirmation.isBusy &&
+                (!summary.needsUnprocessedAcknowledgement || confirmation.hasAcknowledgedUnprocessed)
+        Button(onClick = { confirmation.ask() }, enabled = canAct) {
+            Text(stringResource(Strings.Confirm.action))
+        }
+    }
+
+    if (confirmation.isAsking) {
+        ConfirmationDialog(
+            taskCount = summary.readyTaskCount,
+            isBusy = confirmation.isBusy,
+            onDismiss = { confirmation.stopAsking() },
+            onConfirm = onConfirm,
+        )
+    }
+
+    // Nothing above this line writes anything; only the dialog's accept does.
+    if (drafts.isEmpty()) {
+        Text(
+            text = stringResource(Strings.Review.draftsEmptyHint),
+            style = MaterialTheme.typography.labelMedium,
+        )
+    }
+}
+
+@Composable
+private fun ConfirmationDialog(
+    taskCount: Int,
+    isBusy: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(Strings.Confirm.dialogTitle)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(stringResource(Strings.Confirm.dialogBody, taskCount))
+                Text(
+                    text = stringResource(Strings.Confirm.dialogCancelNote),
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+        },
+        confirmButton = {
+            // Disabled while one is in flight, so a second click cannot start another.
+            Button(onClick = onConfirm, enabled = !isBusy) {
+                Text(stringResource(Strings.Confirm.dialogAccept))
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss, enabled = !isBusy) {
+                Text(stringResource(Strings.Confirm.dialogCancel))
+            }
+        },
+    )
 }
 
 @Composable

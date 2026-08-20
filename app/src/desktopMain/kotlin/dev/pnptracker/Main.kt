@@ -7,6 +7,7 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import dev.pnptracker.data.database.DatabaseFactory
 import dev.pnptracker.data.repository.GameSetupStore
+import dev.pnptracker.data.repository.ImportConfirmationStore
 import dev.pnptracker.data.repository.ImportDraftStore
 import dev.pnptracker.data.repository.ImportReviewStore
 import dev.pnptracker.platform.awt.applyLinuxFileDialogPolicy
@@ -18,6 +19,7 @@ import dev.pnptracker.ui.PnpTrackerApp
 import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.feature.games.GamesController
 import dev.pnptracker.ui.feature.importreview.ImportController
+import dev.pnptracker.ui.feature.importworkspace.ImportConfirmationController
 import dev.pnptracker.ui.feature.importworkspace.ImportReviewController
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.compose.resources.stringResource
@@ -49,6 +51,10 @@ fun main() {
             store = ImportDraftStore(database.importDao()),
         )
     val reviewController = ImportReviewController(ImportReviewStore(database.importDao()))
+    val confirmationController =
+        ImportConfirmationController(
+            ImportConfirmationStore(database.importDao(), database.itemDao(), database.gameDao()),
+        )
     val gamesController = GamesController(GameSetupStore(database.gameDao(), database.itemDao()))
 
     application {
@@ -63,7 +69,13 @@ fun main() {
             // Below this the sidebar and the open section stop being usable
             // together, so the window manager is not allowed to go smaller.
             window.minimumSize = Dimension(MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT)
-            PnpTrackerApp(AppInfo.Current, importController, reviewController, gamesController)
+            PnpTrackerApp(
+                AppInfo.Current,
+                importController,
+                reviewController,
+                confirmationController,
+                gamesController,
+            )
         }
     }
 }

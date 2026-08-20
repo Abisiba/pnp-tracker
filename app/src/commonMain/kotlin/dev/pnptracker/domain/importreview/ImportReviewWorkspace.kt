@@ -5,6 +5,7 @@ import dev.pnptracker.domain.model.HintDecision
 import dev.pnptracker.domain.model.ImportBatchStatus
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.SourceColumnType
+import dev.pnptracker.domain.model.TrackingMode
 
 /**
  * One source cell as the review screen sees it.
@@ -25,14 +26,29 @@ data class ReviewRawBlock(
     val isProcessed: Boolean = false,
 )
 
-/** One task draft as the review screen sees it. */
+/**
+ * One task draft as the review screen sees it.
+ *
+ * The three `selected` fields are what the user has decided so far; they are all
+ * needed before the draft can become a real task, and the screen shows which are
+ * still missing. [materializedTaskId] is set once a confirmation has turned this
+ * draft into a task, which is also what makes the draft read only.
+ */
 data class ReviewDraftTask(
     val id: EntityId,
     val rawImportBlockId: EntityId,
     val name: String,
     val suggestedPoolType: PoolType? = null,
     val completionHint: HintDecision = HintDecision.NONE,
-)
+    val targetItemId: EntityId? = null,
+    val selectedPoolType: PoolType? = null,
+    val selectedTrackingMode: TrackingMode? = null,
+    val materializedTaskId: EntityId? = null,
+) {
+    /** True when the draft has everything a task needs. */
+    val isReady: Boolean
+        get() = targetItemId != null && selectedPoolType != null && selectedTrackingMode != null
+}
 
 /**
  * Everything the two panes of the review screen show, for one import.

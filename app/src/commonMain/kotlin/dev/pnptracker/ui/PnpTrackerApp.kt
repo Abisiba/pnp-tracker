@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import dev.pnptracker.AppInfo
 import dev.pnptracker.ui.feature.games.GamesController
 import dev.pnptracker.ui.feature.importreview.ImportController
+import dev.pnptracker.ui.feature.importworkspace.ImportConfirmationController
 import dev.pnptracker.ui.feature.importworkspace.ImportReviewController
 import dev.pnptracker.ui.navigation.AppNavigationState
 import dev.pnptracker.ui.navigation.AppScaffold
@@ -27,6 +28,7 @@ fun PnpTrackerApp(
     appInfo: AppInfo,
     importController: ImportController,
     reviewController: ImportReviewController,
+    confirmationController: ImportConfirmationController,
     gamesController: GamesController,
 ) {
     val navigation = remember { AppNavigationState() }
@@ -40,6 +42,7 @@ fun PnpTrackerApp(
             onToggleTheme = { themeMode = themeMode.toggled() },
             importController = importController,
             reviewController = reviewController,
+            confirmationController = confirmationController,
             gamesController = gamesController,
         )
     }

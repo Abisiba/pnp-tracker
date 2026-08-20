@@ -38,6 +38,7 @@ import org.jetbrains.compose.resources.stringResource
 fun ImportSection(
     importController: ImportController,
     reviewController: ImportReviewController,
+    confirmationController: ImportConfirmationController,
     modifier: Modifier = Modifier,
 ) {
     var openBatchId: EntityId? by remember { mutableStateOf(null) }
@@ -48,6 +49,7 @@ fun ImportSection(
     if (batchId != null) {
         ImportReviewScreen(
             controller = reviewController,
+            confirmation = confirmationController,
             batchId = batchId,
             onBack = { openBatchId = null },
             modifier = modifier,

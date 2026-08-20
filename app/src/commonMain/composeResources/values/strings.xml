@@ -166,4 +166,49 @@
     <string name="games_item_save">Ögeyi kaydet</string>
     <string name="games_error_could_not_save">Değişiklik kaydedilemedi; hiçbir şey yazılmadı.</string>
     <string name="games_error_game_unavailable">Bu oyun artık kayıtlı değil, bu yüzden değişiklik uygulanamadı.</string>
+
+    <!-- Confirming an import: turning drafts into real tasks. -->
+    <string name="confirm_section_title">İçe aktarmayı onayla</string>
+    <string name="confirm_loading">Onay özeti hazırlanıyor…</string>
+    <string name="confirm_unavailable">Bu içe aktarma artık kayıtlı değil.</string>
+    <string name="confirm_summary">%1$d taslaktan %2$d görev oluşturulacak.</string>
+    <string name="confirm_ready">Bütün taslaklar hazır. Onaylandığında %1$d gerçek görev oluşturulacak.</string>
+    <string name="confirm_no_games_created">Onaylamak hiçbir oyun veya öge oluşturmaz; görevler yalnızca sizin oluşturduğunuz ögelere bağlanır.</string>
+    <string name="confirm_action">Onayla ve görevleri oluştur</string>
+    <string name="confirm_dialog_title">İçe aktarmayı onaylıyor musunuz?</string>
+    <string name="confirm_dialog_body">%1$d gerçek görev oluşturulacak. Bu işlem tek seferliktir ve bu sürümde geri alınamaz.</string>
+    <string name="confirm_dialog_accept">Onayla</string>
+    <string name="confirm_dialog_cancel">Vazgeç</string>
+    <string name="confirm_dialog_cancel_note">Vazgeçmek hiçbir şey yazmaz.</string>
+    <string name="confirm_running">Onaylanıyor…</string>
+    <string name="confirm_unprocessed_warning">Henüz incelemediğiniz %1$d hücre var. Onaylamak bu hücreleri görev hâline getirmez.</string>
+    <string name="confirm_unprocessed_acknowledge">İncelenmemiş hücrelere rağmen devam etmek istiyorum.</string>
+    <string name="confirm_done_title">İçe aktarma onaylandı</string>
+    <string name="confirm_done_body">%1$d görev oluşturuldu. Oluşturulan oyun sayısı: %2$d.</string>
+    <string name="confirm_read_only">Bu içe aktarma onaylandı ve artık salt okunur. Ham hücreler ve taslaklar kaynak olarak korunur.</string>
+    <string name="confirm_problems_title">Önce şunlar tamamlanmalı</string>
+
+    <!-- Why a confirmation was refused, in the words the user needs. -->
+    <string name="confirm_error_batch_not_found">Bu içe aktarma artık kayıtlı değil; hiçbir şey yazılmadı.</string>
+    <string name="confirm_error_already_confirmed">Bu içe aktarma zaten onaylanmış. Yeni görev oluşturulmadı.</string>
+    <string name="confirm_error_not_a_draft">Bu içe aktarma taslak durumunda değil, bu yüzden onaylanamaz.</string>
+    <string name="confirm_error_no_drafts">Onaylanacak taslak yok. Önce ham hücrelerden taslak görev oluşturun.</string>
+    <string name="confirm_error_no_items">Henüz hiç öge yok. Önce Oyunlar ekranından bir oyun ve öge oluşturun.</string>
+    <string name="confirm_error_unprocessed">İncelenmemiş hücreler var; devam etmek için onay kutusunu işaretleyin.</string>
+    <string name="confirm_error_target_missing">Bu taslağa hedef öge seçilmedi.</string>
+    <string name="confirm_error_target_unavailable">Bu taslağın hedef ögesi artık kayıtlı değil.</string>
+    <string name="confirm_error_pool_missing">Bu taslağa üretim havuzu seçilmedi.</string>
+    <string name="confirm_error_tracking_missing">Bu taslağa takip biçimi seçilmedi.</string>
+    <string name="confirm_error_could_not_save">Onay kaydedilemedi; hiçbir görev oluşturulmadı ve içe aktarma taslak olarak kaldı.</string>
+
+    <!-- Aiming a draft at the item its task will belong to. -->
+    <string name="aim_title">Hedef</string>
+    <string name="aim_none">Hedef öge seçilmedi</string>
+    <string name="aim_item_label">%1$s › %2$s</string>
+    <string name="aim_choose_item">Hedef öge</string>
+    <string name="aim_choose_pool">Üretim havuzu</string>
+    <string name="aim_choose_tracking">Takip biçimi</string>
+    <string name="aim_ready">Hazır</string>
+    <string name="aim_no_items">Önce bir oyun ve öge oluşturun.</string>
+    <string name="aim_materialized">Bu taslak gerçek göreve dönüştürüldü.</string>
 </resources>

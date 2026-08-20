@@ -142,4 +142,8 @@ private fun DraftTaskEntity.toReviewDraft(): ReviewDraftTask =
         name = name,
         suggestedPoolType = suggestedPoolType,
         completionHint = completionHint,
+        targetItemId = targetItemId,
+        selectedPoolType = selectedPoolType,
+        selectedTrackingMode = selectedTrackingMode,
+        materializedTaskId = materializedTaskId,
     )

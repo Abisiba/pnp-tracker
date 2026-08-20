@@ -41,6 +41,7 @@ import dev.pnptracker.ui.feature.games.GamesController
 import dev.pnptracker.ui.feature.games.GamesScreen
 import dev.pnptracker.ui.feature.home.HomeScreen
 import dev.pnptracker.ui.feature.importreview.ImportController
+import dev.pnptracker.ui.feature.importworkspace.ImportConfirmationController
 import dev.pnptracker.ui.feature.importworkspace.ImportReviewController
 import dev.pnptracker.ui.feature.importworkspace.ImportSection
 import dev.pnptracker.ui.textsOf
@@ -65,6 +66,7 @@ fun AppScaffold(
     onToggleTheme: () -> Unit,
     importController: ImportController,
     reviewController: ImportReviewController,
+    confirmationController: ImportConfirmationController,
     gamesController: GamesController,
     modifier: Modifier = Modifier,
 ) {
@@ -81,7 +83,7 @@ fun AppScaffold(
                 when (navigation.currentScreen) {
                     Screen.Home -> HomeScreen()
                     Screen.Games -> GamesScreen(gamesController)
-                    Screen.Import -> ImportSection(importController, reviewController)
+                    Screen.Import -> ImportSection(importController, reviewController, confirmationController)
                 }
             }
         }
