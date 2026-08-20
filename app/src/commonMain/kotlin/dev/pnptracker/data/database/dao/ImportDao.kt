@@ -9,9 +9,16 @@ import androidx.room3.Update
 import dev.pnptracker.data.database.entity.DraftTaskEntity
 import dev.pnptracker.data.database.entity.ImportBatchEntity
 import dev.pnptracker.data.database.entity.RawImportBlockEntity
+import dev.pnptracker.data.database.entity.TaskEntity
+import dev.pnptracker.domain.importconfirm.ImportConfirmationException
+import dev.pnptracker.domain.importconfirm.ImportConfirmationFailure
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.HintDecision
+import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.ImportBatchStatus
+import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.rules.requireAllowedTrackingMode
 import kotlinx.coroutines.flow.Flow
 import kotlin.time.Instant
 
@@ -291,4 +298,252 @@ abstract class ImportDao {
     /** Guarded by [discardDraftBatch]; the status check is repeated in SQL. */
     @Query("DELETE FROM import_batches WHERE id = :id AND status = 'DRAFT'")
     protected abstract suspend fun deleteDraftBatchRow(id: EntityId): Int
+
+    // ---------------------------------------------------------------------
+    // Confirming an import: turning drafts into real tasks.
+    // ---------------------------------------------------------------------
+
+    /**
+     * Every draft of a batch, oldest first, reached through the cells it came
+     * from so no other import's draft can be swept into this one's confirmation.
+     */
+    @Query(
+        """
+        SELECT draft_tasks.* FROM draft_tasks
+        JOIN raw_import_blocks ON raw_import_blocks.id = draft_tasks.raw_import_block_id
+        WHERE raw_import_blocks.import_batch_id = :batchId
+        ORDER BY draft_tasks.created_at, draft_tasks.id
+        """,
+    )
+    abstract suspend fun draftTasksOfBatch(batchId: EntityId): List<DraftTaskEntity>
+
+    @Query(
+        """
+        SELECT COUNT(*) FROM raw_import_blocks
+        WHERE import_batch_id = :batchId AND is_processed = 0
+        """,
+    )
+    abstract suspend fun unprocessedRawBlockCount(batchId: EntityId): Int
+
+    /** 1 while the item and the game above it are both there and undeleted. */
+    @Query(
+        """
+        SELECT COUNT(*) FROM items
+        INNER JOIN games ON games.id = items.game_id
+        WHERE items.id = :itemId AND items.deleted_at IS NULL AND games.deleted_at IS NULL
+        """,
+    )
+    abstract suspend fun activeItemCount(itemId: EntityId): Int
+
+    /** How many items exist at all; zero means there is nowhere to put a task. */
+    @Query(
+        """
+        SELECT COUNT(*) FROM items
+        INNER JOIN games ON games.id = items.game_id
+        WHERE items.deleted_at IS NULL AND games.deleted_at IS NULL
+        """,
+    )
+    abstract suspend fun activeItemCount(): Int
+
+    /**
+     * Records the user's decisions about one draft: where the task will go, which
+     * pool it belongs to and how it is tracked.
+     *
+     * Only possible while the import is a draft, which is what PLAN 11.4.3 means
+     * by a confirmed batch being read only. The target item is checked in the same
+     * transaction, so a draft can never be pointed at an item that has just gone.
+     *
+     * @throws IllegalArgumentException if the draft is unknown, its import is no
+     *   longer a draft, or the target item is not available; nothing is written.
+     */
+    @Transaction
+    open suspend fun setDraftTargetUnderReview(
+        draftId: EntityId,
+        targetItemId: EntityId?,
+        poolType: PoolType?,
+        trackingMode: TrackingMode?,
+        updatedAt: Instant,
+    ) {
+        val draft = draftTaskById(draftId)
+        requireNotNull(draft) { "There is no draft $draftId to aim." }
+        val block = rawBlockById(draft.rawImportBlockId)
+        requireNotNull(block) { "The draft $draftId comes from no raw cell." }
+        val batch = batchById(block.importBatchId)
+        requireNotNull(batch) { "The raw cell ${block.id} belongs to no import batch." }
+        require(batch.status == ImportBatchStatus.DRAFT) {
+            "A draft can only be aimed while its import is a draft, but ${batch.id} is ${batch.status}."
+        }
+        if (targetItemId != null) {
+            require(activeItemCount(targetItemId) == 1) {
+                "There is no item $targetItemId to send a task to."
+            }
+        }
+        if (poolType != null && trackingMode != null) {
+            requireAllowedTrackingMode(poolType, trackingMode)
+        }
+        updateDraftTargetRow(draftId, targetItemId, poolType, trackingMode, updatedAt)
+    }
+
+    @Query(
+        """
+        UPDATE draft_tasks
+        SET target_item_id = :targetItemId,
+            selected_pool_type = :poolType,
+            selected_tracking_mode = :trackingMode,
+            updated_at = :updatedAt
+        WHERE id = :draftId
+        """,
+    )
+    protected abstract suspend fun updateDraftTargetRow(
+        draftId: EntityId,
+        targetItemId: EntityId?,
+        poolType: PoolType?,
+        trackingMode: TrackingMode?,
+        updatedAt: Instant,
+    ): Int
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    protected abstract suspend fun insertTask(task: TaskEntity)
+
+    @Query("UPDATE draft_tasks SET materialized_task_id = :taskId, updated_at = :updatedAt WHERE id = :draftId")
+    protected abstract suspend fun setDraftMaterializedTask(
+        draftId: EntityId,
+        taskId: EntityId,
+        updatedAt: Instant,
+    ): Int
+
+    @Query(
+        """
+        UPDATE import_batches
+        SET status = 'CONFIRMED', created_task_count = :createdTaskCount, updated_at = :updatedAt
+        WHERE id = :batchId AND status = 'DRAFT'
+        """,
+    )
+    protected abstract suspend fun markBatchConfirmed(
+        batchId: EntityId,
+        createdTaskCount: Int,
+        updatedAt: Instant,
+    ): Int
+
+    /**
+     * Turns every draft of one import into a real task, or does nothing at all.
+     *
+     * All of it lives in one transaction on purpose: the guards below are not
+     * advice given beforehand but the conditions the writes happen under, so an
+     * item cannot be deleted, and the batch cannot be confirmed by a second
+     * caller, in the gap between checking and writing. Anything thrown from here
+     * — a refused guard, a rejected row, a broken postcondition — takes every
+     * write with it, which is what PLAN 11.4.2 means by no task remaining and no
+     * counter moving after a failure.
+     *
+     * Confirming an import creates no game and no item. It only attaches tasks to
+     * the chain the user built by hand.
+     *
+     * @return how many tasks were created.
+     * @throws ImportConfirmationException if the import cannot be confirmed.
+     */
+    @Transaction
+    open suspend fun confirmDraftBatch(
+        batchId: EntityId,
+        acknowledgeUnprocessedBlocks: Boolean,
+        moment: Instant,
+        idGenerator: IdGenerator,
+    ): Int {
+        val batch = batchById(batchId) ?: refuse(ImportConfirmationFailure.BATCH_NOT_FOUND)
+        when (batch.status) {
+            // A guarded refusal, not a repeat success: the first run's tasks stand.
+            ImportBatchStatus.CONFIRMED -> refuse(ImportConfirmationFailure.ALREADY_CONFIRMED)
+            ImportBatchStatus.ROLLED_BACK -> refuse(ImportConfirmationFailure.BATCH_NOT_A_DRAFT)
+            ImportBatchStatus.DRAFT -> Unit
+        }
+        require(batch.createdGameCount == 0) {
+            "An import that never created a game says it created ${batch.createdGameCount}."
+        }
+
+        val drafts = draftTasksOfBatch(batchId)
+        if (drafts.isEmpty()) refuse(ImportConfirmationFailure.NO_DRAFTS_TO_CONFIRM)
+        if (activeItemCount() == 0) refuse(ImportConfirmationFailure.NO_ITEMS_AVAILABLE)
+        if (!acknowledgeUnprocessedBlocks && unprocessedRawBlockCount(batchId) > 0) {
+            refuse(ImportConfirmationFailure.UNPROCESSED_BLOCKS_NOT_ACKNOWLEDGED)
+        }
+
+        var createdTaskCount = 0
+        drafts.forEach { draft ->
+            // One unready draft stops the whole batch; none is ever skipped.
+            val targetItemId =
+                draft.targetItemId
+                    ?: refuse(ImportConfirmationFailure.TARGET_ITEM_MISSING, draft.id)
+            val poolType =
+                draft.selectedPoolType
+                    ?: refuse(ImportConfirmationFailure.POOL_TYPE_MISSING, draft.id)
+            val trackingMode =
+                draft.selectedTrackingMode
+                    ?: refuse(ImportConfirmationFailure.TRACKING_MODE_MISSING, draft.id)
+            if (activeItemCount(targetItemId) != 1) {
+                refuse(ImportConfirmationFailure.TARGET_ITEM_NOT_AVAILABLE, draft.id)
+            }
+            // A stored draft cannot hold a quantity of zero or a pool the mode
+            // forbids, so either would be a defect rather than a user mistake.
+            require(draft.requiredQuantity == null || draft.requiredQuantity > 0) {
+                "The draft ${draft.id} holds a required quantity of ${draft.requiredQuantity}."
+            }
+            val taskId = idGenerator.newId()
+            insertTask(
+                TaskEntity(
+                    id = taskId,
+                    itemId = targetItemId,
+                    poolType = poolType,
+                    trackingMode = trackingMode,
+                    name = draft.name,
+                    requiredQuantity = draft.requiredQuantity,
+                    notes = draft.notes,
+                    createdAt = moment,
+                    updatedAt = moment,
+                    sourceRawImportBlockId = draft.rawImportBlockId,
+                ),
+            )
+            val aimed = setDraftMaterializedTask(draft.id, taskId, moment)
+            check(aimed == 1) { "The draft ${draft.id} could not be linked to the task it produced." }
+            createdTaskCount++
+        }
+
+        val confirmed = markBatchConfirmed(batchId, createdTaskCount, moment)
+        check(confirmed == 1) { "The import $batchId was no longer a draft when it was about to be confirmed." }
+
+        requireConfirmationHeld(batchId, drafts.size, createdTaskCount)
+        return createdTaskCount
+    }
+
+    /**
+     * Reads back what the transaction has just written and refuses to let it
+     * stand unless it is exactly what was promised. Still inside the transaction,
+     * so a broken postcondition rolls the whole confirmation back.
+     */
+    private suspend fun requireConfirmationHeld(
+        batchId: EntityId,
+        draftCount: Int,
+        createdTaskCount: Int,
+    ) {
+        check(createdTaskCount == draftCount) {
+            "$draftCount drafts should have produced $draftCount tasks, not $createdTaskCount."
+        }
+        val batch = batchById(batchId)
+        checkNotNull(batch) { "The import $batchId disappeared while it was being confirmed." }
+        check(batch.status == ImportBatchStatus.CONFIRMED) {
+            "The import $batchId was left as ${batch.status} after being confirmed."
+        }
+        check(batch.createdTaskCount == createdTaskCount) {
+            "The import $batchId says it created ${batch.createdTaskCount} tasks, not $createdTaskCount."
+        }
+        check(batch.createdGameCount == 0) {
+            "Confirming an import created ${batch.createdGameCount} games; it must create none."
+        }
+        val unlinked = draftTasksOfBatch(batchId).count { it.materializedTaskId == null }
+        check(unlinked == 0) { "$unlinked drafts were left without the task they produced." }
+    }
+
+    private fun refuse(
+        failure: ImportConfirmationFailure,
+        draftTaskId: EntityId? = null,
+    ): Nothing = throw ImportConfirmationException(failure, draftTaskId)
 }

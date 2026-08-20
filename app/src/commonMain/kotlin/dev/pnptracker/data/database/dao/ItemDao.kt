@@ -57,6 +57,21 @@ interface ItemDao {
     )
     fun observeActiveItemsOfGame(gameId: EntityId): Flow<List<ItemEntity>>
 
+    /**
+     * Every active item of every active game, for screens that let the user pick
+     * one across games. Ordered by game first so the list reads the way it is
+     * grouped; `id` keeps it from reshuffling when two names tie.
+     */
+    @Query(
+        """
+        SELECT items.* FROM items
+        INNER JOIN games ON games.id = items.game_id
+        WHERE items.deleted_at IS NULL AND games.deleted_at IS NULL
+        ORDER BY games.name, items.name, items.id
+        """,
+    )
+    fun observeActiveItems(): Flow<List<ItemEntity>>
+
     /** 1 while the game exists and has not been deleted, 0 otherwise. */
     @Query("SELECT COUNT(*) FROM games WHERE id = :gameId AND deleted_at IS NULL")
     suspend fun activeGameCount(gameId: EntityId): Int
