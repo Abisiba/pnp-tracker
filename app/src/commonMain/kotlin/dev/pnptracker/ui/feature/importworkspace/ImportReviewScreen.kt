@@ -168,6 +168,7 @@ private fun ContentPanes(
     ) {
         RawBlockPane(
             state = state,
+            isEditable = state.canEdit,
             isSaving = isSaving,
             onSelect = onSelect,
             onToggleProcessed = onToggleProcessed,
@@ -191,6 +192,7 @@ private fun ContentPanes(
 @Composable
 private fun RawBlockPane(
     state: ImportReviewState.Content,
+    isEditable: Boolean,
     isSaving: Boolean,
     onSelect: (EntityId) -> Unit,
     onToggleProcessed: (ReviewRawBlock) -> Unit,
@@ -211,6 +213,7 @@ private fun RawBlockPane(
                     block = block,
                     draftCount = state.workspace.draftsOf(block.id).size,
                     isSelected = block.id == state.selectedBlockId,
+                    isEditable = isEditable,
                     isSaving = isSaving,
                     onSelect = { onSelect(block.id) },
                     onToggleProcessed = { onToggleProcessed(block) },
@@ -226,6 +229,7 @@ private fun RawBlockRow(
     block: ReviewRawBlock,
     draftCount: Int,
     isSelected: Boolean,
+    isEditable: Boolean,
     isSaving: Boolean,
     onSelect: () -> Unit,
     onToggleProcessed: () -> Unit,
@@ -295,17 +299,27 @@ private fun RawBlockRow(
                 )
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onToggleProcessed, enabled = !isSaving) {
-                    Text(
-                        stringResource(
-                            if (block.isProcessed) Strings.Review.markUnprocessed else Strings.Review.markProcessed,
-                        ),
-                    )
-                }
-                if (isSelected) {
-                    Button(onClick = onStartDraft, enabled = !isSaving) {
-                        Text(stringResource(Strings.Review.createDraft))
+            // A confirmed import is evidence, not a workspace: PLAN 11.4.3 makes it
+            // read only, so the two actions that write are not offered at all. The
+            // data layer refuses them too, but a button that is going to be refused
+            // should never have been on screen.
+            if (isEditable) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onToggleProcessed, enabled = !isSaving) {
+                        Text(
+                            stringResource(
+                                if (block.isProcessed) {
+                                    Strings.Review.markUnprocessed
+                                } else {
+                                    Strings.Review.markProcessed
+                                },
+                            ),
+                        )
+                    }
+                    if (isSelected) {
+                        Button(onClick = onStartDraft, enabled = !isSaving) {
+                            Text(stringResource(Strings.Review.createDraft))
+                        }
                     }
                 }
             }
@@ -326,7 +340,9 @@ private fun DraftPane(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (composer != null) {
+        // A form still open when the import was confirmed would otherwise keep a
+        // save button pointing at a write the data layer now refuses.
+        if (composer != null && state.canEdit) {
             DraftComposerCard(
                 composer = composer,
                 sourceBlock = state.workspace.blockOrNull(composer.blockId),
@@ -357,7 +373,7 @@ private fun DraftPane(
                         draft = draft,
                         confirmation = confirmation,
                         batchId = batchId,
-                        isEditable = state.workspace.isStillADraft,
+                        isEditable = state.canEdit,
                     )
                 }
             }

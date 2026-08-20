@@ -103,6 +103,49 @@ private class FakeReview(
     }
 }
 
+class ImportReviewWorkspaceEditabilityTest {
+    private fun contentOf(status: ImportBatchStatus): ImportReviewState.Content {
+        val cell = block("15 KIRMIZI**", row = 1, column = 1)
+        return ImportReviewState.Content(
+            workspace =
+                ImportReviewWorkspace(
+                    batchId = BATCH_ID,
+                    fileName = "sample-import.xlsx",
+                    sheetName = "Sayfa1",
+                    status = status,
+                    rawBlocks = listOf(cell),
+                    draftTasks = emptyList(),
+                ),
+            selectedBlockId = cell.id,
+        )
+    }
+
+    @Test
+    fun `a draft import may still be written to`() {
+        assertTrue(contentOf(ImportBatchStatus.DRAFT).canEdit)
+    }
+
+    @Test
+    fun `a confirmed import may not be written to`() {
+        assertTrue(
+            !contentOf(ImportBatchStatus.CONFIRMED).canEdit,
+            "a confirmed import is read only, so no action that writes may be offered",
+        )
+    }
+
+    @Test
+    fun `a rolled back import may not be written to either`() {
+        assertTrue(!contentOf(ImportBatchStatus.ROLLED_BACK).canEdit)
+    }
+
+    @Test
+    fun `only a draft is editable, whatever else the batch is`() {
+        val editable = ImportBatchStatus.entries.filter { contentOf(it).canEdit }
+
+        assertEquals(listOf(ImportBatchStatus.DRAFT), editable)
+    }
+}
+
 class ImportReviewControllerTest {
     /** Runs [body] with the controller collecting, then stops collecting. */
     private fun withObserving(
