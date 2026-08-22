@@ -37,6 +37,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.pnptracker.AppInfo
 import dev.pnptracker.ui.Strings
+import dev.pnptracker.ui.feature.colors.ColorCatalogueController
+import dev.pnptracker.ui.feature.colors.ColorCatalogueScreen
 import dev.pnptracker.ui.feature.games.GameTasksController
 import dev.pnptracker.ui.feature.games.GamesController
 import dev.pnptracker.ui.feature.games.GamesScreen
@@ -70,6 +72,7 @@ fun AppScaffold(
     confirmationController: ImportConfirmationController,
     gamesController: GamesController,
     gameTasksController: GameTasksController,
+    colorCatalogueController: ColorCatalogueController,
     modifier: Modifier = Modifier,
 ) {
     Surface(modifier = modifier.fillMaxSize()) {
@@ -85,6 +88,7 @@ fun AppScaffold(
                 when (navigation.currentScreen) {
                     Screen.Home -> HomeScreen()
                     Screen.Games -> GamesScreen(gamesController, gameTasksController)
+                    Screen.Colors -> ColorCatalogueScreen(colorCatalogueController)
                     Screen.Import -> ImportSection(importController, reviewController, confirmationController)
                 }
             }

@@ -26,10 +26,13 @@ class TurkishTextCatalogTest {
             "Navigation.importReview" to Strings.Navigation.importReview,
             "ScreenTitles.home" to Strings.ScreenTitles.home,
             "ScreenTitles.games" to Strings.ScreenTitles.games,
+            "Navigation.colors" to Strings.Navigation.colors,
             "ScreenTitles.importReview" to Strings.ScreenTitles.importReview,
+            "ScreenTitles.colors" to Strings.ScreenTitles.colors,
             "ScreenDescriptions.home" to Strings.ScreenDescriptions.home,
             "ScreenDescriptions.games" to Strings.ScreenDescriptions.games,
             "ScreenDescriptions.importReview" to Strings.ScreenDescriptions.importReview,
+            "ScreenDescriptions.colors" to Strings.ScreenDescriptions.colors,
             "Theme.sectionLabel" to Strings.Theme.sectionLabel,
             "Theme.switchToDark" to Strings.Theme.switchToDark,
             "Theme.switchToLight" to Strings.Theme.switchToLight,
@@ -65,11 +68,11 @@ class TurkishTextCatalogTest {
         }
 
     @Test
-    fun `the three navigation names differ from one another`() =
+    fun `the navigation names differ from one another`() =
         runBlocking<Unit> {
             val names = Screen.all.map { getString(textsOf(it).navigationLabel) }
 
-            assertEquals(3, names.size)
+            assertEquals(4, names.size)
             assertEquals(names.size, names.toSet().size, "navigation names are not unique: $names")
         }
 

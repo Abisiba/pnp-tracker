@@ -246,4 +246,25 @@
     <string name="tracking_pipeline">Aşamalı</string>
     <string name="tracking_checklist">Kontrol listesi</string>
     <string name="tracking_counted">Sayılı</string>
+
+    <!-- Renkler bölümü: global renk kataloğu ve yeni renk ekleme -->
+    <string name="navigation_colors">Renkler</string>
+    <string name="colors_title">Renkler</string>
+    <string name="colors_description">Bütün oyunlarda ortak kullanılan renk kataloğu burada tutulur; yeni renk ekleyebilir ve her rengin örneğini yazılı adıyla birlikte görebilirsiniz.</string>
+    <string name="colors_loading">Renk kataloğu yükleniyor…</string>
+    <string name="colors_count">Katalogda %1$s renk var.</string>
+    <string name="colors_create">Yeni renk ekle</string>
+    <string name="colors_name_label">Renk adı</string>
+    <string name="colors_name_required">Renk adı boş olamaz.</string>
+    <string name="colors_hex_label">Renk değeri</string>
+    <string name="colors_hex_hint">#RRGGBB biçiminde yazın, örneğin #1A237E.</string>
+    <string name="colors_hex_invalid">Renk değeri #RRGGBB biçiminde olmalı.</string>
+    <string name="colors_hex_shared">Bu değer şu renklerde de kullanılıyor: %1$s. İsterseniz yine de kaydedebilirsiniz.</string>
+    <string name="colors_preview">Önizleme</string>
+    <string name="colors_swatch">%1$s renginin örneği</string>
+    <string name="colors_save">Rengi kaydet</string>
+    <string name="colors_discard">Vazgeç</string>
+    <string name="colors_error_could_not_save">Renk kaydedilemedi; hiçbir şey yazılmadı.</string>
+    <string name="colors_error_name_used">Bu ad zaten başka bir renge ait.</string>
+    <string name="colors_error_name_is_alias">Bu ad zaten başka bir rengin bilinen yazımlarından biri.</string>
 </resources>

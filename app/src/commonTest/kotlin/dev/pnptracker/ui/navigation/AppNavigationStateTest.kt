@@ -64,8 +64,8 @@ class AppNavigationStateTest {
     }
 
     @Test
-    fun `the sidebar offers only the three screens phase one delivers`() {
-        assertEquals(listOf(Screen.Home, Screen.Games, Screen.Import), Screen.all)
+    fun `the sidebar offers only the sections that have been built`() {
+        assertEquals(listOf(Screen.Home, Screen.Games, Screen.Import, Screen.Colors), Screen.all)
     }
 
     @Test

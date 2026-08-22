@@ -6,6 +6,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import dev.pnptracker.data.database.DatabaseFactory
+import dev.pnptracker.data.repository.ColorCatalogueStore
 import dev.pnptracker.data.repository.GameSetupStore
 import dev.pnptracker.data.repository.ImportConfirmationStore
 import dev.pnptracker.data.repository.ImportDraftStore
@@ -18,6 +19,7 @@ import dev.pnptracker.platform.xlsx.AwtXlsxFilePicker
 import dev.pnptracker.platform.xlsx.XlsxImportFileGateway
 import dev.pnptracker.ui.PnpTrackerApp
 import dev.pnptracker.ui.Strings
+import dev.pnptracker.ui.feature.colors.ColorCatalogueController
 import dev.pnptracker.ui.feature.games.GameTasksController
 import dev.pnptracker.ui.feature.games.GamesController
 import dev.pnptracker.ui.feature.importreview.ImportController
@@ -59,6 +61,7 @@ fun main() {
         )
     val gamesController = GamesController(GameSetupStore(database.gameDao(), database.itemDao()))
     val gameTasksController = GameTasksController(TaskSetupStore(database.taskDao()))
+    val colorCatalogueController = ColorCatalogueController(ColorCatalogueStore(database.colorDao()))
 
     application {
         Window(
@@ -79,6 +82,7 @@ fun main() {
                 confirmationController,
                 gamesController,
                 gameTasksController,
+                colorCatalogueController,
             )
         }
     }

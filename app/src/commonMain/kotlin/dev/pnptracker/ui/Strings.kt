@@ -13,6 +13,24 @@ import dev.pnptracker.resources.aim_title
 import dev.pnptracker.resources.app_name
 import dev.pnptracker.resources.app_version_label
 import dev.pnptracker.resources.app_window_title
+import dev.pnptracker.resources.colors_count
+import dev.pnptracker.resources.colors_create
+import dev.pnptracker.resources.colors_description
+import dev.pnptracker.resources.colors_discard
+import dev.pnptracker.resources.colors_error_could_not_save
+import dev.pnptracker.resources.colors_error_name_is_alias
+import dev.pnptracker.resources.colors_error_name_used
+import dev.pnptracker.resources.colors_hex_hint
+import dev.pnptracker.resources.colors_hex_invalid
+import dev.pnptracker.resources.colors_hex_label
+import dev.pnptracker.resources.colors_hex_shared
+import dev.pnptracker.resources.colors_loading
+import dev.pnptracker.resources.colors_name_label
+import dev.pnptracker.resources.colors_name_required
+import dev.pnptracker.resources.colors_preview
+import dev.pnptracker.resources.colors_save
+import dev.pnptracker.resources.colors_swatch
+import dev.pnptracker.resources.colors_title
 import dev.pnptracker.resources.confirm_action
 import dev.pnptracker.resources.confirm_dialog_accept
 import dev.pnptracker.resources.confirm_dialog_body
@@ -121,6 +139,7 @@ import dev.pnptracker.resources.import_warning_hidden_sheet
 import dev.pnptracker.resources.import_warning_row_without_game_name
 import dev.pnptracker.resources.import_warnings_title
 import dev.pnptracker.resources.navigation_accessibility_label
+import dev.pnptracker.resources.navigation_colors
 import dev.pnptracker.resources.navigation_games
 import dev.pnptracker.resources.navigation_home
 import dev.pnptracker.resources.navigation_import
@@ -232,18 +251,21 @@ object Strings {
         val home = Res.string.navigation_home
         val games = Res.string.navigation_games
         val importReview = Res.string.navigation_import
+        val colors = Res.string.navigation_colors
     }
 
     object ScreenTitles {
         val home = Res.string.home_title
         val games = Res.string.games_title
         val importReview = Res.string.import_title
+        val colors = Res.string.colors_title
     }
 
     object ScreenDescriptions {
         val home = Res.string.home_description
         val games = Res.string.games_description
         val importReview = Res.string.import_description
+        val colors = Res.string.colors_description
     }
 
     object Theme {
@@ -397,6 +419,33 @@ object Strings {
         val pipeline = Res.string.tracking_pipeline
         val checklist = Res.string.tracking_checklist
         val counted = Res.string.tracking_counted
+    }
+
+    /**
+     * The colour catalogue section.
+     *
+     * Every swatch the section draws is named in words beside it, because PLAN 17
+     * does not let a colour be the only thing carrying a meaning.
+     */
+    object Colors {
+        val loading = Res.string.colors_loading
+        val count = Res.string.colors_count
+
+        val create = Res.string.colors_create
+        val nameLabel = Res.string.colors_name_label
+        val nameRequired = Res.string.colors_name_required
+        val hexLabel = Res.string.colors_hex_label
+        val hexHint = Res.string.colors_hex_hint
+        val hexInvalid = Res.string.colors_hex_invalid
+        val hexShared = Res.string.colors_hex_shared
+        val preview = Res.string.colors_preview
+        val swatch = Res.string.colors_swatch
+        val save = Res.string.colors_save
+        val discard = Res.string.colors_discard
+
+        val errorCouldNotSave = Res.string.colors_error_could_not_save
+        val errorNameUsed = Res.string.colors_error_name_used
+        val errorNameIsAlias = Res.string.colors_error_name_is_alias
     }
 
     /** Turning a reviewed import into real tasks. */
