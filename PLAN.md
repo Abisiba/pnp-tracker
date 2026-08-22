@@ -1364,8 +1364,10 @@ XDG dizinleriyle yapılan manuel turuyla birlikte teslim edilir.
 
 1. PLAN'ı ve hedef veri modelini sabitle.
 2. Gerçek `pnp.db` dosyasının **salt okunur kopyasında** tablo doluluklarını ölç; göç maliyetini buna göre belirle.
-3. Artık geçersiz olan üretim yollarını kontrollü biçimde temizle: renk arşivleme, `Item` tabanlı görev oluşturma ve `ALTERNATIVE` renk ilişkisi.
-4. **Şema v4** — tablo/hücre/segment modeli ve renk sıralaması: `game_cells`, `cell_segments`, `task_colors.slot_index`, `colors.is_archived` kaldırılması, `items` tablosunun kaldırılması ve `tasks` bağlantısının `TaskSegment` üzerine alınması.
+3. Renk arşivleme üretim yolunu ve buna ait eskimiş belge ile testleri temizle. Şemaya dokunulmaz: `colors.is_archived` sütunu ve `ColorEntity.isArchived` alanı yerinde kalır; yalnız arşivleme API'si, arşiv davranışını ürün kuralı gibi anlatan belgeler ve eski arşiv testleri kaldırılır.
+4. **Şema v4** — tablo/hücre/segment modeli, renk sıralaması ve artık geçersiz olan iki üretim yolunun sökülmesi. Kapsam: `game_cells` ve `cell_segments` tablolarının oluşturulması, `task_colors.slot_index` eklenmesi, `colors.is_archived` sütununun kaldırılması, `items` tablosunun kaldırılması, `tasks.item_id` zorunluluğunun kaldırılıp görevin `TaskSegment` üzerinden hücreye bağlanması ve `ALTERNATIVE` renk ilişkisinin sökülmesi.
+
+   **Bunların hepsi tek bir atomik migration dilimidir ve bölünemez.** `items` tablosu düşürülemeden `tasks.item_id` zorunluluğu kaldırılamaz; `tasks` yeniden inşa edilmeden görev `TaskSegment`'e bağlanamaz; `task_colors` yeniden inşa edilirken `slot_index` eklenmesi ile `ALTERNATIVE` sökümü aynı tabloya dokunur. Bu işleri ayrı dilimlere bölmek, arada görev oluşturamayan veya içe aktarma onaylayamayan bir uygulama bırakır.
 5. **Şema v5** — görev tamamlanması, eksik sayaçları, aşamalar ve ilerleme olayları: `tasks.is_completed`/`completed_at`, 3D eksik sayacı, `task_stages`, `progress_events`.
 6. Oyun tablosunu ve üç global görünümü göster.
 7. Hücrede düz metin yazma.
@@ -1380,6 +1382,24 @@ XDG dizinleriyle yapılan manuel turuyla birlikte teslim edilir.
 16. Kart ve mukavva aşamaları.
 17. Oyun toplu tamamlama ve eksik parçada yeniden açılma.
 18. Excel içe aktarma verisini yeni hücre/segment modeline onaylı biçimde dönüştürme.
+
+#### Migration karar kaydı
+
+Adım 2'de yerel geliştirme veritabanının salt okunur kopyası denetlenmiştir.
+
+- Denetlenen veritabanında 12 seed renk dışında hiçbir kullanıcı veya domain verisi bulunmamıştır: `games`, `items`, `tasks`, `task_colors`, `color_aliases`, `import_batches`, `raw_import_blocks` ve `draft_tasks` tablolarının tamamı boştu. 12 rengin hiçbiri seed değerlerinden değiştirilmemiş ve hiçbiri arşivlenmemişti.
+- **Bu yalnızca denetlenen veritabanı için bir bulgudur.** Bütün v3 veritabanlarının boş olduğu şeklinde genelleme yapılamaz; bir yedekten geri yükleme veya başka bir makinedeki kurulum dolu olabilir.
+- Bu nedenle v4 ve v5 migration'ları **veri yokmuş gibi yazılmamalıdır**. Beklenmeyen satırlar sessizce silinemez. Migration ya kaydı korumalı biçimde dönüştürmeli ya da anlaşılır bir hata ile durmalıdır (fail-fast); iki davranıştan hangisinin seçildiği migration'ın kendi belgesinde yazılı olmalıdır.
+- Özellikle: `tasks` tablosunda bir görevin metin içindeki konumunu belirleyecek hiçbir alan yoktur. Dolu bir v3 veritabanı göç ederse eski görevler için **tahminî çapa üretilmemelidir**; görev hedef hücrenin sonuna kendi `TaskSegment`'i olarak eklenir ve ham metin ayrıca korunur.
+
+#### Adım 4 kabul ölçütü
+
+Şema v4 dilimi ancak aşağıdakiler doğrulandığında tamamlanmış sayılır:
+
+- `items` tablosu kaldırılmış, `tasks` doğrudan bir `TaskSegment` üzerinden hücreye bağlanmıştır.
+- `ALTERNATIVE` renk ilişkisi sökülmüş, `task_colors` yalnız sıralı `REQUIRED` ilişkileri taşımaktadır.
+- **Kullanılan bir renk kullanıcı onayıyla silindiğinde ilgili `TaskColor` bağlantıları kalkar, `Task` kayıtları yaşamaya devam eder ve rengi kalmayan görev `Renk seçilecek` havuzuna girer.** Bu davranış açık bir testle kanıtlanmalıdır.
+- Migration beklenmeyen satırlarla karşılaştığında sessizce veri silmez.
 
 Ek olarak Faz 2 içinde tamamlanacak yardımcı işler:
 
