@@ -17,6 +17,7 @@ import dev.pnptracker.resources.colors_count
 import dev.pnptracker.resources.colors_create
 import dev.pnptracker.resources.colors_description
 import dev.pnptracker.resources.colors_discard
+import dev.pnptracker.resources.colors_error_color_gone
 import dev.pnptracker.resources.colors_error_could_not_save
 import dev.pnptracker.resources.colors_error_name_is_alias
 import dev.pnptracker.resources.colors_error_name_used
@@ -31,6 +32,7 @@ import dev.pnptracker.resources.colors_preview
 import dev.pnptracker.resources.colors_save
 import dev.pnptracker.resources.colors_swatch
 import dev.pnptracker.resources.colors_title
+import dev.pnptracker.resources.column_notes
 import dev.pnptracker.resources.confirm_action
 import dev.pnptracker.resources.confirm_dialog_accept
 import dev.pnptracker.resources.confirm_dialog_body
@@ -42,12 +44,13 @@ import dev.pnptracker.resources.confirm_done_title
 import dev.pnptracker.resources.confirm_error_already_confirmed
 import dev.pnptracker.resources.confirm_error_batch_not_found
 import dev.pnptracker.resources.confirm_error_could_not_save
+import dev.pnptracker.resources.confirm_error_no_cells
 import dev.pnptracker.resources.confirm_error_no_drafts
-import dev.pnptracker.resources.confirm_error_no_items
 import dev.pnptracker.resources.confirm_error_not_a_draft
 import dev.pnptracker.resources.confirm_error_pool_missing
 import dev.pnptracker.resources.confirm_error_target_missing
 import dev.pnptracker.resources.confirm_error_target_unavailable
+import dev.pnptracker.resources.confirm_error_target_wrong_column
 import dev.pnptracker.resources.confirm_error_tracking_missing
 import dev.pnptracker.resources.confirm_error_unprocessed
 import dev.pnptracker.resources.confirm_loading
@@ -62,6 +65,10 @@ import dev.pnptracker.resources.confirm_unavailable
 import dev.pnptracker.resources.confirm_unprocessed_acknowledge
 import dev.pnptracker.resources.confirm_unprocessed_warning
 import dev.pnptracker.resources.games_back
+import dev.pnptracker.resources.games_cell_open
+import dev.pnptracker.resources.games_cells_empty
+import dev.pnptracker.resources.games_cells_empty_hint
+import dev.pnptracker.resources.games_cells_title
 import dev.pnptracker.resources.games_completed_badge
 import dev.pnptracker.resources.games_completion_note
 import dev.pnptracker.resources.games_create
@@ -71,13 +78,6 @@ import dev.pnptracker.resources.games_empty_hint
 import dev.pnptracker.resources.games_empty_title
 import dev.pnptracker.resources.games_error_could_not_save
 import dev.pnptracker.resources.games_error_game_unavailable
-import dev.pnptracker.resources.games_item_create
-import dev.pnptracker.resources.games_item_name_label
-import dev.pnptracker.resources.games_item_name_required
-import dev.pnptracker.resources.games_item_save
-import dev.pnptracker.resources.games_items_empty
-import dev.pnptracker.resources.games_items_empty_hint
-import dev.pnptracker.resources.games_items_title
 import dev.pnptracker.resources.games_loading
 import dev.pnptracker.resources.games_mark_active
 import dev.pnptracker.resources.games_mark_completed
@@ -193,17 +193,17 @@ import dev.pnptracker.resources.source_column_game
 import dev.pnptracker.resources.source_column_missing
 import dev.pnptracker.resources.source_column_special
 import dev.pnptracker.resources.source_column_three_d
+import dev.pnptracker.resources.tasks_cell_label
+import dev.pnptracker.resources.tasks_cell_required
 import dev.pnptracker.resources.tasks_create
 import dev.pnptracker.resources.tasks_empty
 import dev.pnptracker.resources.tasks_empty_hint
 import dev.pnptracker.resources.tasks_error_could_not_save
 import dev.pnptracker.resources.tasks_error_item_unavailable
-import dev.pnptracker.resources.tasks_item_label
-import dev.pnptracker.resources.tasks_item_required
 import dev.pnptracker.resources.tasks_loading
 import dev.pnptracker.resources.tasks_name_label
 import dev.pnptracker.resources.tasks_name_required
-import dev.pnptracker.resources.tasks_needs_item
+import dev.pnptracker.resources.tasks_needs_cell
 import dev.pnptracker.resources.tasks_notes_label
 import dev.pnptracker.resources.tasks_pool_label
 import dev.pnptracker.resources.tasks_pool_required
@@ -355,13 +355,10 @@ object Strings {
         val unavailableTitle = Res.string.games_unavailable_title
         val unavailable = Res.string.games_unavailable
 
-        val itemsTitle = Res.string.games_items_title
-        val itemsEmpty = Res.string.games_items_empty
-        val itemsEmptyHint = Res.string.games_items_empty_hint
-        val itemCreate = Res.string.games_item_create
-        val itemNameLabel = Res.string.games_item_name_label
-        val itemNameRequired = Res.string.games_item_name_required
-        val itemSave = Res.string.games_item_save
+        val cellsTitle = Res.string.games_cells_title
+        val cellsEmpty = Res.string.games_cells_empty
+        val cellsEmptyHint = Res.string.games_cells_empty_hint
+        val cellOpen = Res.string.games_cell_open
 
         val errorCouldNotSave = Res.string.games_error_could_not_save
         val errorGameUnavailable = Res.string.games_error_game_unavailable
@@ -379,13 +376,13 @@ object Strings {
         val loading = Res.string.tasks_loading
         val empty = Res.string.tasks_empty
         val emptyHint = Res.string.tasks_empty_hint
-        val needsItem = Res.string.tasks_needs_item
+        val needsCell = Res.string.tasks_needs_cell
 
         val create = Res.string.tasks_create
         val nameLabel = Res.string.tasks_name_label
         val nameRequired = Res.string.tasks_name_required
-        val itemLabel = Res.string.tasks_item_label
-        val itemRequired = Res.string.tasks_item_required
+        val cellLabel = Res.string.tasks_cell_label
+        val cellRequired = Res.string.tasks_cell_required
         val poolLabel = Res.string.tasks_pool_label
         val poolRequired = Res.string.tasks_pool_required
         val trackingLabel = Res.string.tasks_tracking_label
@@ -446,6 +443,12 @@ object Strings {
         val errorCouldNotSave = Res.string.colors_error_could_not_save
         val errorNameUsed = Res.string.colors_error_name_used
         val errorNameIsAlias = Res.string.colors_error_name_is_alias
+        val errorColorGone = Res.string.colors_error_color_gone
+    }
+
+    /** The columns of the game table. */
+    object Columns {
+        val notes = Res.string.column_notes
     }
 
     /** Turning a reviewed import into real tasks. */
@@ -488,10 +491,11 @@ object Strings {
         val errorAlreadyConfirmed = Res.string.confirm_error_already_confirmed
         val errorNotADraft = Res.string.confirm_error_not_a_draft
         val errorNoDrafts = Res.string.confirm_error_no_drafts
-        val errorNoItems = Res.string.confirm_error_no_items
+        val errorNoCells = Res.string.confirm_error_no_cells
         val errorUnprocessed = Res.string.confirm_error_unprocessed
         val errorTargetMissing = Res.string.confirm_error_target_missing
         val errorTargetUnavailable = Res.string.confirm_error_target_unavailable
+        val errorTargetWrongColumn = Res.string.confirm_error_target_wrong_column
         val errorPoolMissing = Res.string.confirm_error_pool_missing
         val errorTrackingMissing = Res.string.confirm_error_tracking_missing
         val errorCouldNotSave = Res.string.confirm_error_could_not_save

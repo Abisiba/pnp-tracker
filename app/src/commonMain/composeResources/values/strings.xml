@@ -157,13 +157,10 @@
     <string name="games_completion_note">Tamamlanma yalnızca sizin kararınızdır; ögeleri ve görevleri değiştirmez.</string>
     <string name="games_unavailable_title">Oyun bulunamadı</string>
     <string name="games_unavailable">Bu oyun artık kayıtlı değil.</string>
-    <string name="games_items_title">Ögeler</string>
-    <string name="games_items_empty">Bu oyunun henüz ögesi yok.</string>
-    <string name="games_items_empty_hint">Token, kart destesi veya oyun tahtası gibi bir öge ekleyin.</string>
-    <string name="games_item_create">Yeni öge ekle</string>
-    <string name="games_item_name_label">Öge adı</string>
-    <string name="games_item_name_required">Öge adı boş olamaz.</string>
-    <string name="games_item_save">Ögeyi kaydet</string>
+    <string name="games_cells_title">Sütunlar</string>
+    <string name="games_cells_empty">Bu oyunun henüz açılmış sütunu yok.</string>
+    <string name="games_cells_empty_hint">Görev yazmak için önce bir sütun açın.</string>
+    <string name="games_cell_open">%1$s sütununu aç</string>
     <string name="games_error_could_not_save">Değişiklik kaydedilemedi; hiçbir şey yazılmadı.</string>
     <string name="games_error_game_unavailable">Bu oyun artık kayıtlı değil, bu yüzden değişiklik uygulanamadı.</string>
 
@@ -193,9 +190,10 @@
     <string name="confirm_error_already_confirmed">Bu içe aktarma zaten onaylanmış. Yeni görev oluşturulmadı.</string>
     <string name="confirm_error_not_a_draft">Bu içe aktarma taslak durumunda değil, bu yüzden onaylanamaz.</string>
     <string name="confirm_error_no_drafts">Onaylanacak taslak yok. Önce ham hücrelerden taslak görev oluşturun.</string>
-    <string name="confirm_error_no_items">Henüz hiç öge yok. Önce Oyunlar ekranından bir oyun ve öge oluşturun.</string>
+    <string name="confirm_error_no_cells">Henüz hiç öge yok. Önce Oyunlar ekranından bir oyun ve öge oluşturun.</string>
     <string name="confirm_error_unprocessed">İncelenmemiş hücreler var; devam etmek için onay kutusunu işaretleyin.</string>
     <string name="confirm_error_target_missing">Bu taslağa hedef öge seçilmedi.</string>
+    <string name="confirm_error_target_wrong_column">Seçilen sütun bu görevin havuzuna uymuyor.</string>
     <string name="confirm_error_target_unavailable">Bu taslağın hedef ögesi artık kayıtlı değil.</string>
     <string name="confirm_error_pool_missing">Bu taslağa üretim havuzu seçilmedi.</string>
     <string name="confirm_error_tracking_missing">Bu taslağa takip biçimi seçilmedi.</string>
@@ -217,12 +215,12 @@
     <string name="tasks_loading">Görevler yükleniyor…</string>
     <string name="tasks_empty">Bu oyunun henüz görevi yok.</string>
     <string name="tasks_empty_hint">Bir ögenin altına ilk görevi ekleyin; görevler havuzlarına göre gruplanır.</string>
-    <string name="tasks_needs_item">Görev ekleyebilmek için önce bir öge oluşturun.</string>
+    <string name="tasks_needs_cell">Görev eklemek için önce bir sütun açın.</string>
     <string name="tasks_create">Yeni görev ekle</string>
     <string name="tasks_name_label">Görev adı</string>
     <string name="tasks_name_required">Görev adı boş olamaz.</string>
-    <string name="tasks_item_label">Hedef öge</string>
-    <string name="tasks_item_required">Görevin bağlanacağı ögeyi seçin.</string>
+    <string name="tasks_cell_label">Hedef sütun</string>
+    <string name="tasks_cell_required">Görevin yazılacağı sütunu seçin.</string>
     <string name="tasks_pool_label">Üretim havuzu</string>
     <string name="tasks_pool_required">Bir üretim havuzu seçin.</string>
     <string name="tasks_tracking_label">Takip biçimi</string>
@@ -231,6 +229,7 @@
     <string name="tasks_quantity_hint">Boş bırakılırsa adet bilinmiyor sayılır.</string>
     <string name="tasks_quantity_unusable">Adet sıfırdan büyük bir tam sayı olmalı.</string>
     <string name="tasks_notes_label">Not</string>
+    <string name="column_notes">Notlar</string>
     <string name="tasks_save">Görevi kaydet</string>
     <string name="tasks_row_item">Öge: %1$s</string>
     <string name="tasks_row_quantity">Gerekli adet: %1$s</string>
@@ -266,5 +265,6 @@
     <string name="colors_discard">Vazgeç</string>
     <string name="colors_error_could_not_save">Renk kaydedilemedi; hiçbir şey yazılmadı.</string>
     <string name="colors_error_name_used">Bu ad zaten başka bir renge ait.</string>
+    <string name="colors_error_color_gone">Bu renk artık katalogda yok.</string>
     <string name="colors_error_name_is_alias">Bu ad zaten başka bir rengin bilinen yazımlarından biri.</string>
 </resources>

@@ -197,8 +197,7 @@ class ImportReviewStoreTest {
             assertEquals(0, batch.createdGameCount)
             assertEquals(0, batch.createdTaskCount)
             assertEquals(0, database.gameDao().activeCount())
-            assertEquals(emptyList(), database.itemDao().allItemsIncludingDeleted())
-            assertEquals(emptyList(), database.taskDao().allTasksIncludingArchivedAndDeleted())
+            assertEquals(emptyList(), database.taskDao().allTasksIncludingDeleted())
         }
 
     @Test
@@ -349,7 +348,7 @@ class ImportReviewStoreTest {
         }
 
     @Test
-    fun `a draft creates no game item or task and leaves the import a draft`() =
+    fun `a draft creates no game or task and leaves the import a draft`() =
         runBlocking {
             val (batchId, blocks) = saveImport()
 
@@ -360,8 +359,7 @@ class ImportReviewStoreTest {
             assertEquals(0, batch.createdGameCount)
             assertEquals(0, batch.createdTaskCount)
             assertEquals(0, database.gameDao().activeCount())
-            assertEquals(emptyList(), database.itemDao().allItemsIncludingDeleted())
-            assertEquals(emptyList(), database.taskDao().allTasksIncludingArchivedAndDeleted())
+            assertEquals(emptyList(), database.taskDao().allTasksIncludingDeleted())
         }
 
     @Test

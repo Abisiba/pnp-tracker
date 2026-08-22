@@ -1,6 +1,7 @@
 package dev.pnptracker.ui.feature.games
 
 import dev.pnptracker.data.repository.TaskSetup
+import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.PoolType
@@ -74,13 +75,13 @@ class GameTasksControllerTest {
     private fun aTask(
         name: String,
         poolType: PoolType = PoolType.THREE_D,
-        itemId: EntityId = tokens,
-        itemName: String = "Tokenlar",
+        cellId: EntityId = tokens,
+        columnType: CellColumnType = CellColumnType.THREE_D,
         trackingMode: TrackingMode = TrackingMode.THREE_D_BATCH,
     ) = TaskSummary(
         id = IdGenerator.Random.newId(),
-        itemId = itemId,
-        itemName = itemName,
+        cellId = cellId,
+        columnType = columnType,
         poolType = poolType,
         trackingMode = trackingMode,
         name = name,
@@ -129,7 +130,7 @@ class GameTasksControllerTest {
         setup.tasksFlow(gameId).value =
             listOf(
                 aTask("Ayraç", PoolType.SPECIAL, trackingMode = TrackingMode.CHECKLIST),
-                aTask("Olay kartı", PoolType.CARD, itemId = cards, itemName = "Kartlar", trackingMode = TrackingMode.PIPELINE),
+                aTask("Olay kartı", PoolType.CARD, cellId = cards, columnType = CellColumnType.CARD, trackingMode = TrackingMode.PIPELINE),
                 aTask("Gri token"),
             )
         withTasks(setup) { controller ->
@@ -162,19 +163,19 @@ class GameTasksControllerTest {
     }
 
     @Test
-    fun `every row says which item it belongs to`() {
+    fun `every row says which column it is written in`() {
         val setup = FakeTaskSetup()
         setup.tasksFlow(gameId).value =
             listOf(
                 aTask("Gri token"),
-                aTask("Olay kartı", PoolType.CARD, itemId = cards, itemName = "Kartlar", trackingMode = TrackingMode.PIPELINE),
+                aTask("Olay kartı", PoolType.CARD, cellId = cards, columnType = CellColumnType.CARD, trackingMode = TrackingMode.PIPELINE),
             )
         withTasks(setup) { controller ->
             val content = assertIs<GameTasksState.Content>(controller.state.tasks)
             val byName = content.groups.flatMap { it.tasks }.associateBy { it.name }
 
-            assertEquals("Tokenlar", assertNotNull(byName["Gri token"]).itemName)
-            assertEquals("Kartlar", assertNotNull(byName["Olay kartı"]).itemName)
+            assertEquals(CellColumnType.THREE_D, assertNotNull(byName["Gri token"]).columnType)
+            assertEquals(CellColumnType.CARD, assertNotNull(byName["Olay kartı"]).columnType)
         }
     }
 
@@ -199,22 +200,22 @@ class GameTasksControllerTest {
     }
 
     @Test
-    fun `the form opens on the item the user came from`() {
+    fun `the form opens on the cell the user came from`() {
         withTasks(FakeTaskSetup()) { controller ->
             controller.startComposer(tokens)
 
-            assertEquals(tokens, assertNotNull(controller.state.composer).itemId)
+            assertEquals(tokens, assertNotNull(controller.state.composer).cellId)
         }
     }
 
     @Test
-    fun `the user can aim the form at another item of the same game`() {
+    fun `the user can aim the form at another cell of the same game`() {
         withTasks(FakeTaskSetup()) { controller ->
             controller.startComposer(tokens)
 
-            controller.chooseItem(cards)
+            controller.chooseCell(cards)
 
-            assertEquals(cards, assertNotNull(controller.state.composer).itemId)
+            assertEquals(cards, assertNotNull(controller.state.composer).cellId)
         }
     }
 
@@ -246,7 +247,7 @@ class GameTasksControllerTest {
     }
 
     @Test
-    fun `a task cannot be saved before an item is chosen`() {
+    fun `a task cannot be saved before a cell is chosen`() {
         val setup = FakeTaskSetup()
         withTasks(setup) { controller ->
             controller.fillIn(itemId = null)
@@ -488,15 +489,15 @@ class GameTasksControllerTest {
     }
 
     @Test
-    fun `an item that is gone is reported as itself rather than as a saving problem`() {
+    fun `a cell that is gone is reported as itself rather than as a saving problem`() {
         val setup = FakeTaskSetup()
-        setup.failWith = TaskSetupFailure.ITEM_NOT_AVAILABLE
+        setup.failWith = TaskSetupFailure.CELL_NOT_AVAILABLE
         withTasks(setup) { controller ->
             controller.fillIn()
 
             controller.save()
 
-            assertEquals(TaskSetupFailure.ITEM_NOT_AVAILABLE, controller.state.failure)
+            assertEquals(TaskSetupFailure.CELL_NOT_AVAILABLE, controller.state.failure)
         }
     }
 

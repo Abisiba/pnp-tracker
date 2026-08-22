@@ -1,10 +1,11 @@
 package dev.pnptracker.ui.feature.games
 
 import dev.pnptracker.data.repository.GameSetup
+import dev.pnptracker.domain.games.CellSummary
 import dev.pnptracker.domain.games.GameSetupException
 import dev.pnptracker.domain.games.GameSetupFailure
 import dev.pnptracker.domain.games.GameSummary
-import dev.pnptracker.domain.games.ItemSummary
+import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import kotlinx.coroutines.CoroutineScope
@@ -24,17 +25,17 @@ import kotlin.test.assertTrue
 /** Storage a test can push new lists through, so the controller can be watched. */
 private class FakeSetup : GameSetup {
     val games = MutableStateFlow<List<GameSummary>>(emptyList())
-    val itemsByGame = mutableMapOf<EntityId, MutableStateFlow<List<ItemSummary>>>()
+    val cellsByGame = mutableMapOf<EntityId, MutableStateFlow<List<CellSummary>>>()
     var failWith: GameSetupFailure? = null
     val createdGames = mutableListOf<String>()
-    val createdItems = mutableListOf<Pair<EntityId, String>>()
+    val openedCells = mutableListOf<Pair<EntityId, CellColumnType>>()
     val completionCalls = mutableListOf<Pair<EntityId, Boolean>>()
 
-    fun itemsFlow(gameId: EntityId) = itemsByGame.getOrPut(gameId) { MutableStateFlow(emptyList()) }
+    fun cellsFlow(gameId: EntityId) = cellsByGame.getOrPut(gameId) { MutableStateFlow(emptyList()) }
 
     override fun observeGames(): Flow<List<GameSummary>> = games
 
-    override fun observeItems(gameId: EntityId): Flow<List<ItemSummary>> = itemsFlow(gameId)
+    override fun observeCells(gameId: EntityId): Flow<List<CellSummary>> = cellsFlow(gameId)
 
     override suspend fun createGame(name: String): EntityId {
         failWith?.let { throw GameSetupException(it) }
@@ -44,15 +45,16 @@ private class FakeSetup : GameSetup {
         return id
     }
 
-    override suspend fun createItem(
+    override suspend fun openCell(
         gameId: EntityId,
-        name: String,
+        columnType: CellColumnType,
     ): EntityId {
         failWith?.let { throw GameSetupException(it) }
-        createdItems += gameId to name
+        val flow = cellsFlow(gameId)
+        flow.value.firstOrNull { it.columnType == columnType }?.let { return it.id }
+        openedCells += gameId to columnType
         val id = IdGenerator.Random.newId()
-        val flow = itemsFlow(gameId)
-        flow.value = flow.value + ItemSummary(id, gameId, name.trim())
+        flow.value = flow.value + CellSummary(id, gameId, columnType)
         return id
     }
 
@@ -187,37 +189,37 @@ class GamesControllerTest {
     }
 
     @Test
-    fun `opening a game with no items shows the empty detail`() {
+    fun `opening a game with no cells shows the empty detail`() {
         val gameId = IdGenerator.Random.newId()
         val setup = FakeSetup()
         setup.games.value = listOf(GameSummary(gameId, "Harmonies"))
         withGames(setup) { controller ->
             controller.openGame(gameId)
-            val items = launch { controller.observeItems(gameId) }
+            val cells = launch { controller.observeCells(gameId) }
             yield()
 
             val detail = assertIs<GameDetailState.Empty>(controller.state.detail)
             assertEquals("Harmonies", detail.game.name)
-            items.cancelAndJoin()
+            cells.cancelAndJoin()
         }
     }
 
     @Test
-    fun `an open game shows only its own items`() {
+    fun `an open game shows only its own cells`() {
         val first = IdGenerator.Random.newId()
         val second = IdGenerator.Random.newId()
         val setup = FakeSetup()
         setup.games.value = listOf(GameSummary(first, "Harmonies"), GameSummary(second, "Root"))
-        setup.itemsFlow(first).value = listOf(ItemSummary(IdGenerator.Random.newId(), first, "Token"))
-        setup.itemsFlow(second).value = listOf(ItemSummary(IdGenerator.Random.newId(), second, "Meeple"))
+        setup.cellsFlow(first).value = listOf(CellSummary(IdGenerator.Random.newId(), first, CellColumnType.THREE_D))
+        setup.cellsFlow(second).value = listOf(CellSummary(IdGenerator.Random.newId(), second, CellColumnType.CARD))
         withGames(setup) { controller ->
             controller.openGame(first)
-            val items = launch { controller.observeItems(first) }
+            val cells = launch { controller.observeCells(first) }
             yield()
 
             val detail = assertIs<GameDetailState.Content>(controller.state.detail)
-            assertEquals(listOf("Token"), detail.items.map { it.name })
-            items.cancelAndJoin()
+            assertEquals(listOf(CellColumnType.THREE_D), detail.cells.map { it.columnType })
+            cells.cancelAndJoin()
         }
     }
 
@@ -228,91 +230,79 @@ class GamesControllerTest {
         setup.games.value = listOf(GameSummary(gameId, "Harmonies"))
         withGames(setup) { controller ->
             controller.openGame(gameId)
-            val items = launch { controller.observeItems(gameId) }
+            val cells = launch { controller.observeCells(gameId) }
             yield()
             setup.games.value = emptyList()
             yield()
 
             assertIs<GameDetailState.Unavailable>(controller.state.detail)
-            items.cancelAndJoin()
+            cells.cancelAndJoin()
         }
     }
 
     @Test
-    fun `a blank item name cannot be saved and writes nothing`() {
+    fun `opening a column sends it to the open game`() {
         val gameId = IdGenerator.Random.newId()
         val setup = FakeSetup()
         setup.games.value = listOf(GameSummary(gameId, "Harmonies"))
         withGames(setup) { controller ->
             controller.openGame(gameId)
-            controller.startItemComposer()
-            controller.editItemName("  ")
-            controller.saveItem()
-
-            assertEquals(emptyList(), setup.createdItems)
-            assertNotNull(controller.state.itemComposer)
-        }
-    }
-
-    @Test
-    fun `changing one's mind about an item writes nothing`() {
-        val gameId = IdGenerator.Random.newId()
-        val setup = FakeSetup()
-        setup.games.value = listOf(GameSummary(gameId, "Harmonies"))
-        withGames(setup) { controller ->
-            controller.openGame(gameId)
-            controller.startItemComposer()
-            controller.editItemName("Token")
-            controller.cancelItemComposer()
-
-            assertNull(controller.state.itemComposer)
-            assertEquals(emptyList(), setup.createdItems)
-        }
-    }
-
-    @Test
-    fun `saving an item sends it to the open game`() {
-        val gameId = IdGenerator.Random.newId()
-        val setup = FakeSetup()
-        setup.games.value = listOf(GameSummary(gameId, "Harmonies"))
-        withGames(setup) { controller ->
-            controller.openGame(gameId)
-            controller.startItemComposer()
-            controller.editItemName("Token")
-            controller.saveItem()
+            val cells = launch { controller.observeCells(gameId) }
             yield()
 
-            assertEquals(listOf(gameId to "Token"), setup.createdItems)
-            assertNull(controller.state.itemComposer)
+            controller.openCell(CellColumnType.CARD)
+            yield()
+
+            assertEquals(listOf(gameId to CellColumnType.CARD), setup.openedCells)
+            val detail = assertIs<GameDetailState.Content>(controller.state.detail)
+            assertEquals(listOf(CellColumnType.CARD), detail.cells.map { it.columnType })
+            cells.cancelAndJoin()
         }
     }
 
     @Test
-    fun `an item cannot be saved with no game open`() {
-        val setup = FakeSetup()
-        withGames(setup) { controller ->
-            controller.startItemComposer()
-            controller.editItemName("Token")
-            controller.saveItem()
-
-            assertEquals(emptyList(), setup.createdItems)
-        }
-    }
-
-    @Test
-    fun `a game missing under an item is reported as such`() {
+    fun `opening the same column twice opens one cell`() {
         val gameId = IdGenerator.Random.newId()
         val setup = FakeSetup()
         setup.games.value = listOf(GameSummary(gameId, "Harmonies"))
         withGames(setup) { controller ->
             controller.openGame(gameId)
-            controller.startItemComposer()
-            controller.editItemName("Token")
-            setup.failWith = GameSetupFailure.GAME_NOT_AVAILABLE
-            controller.saveItem()
+            val cells = launch { controller.observeCells(gameId) }
+            yield()
+
+            controller.openCell(CellColumnType.CARD)
+            yield()
+            controller.openCell(CellColumnType.CARD)
+            yield()
+
+            assertEquals(1, setup.openedCells.size, "the second call opened a second cell")
+            cells.cancelAndJoin()
+        }
+    }
+
+    @Test
+    fun `a column cannot be opened with no game open`() {
+        val setup = FakeSetup()
+        withGames(setup) { controller ->
+            controller.openCell(CellColumnType.THREE_D)
+
+            assertEquals(emptyList(), setup.openedCells)
+            assertNull(controller.state.failure)
+        }
+    }
+
+    @Test
+    fun `a game missing under a cell is reported as such`() {
+        val gameId = IdGenerator.Random.newId()
+        val setup = FakeSetup()
+        setup.games.value = listOf(GameSummary(gameId, "Harmonies"))
+        setup.failWith = GameSetupFailure.GAME_NOT_AVAILABLE
+        withGames(setup) { controller ->
+            controller.openGame(gameId)
+
+            controller.openCell(CellColumnType.THREE_D)
 
             assertEquals(GameSetupFailure.GAME_NOT_AVAILABLE, controller.state.failure)
-            assertEquals("Token", assertNotNull(controller.state.itemComposer).name)
         }
     }
 

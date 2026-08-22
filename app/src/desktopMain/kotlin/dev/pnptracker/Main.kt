@@ -57,9 +57,9 @@ fun main() {
     val reviewController = ImportReviewController(ImportReviewStore(database.importDao()))
     val confirmationController =
         ImportConfirmationController(
-            ImportConfirmationStore(database.importDao(), database.itemDao(), database.gameDao()),
+            ImportConfirmationStore(database.importDao(), database.gameCellDao(), database.gameDao()),
         )
-    val gamesController = GamesController(GameSetupStore(database.gameDao(), database.itemDao()))
+    val gamesController = GamesController(GameSetupStore(database.gameDao(), database.gameCellDao()))
     val gameTasksController = GameTasksController(TaskSetupStore(database.taskDao()))
     val colorCatalogueController = ColorCatalogueController(ColorCatalogueStore(database.colorDao()))
 

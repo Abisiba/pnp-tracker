@@ -408,7 +408,7 @@ class ImportDraftTest {
             val block = insertBatchWithBlock()
             val game = aGame().copy(sourceImportBatchId = block.importBatchId)
             database.gameDao().insert(game)
-            val task = insertGameItemAndTask(database, gameName = "Wingspan")
+            val task = insertGameCellAndTask(database, gameName = "Wingspan")
             database.useWriterConnection { transactor ->
                 transactor.usePrepared("UPDATE tasks SET source_raw_import_block_id = ? WHERE id = ?") { statement ->
                     statement.bindText(1, block.id.toString())
@@ -433,7 +433,7 @@ class ImportDraftTest {
     fun `one task cannot be claimed by two drafts`() =
         runBlocking<Unit> {
             val block = insertBatchWithBlock()
-            val task = insertGameItemAndTask(database)
+            val task = insertGameCellAndTask(database)
             val first = aDraftTask(block.id, name = "Ilk").copy(materializedTaskId = task.id)
             val second = aDraftTask(block.id, name = "Ikinci").copy(materializedTaskId = task.id)
             database.importDao().addDraftTask(first)
@@ -478,16 +478,16 @@ class ImportDraftTest {
         }
 
     @Test
-    fun `a draft can point at an existing item and refuses an unknown one`() =
+    fun `a draft can point at an existing cell and refuses an unknown one`() =
         runBlocking<Unit> {
             val block = insertBatchWithBlock()
-            val task = insertGameItemAndTask(database)
-            val linked = aDraftTask(block.id).copy(targetItemId = task.itemId)
+            val cell = insertGameAndCell(database)
+            val linked = aDraftTask(block.id).copy(targetCellId = cell.id)
 
             database.importDao().addDraftTask(linked)
 
-            assertEquals(task.itemId, assertNotNull(database.importDao().draftTaskById(linked.id)).targetItemId)
-            val orphan = aDraftTask(block.id, name = "Bilinmeyen").copy(targetItemId = IdGenerator.Random.newId())
+            assertEquals(cell.id, assertNotNull(database.importDao().draftTaskById(linked.id)).targetCellId)
+            val orphan = aDraftTask(block.id, name = "Bilinmeyen").copy(targetCellId = IdGenerator.Random.newId())
             val failure = assertFailsWith<SQLiteException> { database.importDao().addDraftTask(orphan) }
             assertContains(failure.message.orEmpty().uppercase(), "FOREIGN KEY")
         }
@@ -511,7 +511,7 @@ class ImportDraftTest {
     @Test
     fun `a game or task created by hand has no import source`() =
         runBlocking<Unit> {
-            val task = insertGameItemAndTask(database)
+            val task = insertGameCellAndTask(database)
 
             val storedTask = assertNotNull(database.taskDao().activeTaskById(task.id))
             val storedGame = database.gameDao().activeGames().single()

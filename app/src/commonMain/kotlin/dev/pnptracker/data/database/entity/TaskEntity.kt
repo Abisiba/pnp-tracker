@@ -12,22 +12,20 @@ import dev.pnptracker.domain.rules.requireAllowedTrackingMode
 import kotlin.time.Instant
 
 /**
- * A unit of production work below an item.
+ * A unit of production work.
  *
- * Completion is not stored here as a flag: it will be derived from the counters
- * and events that later phases add. Archiving takes a task out of the active
- * pools without deleting it.
+ * A task carries no pointer to where it is written. The link runs the other way:
+ * exactly one [CellSegmentEntity] names the task, and the cell that segment
+ * belongs to says which game and which column the task is in. Keeping it one
+ * directional means a task cannot claim to be in a cell that does not have it.
+ *
+ * Completion is not stored here: it will be derived from the counters and events
+ * the v5 schema adds. There is no archive flag either, because the product
+ * archives nothing.
  */
 @Entity(
     tableName = "tasks",
     foreignKeys = [
-        ForeignKey(
-            entity = ItemEntity::class,
-            parentColumns = ["id"],
-            childColumns = ["item_id"],
-            onDelete = ForeignKey.RESTRICT,
-            onUpdate = ForeignKey.RESTRICT,
-        ),
         ForeignKey(
             entity = RawImportBlockEntity::class,
             parentColumns = ["id"],
@@ -37,7 +35,6 @@ import kotlin.time.Instant
         ),
     ],
     indices = [
-        Index(value = ["item_id"]),
         Index(value = ["pool_type"]),
         Index(value = ["deleted_at"]),
         Index(value = ["source_raw_import_block_id"]),
@@ -47,8 +44,6 @@ data class TaskEntity(
     @PrimaryKey
     @ColumnInfo(name = "id")
     val id: EntityId,
-    @ColumnInfo(name = "item_id")
-    val itemId: EntityId,
     @ColumnInfo(name = "pool_type")
     val poolType: PoolType,
     @ColumnInfo(name = "tracking_mode")
@@ -59,8 +54,6 @@ data class TaskEntity(
     val requiredQuantity: Int? = null,
     @ColumnInfo(name = "notes")
     val notes: String? = null,
-    @ColumnInfo(name = "is_archived", defaultValue = "0")
-    val isArchived: Boolean = false,
     @ColumnInfo(name = "created_at")
     val createdAt: Instant,
     @ColumnInfo(name = "updated_at")

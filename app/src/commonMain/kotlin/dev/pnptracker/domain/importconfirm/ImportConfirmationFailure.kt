@@ -34,16 +34,19 @@ enum class ImportConfirmationFailure {
     NO_DRAFTS_TO_CONFIRM,
 
     /** There is no item anywhere to attach a task to; the user creates one first. */
-    NO_ITEMS_AVAILABLE,
+    NO_CELLS_AVAILABLE,
 
     /** Cells are still unreviewed and the user has not said to go ahead anyway. */
     UNPROCESSED_BLOCKS_NOT_ACKNOWLEDGED,
 
     /** A draft has no target item chosen. */
-    TARGET_ITEM_MISSING,
+    TARGET_CELL_MISSING,
 
     /** A draft points at an item that is gone, or whose game is gone. */
-    TARGET_ITEM_NOT_AVAILABLE,
+    TARGET_CELL_NOT_AVAILABLE,
+
+    /** The cell the draft points at belongs to a different column than its pool. */
+    TARGET_CELL_WRONG_COLUMN,
 
     /** A draft has no pool chosen. */
     POOL_TYPE_MISSING,

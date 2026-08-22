@@ -27,7 +27,7 @@ interface TaskSetup {
     fun observeTasks(gameId: EntityId): Flow<List<TaskSummary>>
 
     /**
-     * Creates a task the user typed, under an item that is really there.
+     * Creates a task the user typed, in a cell that is really there.
      *
      * The name is trimmed at both ends, because trailing spaces are a slip rather
      * than a decision, and everything inside it is left alone. A note that is
@@ -37,10 +37,10 @@ interface TaskSetup {
      *   known; a number that is given has to be greater than zero.
      * @throws IllegalArgumentException if the name says nothing, the quantity is
      *   not a usable one, or the pool does not allow the tracking mode.
-     * @throws TaskSetupException if the item is gone, or the task did not save.
+     * @throws TaskSetupException if the cell is gone, or the task did not save.
      */
     suspend fun createTask(
-        itemId: EntityId,
+        cellId: EntityId,
         name: String,
         poolType: PoolType,
         trackingMode: TrackingMode,
@@ -59,8 +59,8 @@ class TaskSetupStore(
             rows.map { row ->
                 TaskSummary(
                     id = row.taskId,
-                    itemId = row.itemId,
-                    itemName = row.itemName,
+                    cellId = row.cellId,
+                    columnType = row.columnType,
                     poolType = row.poolType,
                     trackingMode = row.trackingMode,
                     name = row.taskName,
@@ -72,7 +72,7 @@ class TaskSetupStore(
         }
 
     override suspend fun createTask(
-        itemId: EntityId,
+        cellId: EntityId,
         name: String,
         poolType: PoolType,
         trackingMode: TrackingMode,
@@ -90,7 +90,6 @@ class TaskSetupStore(
         val task =
             TaskEntity(
                 id = idGenerator.newId(),
-                itemId = itemId,
                 poolType = poolType,
                 trackingMode = trackingMode,
                 name = cleanName,
@@ -102,11 +101,16 @@ class TaskSetupStore(
                 sourceRawImportBlockId = null,
             )
         try {
-            taskDao.addTaskToActiveItem(task)
+            taskDao.addTaskToCell(
+                task = task,
+                cellId = cellId,
+                segmentId = idGenerator.newId(),
+                moment = moment,
+            )
         } catch (cause: IllegalArgumentException) {
-            // The one thing that check reports is a parent that is not there any
-            // more, which is something the user can see and act on.
-            throw TaskSetupException(TaskSetupFailure.ITEM_NOT_AVAILABLE, cause)
+            // What that check reports is a cell that is not there any more, or one
+            // whose column cannot hold this task; both are things the user can see.
+            throw TaskSetupException(TaskSetupFailure.CELL_NOT_AVAILABLE, cause)
         } catch (cause: SQLiteException) {
             throw TaskSetupException(TaskSetupFailure.COULD_NOT_SAVE, cause)
         }

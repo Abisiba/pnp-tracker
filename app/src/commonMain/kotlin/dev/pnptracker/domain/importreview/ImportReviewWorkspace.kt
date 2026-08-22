@@ -40,14 +40,14 @@ data class ReviewDraftTask(
     val name: String,
     val suggestedPoolType: PoolType? = null,
     val completionHint: HintDecision = HintDecision.NONE,
-    val targetItemId: EntityId? = null,
+    val targetCellId: EntityId? = null,
     val selectedPoolType: PoolType? = null,
     val selectedTrackingMode: TrackingMode? = null,
     val materializedTaskId: EntityId? = null,
 ) {
     /** True when the draft has everything a task needs. */
     val isReady: Boolean
-        get() = targetItemId != null && selectedPoolType != null && selectedTrackingMode != null
+        get() = targetCellId != null && selectedPoolType != null && selectedTrackingMode != null
 }
 
 /**

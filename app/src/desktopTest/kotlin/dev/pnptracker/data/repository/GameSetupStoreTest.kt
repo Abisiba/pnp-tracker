@@ -4,10 +4,11 @@ import dev.pnptracker.data.database.AppDatabase
 import dev.pnptracker.data.database.DatabaseFactory
 import dev.pnptracker.data.database.StoppedClock
 import dev.pnptracker.data.database.TemporaryDatabaseDirectory
+import dev.pnptracker.data.database.aCell
 import dev.pnptracker.data.database.aGame
-import dev.pnptracker.data.database.anItem
 import dev.pnptracker.domain.games.GameSetupException
 import dev.pnptracker.domain.games.GameSetupFailure
+import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import kotlinx.coroutines.flow.first
@@ -43,7 +44,7 @@ class GameSetupStoreTest {
         realDatabaseExistedBefore = Files.exists(TemporaryDatabaseDirectory.realApplicationDatabaseFile())
         directory = TemporaryDatabaseDirectory()
         database = DatabaseFactory().open(directory.databaseFile)
-        store = GameSetupStore(database.gameDao(), database.itemDao(), clock = StoppedClock(moment))
+        store = GameSetupStore(database.gameDao(), database.gameCellDao(), clock = StoppedClock(moment))
     }
 
     @AfterTest
@@ -55,7 +56,7 @@ class GameSetupStoreTest {
 
     private suspend fun games() = store.observeGames().first()
 
-    private suspend fun itemsOf(gameId: EntityId) = store.observeItems(gameId).first()
+    private suspend fun cellsOf(gameId: EntityId) = store.observeCells(gameId).first()
 
     @Test
     fun `a game the user typed is saved and comes back in the list`() =
@@ -115,63 +116,67 @@ class GameSetupStoreTest {
         }
 
     @Test
-    fun `an item goes under the game it was created for`() =
+    fun `an opened cell goes under the game it was opened for`() =
         runBlocking {
             val gameId = store.createGame("Harmonies")
 
-            val itemId = store.createItem(gameId, "Token")
+            val cellId = store.openCell(gameId, CellColumnType.THREE_D)
 
-            val item = itemsOf(gameId).single()
-            assertEquals(itemId, item.id)
-            assertEquals(gameId, item.gameId)
-            assertEquals("Token", item.name)
+            val cell = cellsOf(gameId).single()
+            assertEquals(cellId, cell.id)
+            assertEquals(gameId, cell.gameId)
+            assertEquals(CellColumnType.THREE_D, cell.columnType)
         }
 
     @Test
-    fun `one game's items never show up under another`() =
+    fun `one game's cells never show up under another`() =
         runBlocking {
             val first = store.createGame("Harmonies")
             val second = store.createGame("Root")
-            store.createItem(first, "Token")
-            store.createItem(first, "Arazi")
-            store.createItem(second, "Meeple")
+            store.openCell(first, CellColumnType.THREE_D)
+            store.openCell(first, CellColumnType.CARD)
+            store.openCell(second, CellColumnType.NOTES)
 
-            assertEquals(listOf("Arazi", "Token"), itemsOf(first).map { it.name })
-            assertEquals(listOf("Meeple"), itemsOf(second).map { it.name })
+            assertEquals(
+                listOf(CellColumnType.THREE_D, CellColumnType.CARD),
+                cellsOf(first).map { it.columnType }.sortedBy { it.ordinal },
+            )
+            assertEquals(listOf(CellColumnType.NOTES), cellsOf(second).map { it.columnType })
         }
 
     @Test
-    fun `a blank item name is refused and nothing is written`() =
+    fun `opening the same column twice hands back the one cell`() =
         runBlocking {
             val gameId = store.createGame("Harmonies")
 
-            assertFailsWith<IllegalArgumentException> { store.createItem(gameId, " \n ") }
+            val first = store.openCell(gameId, CellColumnType.THREE_D)
+            val second = store.openCell(gameId, CellColumnType.THREE_D)
 
-            assertEquals(emptyList(), itemsOf(gameId))
+            assertEquals(first, second, "the second call opened a second cell")
+            assertEquals(1, cellsOf(gameId).size)
         }
 
     @Test
-    fun `an item cannot be created under a game that is not there`() =
+    fun `a cell cannot be opened in a game that is not there`() =
         runBlocking {
             val failure =
                 assertFailsWith<GameSetupException> {
-                    store.createItem(IdGenerator.Random.newId(), "Token")
+                    store.openCell(IdGenerator.Random.newId(), CellColumnType.THREE_D)
                 }
 
             assertEquals(GameSetupFailure.GAME_NOT_AVAILABLE, failure.failure)
-            assertEquals(emptyList(), database.itemDao().allItemsIncludingDeleted())
         }
 
     @Test
-    fun `an item cannot be created under a deleted game`() =
+    fun `a cell cannot be opened in a deleted game`() =
         runBlocking {
             val gameId = store.createGame("Harmonies")
             database.gameDao().softDelete(gameId, moment)
 
-            val failure = assertFailsWith<GameSetupException> { store.createItem(gameId, "Token") }
+            val failure = assertFailsWith<GameSetupException> { store.openCell(gameId, CellColumnType.THREE_D) }
 
             assertEquals(GameSetupFailure.GAME_NOT_AVAILABLE, failure.failure)
-            assertEquals(emptyList(), database.itemDao().allItemsIncludingDeleted())
+            assertEquals(emptyList(), cellsOf(gameId))
         }
 
     @Test
@@ -211,13 +216,13 @@ class GameSetupStoreTest {
     fun `finishing a game changes nothing below it`() =
         runBlocking {
             val gameId = store.createGame("Harmonies")
-            store.createItem(gameId, "Token")
-            val before = database.itemDao().allItemsIncludingDeleted()
+            store.openCell(gameId, CellColumnType.THREE_D)
+            val before = database.gameCellDao().cellsOfGame(gameId)
 
             store.setGameCompleted(gameId, true)
 
-            assertEquals(before, database.itemDao().allItemsIncludingDeleted())
-            assertEquals(emptyList(), database.taskDao().allTasksIncludingArchivedAndDeleted())
+            assertEquals(before, database.gameCellDao().cellsOfGame(gameId))
+            assertEquals(emptyList(), database.taskDao().allTasksIncludingDeleted())
         }
 
     @Test
@@ -232,44 +237,44 @@ class GameSetupStoreTest {
         }
 
     @Test
-    fun `games items and completion are still there after closing and reopening`() =
+    fun `games cells and completion are still there after closing and reopening`() =
         runBlocking {
             val first = store.createGame("Harmonies")
             val second = store.createGame("Root")
-            store.createItem(first, "Token")
-            store.createItem(first, "Arazi")
-            store.createItem(second, "Meeple")
+            store.openCell(first, CellColumnType.THREE_D)
+            store.openCell(first, CellColumnType.CARD)
+            store.openCell(second, CellColumnType.NOTES)
             store.setGameCompleted(first, true)
             database.close()
 
             database = DatabaseFactory().open(directory.databaseFile)
-            store = GameSetupStore(database.gameDao(), database.itemDao(), clock = StoppedClock(moment))
+            store = GameSetupStore(database.gameDao(), database.gameCellDao(), clock = StoppedClock(moment))
 
             assertEquals(listOf("Harmonies", "Root"), games().map { it.name })
             assertEquals(listOf(true, false), games().map { it.isManuallyCompleted })
-            assertEquals(listOf("Arazi", "Token"), itemsOf(first).map { it.name })
-            assertEquals(listOf("Meeple"), itemsOf(second).map { it.name })
+            assertEquals(2, cellsOf(first).size)
+            assertEquals(listOf(CellColumnType.NOTES), cellsOf(second).map { it.columnType })
         }
 
     @Test
     fun `setting up games leaves the import tables untouched`() =
         runBlocking {
             val gameId = store.createGame("Harmonies")
-            store.createItem(gameId, "Token")
+            store.openCell(gameId, CellColumnType.THREE_D)
             store.setGameCompleted(gameId, true)
 
             assertEquals(emptyList(), database.importDao().allBatches())
         }
 
     @Test
-    fun `an existing game and item written directly are read back the same way`() =
+    fun `an existing game and cell written directly are read back the same way`() =
         runBlocking {
             // Proves the queries agree with rows this store did not write itself.
             val game = aGame(name = "Wingspan")
             database.gameDao().insert(game)
-            database.itemDao().insert(anItem(gameId = game.id, name = "Bird Cards"))
+            database.gameCellDao().insert(aCell(gameId = game.id, columnType = CellColumnType.CARD))
 
             assertEquals(listOf("Wingspan"), games().map { it.name })
-            assertEquals(listOf("Bird Cards"), itemsOf(game.id).map { it.name })
+            assertEquals(listOf(CellColumnType.CARD), cellsOf(game.id).map { it.columnType })
         }
 }

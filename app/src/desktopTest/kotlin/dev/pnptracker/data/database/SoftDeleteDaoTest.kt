@@ -1,5 +1,6 @@
 package dev.pnptracker.data.database
 
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import kotlin.test.AfterTest
@@ -68,88 +69,51 @@ class SoftDeleteDaoTest {
         }
 
     @Test
-    fun `deleting a game keeps its item rows on disk`() =
+    fun `deleting a game keeps its cell rows on disk`() =
         runBlocking {
             val game = aGame()
-            val item = anItem(gameId = game.id)
+            val cell = aCell(gameId = game.id)
             database.gameDao().insert(game)
-            database.itemDao().insert(item)
+            database.gameCellDao().insert(cell)
 
             database.gameDao().softDelete(game.id, deletedAt)
 
-            assertEquals(listOf(item), database.itemDao().allItemsIncludingDeleted())
-            val stored = assertNotNull(database.itemDao().itemByIdIncludingDeleted(item.id))
-            assertNull(stored.deletedAt)
-            assertEquals(createdAt, stored.updatedAt)
+            // A cell has no tombstone of its own: deleting the game is what takes
+            // it out of view, and the row is still there to come back with it.
+            assertEquals(listOf(cell), database.gameCellDao().cellsOfGame(game.id))
+            assertEquals(cell, assertNotNull(database.gameCellDao().cellById(cell.id)))
         }
 
     @Test
-    fun `deleting a game hides its items from the active queries`() =
+    fun `deleting a game hides its cells from the active queries`() =
         runBlocking {
             val game = aGame()
-            val item = anItem(gameId = game.id)
+            val cell = aCell(gameId = game.id)
             database.gameDao().insert(game)
-            database.itemDao().insert(item)
+            database.gameCellDao().insert(cell)
 
             database.gameDao().softDelete(game.id, deletedAt)
 
-            assertEquals(emptyList(), database.itemDao().activeItems())
-            assertEquals(emptyList(), database.itemDao().activeItemsOfGame(game.id))
-            assertNull(database.itemDao().activeItemById(item.id))
-            assertEquals(0, database.itemDao().activeCountOfGame(game.id))
+            assertEquals(emptyList(), database.gameCellDao().observeCellsOfActiveGames().first())
+            assertEquals(0, database.taskDao().activeCellCount(cell.id))
         }
 
     @Test
-    fun `a deleted item leaves the active queries of a live game`() =
-        runBlocking {
-            val game = aGame()
-            val deletedItem = anItem(gameId = game.id, name = "Eski token")
-            val keptItem = anItem(gameId = game.id, name = "Kalan token")
-            database.gameDao().insert(game)
-            database.itemDao().insert(deletedItem)
-            database.itemDao().insert(keptItem)
-
-            assertEquals(1, database.itemDao().softDelete(deletedItem.id, deletedAt))
-
-            assertEquals(listOf(keptItem), database.itemDao().activeItemsOfGame(game.id))
-            assertNull(database.itemDao().activeItemById(deletedItem.id))
-            assertEquals(1, database.itemDao().activeCountOfGame(game.id))
-            assertEquals(2, database.itemDao().allItemsIncludingDeleted().size)
-        }
-
-    @Test
-    fun `deleting an item a second time changes no timestamp`() =
-        runBlocking {
-            val game = aGame()
-            val item = anItem(gameId = game.id)
-            database.gameDao().insert(game)
-            database.itemDao().insert(item)
-            database.itemDao().softDelete(item.id, deletedAt)
-            val later = Instant.fromEpochMilliseconds(EPOCH_MILLISECONDS_DELETED + 90_000)
-
-            val changedRows = database.itemDao().softDelete(item.id, later)
-
-            assertEquals(0, changedRows)
-            val stored = assertNotNull(database.itemDao().itemByIdIncludingDeleted(item.id))
-            assertEquals(deletedAt, stored.deletedAt)
-            assertEquals(deletedAt, stored.updatedAt)
-        }
-
-    @Test
-    fun `an item of a live game is active while an item of a deleted game is not`() =
+    fun `a cell of a live game is active while a cell of a deleted game is not`() =
         runBlocking {
             val liveGame = aGame(name = "Aktif oyun")
             val deletedGame = aGame(name = "Silinen oyun")
-            val liveItem = anItem(gameId = liveGame.id, name = "Aktif token")
-            val hiddenItem = anItem(gameId = deletedGame.id, name = "Gizli token")
+            val liveCell = aCell(gameId = liveGame.id)
+            val hiddenCell = aCell(gameId = deletedGame.id)
             database.gameDao().insert(liveGame)
             database.gameDao().insert(deletedGame)
-            database.itemDao().insert(liveItem)
-            database.itemDao().insert(hiddenItem)
+            database.gameCellDao().insert(liveCell)
+            database.gameCellDao().insert(hiddenCell)
 
             database.gameDao().softDelete(deletedGame.id, deletedAt)
 
-            assertEquals(listOf(liveItem), database.itemDao().activeItems())
-            assertEquals(2, database.itemDao().allItemsIncludingDeleted().size)
+            assertEquals(listOf(liveCell), database.gameCellDao().observeCellsOfActiveGames().first())
+            assertEquals(1, database.taskDao().activeCellCount(liveCell.id))
+            assertEquals(0, database.taskDao().activeCellCount(hiddenCell.id))
         }
 }

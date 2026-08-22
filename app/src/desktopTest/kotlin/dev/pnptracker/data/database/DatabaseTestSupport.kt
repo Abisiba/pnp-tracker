@@ -1,11 +1,12 @@
 package dev.pnptracker.data.database
 
 import dev.pnptracker.data.database.entity.DraftTaskEntity
+import dev.pnptracker.data.database.entity.GameCellEntity
 import dev.pnptracker.data.database.entity.GameEntity
 import dev.pnptracker.data.database.entity.ImportBatchEntity
-import dev.pnptracker.data.database.entity.ItemEntity
 import dev.pnptracker.data.database.entity.RawImportBlockEntity
 import dev.pnptracker.data.database.entity.TaskEntity
+import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.ImportSourceFormat
@@ -77,37 +78,32 @@ val deletedAt: Instant = Instant.fromEpochMilliseconds(EPOCH_MILLISECONDS_DELETE
 fun aGame(
     id: EntityId = IdGenerator.Random.newId(),
     name: String = "Harmonies",
-    notes: String? = null,
     isManuallyCompleted: Boolean = false,
     completedAt: Instant? = null,
 ): GameEntity =
     GameEntity(
         id = id,
         name = name,
-        notes = notes,
         isManuallyCompleted = isManuallyCompleted,
         completedAt = completedAt,
         createdAt = createdAt,
         updatedAt = createdAt,
     )
 
-fun anItem(
+fun aCell(
     gameId: EntityId,
     id: EntityId = IdGenerator.Random.newId(),
-    name: String = "Token",
-    notes: String? = null,
-): ItemEntity =
-    ItemEntity(
+    columnType: CellColumnType = CellColumnType.THREE_D,
+): GameCellEntity =
+    GameCellEntity(
         id = id,
         gameId = gameId,
-        name = name,
-        notes = notes,
+        columnType = columnType,
         createdAt = createdAt,
         updatedAt = createdAt,
     )
 
 fun aTask(
-    itemId: EntityId,
     id: EntityId = IdGenerator.Random.newId(),
     poolType: PoolType = PoolType.THREE_D,
     trackingMode: TrackingMode = TrackingMode.THREE_D_BATCH,
@@ -116,7 +112,6 @@ fun aTask(
 ): TaskEntity =
     TaskEntity(
         id = id,
-        itemId = itemId,
         poolType = poolType,
         trackingMode = trackingMode,
         name = name,
@@ -125,20 +120,38 @@ fun aTask(
         updatedAt = createdAt,
     )
 
-/** Inserts a game, an item below it and a task below that, returning the task. */
-suspend fun insertGameItemAndTask(
+/** Inserts a game, a cell in it and a task written in that cell, returning the task. */
+suspend fun insertGameCellAndTask(
     database: AppDatabase,
     gameName: String = "Harmonies",
-    itemName: String = "Token",
-    task: (EntityId) -> TaskEntity = { itemId -> aTask(itemId) },
+    columnType: CellColumnType = CellColumnType.THREE_D,
+    task: () -> TaskEntity = { aTask() },
 ): TaskEntity {
     val game = aGame(name = gameName)
-    val item = anItem(gameId = game.id, name = itemName)
-    val created = task(item.id)
+    val cell = aCell(gameId = game.id, columnType = columnType)
+    val created = task()
     database.gameDao().insert(game)
-    database.itemDao().insert(item)
-    database.taskDao().insert(created)
+    database.gameCellDao().insert(cell)
+    database.taskDao().addTaskToCell(
+        task = created,
+        cellId = cell.id,
+        segmentId = IdGenerator.Random.newId(),
+        moment = createdAt,
+    )
     return created
+}
+
+/** Inserts a game and one cell in it, returning the cell. */
+suspend fun insertGameAndCell(
+    database: AppDatabase,
+    gameName: String = "Harmonies",
+    columnType: CellColumnType = CellColumnType.THREE_D,
+): GameCellEntity {
+    val game = aGame(name = gameName)
+    val cell = aCell(gameId = game.id, columnType = columnType)
+    database.gameDao().insert(game)
+    database.gameCellDao().insert(cell)
+    return cell
 }
 
 const val SHA_256_ONE = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"

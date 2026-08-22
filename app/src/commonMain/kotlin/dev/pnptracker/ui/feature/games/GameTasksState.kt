@@ -42,7 +42,7 @@ sealed interface GameTasksState {
  * from "filled in with something that is not a usable count".
  */
 data class TaskComposer(
-    val itemId: EntityId? = null,
+    val cellId: EntityId? = null,
     val name: String = "",
     val poolType: PoolType? = null,
     val trackingMode: TrackingMode? = null,
@@ -69,7 +69,7 @@ data class TaskComposer(
     val canSave: Boolean
         get() =
             name.isNotBlank() &&
-                itemId != null &&
+                cellId != null &&
                 poolType != null &&
                 trackingMode != null &&
                 !hasUnusableQuantity

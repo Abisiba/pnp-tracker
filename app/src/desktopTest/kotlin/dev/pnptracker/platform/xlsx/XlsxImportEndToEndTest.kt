@@ -121,8 +121,7 @@ class XlsxImportEndToEndTest {
             assertEquals(16, batch.rawBlockCount)
 
             assertEquals(0, database.gameDao().activeCount())
-            assertEquals(emptyList(), database.itemDao().allItemsIncludingDeleted())
-            assertEquals(emptyList(), database.taskDao().allTasksIncludingArchivedAndDeleted())
+            assertEquals(emptyList(), database.taskDao().allTasksIncludingDeleted())
         }
 
     @Test

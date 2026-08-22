@@ -6,12 +6,14 @@ import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
 import androidx.room3.Transaction
 import androidx.room3.Update
+import dev.pnptracker.data.database.entity.CellSegmentEntity
 import dev.pnptracker.data.database.entity.DraftTaskEntity
 import dev.pnptracker.data.database.entity.ImportBatchEntity
 import dev.pnptracker.data.database.entity.RawImportBlockEntity
 import dev.pnptracker.data.database.entity.TaskEntity
 import dev.pnptracker.domain.importconfirm.ImportConfirmationException
 import dev.pnptracker.domain.importconfirm.ImportConfirmationFailure
+import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.HintDecision
 import dev.pnptracker.domain.model.IdGenerator
@@ -325,41 +327,50 @@ abstract class ImportDao {
     )
     abstract suspend fun unprocessedRawBlockCount(batchId: EntityId): Int
 
-    /** 1 while the item and the game above it are both there and undeleted. */
+    /** 1 while the cell and the game above it are both there and undeleted. */
     @Query(
         """
-        SELECT COUNT(*) FROM items
-        INNER JOIN games ON games.id = items.game_id
-        WHERE items.id = :itemId AND items.deleted_at IS NULL AND games.deleted_at IS NULL
+        SELECT COUNT(*) FROM game_cells
+        INNER JOIN games ON games.id = game_cells.game_id
+        WHERE game_cells.id = :cellId AND games.deleted_at IS NULL
         """,
     )
-    abstract suspend fun activeItemCount(itemId: EntityId): Int
+    abstract suspend fun activeCellCount(cellId: EntityId): Int
 
-    /** How many items exist at all; zero means there is nowhere to put a task. */
+    /** How many cells exist at all; zero means there is nowhere to put a task. */
     @Query(
         """
-        SELECT COUNT(*) FROM items
-        INNER JOIN games ON games.id = items.game_id
-        WHERE items.deleted_at IS NULL AND games.deleted_at IS NULL
+        SELECT COUNT(*) FROM game_cells
+        INNER JOIN games ON games.id = game_cells.game_id
+        WHERE games.deleted_at IS NULL
         """,
     )
-    abstract suspend fun activeItemCount(): Int
+    abstract suspend fun activeCellCount(): Int
+
+    @Query("SELECT column_type FROM game_cells WHERE id = :cellId")
+    abstract suspend fun columnTypeOfCell(cellId: EntityId): CellColumnType?
+
+    @Query("SELECT COALESCE(MAX(order_index), -1) + 1 FROM cell_segments WHERE cell_id = :cellId")
+    abstract suspend fun nextSegmentIndex(cellId: EntityId): Int
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    protected abstract suspend fun insertSegment(segment: CellSegmentEntity)
 
     /**
      * Records the user's decisions about one draft: where the task will go, which
      * pool it belongs to and how it is tracked.
      *
      * Only possible while the import is a draft, which is what PLAN 11.4.3 means
-     * by a confirmed batch being read only. The target item is checked in the same
-     * transaction, so a draft can never be pointed at an item that has just gone.
+     * by a confirmed batch being read only. The target cell is checked in the same
+     * transaction, so a draft can never be pointed at a cell that has just gone.
      *
      * @throws IllegalArgumentException if the draft is unknown, its import is no
-     *   longer a draft, or the target item is not available; nothing is written.
+     *   longer a draft, or the target cell is not available; nothing is written.
      */
     @Transaction
     open suspend fun setDraftTargetUnderReview(
         draftId: EntityId,
-        targetItemId: EntityId?,
+        targetCellId: EntityId?,
         poolType: PoolType?,
         trackingMode: TrackingMode?,
         updatedAt: Instant,
@@ -373,21 +384,28 @@ abstract class ImportDao {
         require(batch.status == ImportBatchStatus.DRAFT) {
             "A draft can only be aimed while its import is a draft, but ${batch.id} is ${batch.status}."
         }
-        if (targetItemId != null) {
-            require(activeItemCount(targetItemId) == 1) {
-                "There is no item $targetItemId to send a task to."
+        if (targetCellId != null) {
+            require(activeCellCount(targetCellId) == 1) {
+                "There is no cell $targetCellId to send a task to."
+            }
+            val columnType = requireNotNull(columnTypeOfCell(targetCellId)) { "The cell $targetCellId has no column." }
+            require(columnType.holdsTasks) { "The $columnType column holds no tasks." }
+            if (poolType != null) {
+                require(columnType.poolType == poolType) {
+                    "A $poolType task does not belong in the $columnType column."
+                }
             }
         }
         if (poolType != null && trackingMode != null) {
             requireAllowedTrackingMode(poolType, trackingMode)
         }
-        updateDraftTargetRow(draftId, targetItemId, poolType, trackingMode, updatedAt)
+        updateDraftTargetRow(draftId, targetCellId, poolType, trackingMode, updatedAt)
     }
 
     @Query(
         """
         UPDATE draft_tasks
-        SET target_item_id = :targetItemId,
+        SET target_cell_id = :targetCellId,
             selected_pool_type = :poolType,
             selected_tracking_mode = :trackingMode,
             updated_at = :updatedAt
@@ -396,7 +414,7 @@ abstract class ImportDao {
     )
     protected abstract suspend fun updateDraftTargetRow(
         draftId: EntityId,
-        targetItemId: EntityId?,
+        targetCellId: EntityId?,
         poolType: PoolType?,
         trackingMode: TrackingMode?,
         updatedAt: Instant,
@@ -436,8 +454,8 @@ abstract class ImportDao {
      * write with it, which is what PLAN 11.4.2 means by no task remaining and no
      * counter moving after a failure.
      *
-     * Confirming an import creates no game and no item. It only attaches tasks to
-     * the chain the user built by hand.
+     * Confirming an import creates no game and no cell. It only writes tasks into
+     * cells the user opened by hand, each one as a piece of that cell's document.
      *
      * @return how many tasks were created.
      * @throws ImportConfirmationException if the import cannot be confirmed.
@@ -462,7 +480,7 @@ abstract class ImportDao {
 
         val drafts = draftTasksOfBatch(batchId)
         if (drafts.isEmpty()) refuse(ImportConfirmationFailure.NO_DRAFTS_TO_CONFIRM)
-        if (activeItemCount() == 0) refuse(ImportConfirmationFailure.NO_ITEMS_AVAILABLE)
+        if (activeCellCount() == 0) refuse(ImportConfirmationFailure.NO_CELLS_AVAILABLE)
         if (!acknowledgeUnprocessedBlocks && unprocessedRawBlockCount(batchId) > 0) {
             refuse(ImportConfirmationFailure.UNPROCESSED_BLOCKS_NOT_ACKNOWLEDGED)
         }
@@ -470,17 +488,21 @@ abstract class ImportDao {
         var createdTaskCount = 0
         drafts.forEach { draft ->
             // One unready draft stops the whole batch; none is ever skipped.
-            val targetItemId =
-                draft.targetItemId
-                    ?: refuse(ImportConfirmationFailure.TARGET_ITEM_MISSING, draft.id)
+            val targetCellId =
+                draft.targetCellId
+                    ?: refuse(ImportConfirmationFailure.TARGET_CELL_MISSING, draft.id)
             val poolType =
                 draft.selectedPoolType
                     ?: refuse(ImportConfirmationFailure.POOL_TYPE_MISSING, draft.id)
             val trackingMode =
                 draft.selectedTrackingMode
                     ?: refuse(ImportConfirmationFailure.TRACKING_MODE_MISSING, draft.id)
-            if (activeItemCount(targetItemId) != 1) {
-                refuse(ImportConfirmationFailure.TARGET_ITEM_NOT_AVAILABLE, draft.id)
+            if (activeCellCount(targetCellId) != 1) {
+                refuse(ImportConfirmationFailure.TARGET_CELL_NOT_AVAILABLE, draft.id)
+            }
+            val columnType = columnTypeOfCell(targetCellId)
+            if (columnType == null || columnType.poolType != poolType) {
+                refuse(ImportConfirmationFailure.TARGET_CELL_WRONG_COLUMN, draft.id)
             }
             // A stored draft cannot hold a quantity of zero or a pool the mode
             // forbids, so either would be a defect rather than a user mistake.
@@ -491,7 +513,6 @@ abstract class ImportDao {
             insertTask(
                 TaskEntity(
                     id = taskId,
-                    itemId = targetItemId,
                     poolType = poolType,
                     trackingMode = trackingMode,
                     name = draft.name,
@@ -500,6 +521,15 @@ abstract class ImportDao {
                     createdAt = moment,
                     updatedAt = moment,
                     sourceRawImportBlockId = draft.rawImportBlockId,
+                ),
+            )
+            insertSegment(
+                CellSegmentEntity.task(
+                    id = idGenerator.newId(),
+                    cellId = targetCellId,
+                    orderIndex = nextSegmentIndex(targetCellId),
+                    taskId = taskId,
+                    moment = moment,
                 ),
             )
             val aimed = setDraftMaterializedTask(draft.id, taskId, moment)

@@ -3,6 +3,7 @@ package dev.pnptracker.data.database
 import androidx.room3.useReaderConnection
 import androidx.room3.useWriterConnection
 import androidx.sqlite.SQLiteException
+import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import kotlinx.coroutines.runBlocking
@@ -72,7 +73,7 @@ class AppDatabaseTest {
                         statement.getLong(0)
                     }
                 }
-            assertEquals(3L, version)
+            assertEquals(4L, version)
         }
 
     @Test
@@ -83,7 +84,9 @@ class AppDatabaseTest {
             val tables = queryScalars("SELECT name FROM sqlite_master WHERE type = 'table'")
 
             assertContains(tables, "games")
-            assertContains(tables, "items")
+            assertContains(tables, "game_cells")
+            assertContains(tables, "cell_segments")
+            assertFalse(tables.contains("items"), "the withdrawn item table is still here")
         }
 
     @Test
@@ -94,11 +97,12 @@ class AppDatabaseTest {
             val definitions =
                 queryScalars(
                     "SELECT sql FROM sqlite_master WHERE type = 'table' " +
-                        "AND name IN ('games', 'items', 'colors', 'color_aliases', 'tasks', 'task_colors', " +
+                        "AND name IN ('games', 'game_cells', 'cell_segments', 'colors', 'color_aliases', " +
+                        "'tasks', 'task_colors', " +
                         "'import_batches', 'raw_import_blocks', 'draft_tasks')",
                 )
 
-            assertEquals(9, definitions.size)
+            assertEquals(10, definitions.size)
             definitions.forEach { definition ->
                 assertFalse(definition.uppercase().contains("AUTOINCREMENT"), "unexpected autoincrement in: $definition")
             }
@@ -112,7 +116,7 @@ class AppDatabaseTest {
             val indices = queryScalars("SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'index_%'")
             val foreignKeys =
                 database.useReaderConnection { transactor ->
-                    transactor.usePrepared("PRAGMA foreign_key_list('items')") { statement ->
+                    transactor.usePrepared("PRAGMA foreign_key_list('game_cells')") { statement ->
                         buildList {
                             while (statement.step()) {
                                 val columnNames = statement.getColumnNames()
@@ -127,8 +131,10 @@ class AppDatabaseTest {
                 }
 
             assertContains(indices, "index_games_deleted_at")
-            assertContains(indices, "index_items_game_id")
-            assertContains(indices, "index_items_deleted_at")
+            assertContains(indices, "index_game_cells_game_id_column_type")
+            assertContains(indices, "index_cell_segments_cell_id_order_index")
+            assertContains(indices, "index_cell_segments_task_id")
+            assertContains(indices, "index_task_colors_task_id_slot_index")
             assertEquals(1, foreignKeys.size)
             val foreignKey = foreignKeys.single()
             assertEquals("games", foreignKey["table"])
@@ -150,7 +156,7 @@ class AppDatabaseTest {
     @Test
     fun `a game survives a close and reopen`() =
         runBlocking {
-            val game = aGame(name = "Wingspan", notes = "170 kart")
+            val game = aGame(name = "Wingspan")
             database.gameDao().insert(game)
 
             reopen()
@@ -159,18 +165,19 @@ class AppDatabaseTest {
         }
 
     @Test
-    fun `the item to game relation survives a close and reopen`() =
+    fun `the cell to game relation survives a close and reopen`() =
         runBlocking {
             val game = aGame()
-            val item = anItem(gameId = game.id, name = "Kilic")
+            val cell = aCell(gameId = game.id, columnType = CellColumnType.CARD)
             database.gameDao().insert(game)
-            database.itemDao().insert(item)
+            database.gameCellDao().insert(cell)
 
             reopen()
 
-            val restored = database.itemDao().activeItemsOfGame(game.id)
-            assertEquals(listOf(item), restored)
+            val restored = database.gameCellDao().cellsOfGame(game.id)
+            assertEquals(listOf(cell), restored)
             assertEquals(game.id, restored.single().gameId)
+            assertEquals(CellColumnType.CARD, restored.single().columnType)
         }
 
     @Test
@@ -188,15 +195,14 @@ class AppDatabaseTest {
         }
 
     @Test
-    fun `nullable timestamps and notes round trip as null`() =
+    fun `nullable timestamps round trip as null`() =
         runBlocking {
-            val game = aGame(notes = null, completedAt = null)
+            val game = aGame(completedAt = null)
             database.gameDao().insert(game)
 
             reopen()
 
             val restored = assertNotNull(database.gameDao().gameByIdIncludingDeleted(game.id))
-            assertNull(restored.notes)
             assertNull(restored.completedAt)
             assertNull(restored.deletedAt)
             assertFalse(restored.isManuallyCompleted)
@@ -259,22 +265,22 @@ class AppDatabaseTest {
         }
 
     @Test
-    fun `an item pointing at an unknown game is rejected by the foreign key`() =
+    fun `a cell pointing at an unknown game is rejected by the foreign key`() =
         runBlocking {
-            val orphan = anItem(gameId = IdGenerator.Random.newId())
+            val orphan = aCell(gameId = IdGenerator.Random.newId())
 
-            val failure = assertFailsWith<SQLiteException> { database.itemDao().insert(orphan) }
+            val failure = assertFailsWith<SQLiteException> { database.gameCellDao().insert(orphan) }
 
             assertContains(failure.message.orEmpty().uppercase(), "FOREIGN KEY")
-            assertEquals(emptyList(), database.itemDao().allItemsIncludingDeleted())
+            assertNull(database.gameCellDao().cellById(orphan.id))
         }
 
     @Test
-    fun `hard deleting a game that still has items is rejected by the foreign key`() =
+    fun `hard deleting a game that still has cells is rejected by the foreign key`() =
         runBlocking {
             val game = aGame()
             database.gameDao().insert(game)
-            database.itemDao().insert(anItem(gameId = game.id))
+            database.gameCellDao().insert(aCell(gameId = game.id))
 
             val failure =
                 assertFailsWith<SQLiteException> {

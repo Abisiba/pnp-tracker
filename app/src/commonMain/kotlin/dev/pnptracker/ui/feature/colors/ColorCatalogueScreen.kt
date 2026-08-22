@@ -254,6 +254,7 @@ private fun FailureLine(failure: ColorSetupFailure?) {
                     ColorSetupFailure.COULD_NOT_SAVE -> Strings.Colors.errorCouldNotSave
                     ColorSetupFailure.NAME_ALREADY_USED -> Strings.Colors.errorNameUsed
                     ColorSetupFailure.NAME_IS_ANOTHER_COLORS_ALIAS -> Strings.Colors.errorNameIsAlias
+                    ColorSetupFailure.COLOR_NO_LONGER_EXISTS -> Strings.Colors.errorColorGone
                 },
             ),
         style = MaterialTheme.typography.bodyMedium,

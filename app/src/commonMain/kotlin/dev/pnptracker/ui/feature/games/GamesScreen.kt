@@ -30,15 +30,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.pnptracker.domain.games.CellSummary
 import dev.pnptracker.domain.games.GameSetupFailure
 import dev.pnptracker.domain.games.GameSummary
-import dev.pnptracker.domain.games.ItemSummary
+import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.tasks.TaskSetupFailure
 import dev.pnptracker.domain.tasks.TaskSummary
 import dev.pnptracker.ui.Strings
+import dev.pnptracker.ui.columnNameOf
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
@@ -63,7 +65,7 @@ fun GamesScreen(
     LaunchedEffect(Unit) { controller.observeGames() }
 
     val openGameId = state.openGameId
-    LaunchedEffect(openGameId) { openGameId?.let { controller.observeItems(it) } }
+    LaunchedEffect(openGameId) { openGameId?.let { controller.observeCells(it) } }
     LaunchedEffect(openGameId) {
         // Cleared first, so the game being opened never shows the last one's
         // tasks for the moment before its own arrive.
@@ -92,10 +94,7 @@ fun GamesScreen(
                 tasks = tasks,
                 isSaving = controller.isSaving,
                 onBack = { controller.closeGame() },
-                onStartComposer = { controller.startItemComposer() },
-                onEditName = { name -> controller.editItemName(name) },
-                onSave = { scope.launch { controller.saveItem() } },
-                onDiscard = { controller.cancelItemComposer() },
+                onOpenCell = { columnType -> scope.launch { controller.openCell(columnType) } },
                 onSetCompleted = { game -> scope.launch { controller.setCompleted(game.id, !game.isManuallyCompleted) } },
             )
         }
@@ -199,7 +198,7 @@ private fun GameRow(
 }
 
 /**
- * One game: what it is, the items under it, and its tasks by pool.
+ * One game: what it is, the cells it has opened, and its tasks by pool.
  *
  * The whole detail is a single scrolling list. Two lists that scroll inside a
  * column that also scrolls is how the review workspace once ended up measuring
@@ -212,10 +211,7 @@ private fun GameDetail(
     tasks: GameTasksController,
     isSaving: Boolean,
     onBack: () -> Unit,
-    onStartComposer: () -> Unit,
-    onEditName: (String) -> Unit,
-    onSave: () -> Unit,
-    onDiscard: () -> Unit,
+    onOpenCell: (CellColumnType) -> Unit,
     onSetCompleted: (GameSummary) -> Unit,
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -233,24 +229,20 @@ private fun GameDetail(
             )
 
         is GameDetailState.Empty ->
-            DetailBody(state, detail.game, emptyList(), tasks, isSaving, onStartComposer, onEditName, onSave, onDiscard, onSetCompleted)
+            DetailBody(detail.game, emptyList(), tasks, isSaving, onOpenCell, onSetCompleted)
 
         is GameDetailState.Content ->
-            DetailBody(state, detail.game, detail.items, tasks, isSaving, onStartComposer, onEditName, onSave, onDiscard, onSetCompleted)
+            DetailBody(detail.game, detail.cells, tasks, isSaving, onOpenCell, onSetCompleted)
     }
 }
 
 @Composable
 private fun DetailBody(
-    state: GamesScreenState,
     game: GameSummary,
-    items: List<ItemSummary>,
+    cells: List<CellSummary>,
     tasks: GameTasksController,
     isSaving: Boolean,
-    onStartComposer: () -> Unit,
-    onEditName: (String) -> Unit,
-    onSave: () -> Unit,
-    onDiscard: () -> Unit,
+    onOpenCell: (CellColumnType) -> Unit,
     onSetCompleted: (GameSummary) -> Unit,
 ) {
     // Read here, in composition, rather than inside the list builder below, so
@@ -264,48 +256,46 @@ private fun DetailBody(
     ) {
         item(key = "header") { GameHeader(game, isSaving, onSetCompleted) }
 
-        item(key = "items-title") {
-            Text(text = stringResource(Strings.Games.itemsTitle), style = MaterialTheme.typography.titleMedium)
+        item(key = "cells-title") {
+            Text(text = stringResource(Strings.Games.cellsTitle), style = MaterialTheme.typography.titleMedium)
         }
-        item(key = "items-composer") {
-            ItemComposerOrButton(state, isSaving, onStartComposer, onEditName, onSave, onDiscard)
-        }
-        if (items.isEmpty()) {
-            item(key = "items-empty") {
+        item(key = "cells-openers") { CellOpeners(cells, isSaving, onOpenCell) }
+        if (cells.isEmpty()) {
+            item(key = "cells-empty") {
                 MessageCard(
-                    title = stringResource(Strings.Games.itemsEmpty),
-                    body = stringResource(Strings.Games.itemsEmptyHint),
+                    title = stringResource(Strings.Games.cellsEmpty),
+                    body = stringResource(Strings.Games.cellsEmptyHint),
                 )
             }
         } else {
-            items(items, key = { "item-${it.id}" }) { item ->
+            items(cells, key = { "cell-${it.id}" }) { cell ->
                 Card(modifier = Modifier.fillMaxWidth()) {
-                    Text(text = item.name, modifier = Modifier.padding(12.dp))
+                    Text(text = stringResource(columnNameOf(cell.columnType)), modifier = Modifier.padding(12.dp))
                 }
             }
         }
 
-        tasksSection(tasksState, isSavingTask, items, tasks)
+        tasksSection(tasksState, isSavingTask, cells, tasks)
     }
 }
 
 /**
  * The game's tasks, under a pool heading each.
  *
- * The items above stay where they are: this section lists tasks and offers the
- * form that makes one, and it never becomes a second place to manage items.
+ * The cells above stay where they are: this section lists tasks and offers the
+ * form that makes one, and it never becomes a second place to open cells.
  */
 private fun LazyListScope.tasksSection(
     tasksState: GameTasksScreenState,
     isSaving: Boolean,
-    items: List<ItemSummary>,
+    cells: List<CellSummary>,
     tasks: GameTasksController,
 ) {
     item(key = "tasks-title") {
         Text(text = stringResource(Strings.Tasks.title), style = MaterialTheme.typography.titleMedium)
     }
     item(key = "tasks-failure") { TaskFailureLine(tasksState.failure) }
-    item(key = "tasks-composer") { TaskComposerOrButton(tasksState.composer, isSaving, items, tasks) }
+    item(key = "tasks-composer") { TaskComposerOrButton(tasksState.composer, isSaving, cells, tasks) }
 
     when (val shown = tasksState.tasks) {
         GameTasksState.Loading -> item(key = "tasks-loading") { BusyRow(stringResource(Strings.Tasks.loading)) }
@@ -348,7 +338,7 @@ private fun TaskRow(task: TaskSummary) {
         ) {
             Text(text = task.name, style = MaterialTheme.typography.bodyLarge)
             Text(
-                text = stringResource(Strings.Tasks.rowItem, task.itemName),
+                text = stringResource(Strings.Tasks.rowItem, task.columnType),
                 style = MaterialTheme.typography.labelMedium,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -375,18 +365,19 @@ private fun TaskRow(task: TaskSummary) {
 private fun TaskComposerOrButton(
     composer: TaskComposer?,
     isSaving: Boolean,
-    items: List<ItemSummary>,
+    cells: List<CellSummary>,
     tasks: GameTasksController,
 ) {
     val scope = rememberCoroutineScope()
 
-    if (items.isEmpty()) {
-        Text(text = stringResource(Strings.Tasks.needsItem), style = MaterialTheme.typography.labelMedium)
+    val usable = cells.filter { it.columnType.holdsTasks }
+    if (usable.isEmpty()) {
+        Text(text = stringResource(Strings.Tasks.needsCell), style = MaterialTheme.typography.labelMedium)
         return
     }
 
     if (composer == null) {
-        Button(onClick = { tasks.startComposer(items.singleOrNull()?.id) }, enabled = !isSaving) {
+        Button(onClick = { tasks.startComposer(usable.singleOrNull()?.id) }, enabled = !isSaving) {
             Text(stringResource(Strings.Tasks.create))
         }
         return
@@ -394,9 +385,9 @@ private fun TaskComposerOrButton(
 
     TaskForm(
         composer = composer,
-        items = items,
+        cells = cells,
         isSaving = isSaving,
-        onChooseItem = { id -> tasks.chooseItem(id) },
+        onChooseCell = { id -> tasks.chooseCell(id) },
         onEditName = { name -> tasks.editName(name) },
         onChoosePool = { pool -> tasks.choosePool(pool) },
         onChooseTracking = { mode -> tasks.chooseTracking(mode) },
@@ -417,9 +408,9 @@ private fun TaskComposerOrButton(
 @Composable
 private fun TaskForm(
     composer: TaskComposer,
-    items: List<ItemSummary>,
+    cells: List<CellSummary>,
     isSaving: Boolean,
-    onChooseItem: (EntityId) -> Unit,
+    onChooseCell: (EntityId) -> Unit,
     onEditName: (String) -> Unit,
     onChoosePool: (PoolType) -> Unit,
     onChooseTracking: (TrackingMode) -> Unit,
@@ -444,18 +435,18 @@ private fun TaskForm(
                 RequiredLine(stringResource(Strings.Tasks.nameRequired))
             }
 
-            Text(text = stringResource(Strings.Tasks.itemLabel), style = MaterialTheme.typography.labelMedium)
+            Text(text = stringResource(Strings.Tasks.cellLabel), style = MaterialTheme.typography.labelMedium)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                items.forEach { item ->
+                cells.filter { it.columnType.holdsTasks }.forEach { cell ->
                     FilterChip(
-                        selected = item.id == composer.itemId,
+                        selected = cell.id == composer.cellId,
                         enabled = !isSaving,
-                        onClick = { onChooseItem(item.id) },
-                        label = { Text(item.name) },
+                        onClick = { onChooseCell(cell.id) },
+                        label = { Text(stringResource(columnNameOf(cell.columnType))) },
                     )
                 }
             }
-            if (composer.itemId == null) RequiredLine(stringResource(Strings.Tasks.itemRequired))
+            if (composer.cellId == null) RequiredLine(stringResource(Strings.Tasks.cellRequired))
 
             Text(text = stringResource(Strings.Tasks.poolLabel), style = MaterialTheme.typography.labelMedium)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -576,29 +567,21 @@ private fun GameHeader(
 }
 
 @Composable
-private fun ItemComposerOrButton(
-    state: GamesScreenState,
+private fun CellOpeners(
+    cells: List<CellSummary>,
     isSaving: Boolean,
-    onStartComposer: () -> Unit,
-    onEditName: (String) -> Unit,
-    onSave: () -> Unit,
-    onDiscard: () -> Unit,
+    onOpenCell: (CellColumnType) -> Unit,
 ) {
-    if (state.itemComposer == null) {
-        Button(onClick = onStartComposer, enabled = !isSaving) {
-            Text(stringResource(Strings.Games.itemCreate))
+    val open = cells.map { it.columnType }.toSet()
+    val closed = CellColumnType.entries.filterNot { it in open }
+    if (closed.isEmpty()) return
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        closed.forEach { columnType ->
+            val name = stringResource(columnNameOf(columnType))
+            OutlinedButton(onClick = { onOpenCell(columnType) }, enabled = !isSaving) {
+                Text(stringResource(Strings.Games.cellOpen, name))
+            }
         }
-    } else {
-        NameForm(
-            composer = state.itemComposer,
-            label = Strings.Games.itemNameLabel,
-            requiredMessage = Strings.Games.itemNameRequired,
-            saveLabel = Strings.Games.itemSave,
-            isSaving = isSaving,
-            onEditName = onEditName,
-            onSave = onSave,
-            onDiscard = onDiscard,
-        )
     }
 }
 

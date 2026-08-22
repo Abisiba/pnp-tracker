@@ -1,14 +1,15 @@
 package dev.pnptracker.domain.importconfirm
 
+import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.ImportBatchStatus
 
 /** One item the user can send a task to, named the way the screen lists it. */
-data class TargetItemChoice(
-    val itemId: EntityId,
+data class TargetCellChoice(
+    val cellId: EntityId,
     val gameId: EntityId,
     val gameName: String,
-    val itemName: String,
+    val columnType: CellColumnType,
 )
 
 /** One draft that is not ready, and what is missing from it. */
@@ -33,7 +34,7 @@ data class ImportConfirmationSummary(
     val readyTaskCount: Int,
     val unprocessedBlockCount: Int,
     val problems: List<DraftTaskProblem>,
-    val hasAnyItem: Boolean,
+    val hasAnyCell: Boolean,
 ) {
     val isStillADraft: Boolean get() = status == ImportBatchStatus.DRAFT
 
@@ -54,7 +55,7 @@ data class ImportConfirmationSummary(
                 status == ImportBatchStatus.CONFIRMED -> ImportConfirmationFailure.ALREADY_CONFIRMED
                 status != ImportBatchStatus.DRAFT -> ImportConfirmationFailure.BATCH_NOT_A_DRAFT
                 draftTaskCount == 0 -> ImportConfirmationFailure.NO_DRAFTS_TO_CONFIRM
-                !hasAnyItem -> ImportConfirmationFailure.NO_ITEMS_AVAILABLE
+                !hasAnyCell -> ImportConfirmationFailure.NO_CELLS_AVAILABLE
                 problems.isNotEmpty() -> problems.first().failure
                 else -> null
             }

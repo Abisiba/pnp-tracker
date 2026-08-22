@@ -1,12 +1,13 @@
 package dev.pnptracker.data.database.converter
 
 import androidx.room3.ColumnTypeConverter
-import dev.pnptracker.domain.model.ColorRelation
+import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.HintDecision
 import dev.pnptracker.domain.model.ImportBatchStatus
 import dev.pnptracker.domain.model.ImportSourceFormat
 import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.model.SegmentKind
 import dev.pnptracker.domain.model.SourceColumnType
 import dev.pnptracker.domain.model.TrackingMode
 import kotlin.time.Instant
@@ -48,10 +49,16 @@ object DatabaseConverters {
     fun textToTrackingMode(name: String): TrackingMode = TrackingMode.valueOf(name)
 
     @ColumnTypeConverter
-    fun colorRelationToText(relation: ColorRelation): String = relation.name
+    fun cellColumnTypeToText(columnType: CellColumnType): String = columnType.name
 
     @ColumnTypeConverter
-    fun textToColorRelation(name: String): ColorRelation = ColorRelation.valueOf(name)
+    fun textToCellColumnType(name: String): CellColumnType = CellColumnType.valueOf(name)
+
+    @ColumnTypeConverter
+    fun segmentKindToText(kind: SegmentKind): String = kind.name
+
+    @ColumnTypeConverter
+    fun textToSegmentKind(name: String): SegmentKind = SegmentKind.valueOf(name)
 
     @ColumnTypeConverter
     fun importBatchStatusToText(status: ImportBatchStatus): String = status.name

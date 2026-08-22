@@ -1,5 +1,6 @@
 package dev.pnptracker.ui
 
+import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.PoolType
 import org.jetbrains.compose.resources.StringResource
 
@@ -21,4 +22,17 @@ fun poolNameOf(poolType: PoolType): StringResource =
         PoolType.CARD -> Strings.Pools.card
         PoolType.BOARD -> Strings.Pools.board
         PoolType.SPECIAL -> Strings.Pools.special
+    }
+
+/**
+ * The Turkish name of a table column.
+ *
+ * The four production columns borrow the names of the pools they feed, so a user
+ * reading `Mukavva` in the table and `Mukavva` in the pool is reading about the
+ * same thing. Notes is the one column with no pool behind it.
+ */
+fun columnNameOf(columnType: CellColumnType): StringResource =
+    when (columnType) {
+        CellColumnType.NOTES -> Strings.Columns.notes
+        else -> poolNameOf(requireNotNull(columnType.poolType))
     }

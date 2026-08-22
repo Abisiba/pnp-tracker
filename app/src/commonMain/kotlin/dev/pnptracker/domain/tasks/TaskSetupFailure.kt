@@ -13,7 +13,7 @@ enum class TaskSetupFailure {
     COULD_NOT_SAVE,
 
     /** The item the task was going under is gone, or it or its game was deleted. */
-    ITEM_NOT_AVAILABLE,
+    CELL_NOT_AVAILABLE,
 }
 
 /**

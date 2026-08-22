@@ -3,15 +3,17 @@ package dev.pnptracker.data.repository
 import dev.pnptracker.data.database.AppDatabase
 import dev.pnptracker.data.database.DatabaseFactory
 import dev.pnptracker.data.database.TemporaryDatabaseDirectory
+import dev.pnptracker.data.database.aCell
 import dev.pnptracker.data.database.aGame
 import dev.pnptracker.data.database.aRawImportBlock
 import dev.pnptracker.data.database.aTask
 import dev.pnptracker.data.database.anImportBatch
-import dev.pnptracker.data.database.anItem
+import dev.pnptracker.data.database.createdAt
 import dev.pnptracker.data.database.seedColors
 import dev.pnptracker.domain.colors.ColorSetupException
 import dev.pnptracker.domain.colors.ColorSetupFailure
 import dev.pnptracker.domain.colors.ColorSummary
+import dev.pnptracker.domain.model.IdGenerator
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
@@ -230,26 +232,26 @@ class ColorCatalogueStoreTest {
     fun `adding a colour leaves the task and import tables exactly as they were`() =
         runBlocking {
             val game = aGame()
-            val item = anItem(gameId = game.id)
+            val cell = aCell(gameId = game.id)
             val batch = anImportBatch(rawBlockCount = 1)
             val block = aRawImportBlock(importBatchId = batch.id)
-            val task = aTask(itemId = item.id)
+            val task = aTask()
             database.gameDao().insert(game)
-            database.itemDao().insert(item)
-            database.taskDao().insert(task)
+            database.gameCellDao().insert(cell)
+            database.taskDao().addTaskToCell(task, cell.id, IdGenerator.Random.newId(), createdAt)
             database.importDao().insertBatch(batch)
             database.importDao().insertRawBlock(block)
             val batchesBefore = database.importDao().allBatches()
             val blocksBefore = database.importDao().rawBlocksOfBatch(batch.id)
             val draftsBefore = database.importDao().draftTasksOfBatch(batch.id)
-            val tasksBefore = database.taskDao().allTasksIncludingArchivedAndDeleted()
+            val tasksBefore = database.taskDao().allTasksIncludingDeleted()
 
             store.createColor("Lacivert", "#1A237E")
 
             assertEquals(batchesBefore, database.importDao().allBatches())
             assertEquals(blocksBefore, database.importDao().rawBlocksOfBatch(batch.id))
             assertEquals(draftsBefore, database.importDao().draftTasksOfBatch(batch.id))
-            assertEquals(tasksBefore, database.taskDao().allTasksIncludingArchivedAndDeleted())
+            assertEquals(tasksBefore, database.taskDao().allTasksIncludingDeleted())
             assertEquals(0, taskColorCount(), "the catalogue wrote a colour onto a task")
         }
 
@@ -262,7 +264,7 @@ class ColorCatalogueStoreTest {
         }
 
     private suspend fun taskColorCount(): Int {
-        val tasks = database.taskDao().allTasksIncludingArchivedAndDeleted()
+        val tasks = database.taskDao().allTasksIncludingDeleted()
         return tasks.sumOf { database.taskColorDao().colorsOfTask(it.id).size }
     }
 }

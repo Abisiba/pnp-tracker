@@ -39,7 +39,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.pnptracker.domain.importconfirm.ImportConfirmationSummary
-import dev.pnptracker.domain.importconfirm.TargetItemChoice
+import dev.pnptracker.domain.importconfirm.TargetCellChoice
 import dev.pnptracker.domain.importreview.ReviewDraftTask
 import dev.pnptracker.domain.importreview.ReviewRawBlock
 import dev.pnptracker.domain.model.EntityId
@@ -71,7 +71,7 @@ fun ImportReviewScreen(
 
     LaunchedEffect(batchId) { controller.observe(batchId) }
     LaunchedEffect(batchId) { confirmation.refresh(batchId) }
-    LaunchedEffect(Unit) { confirmation.observeTargetItems() }
+    LaunchedEffect(Unit) { confirmation.observeTargetCells() }
 
     Column(
         modifier = modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 28.dp),
@@ -489,13 +489,13 @@ private fun DraftRow(
                 )
             }
 
-            val target = confirmation.targetItems.firstOrNull { it.itemId == draft.targetItemId }
+            val target = confirmation.targetCells.firstOrNull { it.cellId == draft.targetCellId }
             Text(
                 text =
                     if (target == null) {
                         stringResource(Strings.Aim.none)
                     } else {
-                        stringResource(Strings.Aim.itemLabel, target.gameName, target.itemName)
+                        stringResource(Strings.Aim.itemLabel, target.gameName, target.columnType)
                     },
                 style = MaterialTheme.typography.labelMedium,
                 color =
@@ -512,11 +512,11 @@ private fun DraftRow(
             } else if (isEditable) {
                 DraftAiming(
                     draft = draft,
-                    targetItems = confirmation.targetItems,
+                    targetCells = confirmation.targetCells,
                     isBusy = confirmation.isBusy,
-                    onAim = { itemId, poolType, trackingMode ->
+                    onAim = { cellId, poolType, trackingMode ->
                         scope.launch {
-                            confirmation.aim(batchId, draft.id, itemId, poolType, trackingMode)
+                            confirmation.aim(batchId, draft.id, cellId, poolType, trackingMode)
                         }
                     },
                 )
@@ -544,11 +544,11 @@ private fun DraftRow(
 @Composable
 private fun DraftAiming(
     draft: ReviewDraftTask,
-    targetItems: List<TargetItemChoice>,
+    targetCells: List<TargetCellChoice>,
     isBusy: Boolean,
     onAim: (EntityId?, PoolType?, TrackingMode?) -> Unit,
 ) {
-    if (targetItems.isEmpty()) {
+    if (targetCells.isEmpty()) {
         Text(
             text = stringResource(Strings.Aim.noItems),
             style = MaterialTheme.typography.labelMedium,
@@ -562,12 +562,12 @@ private fun DraftAiming(
 
     Text(text = stringResource(Strings.Aim.chooseItem), style = MaterialTheme.typography.labelMedium)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        targetItems.forEach { choice ->
+        targetCells.forEach { choice ->
             FilterChip(
-                selected = choice.itemId == draft.targetItemId,
+                selected = choice.cellId == draft.targetCellId,
                 enabled = !isBusy,
-                onClick = { onAim(choice.itemId, poolType, trackingMode) },
-                label = { Text(stringResource(Strings.Aim.itemLabel, choice.gameName, choice.itemName)) },
+                onClick = { onAim(choice.cellId, poolType, trackingMode) },
+                label = { Text(stringResource(Strings.Aim.itemLabel, choice.gameName, choice.columnType)) },
             )
         }
     }
@@ -580,7 +580,7 @@ private fun DraftAiming(
                 enabled = !isBusy,
                 onClick = {
                     // Changing the pool drops a mode the new pool does not allow.
-                    onAim(draft.targetItemId, pool, ImportConfirmationController.onlyTrackingModeOf(pool))
+                    onAim(draft.targetCellId, pool, ImportConfirmationController.onlyTrackingModeOf(pool))
                 },
                 label = { Text(stringResource(labelOf(pool))) },
             )
@@ -595,7 +595,7 @@ private fun DraftAiming(
                 FilterChip(
                     selected = mode == trackingMode,
                     enabled = !isBusy,
-                    onClick = { onAim(draft.targetItemId, poolType, mode) },
+                    onClick = { onAim(draft.targetCellId, poolType, mode) },
                     label = { Text(labelOf(mode)) },
                 )
             }

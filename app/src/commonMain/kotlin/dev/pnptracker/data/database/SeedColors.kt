@@ -47,15 +47,14 @@ internal fun insertSeedColors(connection: SQLiteConnection) {
             statement.bindText(3, color.normalizedName)
             statement.bindText(4, color.hex)
             statement.bindInt(5, color.sortOrder)
-            statement.bindInt(6, if (color.isArchived) 1 else 0)
             statement.step()
         }
     }
 }
 
 private const val INSERT_SEED_COLOR =
-    "INSERT OR IGNORE INTO colors (id, canonical_name, normalized_name, hex, sort_order, is_archived) " +
-        "VALUES (?, ?, ?, ?, ?, ?)"
+    "INSERT OR IGNORE INTO colors (id, canonical_name, normalized_name, hex, sort_order) " +
+        "VALUES (?, ?, ?, ?, ?)"
 
 private fun seedColor(
     id: String,

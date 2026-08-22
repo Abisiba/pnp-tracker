@@ -7,6 +7,8 @@ import androidx.room3.Query
 import androidx.room3.Transaction
 import dev.pnptracker.data.database.entity.ColorAliasEntity
 import dev.pnptracker.data.database.entity.ColorEntity
+import dev.pnptracker.data.database.entity.TaskColorEntity
+import dev.pnptracker.domain.colors.ColorRemoval
 import dev.pnptracker.domain.colors.ColorSetupException
 import dev.pnptracker.domain.colors.ColorSetupFailure
 import dev.pnptracker.domain.model.EntityId
@@ -131,6 +133,84 @@ interface ColorDao {
             )
         insert(color)
         return color
+    }
+
+    @Query("DELETE FROM task_colors WHERE color_id = :colorId")
+    suspend fun removeEveryUseOfColor(colorId: EntityId): Int
+
+    @Query("SELECT DISTINCT task_id FROM task_colors WHERE color_id = :colorId")
+    suspend fun tasksUsingColor(colorId: EntityId): List<EntityId>
+
+    @Query("DELETE FROM color_aliases WHERE color_id = :colorId")
+    suspend fun removeAliasesOfColor(colorId: EntityId): Int
+
+    @Query("DELETE FROM colors WHERE id = :id")
+    suspend fun deleteColorRow(id: EntityId): Int
+
+    @Query("SELECT * FROM task_colors WHERE task_id = :taskId ORDER BY slot_index")
+    suspend fun colorsOfTask(taskId: EntityId): List<TaskColorEntity>
+
+    @Query("UPDATE task_colors SET slot_index = :slotIndex WHERE task_id = :taskId AND color_id = :colorId")
+    suspend fun setSlotIndex(
+        taskId: EntityId,
+        colorId: EntityId,
+        slotIndex: Int,
+    ): Int
+
+    /**
+     * Removes a colour the user has agreed to lose, along with everything that
+     * points at it.
+     *
+     * The name says the confirmation has already happened, because this cannot
+     * ask: by the time it runs, the decision is made and the only question left
+     * is whether the whole of it lands. It does or none of it does — the relations
+     * and the aliases have to go before the colour, since the foreign keys refuse
+     * to leave either dangling, and a run that stopped halfway would leave rows
+     * pointing at a colour that is on its way out.
+     *
+     * Tasks are not touched. A task that loses its last colour is still a task;
+     * PLAN 5.9 has it fall back to `Renk seçilecek` rather than disappear with
+     * the colour, and nothing here writes that state because nothing needs to:
+     * having no colour rows is what the state is.
+     *
+     * The colours a multi-colour task keeps are renumbered so their order stays
+     * `0..N-1`. A gap would be a hole the name splitting would have to guess
+     * about.
+     *
+     * @return what was removed, so a caller can tell the user what happened.
+     * @throws ColorSetupException if the colour is not there any more; nothing is
+     *   written in that case.
+     */
+    @Transaction
+    suspend fun deleteColorTheUserHasConfirmed(colorId: EntityId): ColorRemoval {
+        colorById(colorId) ?: throw ColorSetupException(ColorSetupFailure.COLOR_NO_LONGER_EXISTS)
+        val affectedTasks = tasksUsingColor(colorId)
+        val removedRelations = removeEveryUseOfColor(colorId)
+        val removedAliases = removeAliasesOfColor(colorId)
+        affectedTasks.forEach { taskId -> compactSlots(taskId) }
+        val removed = deleteColorRow(colorId)
+        check(removed == 1) { "The colour $colorId was still there after being deleted." }
+        return ColorRemoval(
+            taskCount = affectedTasks.size,
+            removedRelationCount = removedRelations,
+            removedAliasCount = removedAliases,
+            tasksLeftWithoutAColor = affectedTasks.count { colorsOfTask(it).isEmpty() },
+        )
+    }
+
+    /**
+     * Closes the gaps one removal left in a task's colour order.
+     *
+     * The rows are moved out of the way first: renumbering in place would collide
+     * with the unique index the moment a colour landed on a place another one
+     * still held. The negative range is never a resting state — both loops are in
+     * the caller's transaction.
+     */
+    private suspend fun compactSlots(taskId: EntityId) {
+        val ordered = colorsOfTask(taskId)
+        if (ordered.withIndex().all { (index, row) -> row.slotIndex == index }) return
+        ordered.forEachIndexed { index, row -> setSlotIndex(taskId, row.colorId, -(index + 1)) }
+        ordered.forEachIndexed { index, row -> setSlotIndex(taskId, row.colorId, index) }
     }
 
     /**

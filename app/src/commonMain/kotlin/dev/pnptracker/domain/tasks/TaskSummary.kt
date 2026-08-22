@@ -1,5 +1,6 @@
 package dev.pnptracker.domain.tasks
 
+import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
@@ -12,7 +13,7 @@ import dev.pnptracker.domain.model.TrackingMode
  * events each pool keeps, so nothing may cache it as a value of its own until
  * those counters exist.
  *
- * [itemName] travels with the task because a game's tasks are shown grouped by
+ * [columnType] travels with the task because a game's tasks are shown grouped by
  * pool rather than by item, so a row has to say for itself what it belongs to.
  *
  * [isFromImport] only says whether there is a source cell behind this task; the
@@ -20,8 +21,8 @@ import dev.pnptracker.domain.model.TrackingMode
  */
 data class TaskSummary(
     val id: EntityId,
-    val itemId: EntityId,
-    val itemName: String,
+    val cellId: EntityId,
+    val columnType: CellColumnType,
     val poolType: PoolType,
     val trackingMode: TrackingMode,
     val name: String,

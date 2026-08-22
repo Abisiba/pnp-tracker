@@ -6,83 +6,80 @@ import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
 import androidx.room3.Transaction
 import dev.pnptracker.data.database.entity.TaskColorEntity
-import dev.pnptracker.domain.model.ColorRelation
 import dev.pnptracker.domain.model.EntityId
 
 /**
- * Reads and writes the colors of a task.
+ * Reads and writes the colours of a task.
  *
- * Two rules live here because they span several rows and only the database can
- * see all of them: a task uses either required colors or alternative ones, never
- * both, and at most one alternative is selected at a time.
+ * The order the user picked the colours in is kept, because a single-item
+ * multi-colour task is drawn by splitting its name across them in that order.
+ * The order has to stay `0..N-1` with no gaps, which is a rule about the whole
+ * set of a task's rows and so lives here rather than on any one row.
  */
 @Dao
 interface TaskColorDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(taskColor: TaskColorEntity)
 
-    @Query("SELECT * FROM task_colors WHERE task_id = :taskId ORDER BY color_id")
+    @Query("SELECT * FROM task_colors WHERE task_id = :taskId ORDER BY slot_index")
     suspend fun colorsOfTask(taskId: EntityId): List<TaskColorEntity>
 
-    @Query("SELECT * FROM task_colors WHERE task_id = :taskId AND relation = :relation ORDER BY color_id")
-    suspend fun colorsOfTaskByRelation(
-        taskId: EntityId,
-        relation: ColorRelation,
-    ): List<TaskColorEntity>
+    @Query("SELECT COUNT(*) FROM task_colors WHERE task_id = :taskId")
+    suspend fun colorCountOfTask(taskId: EntityId): Int
 
-    @Query("SELECT * FROM task_colors WHERE task_id = :taskId AND is_selected = 1")
-    suspend fun selectedColorsOfTask(taskId: EntityId): List<TaskColorEntity>
+    @Query("SELECT COUNT(*) FROM task_colors WHERE color_id = :colorId")
+    suspend fun usageCountOfColor(colorId: EntityId): Int
 
-    @Query("SELECT * FROM task_colors WHERE task_id = :taskId AND relation = 'ALTERNATIVE' AND is_selected = 1")
-    suspend fun selectedAlternativeOfTask(taskId: EntityId): TaskColorEntity?
+    @Query("SELECT DISTINCT task_id FROM task_colors WHERE color_id = :colorId")
+    suspend fun tasksUsingColor(colorId: EntityId): List<EntityId>
 
-    @Query("UPDATE task_colors SET is_selected = 0 WHERE task_id = :taskId AND relation = 'ALTERNATIVE'")
-    suspend fun clearAlternativeSelection(taskId: EntityId): Int
+    @Query("DELETE FROM task_colors WHERE color_id = :colorId")
+    suspend fun removeEveryUseOfColor(colorId: EntityId): Int
 
-    @Query(
-        "UPDATE task_colors SET is_selected = 1 " +
-            "WHERE task_id = :taskId AND color_id = :colorId AND relation = 'ALTERNATIVE'",
-    )
-    suspend fun markAlternativeSelected(
+    @Query("UPDATE task_colors SET slot_index = :slotIndex WHERE task_id = :taskId AND color_id = :colorId")
+    suspend fun setSlotIndex(
         taskId: EntityId,
         colorId: EntityId,
+        slotIndex: Int,
     ): Int
 
     /**
-     * Adds a color to a task after checking that it does not mix the two kinds of
-     * relation.
+     * Adds a colour to the end of a task's list.
      *
-     * @throws IllegalArgumentException if the task already uses the other kind.
+     * The place is worked out and used in the same transaction, so two colours
+     * added at once cannot be given the same one.
+     *
+     * @throws IllegalArgumentException if the task already uses this colour.
      */
     @Transaction
-    suspend fun addRelation(taskColor: TaskColorEntity) {
-        val existing = colorsOfTask(taskColor.taskId)
-        val conflicting = existing.firstOrNull { it.relation != taskColor.relation }
-        require(conflicting == null) {
-            "Task ${taskColor.taskId} already uses ${conflicting?.relation} colors, " +
-                "so a ${taskColor.relation} color cannot be added to it."
-        }
-        insert(taskColor)
-    }
-
-    /**
-     * Picks one of a task's alternative colors, clearing any earlier pick first so
-     * that never more than one is selected.
-     *
-     * Runs in one transaction: if [colorId] is not an alternative of this task the
-     * whole change is rolled back and the earlier selection survives.
-     *
-     * @throws IllegalArgumentException if [colorId] is not an alternative of the task.
-     */
-    @Transaction
-    suspend fun selectAlternativeColor(
+    suspend fun addColorToTask(
         taskId: EntityId,
         colorId: EntityId,
     ) {
-        clearAlternativeSelection(taskId)
-        val updatedRows = markAlternativeSelected(taskId = taskId, colorId = colorId)
-        require(updatedRows == 1) {
-            "Color $colorId is not an alternative color of task $taskId."
+        val existing = colorsOfTask(taskId)
+        require(existing.none { it.colorId == colorId }) {
+            "The task $taskId already uses the colour $colorId."
+        }
+        insert(TaskColorEntity(taskId = taskId, colorId = colorId, slotIndex = existing.size))
+    }
+
+    /**
+     * Closes the gaps in one task's colour order, leaving `0..N-1`.
+     *
+     * Renumbering in place would collide with the unique index the moment a
+     * colour moved onto a place another one still holds, so the rows are lifted
+     * out of the way first. The negative range is never a resting state: it only
+     * exists between the two loops of one transaction.
+     */
+    @Transaction
+    suspend fun compactSlotsOfTask(taskId: EntityId) {
+        val ordered = colorsOfTask(taskId)
+        if (ordered.withIndex().all { (index, row) -> row.slotIndex == index }) return
+        ordered.forEachIndexed { index, row ->
+            setSlotIndex(taskId = taskId, colorId = row.colorId, slotIndex = -(index + 1))
+        }
+        ordered.forEachIndexed { index, row ->
+            setSlotIndex(taskId = taskId, colorId = row.colorId, slotIndex = index)
         }
     }
 }

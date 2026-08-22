@@ -6,7 +6,8 @@ import dev.pnptracker.domain.importconfirm.ImportConfirmationException
 import dev.pnptracker.domain.importconfirm.ImportConfirmationFailure
 import dev.pnptracker.domain.importconfirm.ImportConfirmationResult
 import dev.pnptracker.domain.importconfirm.ImportConfirmationSummary
-import dev.pnptracker.domain.importconfirm.TargetItemChoice
+import dev.pnptracker.domain.importconfirm.TargetCellChoice
+import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.ImportBatchStatus
@@ -30,7 +31,7 @@ import kotlin.test.assertTrue
 private val BATCH = IdGenerator.Random.newId()
 private val DRAFT_ONE = IdGenerator.Random.newId()
 private val DRAFT_TWO = IdGenerator.Random.newId()
-private val ITEM = IdGenerator.Random.newId()
+private val CELL = IdGenerator.Random.newId()
 private val GAME = IdGenerator.Random.newId()
 
 private fun summary(
@@ -39,7 +40,7 @@ private fun summary(
     readyTaskCount: Int = 2,
     unprocessedBlockCount: Int = 0,
     problems: List<DraftTaskProblem> = emptyList(),
-    hasAnyItem: Boolean = true,
+    hasAnyCell: Boolean = true,
 ) = ImportConfirmationSummary(
     batchId = BATCH,
     status = status,
@@ -47,7 +48,7 @@ private fun summary(
     readyTaskCount = readyTaskCount,
     unprocessedBlockCount = unprocessedBlockCount,
     problems = problems,
-    hasAnyItem = hasAnyItem,
+    hasAnyCell = hasAnyCell,
 )
 
 /**
@@ -59,7 +60,7 @@ private fun summary(
 private class FakeConfirmation(
     var summary: ImportConfirmationSummary? = summary(),
 ) : ImportConfirmation {
-    val items = MutableStateFlow(listOf(TargetItemChoice(ITEM, GAME, "Harmonies", "Token")))
+    val cells = MutableStateFlow(listOf(TargetCellChoice(CELL, GAME, "Harmonies", CellColumnType.THREE_D)))
 
     var confirmCalls = 0
         private set
@@ -76,18 +77,18 @@ private class FakeConfirmation(
     /** Blocks the next confirmation until released, to test the in-flight guard. */
     var gate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
 
-    override fun observeTargetItems(): Flow<List<TargetItemChoice>> = items
+    override fun observeTargetCells(): Flow<List<TargetCellChoice>> = cells
 
     override suspend fun summarize(batchId: EntityId): ImportConfirmationSummary? = summary
 
     override suspend fun aimDraft(
         draftId: EntityId,
-        targetItemId: EntityId?,
+        targetCellId: EntityId?,
         poolType: PoolType?,
         trackingMode: TrackingMode?,
     ) {
         aimFailsWith?.let { throw ImportConfirmationException(it) }
-        aimed += Triple(draftId, targetItemId, poolType)
+        aimed += Triple(draftId, targetCellId, poolType)
         lastTrackingMode = trackingMode
     }
 
@@ -137,14 +138,14 @@ class ImportConfirmationControllerTest {
         }
 
     @Test
-    fun `the items a draft can be aimed at arrive from the store`() =
+    fun `the cells a draft can be aimed at arrive from the store`() =
         runBlocking {
             val fake = FakeConfirmation()
             val controller = ImportConfirmationController(fake)
-            val job = CoroutineScope(Job() + Dispatchers.Unconfined).launch { controller.observeTargetItems() }
+            val job = CoroutineScope(Job() + Dispatchers.Unconfined).launch { controller.observeTargetCells() }
             yield()
 
-            assertEquals(listOf(ITEM), controller.targetItems.map { it.itemId })
+            assertEquals(listOf(CELL), controller.targetCells.map { it.cellId })
 
             job.cancelAndJoin()
         }
@@ -163,7 +164,7 @@ class ImportConfirmationControllerTest {
                                 DraftTaskProblem(
                                     DRAFT_TWO,
                                     "Yeşil kart",
-                                    ImportConfirmationFailure.TARGET_ITEM_MISSING,
+                                    ImportConfirmationFailure.TARGET_CELL_MISSING,
                                 ),
                             ),
                     ),
@@ -174,18 +175,18 @@ class ImportConfirmationControllerTest {
 
             val ready = assertIs<ImportConfirmationState.Ready>(controller.state)
             assertTrue(!ready.summary.canConfirm)
-            assertEquals(ImportConfirmationFailure.TARGET_ITEM_MISSING, ready.summary.blockingFailure)
+            assertEquals(ImportConfirmationFailure.TARGET_CELL_MISSING, ready.summary.blockingFailure)
         }
 
     @Test
-    fun `an import with no items anywhere cannot be confirmed`() =
+    fun `an import with no cells anywhere cannot be confirmed`() =
         runBlocking {
-            val controller = ImportConfirmationController(FakeConfirmation(summary(hasAnyItem = false)))
+            val controller = ImportConfirmationController(FakeConfirmation(summary(hasAnyCell = false)))
 
             controller.refresh(BATCH)
 
             val ready = assertIs<ImportConfirmationState.Ready>(controller.state)
-            assertEquals(ImportConfirmationFailure.NO_ITEMS_AVAILABLE, ready.summary.blockingFailure)
+            assertEquals(ImportConfirmationFailure.NO_CELLS_AVAILABLE, ready.summary.blockingFailure)
         }
 
     @Test
@@ -203,15 +204,15 @@ class ImportConfirmationControllerTest {
     // ------------------------------------------------------------- aiming
 
     @Test
-    fun `aiming a draft records the item and the pool`() =
+    fun `aiming a draft records the cell and the pool`() =
         runBlocking {
             val fake = FakeConfirmation()
             val controller = ImportConfirmationController(fake)
 
-            controller.aim(BATCH, DRAFT_ONE, ITEM, PoolType.CARD)
+            controller.aim(BATCH, DRAFT_ONE, CELL, PoolType.CARD)
 
             val expected: List<Triple<EntityId, EntityId?, PoolType?>> =
-                listOf(Triple(DRAFT_ONE, ITEM, PoolType.CARD))
+                listOf(Triple(DRAFT_ONE, CELL, PoolType.CARD))
             assertEquals(expected, fake.aimed.toList())
         }
 
@@ -221,7 +222,7 @@ class ImportConfirmationControllerTest {
             val fake = FakeConfirmation()
             val controller = ImportConfirmationController(fake)
 
-            controller.aim(BATCH, DRAFT_ONE, ITEM, PoolType.THREE_D)
+            controller.aim(BATCH, DRAFT_ONE, CELL, PoolType.THREE_D)
 
             assertEquals(TrackingMode.THREE_D_BATCH, fake.lastTrackingMode)
         }
@@ -243,7 +244,7 @@ class ImportConfirmationControllerTest {
             val controller = ImportConfirmationController(fake)
             controller.refresh(BATCH)
 
-            controller.aim(BATCH, DRAFT_ONE, ITEM, PoolType.CARD)
+            controller.aim(BATCH, DRAFT_ONE, CELL, PoolType.CARD)
 
             val ready = assertIs<ImportConfirmationState.Ready>(controller.state)
             assertEquals(ImportConfirmationFailure.COULD_NOT_SAVE, ready.failure)
@@ -384,7 +385,7 @@ class ImportConfirmationControllerTest {
             val running = CoroutineScope(Job() + Dispatchers.Unconfined).launch { controller.confirm(BATCH) }
             yield()
 
-            controller.aim(BATCH, DRAFT_ONE, ITEM, PoolType.CARD)
+            controller.aim(BATCH, DRAFT_ONE, CELL, PoolType.CARD)
             controller.ask()
 
             assertEquals(0, fake.aimed.size, "a draft cannot be re-aimed mid confirmation")

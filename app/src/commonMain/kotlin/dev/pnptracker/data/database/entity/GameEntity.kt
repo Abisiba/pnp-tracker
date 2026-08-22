@@ -9,8 +9,11 @@ import dev.pnptracker.domain.model.EntityId
 import kotlin.time.Instant
 
 /**
- * A game row. Completion is the user's own decision and is independent of the
- * state of the tasks belonging to the game.
+ * A game row of the table.
+ *
+ * Completion is the user's own decision and is independent of the state of the
+ * tasks belonging to the game. The game's free text is not here: notes are a
+ * column of the table like any other, so they live in the game's `NOTES` cell.
  */
 @Entity(
     tableName = "games",
@@ -31,8 +34,6 @@ data class GameEntity(
     val id: EntityId,
     @ColumnInfo(name = "name")
     val name: String,
-    @ColumnInfo(name = "notes")
-    val notes: String? = null,
     @ColumnInfo(name = "is_manually_completed", defaultValue = "0")
     val isManuallyCompleted: Boolean = false,
     @ColumnInfo(name = "completed_at")

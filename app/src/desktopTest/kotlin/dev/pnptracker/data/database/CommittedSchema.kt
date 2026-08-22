@@ -83,6 +83,18 @@ object CommittedSchema {
         }
     }
 
+    /** How many rows a table of a database file holds, without opening it with Room. */
+    fun countRowsOf(
+        databaseFile: Path,
+        table: String,
+    ): Int =
+        BundledSQLiteDriver().open(databaseFile.toString()).use { connection ->
+            connection.prepare("SELECT COUNT(*) FROM `$table`").use { statement ->
+                statement.step()
+                statement.getInt(0)
+            }
+        }
+
     private fun directory(): Path {
         var candidate: Path? = Path.of("").toAbsolutePath().normalize()
         while (candidate != null) {

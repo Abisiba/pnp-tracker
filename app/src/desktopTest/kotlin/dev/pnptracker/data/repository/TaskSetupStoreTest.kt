@@ -4,12 +4,14 @@ import dev.pnptracker.data.database.AppDatabase
 import dev.pnptracker.data.database.DatabaseFactory
 import dev.pnptracker.data.database.StoppedClock
 import dev.pnptracker.data.database.TemporaryDatabaseDirectory
+import dev.pnptracker.data.database.aCell
 import dev.pnptracker.data.database.aGame
 import dev.pnptracker.data.database.aRawImportBlock
 import dev.pnptracker.data.database.aTask
 import dev.pnptracker.data.database.anImportBatch
-import dev.pnptracker.data.database.anItem
+import dev.pnptracker.data.database.createdAt
 import dev.pnptracker.data.database.deletedAt
+import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.PoolType
@@ -62,30 +64,30 @@ class TaskSetupStoreTest {
         directory.delete()
     }
 
-    /** A game with one item under it, both active, ready to hang tasks from. */
-    private suspend fun aGameWithAnItem(
+    /** A game with one open cell in it, ready to write tasks into. */
+    private suspend fun aGameWithACell(
         gameName: String = "Harmonies",
-        itemName: String = "Token",
+        columnType: CellColumnType = CellColumnType.THREE_D,
     ): Pair<EntityId, EntityId> {
         val game = aGame(name = gameName)
-        val item = anItem(gameId = game.id, name = itemName)
+        val cell = aCell(gameId = game.id, columnType = columnType)
         database.gameDao().insert(game)
-        database.itemDao().insert(item)
-        return game.id to item.id
+        database.gameCellDao().insert(cell)
+        return game.id to cell.id
     }
 
     private suspend fun tasksOf(gameId: EntityId): List<TaskSummary> = store.observeTasks(gameId).first()
 
-    private suspend fun everyTaskRow() = database.taskDao().allTasksIncludingArchivedAndDeleted()
+    private suspend fun everyTaskRow() = database.taskDao().allTasksIncludingDeleted()
 
     @Test
-    fun `a task the user typed is saved under the item and comes back in the list`() =
+    fun `a task the user typed is written into the cell and comes back in the list`() =
         runBlocking {
-            val (gameId, itemId) = aGameWithAnItem()
+            val (gameId, cellId) = aGameWithACell()
 
             val id =
                 store.createTask(
-                    itemId = itemId,
+                    cellId = cellId,
                     name = "Gri token",
                     poolType = PoolType.THREE_D,
                     trackingMode = TrackingMode.THREE_D_BATCH,
@@ -93,8 +95,8 @@ class TaskSetupStoreTest {
 
             val saved = tasksOf(gameId).single()
             assertEquals(id, saved.id)
-            assertEquals(itemId, saved.itemId)
-            assertEquals("Token", saved.itemName)
+            assertEquals(cellId, saved.cellId)
+            assertEquals(CellColumnType.THREE_D, saved.columnType)
             assertEquals("Gri token", saved.name)
             assertEquals(PoolType.THREE_D, saved.poolType)
             assertEquals(TrackingMode.THREE_D_BATCH, saved.trackingMode)
@@ -103,11 +105,11 @@ class TaskSetupStoreTest {
     @Test
     fun `every field the form offers reaches the row unchanged`() =
         runBlocking {
-            val (_, itemId) = aGameWithAnItem()
+            val (_, cellId) = aGameWithACell(columnType = CellColumnType.CARD)
 
             val id =
                 store.createTask(
-                    itemId = itemId,
+                    cellId = cellId,
                     name = "Mavi kart",
                     poolType = PoolType.CARD,
                     trackingMode = TrackingMode.PIPELINE,
@@ -116,24 +118,23 @@ class TaskSetupStoreTest {
                 )
 
             val row = assertNotNull(database.taskDao().activeTaskById(id))
-            assertEquals(itemId, row.itemId)
+            assertEquals(cellId, assertNotNull(database.cellSegmentDao().segmentOfTask(id)).cellId)
             assertEquals("Mavi kart", row.name)
             assertEquals(PoolType.CARD, row.poolType)
             assertEquals(TrackingMode.PIPELINE, row.trackingMode)
             assertEquals(24, row.requiredQuantity)
             assertEquals("Arka yüz mat", row.notes)
-            assertTrue(!row.isArchived, "a new task is not archived")
             assertNull(row.deletedAt, "a new task is not deleted")
         }
 
     @Test
     fun `the name is trimmed at the ends and left alone inside`() =
         runBlocking {
-            val (_, itemId) = aGameWithAnItem()
+            val (_, cellId) = aGameWithACell()
 
             val id =
                 store.createTask(
-                    itemId = itemId,
+                    cellId = cellId,
                     name = "  Gri  büyük  token  ",
                     poolType = PoolType.THREE_D,
                     trackingMode = TrackingMode.THREE_D_BATCH,
@@ -145,11 +146,11 @@ class TaskSetupStoreTest {
     @Test
     fun `a note that is only spaces is the same as no note`() =
         runBlocking {
-            val (_, itemId) = aGameWithAnItem()
+            val (_, cellId) = aGameWithACell()
 
             val id =
                 store.createTask(
-                    itemId = itemId,
+                    cellId = cellId,
                     name = "Gri token",
                     poolType = PoolType.THREE_D,
                     trackingMode = TrackingMode.THREE_D_BATCH,
@@ -162,11 +163,11 @@ class TaskSetupStoreTest {
     @Test
     fun `a task the user typed carries no imported cell behind it`() =
         runBlocking {
-            val (_, itemId) = aGameWithAnItem()
+            val (_, cellId) = aGameWithACell()
 
             val id =
                 store.createTask(
-                    itemId = itemId,
+                    cellId = cellId,
                     name = "Gri token",
                     poolType = PoolType.THREE_D,
                     trackingMode = TrackingMode.THREE_D_BATCH,
@@ -179,11 +180,11 @@ class TaskSetupStoreTest {
     @Test
     fun `the row is created and updated at the one moment the act happened`() =
         runBlocking {
-            val (_, itemId) = aGameWithAnItem()
+            val (_, cellId) = aGameWithACell()
 
             val id =
                 store.createTask(
-                    itemId = itemId,
+                    cellId = cellId,
                     name = "Gri token",
                     poolType = PoolType.THREE_D,
                     trackingMode = TrackingMode.THREE_D_BATCH,
@@ -197,11 +198,11 @@ class TaskSetupStoreTest {
     @Test
     fun `a quantity left unknown is stored as unknown rather than as zero`() =
         runBlocking {
-            val (_, itemId) = aGameWithAnItem()
+            val (_, cellId) = aGameWithACell()
 
             val id =
                 store.createTask(
-                    itemId = itemId,
+                    cellId = cellId,
                     name = "Gri token",
                     poolType = PoolType.THREE_D,
                     trackingMode = TrackingMode.THREE_D_BATCH,
@@ -214,11 +215,11 @@ class TaskSetupStoreTest {
     @Test
     fun `a blank name is refused and nothing at all is written`() =
         runBlocking {
-            val (_, itemId) = aGameWithAnItem()
+            val (_, cellId) = aGameWithACell()
 
             assertFailsWith<IllegalArgumentException> {
                 store.createTask(
-                    itemId = itemId,
+                    cellId = cellId,
                     name = "   ",
                     poolType = PoolType.THREE_D,
                     trackingMode = TrackingMode.THREE_D_BATCH,
@@ -231,11 +232,11 @@ class TaskSetupStoreTest {
     @Test
     fun `a quantity of zero is refused and nothing at all is written`() =
         runBlocking {
-            val (_, itemId) = aGameWithAnItem()
+            val (_, cellId) = aGameWithACell()
 
             assertFailsWith<IllegalArgumentException> {
                 store.createTask(
-                    itemId = itemId,
+                    cellId = cellId,
                     name = "Gri token",
                     poolType = PoolType.THREE_D,
                     trackingMode = TrackingMode.THREE_D_BATCH,
@@ -249,11 +250,11 @@ class TaskSetupStoreTest {
     @Test
     fun `a negative quantity is refused and nothing at all is written`() =
         runBlocking {
-            val (_, itemId) = aGameWithAnItem()
+            val (_, cellId) = aGameWithACell()
 
             assertFailsWith<IllegalArgumentException> {
                 store.createTask(
-                    itemId = itemId,
+                    cellId = cellId,
                     name = "Gri token",
                     poolType = PoolType.THREE_D,
                     trackingMode = TrackingMode.THREE_D_BATCH,
@@ -267,11 +268,11 @@ class TaskSetupStoreTest {
     @Test
     fun `a tracking mode the pool does not allow is refused and nothing is written`() =
         runBlocking {
-            val (_, itemId) = aGameWithAnItem()
+            val (_, cellId) = aGameWithACell()
 
             assertFailsWith<IllegalArgumentException> {
                 store.createTask(
-                    itemId = itemId,
+                    cellId = cellId,
                     name = "Gri token",
                     poolType = PoolType.THREE_D,
                     trackingMode = TrackingMode.CHECKLIST,
@@ -284,54 +285,54 @@ class TaskSetupStoreTest {
     @Test
     fun `a broken rule comes out as itself rather than as a saving problem`() =
         runBlocking {
-            val (_, itemId) = aGameWithAnItem()
+            val (_, cellId) = aGameWithACell()
 
             // The three refusals above are invariants, not storage failures. Were
             // they reported as TaskSetupException the screen would tell the user
             // the database was at fault and offer them nothing to fix.
             val refusals =
                 listOf<suspend () -> Unit>(
-                    { store.createTask(itemId, " ", PoolType.THREE_D, TrackingMode.THREE_D_BATCH) },
-                    { store.createTask(itemId, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH, 0) },
-                    { store.createTask(itemId, "Gri token", PoolType.CARD, TrackingMode.COUNTED) },
+                    { store.createTask(cellId, " ", PoolType.THREE_D, TrackingMode.THREE_D_BATCH) },
+                    { store.createTask(cellId, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH, 0) },
+                    { store.createTask(cellId, "Gri token", PoolType.CARD, TrackingMode.COUNTED) },
                 )
             refusals.forEach { attempt -> assertFailsWith<IllegalArgumentException> { attempt() } }
         }
 
     @Test
-    fun `an item that was deleted refuses the task even though its row is still there`() =
+    fun `a cell whose game was deleted refuses the task even though its row is still there`() =
         runBlocking {
-            val (_, itemId) = aGameWithAnItem()
-            assertEquals(1, database.itemDao().softDelete(itemId, deletedAt))
-
-            val refusal =
-                assertFailsWith<TaskSetupException> {
-                    store.createTask(itemId, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
-                }
-
-            assertEquals(TaskSetupFailure.ITEM_NOT_AVAILABLE, refusal.failure)
-            assertEquals(emptyList(), everyTaskRow())
-        }
-
-    @Test
-    fun `a game that was deleted refuses a task under its item`() =
-        runBlocking {
-            val (gameId, itemId) = aGameWithAnItem()
+            val (gameId, cellId) = aGameWithACell()
             assertEquals(1, database.gameDao().softDelete(gameId, deletedAt))
 
             val refusal =
                 assertFailsWith<TaskSetupException> {
-                    store.createTask(itemId, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
+                    store.createTask(cellId, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
                 }
 
-            assertEquals(TaskSetupFailure.ITEM_NOT_AVAILABLE, refusal.failure)
+            assertEquals(TaskSetupFailure.CELL_NOT_AVAILABLE, refusal.failure)
             assertEquals(emptyList(), everyTaskRow())
         }
 
     @Test
-    fun `an item that was never there refuses the task`() =
+    fun `a game that was deleted refuses a task in its cell`() =
         runBlocking {
-            aGameWithAnItem()
+            val (gameId, cellId) = aGameWithACell()
+            assertEquals(1, database.gameDao().softDelete(gameId, deletedAt))
+
+            val refusal =
+                assertFailsWith<TaskSetupException> {
+                    store.createTask(cellId, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
+                }
+
+            assertEquals(TaskSetupFailure.CELL_NOT_AVAILABLE, refusal.failure)
+            assertEquals(emptyList(), everyTaskRow())
+        }
+
+    @Test
+    fun `a cell that was never there refuses the task`() =
+        runBlocking {
+            aGameWithACell()
 
             val refusal =
                 assertFailsWith<TaskSetupException> {
@@ -343,42 +344,42 @@ class TaskSetupStoreTest {
                     )
                 }
 
-            assertEquals(TaskSetupFailure.ITEM_NOT_AVAILABLE, refusal.failure)
+            assertEquals(TaskSetupFailure.CELL_NOT_AVAILABLE, refusal.failure)
             assertEquals(emptyList(), everyTaskRow())
         }
 
     @Test
     fun `one game's tasks never include another game's`() =
         runBlocking {
-            val (firstGame, firstItem) = aGameWithAnItem(gameName = "Harmonies", itemName = "Token")
-            val (secondGame, secondItem) = aGameWithAnItem(gameName = "Root", itemName = "Meeple")
-            store.createTask(firstItem, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
-            store.createTask(secondItem, "Kedi meeple", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
+            val (firstGame, firstCell) = aGameWithACell(gameName = "Harmonies")
+            val (secondGame, secondCell) = aGameWithACell(gameName = "Root")
+            store.createTask(firstCell, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
+            store.createTask(secondCell, "Kedi meeple", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
 
             assertEquals(listOf("Gri token"), tasksOf(firstGame).map { it.name })
             assertEquals(listOf("Kedi meeple"), tasksOf(secondGame).map { it.name })
         }
 
     @Test
-    fun `each row names the item it really hangs from`() =
+    fun `each row names the column it is really written in`() =
         runBlocking {
-            val (gameId, tokens) = aGameWithAnItem(itemName = "Tokenlar")
-            val cards = anItem(gameId = gameId, name = "Kartlar")
-            database.itemDao().insert(cards)
+            val (gameId, tokens) = aGameWithACell()
+            val cards = aCell(gameId = gameId, columnType = CellColumnType.CARD)
+            database.gameCellDao().insert(cards)
             store.createTask(tokens, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
             store.createTask(cards.id, "Olay kartı", PoolType.CARD, TrackingMode.PIPELINE)
 
             val byName = tasksOf(gameId).associateBy { it.name }
-            assertEquals("Tokenlar", assertNotNull(byName["Gri token"]).itemName)
-            assertEquals("Kartlar", assertNotNull(byName["Olay kartı"]).itemName)
-            assertEquals(cards.id, assertNotNull(byName["Olay kartı"]).itemId)
+            assertEquals(CellColumnType.THREE_D, assertNotNull(byName["Gri token"]).columnType)
+            assertEquals(CellColumnType.CARD, assertNotNull(byName["Olay kartı"]).columnType)
+            assertEquals(cards.id, assertNotNull(byName["Olay kartı"]).cellId)
         }
 
     @Test
     fun `a deleted task drops out of the game's list`() =
         runBlocking {
-            val (gameId, itemId) = aGameWithAnItem()
-            val id = store.createTask(itemId, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
+            val (gameId, cellId) = aGameWithACell()
+            val id = store.createTask(cellId, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
 
             assertEquals(1, database.taskDao().softDelete(id, deletedAt))
 
@@ -386,12 +387,11 @@ class TaskSetupStoreTest {
         }
 
     @Test
-    fun `a deleted item takes its tasks out of the game's list`() =
+    fun `a task written into another game's cell stays out of this game's list`() =
         runBlocking {
-            val (gameId, itemId) = aGameWithAnItem()
-            store.createTask(itemId, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
-
-            assertEquals(1, database.itemDao().softDelete(itemId, deletedAt))
+            val (gameId, _) = aGameWithACell(gameName = "Harmonies")
+            val (_, otherCell) = aGameWithACell(gameName = "Root")
+            store.createTask(otherCell, "Kedi meeple", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
 
             assertEquals(emptyList(), tasksOf(gameId))
         }
@@ -399,8 +399,8 @@ class TaskSetupStoreTest {
     @Test
     fun `a deleted game takes its tasks out of its own list`() =
         runBlocking {
-            val (gameId, itemId) = aGameWithAnItem()
-            store.createTask(itemId, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
+            val (gameId, cellId) = aGameWithACell()
+            store.createTask(cellId, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
 
             assertEquals(1, database.gameDao().softDelete(gameId, deletedAt))
 
@@ -408,28 +408,33 @@ class TaskSetupStoreTest {
         }
 
     @Test
-    fun `an archived task drops out of the game's list without being deleted`() =
+    fun `a deleted task stays on disk after dropping out of the list`() =
         runBlocking<Unit> {
-            val (gameId, itemId) = aGameWithAnItem()
-            val id = store.createTask(itemId, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
+            val (gameId, cellId) = aGameWithACell()
+            val id = store.createTask(cellId, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
 
-            assertEquals(1, database.taskDao().archive(id, deletedAt))
+            assertEquals(1, database.taskDao().softDelete(id, deletedAt))
 
             assertEquals(emptyList(), tasksOf(gameId))
-            assertNotNull(database.taskDao().taskByIdIncludingArchivedAndDeleted(id))
+            assertNotNull(database.taskDao().taskByIdIncludingDeleted(id), "the row was really removed")
         }
 
     @Test
     fun `the row order is the same on every read`() =
         runBlocking {
-            val (gameId, tokens) = aGameWithAnItem(itemName = "Tokenlar")
-            val cards = anItem(gameId = gameId, name = "Kartlar")
-            database.itemDao().insert(cards)
+            val (gameId, tokens) = aGameWithACell()
+            val cards = aCell(gameId = gameId, columnType = CellColumnType.CARD)
+            database.gameCellDao().insert(cards)
             store.createTask(cards.id, "Olay kartı", PoolType.CARD, TrackingMode.PIPELINE)
             store.createTask(tokens, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
             store.createTask(cards.id, "Anlaşma kartı", PoolType.CARD, TrackingMode.PIPELINE)
 
-            val expected = listOf("Anlaşma kartı", "Olay kartı", "Gri token")
+            // Cells come in column order, and inside a cell the pieces come in the
+            // order they were written.
+            // Cells come in column order — the column is stored under its name, so
+            // CARD sorts before THREE_D — and inside a cell the pieces come in the
+            // order they were written.
+            val expected = listOf("Olay kartı", "Anlaşma kartı", "Gri token")
             assertEquals(expected, tasksOf(gameId).map { it.name })
             assertEquals(expected, tasksOf(gameId).map { it.name }, "a second read reordered the list")
         }
@@ -437,10 +442,10 @@ class TaskSetupStoreTest {
     @Test
     fun `two tasks may carry the same name`() =
         runBlocking {
-            val (gameId, itemId) = aGameWithAnItem()
+            val (gameId, cellId) = aGameWithACell()
 
-            val first = store.createTask(itemId, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
-            val second = store.createTask(itemId, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
+            val first = store.createTask(cellId, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
+            val second = store.createTask(cellId, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
 
             assertTrue(first != second, "the two tasks are separate rows")
             assertEquals(2, tasksOf(gameId).size)
@@ -449,9 +454,9 @@ class TaskSetupStoreTest {
     @Test
     fun `what the user typed is still there after the database is closed and opened`() =
         runBlocking {
-            val (gameId, itemId) = aGameWithAnItem()
+            val (gameId, cellId) = aGameWithACell(columnType = CellColumnType.SPECIAL)
             store.createTask(
-                itemId = itemId,
+                cellId = cellId,
                 name = "Gri token",
                 poolType = PoolType.SPECIAL,
                 trackingMode = TrackingMode.COUNTED,
@@ -474,16 +479,19 @@ class TaskSetupStoreTest {
     @Test
     fun `a hand made task and an imported one sit in the same list and stay told apart`() =
         runBlocking {
-            val (gameId, itemId) = aGameWithAnItem()
+            val (gameId, cellId) = aGameWithACell()
             val batch = anImportBatch()
             val block = aRawImportBlock(importBatchId = batch.id)
             database.importDao().insertBatch(batch)
             database.importDao().insertRawBlock(block)
-            database.taskDao().insert(
-                aTask(itemId = itemId, name = "İçe aktarılan token").copy(sourceRawImportBlockId = block.id),
+            database.taskDao().addTaskToCell(
+                task = aTask(name = "İçe aktarılan token").copy(sourceRawImportBlockId = block.id),
+                cellId = cellId,
+                segmentId = IdGenerator.Random.newId(),
+                moment = createdAt,
             )
 
-            store.createTask(itemId, "Elle yazılan token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
+            store.createTask(cellId, "Elle yazılan token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
 
             val byName = tasksOf(gameId).associateBy { it.name }
             assertEquals(2, byName.size)
@@ -501,7 +509,7 @@ class TaskSetupStoreTest {
     @Test
     fun `creating a task by hand leaves the import tables exactly as they were`() =
         runBlocking {
-            val (_, itemId) = aGameWithAnItem()
+            val (_, cellId) = aGameWithACell()
             val batch = anImportBatch(rawBlockCount = 1)
             val block = aRawImportBlock(importBatchId = batch.id)
             database.importDao().insertBatch(batch)
@@ -510,7 +518,7 @@ class TaskSetupStoreTest {
             val blocksBefore = database.importDao().rawBlocksOfBatch(batch.id)
             val draftsBefore = database.importDao().draftTasksOfBatch(batch.id)
 
-            store.createTask(itemId, "Elle yazılan token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
+            store.createTask(cellId, "Elle yazılan token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
 
             assertEquals(batchesBefore, database.importDao().allBatches())
             assertEquals(blocksBefore, database.importDao().rawBlocksOfBatch(batch.id))

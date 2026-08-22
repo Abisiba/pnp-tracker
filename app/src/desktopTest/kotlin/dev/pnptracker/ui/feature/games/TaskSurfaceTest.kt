@@ -35,8 +35,8 @@ class TaskSurfaceTest {
         assertEquals(
             setOf(
                 "id",
-                "itemId",
-                "itemName",
+                "cellId",
+                "columnType",
                 "poolType",
                 "trackingMode",
                 "name",
@@ -56,7 +56,7 @@ class TaskSurfaceTest {
     @Test
     fun `the form carries only what the user fills in`() {
         assertEquals(
-            setOf("itemId", "name", "poolType", "trackingMode", "quantity", "notes"),
+            setOf("cellId", "name", "poolType", "trackingMode", "quantity", "notes"),
             fieldNamesOf(TaskComposer::class.java),
         )
     }

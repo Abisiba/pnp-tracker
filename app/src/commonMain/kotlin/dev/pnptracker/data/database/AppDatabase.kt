@@ -6,18 +6,20 @@ import androidx.room3.Database
 import androidx.room3.RoomDatabase
 import androidx.room3.RoomDatabaseConstructor
 import dev.pnptracker.data.database.converter.DatabaseConverters
+import dev.pnptracker.data.database.dao.CellSegmentDao
 import dev.pnptracker.data.database.dao.ColorDao
+import dev.pnptracker.data.database.dao.GameCellDao
 import dev.pnptracker.data.database.dao.GameDao
 import dev.pnptracker.data.database.dao.ImportDao
-import dev.pnptracker.data.database.dao.ItemDao
 import dev.pnptracker.data.database.dao.TaskColorDao
 import dev.pnptracker.data.database.dao.TaskDao
+import dev.pnptracker.data.database.entity.CellSegmentEntity
 import dev.pnptracker.data.database.entity.ColorAliasEntity
 import dev.pnptracker.data.database.entity.ColorEntity
 import dev.pnptracker.data.database.entity.DraftTaskEntity
+import dev.pnptracker.data.database.entity.GameCellEntity
 import dev.pnptracker.data.database.entity.GameEntity
 import dev.pnptracker.data.database.entity.ImportBatchEntity
-import dev.pnptracker.data.database.entity.ItemEntity
 import dev.pnptracker.data.database.entity.RawImportBlockEntity
 import dev.pnptracker.data.database.entity.TaskColorEntity
 import dev.pnptracker.data.database.entity.TaskEntity
@@ -25,7 +27,8 @@ import dev.pnptracker.data.database.entity.TaskEntity
 @Database(
     entities = [
         GameEntity::class,
-        ItemEntity::class,
+        GameCellEntity::class,
+        CellSegmentEntity::class,
         ColorEntity::class,
         ColorAliasEntity::class,
         TaskEntity::class,
@@ -34,7 +37,7 @@ import dev.pnptracker.data.database.entity.TaskEntity
         RawImportBlockEntity::class,
         DraftTaskEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 @ColumnTypeConverters(DatabaseConverters::class)
@@ -42,7 +45,9 @@ import dev.pnptracker.data.database.entity.TaskEntity
 abstract class AppDatabase : RoomDatabase() {
     abstract fun gameDao(): GameDao
 
-    abstract fun itemDao(): ItemDao
+    abstract fun gameCellDao(): GameCellDao
+
+    abstract fun cellSegmentDao(): CellSegmentDao
 
     abstract fun colorDao(): ColorDao
 

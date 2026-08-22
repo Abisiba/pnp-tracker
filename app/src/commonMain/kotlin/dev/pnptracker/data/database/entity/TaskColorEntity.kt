@@ -4,15 +4,19 @@ import androidx.room3.ColumnInfo
 import androidx.room3.Entity
 import androidx.room3.ForeignKey
 import androidx.room3.Index
-import dev.pnptracker.domain.model.ColorRelation
 import dev.pnptracker.domain.model.EntityId
 
 /**
- * Ties a color to a task.
+ * A colour a task is produced in.
  *
- * A required color is always in use, so it is selected by definition. Alternative
- * colors start unselected and the user picks exactly one of them before the task
- * joins a color group.
+ * Every relation here is a required one. There is no second kind: the user picks
+ * the real colour while creating the task, so a task either has the colours it
+ * needs or has none yet.
+ *
+ * [slotIndex] is the user's own order, which is what a single-item multi-colour
+ * task is drawn from — the name is split across the colours in this order. It
+ * starts at zero and leaves no gaps, so removing a colour means closing the gap
+ * rather than leaving a hole the drawing would have to guess about.
  */
 @Entity(
     tableName = "task_colors",
@@ -33,46 +37,20 @@ import dev.pnptracker.domain.model.EntityId
             onUpdate = ForeignKey.RESTRICT,
         ),
     ],
-    indices = [Index(value = ["color_id"])],
+    indices = [
+        Index(value = ["color_id"]),
+        Index(value = ["task_id", "slot_index"], unique = true),
+    ],
 )
 data class TaskColorEntity(
     @ColumnInfo(name = "task_id")
     val taskId: EntityId,
     @ColumnInfo(name = "color_id")
     val colorId: EntityId,
-    @ColumnInfo(name = "relation")
-    val relation: ColorRelation,
-    @ColumnInfo(name = "is_selected", defaultValue = "0")
-    val isSelected: Boolean,
+    @ColumnInfo(name = "slot_index")
+    val slotIndex: Int,
 ) {
     init {
-        require(relation != ColorRelation.REQUIRED || isSelected) {
-            "A required color is always in use, so it cannot be unselected."
-        }
-    }
-
-    companion object {
-        fun required(
-            taskId: EntityId,
-            colorId: EntityId,
-        ): TaskColorEntity =
-            TaskColorEntity(
-                taskId = taskId,
-                colorId = colorId,
-                relation = ColorRelation.REQUIRED,
-                isSelected = true,
-            )
-
-        fun alternative(
-            taskId: EntityId,
-            colorId: EntityId,
-            isSelected: Boolean = false,
-        ): TaskColorEntity =
-            TaskColorEntity(
-                taskId = taskId,
-                colorId = colorId,
-                relation = ColorRelation.ALTERNATIVE,
-                isSelected = isSelected,
-            )
+        require(slotIndex >= 0) { "A colour slot starts at zero, was: $slotIndex" }
     }
 }

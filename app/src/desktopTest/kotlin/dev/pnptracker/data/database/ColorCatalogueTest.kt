@@ -3,7 +3,6 @@ package dev.pnptracker.data.database
 import androidx.room3.useReaderConnection
 import androidx.room3.useWriterConnection
 import androidx.sqlite.SQLiteException
-import dev.pnptracker.data.database.entity.TaskColorEntity
 import dev.pnptracker.domain.rules.normalizeColorTerm
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
@@ -150,8 +149,8 @@ class ColorCatalogueTest {
     fun `the current schema refuses a bare delete of a color a task uses`() =
         runBlocking<Unit> {
             val grey = assertNotNull(database.colorDao().resolve("Gri"))
-            val task = insertGameItemAndTask(database)
-            database.taskColorDao().addRelation(TaskColorEntity.required(task.id, grey.id))
+            val task = insertGameCellAndTask(database)
+            database.taskColorDao().addColorToTask(task.id, grey.id)
 
             val failure =
                 assertFailsWith<SQLiteException> {
@@ -187,12 +186,12 @@ class ColorCatalogueTest {
         }
 
     @Test
-    fun `color identifiers and flags are stored as canonical text and integers`() =
+    fun `color identifiers and places are stored as canonical text and integers`() =
         runBlocking<Unit> {
             val stored =
                 database.useReaderConnection { transactor ->
                     transactor.usePrepared(
-                        "SELECT typeof(id), typeof(sort_order), typeof(is_archived), id, normalized_name " +
+                        "SELECT typeof(id), typeof(sort_order), typeof(hex), id, normalized_name " +
                             "FROM colors ORDER BY sort_order LIMIT 1",
                     ) { statement ->
                         statement.step()
@@ -206,7 +205,7 @@ class ColorCatalogueTest {
                     }
                 }
 
-            assertEquals(listOf("TEXT", "INTEGER", "INTEGER"), stored.take(3))
+            assertEquals(listOf("TEXT", "INTEGER", "TEXT"), stored.take(3))
             assertEquals(seedColors.first().id.toString(), stored[3])
             assertEquals("beyaz", stored[4])
             assertNull(database.colorDao().colorByNormalizedName("Beyaz"))

@@ -4,19 +4,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.pnptracker.data.repository.GameSetup
+import dev.pnptracker.domain.games.CellSummary
 import dev.pnptracker.domain.games.GameSetupException
 import dev.pnptracker.domain.games.GameSummary
-import dev.pnptracker.domain.games.ItemSummary
+import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import kotlinx.coroutines.flow.collect
 
 /**
- * Setting up the games and items the user tracks.
+ * Setting up the games the user tracks and the cells in them.
  *
  * Both lists are read as streams, so a game or an item that is created shows up
  * without anything here having to remember to reload.
  *
- * Nothing on this path touches an import. Games and items exist because someone
+ * Nothing on this path touches an import. Games and cells exist because someone
  * typed them, and finishing a game is the user's own statement: it changes that
  * one game and nothing underneath it.
  */
@@ -31,7 +32,7 @@ class GamesController(
         private set
 
     private var games: List<GameSummary> = emptyList()
-    private var itemsOfOpenGame: List<ItemSummary> = emptyList()
+    private var cellsOfOpenGame: List<CellSummary> = emptyList()
 
     /** Collects the games list until cancelled. */
     suspend fun observeGames() {
@@ -40,34 +41,33 @@ class GamesController(
             state =
                 state.copy(
                     list = if (list.isEmpty()) GamesListState.Empty else GamesListState.Content(list),
-                    detail = detailFor(state.openGameId, itemsOfOpenGame),
+                    detail = detailFor(state.openGameId, cellsOfOpenGame),
                 )
         }
     }
 
-    /** Puts a game in focus; the screen starts collecting its items in response. */
+    /** Puts a game in focus; the screen starts collecting its cells in response. */
     fun openGame(gameId: EntityId) {
-        itemsOfOpenGame = emptyList()
+        cellsOfOpenGame = emptyList()
         state =
             state.copy(
                 openGameId = gameId,
                 detail = GameDetailState.Loading,
-                itemComposer = null,
                 failure = null,
             )
     }
 
-    /** Collects the open game's items until cancelled. */
-    suspend fun observeItems(gameId: EntityId) {
-        setup.observeItems(gameId).collect { items ->
-            itemsOfOpenGame = items
-            state = state.copy(detail = detailFor(gameId, items))
+    /** Collects the open game's cells until cancelled. */
+    suspend fun observeCells(gameId: EntityId) {
+        setup.observeCells(gameId).collect { cells ->
+            cellsOfOpenGame = cells
+            state = state.copy(detail = detailFor(gameId, cells))
         }
     }
 
     fun closeGame() {
-        itemsOfOpenGame = emptyList()
-        state = state.copy(openGameId = null, detail = GameDetailState.Loading, itemComposer = null, failure = null)
+        cellsOfOpenGame = emptyList()
+        state = state.copy(openGameId = null, detail = GameDetailState.Loading, failure = null)
     }
 
     fun startGameComposer() {
@@ -83,24 +83,6 @@ class GamesController(
         state = state.copy(gameComposer = null)
     }
 
-    fun startItemComposer() {
-        state = state.copy(itemComposer = NameComposer(""), failure = null)
-    }
-
-    fun editItemName(name: String) {
-        state = state.copy(itemComposer = state.itemComposer?.copy(name = name))
-    }
-
-    fun cancelItemComposer() {
-        state = state.copy(itemComposer = null)
-    }
-
-    /**
-     * Saves the game being typed, if it has a name.
-     *
-     * A name that is empty or only spaces is refused before anything is written.
-     * A game that does not save leaves the form open with what was typed in it.
-     */
     suspend fun saveGame() {
         val composer = state.gameComposer ?: return
         if (!composer.canSave || isSaving) return
@@ -110,23 +92,17 @@ class GamesController(
         }
     }
 
-    /** Saves the item being typed, under whichever game is open. */
-    suspend fun saveItem() {
-        val composer = state.itemComposer ?: return
+    /**
+     * Opens one of the game's columns, or does nothing when it is already open.
+     *
+     * A cell has no name to type: which column it is says everything about it,
+     * so this is one action rather than a form.
+     */
+    suspend fun openCell(columnType: CellColumnType) {
         val gameId = state.openGameId ?: return
-        if (!composer.canSave || isSaving) return
-        runSaving {
-            setup.createItem(gameId, composer.name)
-            state = state.copy(itemComposer = null)
-        }
+        runSaving { setup.openCell(gameId, columnType) }
     }
 
-    /**
-     * Records that the user considers a game finished, or takes it back.
-     *
-     * Reversible on purpose, and confined to the one game: nothing below it and no
-     * other game is touched.
-     */
     suspend fun setCompleted(
         gameId: EntityId,
         isCompleted: Boolean,
@@ -149,10 +125,10 @@ class GamesController(
 
     private fun detailFor(
         gameId: EntityId?,
-        items: List<ItemSummary>,
+        cells: List<CellSummary>,
     ): GameDetailState {
         if (gameId == null) return GameDetailState.Loading
         val game = games.firstOrNull { it.id == gameId } ?: return GameDetailState.Unavailable
-        return if (items.isEmpty()) GameDetailState.Empty(game) else GameDetailState.Content(game, items)
+        return if (cells.isEmpty()) GameDetailState.Empty(game) else GameDetailState.Content(game, cells)
     }
 }

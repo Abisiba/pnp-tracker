@@ -31,15 +31,6 @@ data class ColorEntity(
     val hex: String,
     @ColumnInfo(name = "sort_order")
     val sortOrder: Int,
-    /**
-     * Left over from the archiving the product no longer has.
-     *
-     * Nothing reads it and nothing sets it to anything but `false`. The column
-     * goes with the v4 schema, which is the first point a column can be dropped;
-     * until then the field has to stay for Room to match the table.
-     */
-    @ColumnInfo(name = "is_archived", defaultValue = "0")
-    val isArchived: Boolean = false,
 ) {
     init {
         require(canonicalName.isNotBlank()) { "A color needs a name." }
@@ -56,7 +47,6 @@ data class ColorEntity(
             canonicalName: String,
             hex: String,
             sortOrder: Int,
-            isArchived: Boolean = false,
         ): ColorEntity =
             ColorEntity(
                 id = id,
@@ -64,7 +54,6 @@ data class ColorEntity(
                 normalizedName = normalizeColorTerm(canonicalName),
                 hex = hex,
                 sortOrder = sortOrder,
-                isArchived = isArchived,
             )
     }
 }

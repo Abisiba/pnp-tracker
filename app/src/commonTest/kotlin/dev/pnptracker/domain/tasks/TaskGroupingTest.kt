@@ -1,5 +1,6 @@
 package dev.pnptracker.domain.tasks
 
+import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.PoolType
@@ -9,15 +10,15 @@ import kotlin.test.assertEquals
 
 /** Splitting a game's tasks into the sections the screen draws. */
 class TaskGroupingTest {
-    private val itemId: EntityId = IdGenerator.Random.newId()
+    private val cellId: EntityId = IdGenerator.Random.newId()
 
     private fun task(
         name: String,
         poolType: PoolType,
     ) = TaskSummary(
         id = IdGenerator.Random.newId(),
-        itemId = itemId,
-        itemName = "Token",
+        cellId = cellId,
+        columnType = CellColumnType.THREE_D,
         poolType = poolType,
         trackingMode =
             when (poolType) {

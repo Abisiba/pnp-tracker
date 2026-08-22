@@ -45,9 +45,9 @@ import kotlin.time.Instant
             onUpdate = ForeignKey.RESTRICT,
         ),
         ForeignKey(
-            entity = ItemEntity::class,
+            entity = GameCellEntity::class,
             parentColumns = ["id"],
-            childColumns = ["target_item_id"],
+            childColumns = ["target_cell_id"],
             onDelete = ForeignKey.RESTRICT,
             onUpdate = ForeignKey.RESTRICT,
         ),
@@ -61,7 +61,7 @@ import kotlin.time.Instant
     ],
     indices = [
         Index(value = ["raw_import_block_id"]),
-        Index(value = ["target_item_id"]),
+        Index(value = ["target_cell_id"]),
         Index(value = ["materialized_task_id"], unique = true),
     ],
 )
@@ -83,8 +83,8 @@ data class DraftTaskEntity(
     val requiredQuantity: Int? = null,
     @ColumnInfo(name = "notes")
     val notes: String? = null,
-    @ColumnInfo(name = "target_item_id")
-    val targetItemId: EntityId? = null,
+    @ColumnInfo(name = "target_cell_id")
+    val targetCellId: EntityId? = null,
     @ColumnInfo(name = "selection_start_index")
     val selectionStartIndex: Int? = null,
     @ColumnInfo(name = "selection_end_index")

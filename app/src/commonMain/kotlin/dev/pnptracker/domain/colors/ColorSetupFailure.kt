@@ -16,6 +16,9 @@ enum class ColorSetupFailure {
 
     /** Another colour is already known by this name, as one of its aliases. */
     NAME_IS_ANOTHER_COLORS_ALIAS,
+
+    /** The colour was gone by the time the change reached the database. */
+    COLOR_NO_LONGER_EXISTS,
 }
 
 /**

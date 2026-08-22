@@ -1,6 +1,7 @@
 package dev.pnptracker.data.database
 
 import androidx.room3.useReaderConnection
+import dev.pnptracker.data.database.migration.UnconvertibleLegacyDataException
 import dev.pnptracker.domain.model.IdGenerator
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
@@ -9,8 +10,9 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 
 /**
  * Upgrades a real version 1 database to version 2.
@@ -45,48 +47,41 @@ class Migration1To2Test {
         }
     }
 
+    /** A version 1 database with the tables but none of the rows. */
+    private fun createEmptyVersion1Database() {
+        CommittedSchema.createDatabase(directory.databaseFile, version = 1) { }
+    }
+
     private fun readVersion(): Long = CommittedSchema.readVersion(directory.databaseFile)
 
+    private fun countRowsOf(table: String): Int = CommittedSchema.countRowsOf(directory.databaseFile, table)
+
     @Test
-    fun `version 1 data survives the upgrade and the catalogue is seeded`() =
+    fun `a version 1 database holding games is refused, and keeps every row`() =
         runBlocking<Unit> {
             createVersion1DatabaseWithData()
             assertEquals(1L, readVersion(), "the fixture is not a version 1 database")
 
-            val database = DatabaseFactory().open(directory.databaseFile)
-            try {
-                // Room validates the current schema while opening; a mismatch throws here.
-                val games = database.gameDao().allGamesIncludingDeleted()
-                val items = database.itemDao().allItemsIncludingDeleted()
-
-                assertEquals(1, games.size, "the migration lost the game row")
-                val game = games.single()
-                assertEquals(gameId, game.id)
-                assertEquals("Harmonies", game.name)
-                assertEquals("eski not", game.notes)
-                assertTrue(game.isManuallyCompleted)
-                assertEquals(EPOCH_MILLISECONDS_UPDATED, game.completedAt?.toEpochMilliseconds())
-                assertEquals(EPOCH_MILLISECONDS_CREATED, game.createdAt.toEpochMilliseconds())
-                assertEquals(EPOCH_MILLISECONDS_UPDATED, game.updatedAt.toEpochMilliseconds())
-
-                assertEquals(1, items.size, "the migration lost the item row")
-                val item = items.single()
-                assertEquals(itemId, item.id)
-                assertEquals(gameId, item.gameId)
-                assertEquals("Token", item.name)
-                assertEquals(EPOCH_MILLISECONDS_CREATED, item.createdAt.toEpochMilliseconds())
-            } finally {
-                database.close()
+            // The item model is withdrawn and a version 1 task carries no place in
+            // a cell, so the chain stops at 3 to 4 rather than guessing one.
+            assertFailsWith<UnconvertibleLegacyDataException> {
+                val database = DatabaseFactory().open(directory.databaseFile)
+                try {
+                    database.gameDao().activeCount()
+                } finally {
+                    database.close()
+                }
             }
 
-            // Opening through the factory applies every migration it knows, not just this one.
-            assertEquals(3L, readVersion())
+            assertEquals(1L, readVersion(), "a refused upgrade moved the version anyway")
+            assertEquals(1, countRowsOf("games"), "a refused upgrade dropped a game")
+            assertEquals(1, countRowsOf("items"), "a refused upgrade dropped an item")
         }
 
     @Test
-    fun `the upgrade creates the four new tables with their indices and foreign keys`() =
+    fun `walking an empty version 1 database up creates the v4 tables, indices and keys`() =
         runBlocking<Unit> {
-            createVersion1DatabaseWithData()
+            createEmptyVersion1Database()
 
             val database = DatabaseFactory().open(directory.databaseFile)
             try {
@@ -95,23 +90,32 @@ class Migration1To2Test {
                 val indices =
                     queryTexts(database, "SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'index_%'")
 
-                listOf("games", "items", "colors", "color_aliases", "tasks", "task_colors").forEach { table ->
-                    assertContains(tables, table)
-                }
+                listOf(
+                    "games",
+                    "game_cells",
+                    "cell_segments",
+                    "colors",
+                    "color_aliases",
+                    "tasks",
+                    "task_colors",
+                ).forEach { table -> assertContains(tables, table) }
+                assertFalse(tables.contains("items"), "the item table survived the upgrade")
                 listOf(
                     "index_colors_normalized_name",
                     "index_color_aliases_normalized_alias",
-                    "index_tasks_item_id",
+                    "index_game_cells_game_id_column_type",
+                    "index_cell_segments_cell_id_order_index",
+                    "index_cell_segments_task_id",
                     "index_tasks_pool_type",
                     "index_tasks_deleted_at",
                     "index_task_colors_color_id",
+                    "index_task_colors_task_id_slot_index",
                 ).forEach { index -> assertContains(indices, index) }
 
-                assertEquals(
-                    listOf("colors"),
-                    foreignKeyTargets(database, "color_aliases"),
-                )
-                assertEquals(listOf("items", "raw_import_blocks"), foreignKeyTargets(database, "tasks").sorted())
+                assertEquals(listOf("colors"), foreignKeyTargets(database, "color_aliases"))
+                assertEquals(listOf("games"), foreignKeyTargets(database, "game_cells"))
+                assertEquals(listOf("game_cells", "tasks"), foreignKeyTargets(database, "cell_segments").sorted())
+                assertEquals(listOf("raw_import_blocks"), foreignKeyTargets(database, "tasks").sorted())
                 assertEquals(listOf("colors", "tasks"), foreignKeyTargets(database, "task_colors").sorted())
             } finally {
                 database.close()
@@ -121,7 +125,7 @@ class Migration1To2Test {
     @Test
     fun `the upgrade seeds exactly the twelve colors and reopening does not repeat them`() =
         runBlocking<Unit> {
-            createVersion1DatabaseWithData()
+            createEmptyVersion1Database()
 
             val first = DatabaseFactory().open(directory.databaseFile)
             val seeded =
@@ -137,7 +141,6 @@ class Migration1To2Test {
             assertEquals(seedColors.map { it.normalizedName }, seeded.map { it.normalizedName })
             assertEquals(seedColors.map { it.hex }, seeded.map { it.hex })
             assertEquals((0..11).toList(), seeded.map { it.sortOrder })
-            assertTrue(seeded.none { it.isArchived })
 
             val second = DatabaseFactory().open(directory.databaseFile)
             try {

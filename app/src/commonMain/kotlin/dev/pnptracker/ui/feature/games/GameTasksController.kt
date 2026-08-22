@@ -58,15 +58,15 @@ class GameTasksController(
     /**
      * Opens the form.
      *
-     * @param itemId the item the user came from, when they came from one; they
+     * @param cellId the item the user came from, when they came from one; they
      *   can still pick another before saving.
      */
-    fun startComposer(itemId: EntityId? = null) {
-        state = state.copy(composer = TaskComposer(itemId = itemId), failure = null)
+    fun startComposer(cellId: EntityId? = null) {
+        state = state.copy(composer = TaskComposer(cellId = cellId), failure = null)
     }
 
-    fun chooseItem(itemId: EntityId) {
-        state = state.copy(composer = state.composer?.copy(itemId = itemId))
+    fun chooseCell(cellId: EntityId) {
+        state = state.copy(composer = state.composer?.copy(cellId = cellId))
     }
 
     fun editName(name: String) {
@@ -113,14 +113,14 @@ class GameTasksController(
      */
     suspend fun save() {
         val composer = state.composer ?: return
-        val itemId = composer.itemId ?: return
+        val cellId = composer.cellId ?: return
         val poolType = composer.poolType ?: return
         val trackingMode = composer.trackingMode ?: return
         if (!composer.canSave || isSaving) return
         isSaving = true
         try {
             setup.createTask(
-                itemId = itemId,
+                cellId = cellId,
                 name = composer.name,
                 poolType = poolType,
                 trackingMode = trackingMode,

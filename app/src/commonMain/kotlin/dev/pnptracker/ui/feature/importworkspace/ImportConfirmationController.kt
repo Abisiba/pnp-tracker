@@ -5,7 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.pnptracker.data.repository.ImportConfirmation
 import dev.pnptracker.domain.importconfirm.ImportConfirmationException
-import dev.pnptracker.domain.importconfirm.TargetItemChoice
+import dev.pnptracker.domain.importconfirm.TargetCellChoice
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
@@ -30,7 +30,7 @@ class ImportConfirmationController(
         private set
 
     /** Every item the user has made, for the target picker. */
-    var targetItems: List<TargetItemChoice> by mutableStateOf(emptyList())
+    var targetCells: List<TargetCellChoice> by mutableStateOf(emptyList())
         private set
 
     /** True while a change or a confirmation is on its way to the database. */
@@ -51,8 +51,8 @@ class ImportConfirmationController(
         private set
 
     /** Collects the list of items to aim drafts at, until cancelled. */
-    suspend fun observeTargetItems() {
-        confirmation.observeTargetItems().collect { targetItems = it }
+    suspend fun observeTargetCells() {
+        confirmation.observeTargetCells().collect { targetCells = it }
     }
 
     /**
@@ -85,14 +85,14 @@ class ImportConfirmationController(
     suspend fun aim(
         batchId: EntityId,
         draftId: EntityId,
-        targetItemId: EntityId?,
+        targetCellId: EntityId?,
         poolType: PoolType?,
         trackingMode: TrackingMode? = poolType?.let(::onlyTrackingModeOf),
     ) {
         if (isBusy) return
         isBusy = true
         try {
-            confirmation.aimDraft(draftId, targetItemId, poolType, trackingMode)
+            confirmation.aimDraft(draftId, targetCellId, poolType, trackingMode)
             clearFailure()
             refresh(batchId)
         } catch (failure: ImportConfirmationException) {

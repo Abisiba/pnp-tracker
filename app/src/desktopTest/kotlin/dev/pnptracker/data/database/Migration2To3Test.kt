@@ -1,6 +1,7 @@
 package dev.pnptracker.data.database
 
 import androidx.room3.useReaderConnection
+import dev.pnptracker.data.database.migration.UnconvertibleLegacyDataException
 import dev.pnptracker.domain.model.IdGenerator
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
@@ -9,9 +10,9 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 /**
  * Upgrades a real version 2 database to version 3, and walks the whole chain from
@@ -36,6 +37,19 @@ class Migration2To3Test {
     fun removeTemporaryDirectory() {
         directory.assertRealApplicationDatabaseUntouched(realDatabaseExistedBefore)
         directory.delete()
+    }
+
+    /** A version 2 database holding only its colours and their aliases. */
+    private fun createVersion2DatabaseWithColoursOnly() {
+        CommittedSchema.createDatabase(directory.databaseFile, version = 2) { connection ->
+            insertSeedColors(connection)
+            insertVersion2ColorAlias(
+                connection,
+                colorId = greyColorId,
+                alias = "GRI TON",
+                normalizedAlias = "gri ton",
+            )
+        }
     }
 
     /** A version 2 database holding one of everything the version 2 schema knows. */
@@ -71,136 +85,91 @@ class Migration2To3Test {
     ): List<String> = queryTexts(database, "SELECT \"table\" FROM pragma_foreign_key_list('$table')").sorted()
 
     @Test
-    fun `every version 2 row survives the upgrade unchanged`() =
+    fun `the colours and aliases of a version 2 database survive the walk to v4`() =
+        runBlocking<Unit> {
+            createVersion2DatabaseWithColoursOnly()
+
+            val database = DatabaseFactory().open(directory.databaseFile)
+            try {
+                val colours = database.colorDao().allColors()
+                assertEquals(4L, CommittedSchema.readVersion(directory.databaseFile))
+                assertEquals(seedColors.map { it.id }, colours.map { it.id })
+                assertEquals(seedColors.map { it.canonicalName }, colours.map { it.canonicalName })
+                assertEquals(seedColors.map { it.hex }, colours.map { it.hex })
+                assertEquals(seedColors.map { it.sortOrder }, colours.map { it.sortOrder })
+                assertEquals(
+                    greyColorId,
+                    assertNotNull(database.colorDao().resolve("GRI TON")).id,
+                    "an alias did not survive the upgrade",
+                )
+            } finally {
+                database.close()
+            }
+        }
+
+    @Test
+    fun `a version 2 database holding tasks is refused and keeps every row`() =
         runBlocking<Unit> {
             createVersion2DatabaseWithData()
+
+            assertFailsWith<UnconvertibleLegacyDataException> {
+                val database = DatabaseFactory().open(directory.databaseFile)
+                try {
+                    database.gameDao().activeCount()
+                } finally {
+                    database.close()
+                }
+            }
+
             assertEquals(2L, CommittedSchema.readVersion(directory.databaseFile))
-
-            val database = DatabaseFactory().open(directory.databaseFile)
-            try {
-                // Room validates the version 3 schema while opening; a mismatch throws here.
-                val game = database.gameDao().allGamesIncludingDeleted().single()
-                val item = database.itemDao().allItemsIncludingDeleted().single()
-                val task = assertNotNull(database.taskDao().taskByIdIncludingArchivedAndDeleted(taskId))
-                val taskColors = database.taskColorDao().colorsOfTask(taskId)
-                val colors = database.colorDao().allColors()
-
-                assertEquals(gameId, game.id)
-                assertEquals("Harmonies", game.name)
-                assertEquals("eski not", game.notes)
-                assertTrue(game.isManuallyCompleted)
-                assertEquals(EPOCH_MILLISECONDS_UPDATED, game.completedAt?.toEpochMilliseconds())
-                assertEquals(EPOCH_MILLISECONDS_CREATED, game.createdAt.toEpochMilliseconds())
-
-                assertEquals(itemId, item.id)
-                assertEquals(gameId, item.gameId)
-                assertEquals("Token", item.name)
-
-                assertEquals(itemId, task.itemId)
-                assertEquals("Gri token", task.name)
-                assertEquals(14, task.requiredQuantity)
-                assertEquals(EPOCH_MILLISECONDS_CREATED, task.createdAt.toEpochMilliseconds())
-
-                assertEquals(1, taskColors.size)
-                assertEquals(greyColorId, taskColors.single().colorId)
-                assertTrue(taskColors.single().isSelected)
-
-                assertEquals(12, colors.size, "the colour catalogue must not grow during the upgrade")
-                assertEquals(seedColors.map { it.id }, colors.map { it.id })
-                assertEquals(greyColorId, assertNotNull(database.colorDao().resolve("GRI TON")).id)
-            } finally {
-                database.close()
-            }
-
-            assertEquals(3L, CommittedSchema.readVersion(directory.databaseFile))
+            assertEquals(1, CommittedSchema.countRowsOf(directory.databaseFile, "games"))
+            assertEquals(1, CommittedSchema.countRowsOf(directory.databaseFile, "items"))
+            assertEquals(1, CommittedSchema.countRowsOf(directory.databaseFile, "tasks"))
+            assertEquals(1, CommittedSchema.countRowsOf(directory.databaseFile, "task_colors"))
+            assertEquals(12, CommittedSchema.countRowsOf(directory.databaseFile, "colors"))
         }
 
     @Test
-    fun `existing rows get a null import source`() =
+    fun `the walk adds the import tables and the cell tables with their keys`() =
         runBlocking<Unit> {
-            createVersion2DatabaseWithData()
+            createVersion2DatabaseWithColoursOnly()
 
             val database = DatabaseFactory().open(directory.databaseFile)
             try {
-                val game = database.gameDao().allGamesIncludingDeleted().single()
-                val task = assertNotNull(database.taskDao().taskByIdIncludingArchivedAndDeleted(taskId))
-
-                assertNull(game.sourceImportBatchId, "a game that predates importing has no source batch")
-                assertNull(task.sourceRawImportBlockId, "a task that predates importing has no source cell")
-            } finally {
-                database.close()
-            }
-        }
-
-    @Test
-    fun `the upgrade adds the import tables with their indices and foreign keys`() =
-        runBlocking<Unit> {
-            createVersion2DatabaseWithData()
-
-            val database = DatabaseFactory().open(directory.databaseFile)
-            try {
-                database.gameDao().activeCount()
                 val tables = queryTexts(database, "SELECT name FROM sqlite_master WHERE type = 'table'")
-                val indices =
-                    queryTexts(
-                        database,
-                        "SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'index_%'",
-                    )
-
-                listOf("import_batches", "raw_import_blocks", "draft_tasks").forEach { assertContains(tables, it) }
                 listOf(
-                    "index_import_batches_sha256",
-                    "index_import_batches_status",
-                    "index_raw_import_blocks_import_batch_id",
-                    "index_raw_import_blocks_is_processed",
-                    "index_raw_import_blocks_import_batch_id_sheet_name_row_index_column_index",
-                    "index_draft_tasks_raw_import_block_id",
-                    "index_draft_tasks_target_item_id",
-                    "index_draft_tasks_materialized_task_id",
-                    "index_games_source_import_batch_id",
-                    "index_tasks_source_raw_import_block_id",
-                ).forEach { index -> assertContains(indices, index) }
+                    "import_batches",
+                    "raw_import_blocks",
+                    "draft_tasks",
+                    "game_cells",
+                    "cell_segments",
+                ).forEach { table -> assertContains(tables, table) }
+                assertFalse(tables.contains("items"), "the item table survived the walk")
 
                 assertEquals(listOf("import_batches"), foreignKeyTargets(database, "raw_import_blocks"))
                 assertEquals(
-                    listOf("items", "raw_import_blocks", "tasks"),
+                    listOf("game_cells", "raw_import_blocks", "tasks"),
                     foreignKeyTargets(database, "draft_tasks"),
                 )
-                assertEquals(listOf("import_batches"), foreignKeyTargets(database, "games"))
-                assertEquals(listOf("items", "raw_import_blocks"), foreignKeyTargets(database, "tasks"))
-                assertEquals(emptyList(), database.importDao().allBatches())
+                assertEquals(listOf("games"), foreignKeyTargets(database, "game_cells"))
+                assertEquals(listOf("game_cells", "tasks"), foreignKeyTargets(database, "cell_segments"))
             } finally {
                 database.close()
             }
         }
 
     @Test
-    fun `a version 1 database can be walked all the way to version 3`() =
+    fun `a version 1 database can be walked all the way to version 4`() =
         runBlocking<Unit> {
-            CommittedSchema.createDatabase(directory.databaseFile, version = 1) { connection ->
-                insertVersion1Game(connection, gameId)
-                insertVersion1Item(connection, itemId = itemId, gameId = gameId)
-            }
-            assertEquals(1L, CommittedSchema.readVersion(directory.databaseFile))
+            CommittedSchema.createDatabase(directory.databaseFile, version = 1) { }
 
             val database = DatabaseFactory().open(directory.databaseFile)
             try {
-                val game = database.gameDao().allGamesIncludingDeleted().single()
-                val item = database.itemDao().allItemsIncludingDeleted().single()
-                val tables = queryTexts(database, "SELECT name FROM sqlite_master WHERE type = 'table'")
-
-                assertEquals(gameId, game.id)
-                assertEquals("Harmonies", game.name)
-                assertNull(game.sourceImportBatchId)
-                assertEquals(itemId, item.id)
-                assertEquals(gameId, item.gameId)
                 assertEquals(12, database.colorDao().allColors().size)
-                listOf("colors", "color_aliases", "tasks", "task_colors", "import_batches", "raw_import_blocks", "draft_tasks")
-                    .forEach { assertContains(tables, it) }
+                assertEquals(emptyList(), database.taskDao().allTasksIncludingDeleted())
+                assertEquals(4L, CommittedSchema.readVersion(directory.databaseFile))
             } finally {
                 database.close()
             }
-
-            assertEquals(3L, CommittedSchema.readVersion(directory.databaseFile))
         }
 }

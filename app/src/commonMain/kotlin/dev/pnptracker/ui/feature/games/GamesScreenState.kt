@@ -1,8 +1,8 @@
 package dev.pnptracker.ui.feature.games
 
+import dev.pnptracker.domain.games.CellSummary
 import dev.pnptracker.domain.games.GameSetupFailure
 import dev.pnptracker.domain.games.GameSummary
-import dev.pnptracker.domain.games.ItemSummary
 import dev.pnptracker.domain.model.EntityId
 
 /**
@@ -26,14 +26,14 @@ sealed interface GamesListState {
 sealed interface GameDetailState {
     data object Loading : GameDetailState
 
-    /** The game is there but has no items yet. */
+    /** The game is there but none of its cells has been opened yet. */
     data class Empty(
         val game: GameSummary,
     ) : GameDetailState
 
     data class Content(
         val game: GameSummary,
-        val items: List<ItemSummary>,
+        val cells: List<CellSummary>,
     ) : GameDetailState
 
     /** The game was deleted, or was never there. */
@@ -53,6 +53,5 @@ data class GamesScreenState(
     val openGameId: EntityId? = null,
     val detail: GameDetailState = GameDetailState.Loading,
     val gameComposer: NameComposer? = null,
-    val itemComposer: NameComposer? = null,
     val failure: GameSetupFailure? = null,
 )

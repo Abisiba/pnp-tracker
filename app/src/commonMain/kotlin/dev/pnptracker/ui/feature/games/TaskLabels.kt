@@ -27,5 +27,5 @@ fun labelOf(trackingMode: TrackingMode): StringResource =
 fun messageOf(failure: TaskSetupFailure): StringResource =
     when (failure) {
         TaskSetupFailure.COULD_NOT_SAVE -> Strings.Tasks.errorCouldNotSave
-        TaskSetupFailure.ITEM_NOT_AVAILABLE -> Strings.Tasks.errorItemUnavailable
+        TaskSetupFailure.CELL_NOT_AVAILABLE -> Strings.Tasks.errorItemUnavailable
     }
