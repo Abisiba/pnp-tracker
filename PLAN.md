@@ -1,8 +1,11 @@
 # PnP Üretim Takipçisi — Ana Uygulama Planı
 
-> Sürüm: 1.0  
-> Tarih: 2026-08-18  
-> Durum: Uygulamaya hazır ana plan  
+> Sürüm: 2.0
+>
+> Tarih: 2026-08-22
+>
+> Durum: Uygulamaya hazır ana plan — tablo öncelikli çalışma akışına göre yeniden hizalandı
+>
 > İlk hedef: Garuda Linux üzerinde çalışan, yerel ve çevrimdışı masaüstü uygulaması
 
 ## 1. Bu belgenin amacı
@@ -23,14 +26,18 @@ Kod yazan yapay zekâ bu belgeyi aşağıdaki kurallarla uygulamalıdır:
 
 Kullanıcı farklı masa oyunları için çok sayıda PnP üretim işi yapmaktadır. Aynı oyunda veya farklı oyunlarda aynı renkle basılacak 3D ögeler bulunabilir. Kartların basılması, lamine edilmesi ve kesilmesi; mukavva parçalarının basılması, yapıştırılması ve kesilmesi ayrı aşamalardır. Mevcut Excel listesinde oyun, görev, adet, renk, tamamlanma işaretleri ve notlar serbest metin biçiminde aynı hücrelerde tutulmaktadır.
 
+Uygulamanın temel çalışma yüzeyi Excel benzeri bir **oyun tablosudur**. Her oyun bir satırdır ve satırın hücrelerinde kullanıcının kendi yazdığı serbest metin bulunur. Kullanıcı bu metnin bir parçasını seçip göreve dönüştürür; görev metnin içinde kalır ve orada takip edilir.
+
 Uygulama şu problemleri çözer:
 
-- Hangi oyunda hangi ögeden kaç tane gerektiğini gösterir.
+- Bütün oyunları tek tabloda, satır satır gösterir.
+- Hangi oyunda hangi işten kaç tane gerektiğini hücrenin içinde gösterir.
+- Serbest metni kaybetmeden, kullanıcının seçtiği ifadeleri takip edilebilir görevlere dönüştürür.
 - Tüm oyunların 3D görevlerini renklere göre ortak havuzda toplar.
-- Tek renk, renk varyantı, çok renkli ve alternatif renkli görevleri ayırır.
+- Tek renkli, tek öge çok renkli ve renksiz görevleri ayırır.
 - Büyük tabla baskılarında “kaç tane bastım?” yerine “kaç tane eksik/hatalı kaldı?” yaklaşımını kullanır.
 - Kart ve mukavva üretimini aşamalar halinde takip eder.
-- Tamamlanan görevleri aktif havuzdan çıkarır fakat oyun kaydında ve geçmişte tutar.
+- Tamamlanan görevleri aktif havuzdan çıkarır fakat hücrede, oyun kaydında ve geçmişte tutar.
 - Excel/CSV verilerini ham biçimiyle içe alır ve kullanıcıya elle görev oluşturma imkânı verir.
 - İnternet olmadan çalışır; ilk sürümde hesap, backend veya cihazlar arası eşitleme içermez.
 
@@ -76,7 +83,10 @@ Uygulamada dört üretim havuzu vardır:
 
 - Oyun tamamlanması kullanıcı tarafından ayrıca işaretlenir.
 - Bir oyunun bütün görevlerinin tamamlanması oyunu otomatik tamamlamaz.
+- Kullanıcı oyun satırındaki tamamlanma tikine bastığında, bitmemiş iş varsa tek bir onay sorulur; onaylanırsa oyuna ait bütün görevler ve üretim aşamaları tek transaction içinde tamamlanır.
+- Tamamlanmış bir oyunda eksik parça bildirilmesi oyunu kendiliğinden Devam Eden durumuna geri döndürür.
 - Bir oyun tamamlanmış olsa bile o oyuna yeni üretim görevleri eklenebilir ve aktif kalabilir.
+- Tamamlamak arşivlemek değildir; uygulamada oyun arşivi bulunmaz.
 - Excel’de oyun adının hücresi yeşilse bu, içe aktarma sırasında “oyun tamamlandı” ipucu olarak alınır.
 - Excel’de `**` ile biten renk veya öge ifadesi, ilgili görevin tamamlandığına dair ipucudur.
 - Root ve Splendor gibi elle tutulmuş listedeki istisnalar nedeniyle bütün içe aktarma ipuçları onay ekranında değiştirilebilir olmalıdır.
@@ -96,6 +106,12 @@ Aşağıdakiler ilk sürüme eklenmeyecektir:
 - Kart/board tasarlama ve düzenleme
 - Bulut yapay zekâsıyla otomatik metin ayrıştırma
 - Ayrı fiziksel alt parça modeli
+- Oyun arşivi, renk arşivi veya herhangi bir arşivleme işlemi
+- `ALTERNATIVE` renk ilişkisi ve “alternatiflerden birini sonra seç” davranışı
+- Adsız, kaydedilmemiş veya tek kullanımlık renk
+- Ayrı oyun listesi ve oyun detay ekranı üzerinden yürüyen görev düzenleme akışı
+- Kullanıcıya gösterilen `Item` (öge) kavramı ve öge altında görev gruplama
+- Kullanıcıya ayrı bir özellik olarak sunulan renk alias yönetimi
 
 ## 5. Temel kavramlar ve veri modeli
 
@@ -103,15 +119,20 @@ Aşağıdakiler ilk sürüme eklenmeyecektir:
 
 ```mermaid
 erDiagram
-    GAME ||--o{ ITEM : contains
-    ITEM ||--o{ TASK : creates
+    GAME ||--o{ GAME_CELL : has
+    GAME_CELL ||--o{ CELL_SEGMENT : contains
+    CELL_SEGMENT |o--|| TASK : represents
     TASK ||--o{ TASK_COLOR : uses
     COLOR ||--o{ TASK_COLOR : assigned
+    COLOR ||--o{ COLOR_ALIAS : known_as
     TASK ||--o{ PROGRESS_EVENT : records
     TASK ||--o{ TASK_STAGE : progresses
     IMPORT_BATCH ||--o{ RAW_IMPORT_BLOCK : contains
     RAW_IMPORT_BLOCK ||--o{ DRAFT_TASK : produces
 ```
+
+Zincir `Game → GameCell → CellSegment → Task` biçimindedir. Görev ile onu gösteren
+metin parçası arasında birebir ilişki vardır; arada gruplayıcı bir katman yoktur.
 
 ### 5.2 Kimlikler ve silme
 
@@ -121,14 +142,22 @@ erDiagram
 - `deletedAt` alanı veya eşdeğer bir tombstone kullanılmalıdır.
 - Kalıcı fiziksel temizleme yalnızca açık bir bakım işlemi olarak ve yedek alındıktan sonra yapılabilir.
 - Bu tercih ilk sürümde eşitleme olmasa da gelecekte eşitleme eklenmesini kolaylaştırır.
+- **Renk bu kuralın açık istisnasıdır.** Renk kullanıcı onayıyla fiziksel olarak
+  silinir; renk için tombstone, arşiv veya geri açma yoktur. Renk silindiğinde
+  yalnız rengin kendisi ve renk ilişkileri kaldırılır; görev ve oyun kayıtları
+  korunur. Ayrıntı `5.9`'dadır.
+- Bir görevi metne geri döndürme (`12.8`) silme değildir: görev kaydı kaldırılır
+  fakat görevin adı aynı yerde düz metin olarak kalır.
 
 ### 5.3 Game
+
+Bir oyun, oyun tablosunun bir satırıdır. Oyun bir görev değildir ve kendi başına
+üretim işi taşımaz.
 
 Önerilen alanlar:
 
 - `id`
 - `name`
-- `notes`
 - `isManuallyCompleted`
 - `completedAt`
 - `createdAt`
@@ -139,56 +168,107 @@ erDiagram
 Kurallar:
 
 - Oyun tamamlanması yalnızca kullanıcı eylemi veya onaylanmış içe aktarma ipucuyla değişir.
-- Alt görevlerin durumu oyun durumunu değiştirmez.
-- Tamamlanan oyunlar gizlenmez; filtrelenebilir.
+- Alt görevlerin durumu oyun durumunu **kendiliğinden tamamlanmış yapmaz**.
+- Tamamlanmış bir oyunda eksik parça bildirilmesi oyunun tamamlanma işaretini kaldırır ve `completedAt` alanını temizler.
+- Tamamlanan oyunlar gizlenmez; `Tamamlanan` ve `Tümü` görünümlerinde görülür ve düzenlenebilir.
+- Oyun arşivlenmez.
+- Oyunun serbest metinleri `GameCell` kayıtlarında tutulur; `Game` üzerinde ayrı bir `notes` alanı bulunmaz.
 
-### 5.4 Item
+### 5.4 GameCell
 
-`Item`, bir oyundaki mantıksal ögeyi temsil eder. Örnekler: Token, Kılıç, Survivor, Bird Cards, Player Board.
+`GameCell`, bir oyun satırının bir sütunundaki hücredir. Kullanıcının serbest
+metin yazdığı ve görev oluşturduğu yüzey budur.
 
 Önerilen alanlar:
 
 - `id`
 - `gameId`
-- `name`
-- `notes`
+- `columnType`: `THREE_D`, `CARD`, `BOARD`, `SPECIAL`, `NOTES`
 - `createdAt`
 - `updatedAt`
-- `deletedAt`
 
-Bir `Item` bir veya daha fazla `Task` içerebilir. Renk varyantları aynı `Item` altında ayrı görevlerdir.
+Kurallar:
 
-### 5.5 Task
+- Bir oyunun her sütun türünden **en fazla bir** hücresi vardır; `(gameId, columnType)` benzersizdir.
+- Hücrenin içeriği doğrudan hücrede değil, sıralı `CellSegment` kayıtlarında tutulur.
+- `NOTES` hücresi serbest metindir; görev veya havuz kaydı **üretmez** ve içinde `TaskSegment` bulunamaz.
+- Hücre silinmeden içindeki görevler silinemez; hücre boşaltmak görevleri sessizce yok etmez.
+
+### 5.5 CellSegment
+
+Bir hücre, sıralı ve atomik parçalardan oluşan bir belgedir. Ham metin artı
+başlangıç/bitiş indeksi modeli **kullanılmaz**.
+
+Parça türleri:
+
+- `PlainTextSegment` — normal serbest metin taşır.
+- `TaskSegment` — tam olarak bir bağımsız `Task` kaydına işaret eder.
+
+Önerilen alanlar:
+
+- `id`
+- `cellId`
+- `orderIndex`
+- `kind`: `PLAIN_TEXT`, `TASK`
+- `text` — yalnız `PLAIN_TEXT` için
+- `taskId` — yalnız `TASK` için
+- `createdAt`
+- `updatedAt`
+
+Kurallar:
+
+- Parçalar `orderIndex` ile sıralıdır ve sıra hücre içinde benzersizdir.
+- `TaskSegment` atomiktir: klavyeyle ortasından silinemez, ham metin gibi parçalanamaz ve karakter karakter düzenlenemez.
+- Bir `Task` tam olarak bir `TaskSegment`'e aittir; bir `TaskSegment` tam olarak bir `Task`'a işaret eder.
+- Kullanıcı düz metinde bir ifadeyi seçip göreve dönüştürdüğünde ilgili `PlainTextSegment` güvenli biçimde üçe ayrılır: seçimden önceki düz metin, bir veya daha fazla `TaskSegment`, seçimden sonraki düz metin. Boş kalan düz metin parçaları yazılmaz.
+- Yan yana gelen iki `PlainTextSegment` birleştirilir; hücre hiçbir zaman gereksiz parça biriktirmez.
+- Bu modelde kayan çapa, çapasız görev veya örtüşen görev aralığı **oluşamaz**.
+- İçe aktarılan bir ham hücre ilk aşamada tek bir `PlainTextSegment` olarak oluşturulabilir.
+
+### 5.6 Task
+
+Bir görev, bir hücredeki bir `TaskSegment` tarafından temsil edilen bağımsız
+üretim işidir.
 
 Ortak görev alanları:
 
 - `id`
-- `itemId`
 - `poolType`: `THREE_D`, `CARD`, `BOARD`, `SPECIAL`
 - `trackingMode`: `THREE_D_BATCH`, `PIPELINE`, `CHECKLIST`, `COUNTED`
 - `name`
 - `requiredQuantity` — bilinmiyorsa `null`
 - `notes`
-- `isArchived`
+- `isCompleted`
+- `completedAt`
 - `createdAt`
 - `updatedAt`
 - `deletedAt`
 - `sourceRawImportBlockId`
 
-Görev durumu mümkün olduğunca temel alanlardan ve olaylardan türetilmelidir. Gösterim için cache tutulsa bile kaynak gerçek olaylar ve sayılardır.
+Kurallar:
 
-### 5.6 Color
+- Görev bir `Item` altında değil, doğrudan bir `TaskSegment` üzerinden bir hücreye bağlıdır.
+- Görevin ilerleme ayrıntıları (3D eksik sayacı, kart/mukavva aşamaları) `TaskStage` ve `ProgressEvent` kayıtlarından türetilir.
+- Tamamlanan görev hücreden **kaldırılmaz**: `TaskSegment` yerinde kalır, tikli ve üstü çizili görünür, yalnızca aktif üretim havuzundan çıkar.
+- Görev sıfır veya daha fazla renge sahip olabilir; sıfır renk geçerli bir durumdur (`5.10`).
+- Görev arşivlenmez.
 
-Renkler serbest metin yerine global kayıt olarak tutulur.
+### 5.7 Color
+
+Renkler serbest metin yerine global kayıt olarak tutulur ve **hepsi isimlidir**.
 
 Önerilen alanlar:
 
 - `id`
 - `canonicalName`
+- `normalizedName`
 - `hex`
-- `aliases`
 - `sortOrder`
-- `isArchived`
+
+Renklerin iki kaynağı vardır:
+
+1. Başlangıçtaki 12 temel renk.
+2. Kullanıcının renk çarkından oluşturduğu özel renkler.
 
 Excel dosyasında görülen başlangıç renkleri:
 
@@ -207,41 +287,114 @@ Excel dosyasında görülen başlangıç renkleri:
 
 Kurallar:
 
-- `gri`, `Gri` ve `GRİ` aynı kanonik renge eşlenmelidir.
+- `gri`, `Gri` ve `GRİ` aynı kanonik renge eşlenmelidir; renk adları Türkçe büyük/küçük harfe duyarsız olarak benzersizdir.
 - Renk adıyla birlikte renk örneği gösterilmelidir; anlam yalnızca görsel renge bırakılmamalıdır.
-- Kullanıcı yeni renk ekleyebilir, adını/hex değerini düzenleyebilir ve kullanılmayan rengi arşivleyebilir.
+- Renk seçici küçüktür: 12 temel renk karesi, küçük bir renk çarkı ve gerekirse tek bir kompakt parlaklık kontrolü. Geniş profesyonel renk düzenleyici, sürekli açık hex alanı veya çok sayıda kanal ayarı gösterilmez.
+- Özel renk oluşturma akışı: çarktan renk seç → gerekirse parlaklığı ayarla → **zorunlu ad gir** → kaydet.
+- Ad girilmeden renk göreve atanamaz, renk listesine eklenemez ve havuz oluşturamaz.
+- Kaydedilen özel renk o andan itibaren globaldir ve adıyla aranarak tekrar kullanılabilir.
+- Aynı görsel renk farklı adlarla kaydedilebilir; bu durumda engelleyici olmayan bir aynı-hex uyarısı gösterilebilir.
+- Tek kullanımlık, adsız veya kaydedilmemiş renk **yoktur**; `isSaved` benzeri bir ayrım bulunmaz.
+- 12 temel renk de normal kayıtlardır: adı ve değeri düzenlenebilir, fiziksel olarak silinebilir.
+- Renk arşivi, `isArchived` alanı, arşivli renk listesi ve geri açma **yoktur**.
 - İlk sürümde renk gruplaması yalnızca renge göre yapılır; filament malzemesi gruplamaya dâhil değildir.
+- `sortOrder` kullanıcının renk sırasıdır ve havuz gruplarının varsayılan sıralamasını belirler.
 
-### 5.7 TaskColor
+### 5.8 Temel renkleri geri yükleme
 
-Bir görevin renk ilişkisi aşağıdaki biçimlerden biridir:
+Renk yönetiminde `Temel renkleri geri yükle` eylemi bulunur.
 
-- `REQUIRED`: Renk bu görevin zorunlu rengidir.
-- `ALTERNATIVE`: Kullanılabilecek renk seçeneklerinden biridir.
+- Yalnız **eksik olan** seed renkleri geri getirir.
+- Mevcut renkleri veya kullanıcının yaptığı düzenlemeleri üzerine yazmaz.
+- Otomatik çalışmaz; kullanıcının açık eylemi ve onayı gerekir.
+- Sabit seed UUID'leri kullanılabilir.
+- Normalize edilmiş ad çakışması varsa var olan renk üzerine yazılmaz.
+- Davranış **ya hep ya hiç**'tir: transaction başlamadan önce bütün çakışmalar denetlenir; herhangi bir çakışma varsa hiçbir seed yazılmaz ve kullanıcıya hangi renklerin neden geri getirilemediği bildirilir. Kısmi geri yükleme yapılmaz.
+
+### 5.9 Renk silme
+
+Renk silme kullanıcı onayı ister. Renk görevlerde kullanılıyorsa ilişkili görev
+sayısı gösterilerek açıkça uyarılır.
+
+Kullanıcı onaylarsa tek transaction içinde:
+
+1. İlgili `TaskColor` ilişkileri kaldırılır.
+2. İlgili `ColorAlias` kayıtları kaldırılır.
+3. Renk fiziksel olarak silinir.
+4. Görev ve oyun kayıtları korunur; hiçbir görev veya `TaskSegment` silinmez.
+5. Tek öge çok renk görevlerinde kalan renklerin `slotIndex` değerleri `0…N-1` olarak yeniden sıkıştırılır.
+6. Rengi kalmayan görev `Renk seçilecek` durumuna geçer.
+
+Ek kurallar:
+
+- Çoklu görev oluşturmayla üretilmiş görevler bağımsızdır; renk silinince ilgili bağımsız görev silinmez, yalnız rengi kaldırılır.
+- Temel ve özel renkler aynı silme kurallarına tabidir.
+- İşlem yarıda kalırsa hiçbir ilişki ve hiçbir renk değişmez.
+
+### 5.10 TaskColor
+
+Bir görevin renk ilişkisi tek bir biçimdedir: `REQUIRED`. Renk bu görevin zorunlu
+rengidir.
+
+Önerilen alanlar:
+
+- `taskId`
+- `colorId`
+- `slotIndex`
 
 Kurallar:
 
+- `slotIndex` kullanıcının renk seçim sırasını korur ve görev içinde benzersizdir; `0`'dan başlar ve boşluk bırakmaz.
 - Tek renkli görev: bir `REQUIRED` renk.
-- Çok renkli görev: birden fazla `REQUIRED` renk ve tek görev sayacı.
-- Alternatif renkli görev: birden fazla `ALTERNATIVE` renk; aktif havuza girmeden önce kullanıcı birini seçer.
-- Renk varyantları: aynı `Item` altında, her biri bir zorunlu renge ve kendi adedine sahip ayrı `Task` kayıtları.
+- Tek öge çok renk görevi: birden fazla sıralı `REQUIRED` renk ve **tek** görev sayacı.
+- Renksiz görev: sıfır renk ilişkisi. Bu geçerli bir durumdur; görev silinmez, `Renk seçilecek` bölümünde gösterilir ve renk seçilene kadar renk havuzlarına girmez. Bir görev bu duruma renk silme sonucunda veya içe aktarma sonrasında geçebilir.
+- `ALTERNATIVE` ilişkisi ve “alternatiflerden birini sonra seç” davranışı ürün modelinde **yoktur**. Kullanıcı görev oluştururken kesin rengi veya renkleri seçer.
 - Ayrı fiziksel parça modeli yoktur. Kullanıcı bıçak ve kabzayı ayrı takip etmek isterse bunları iki bağımsız görev olarak ekler.
 
 Örnekler:
 
 ```text
-Token
-├── Gri token — 14 adet — REQUIRED[Gri]
-├── Sarı token — 15 adet — REQUIRED[Sarı]
-└── Yeşil token — 15 adet — REQUIRED[Yeşil]
+Harmonies · 3D hücresi
+  Token ×14 — REQUIRED[Gri]
+  Token ×15 — REQUIRED[Sarı]
+  Token ×15 — REQUIRED[Yeşil]
+  (üç bağımsız görev, aralarında hiçbir kalıcı bağ yok)
 
-Kılıç
-└── Kılıç — 10 adet — REQUIRED[Gri, Siyah]
+Kılıç ×10 — REQUIRED[Gri, Siyah]
+  (tek görev, tek adet, iki sıralı zorunlu renk)
 
-Whale
-└── Whale — 5 adet — ALTERNATIVE[Mavi, Açık Mavi]
-    Seçilen baskı rengi: Açık Mavi
+Whale ×5 — renksiz
+  (Renk seçilecek durumunda)
 ```
+
+### 5.11 ColorAlias
+
+Alias, bir rengin bilinen başka bir yazılışıdır ve **yalnız iç sistem**dir.
+
+- Alias yönetimi kullanıcıya ayrı bir renk yönetimi özelliği olarak sunulmaz.
+- Alias altyapısı yalnız içe aktarma sırasında ham renk terimlerini tanımak ve Türkçe yazım çeşitlerini eşlemek için kullanılır.
+- Alias hiçbir zaman kullanıcının kesin renk seçiminin yerine geçmez.
+
+### 5.12 TaskStage ve ProgressEvent
+
+`TaskStage`, kart ve mukavva görevlerinin sabit aşamalarının tamamlanan adetlerini
+tutar (`7.2`, `8`). `ProgressEvent`, 3D eksik/hatalı bildirimleri ve giderme
+hareketlerini olay olarak kaydeder (`6`).
+
+- Her `ProgressEvent`'in benzersiz UUID'si vardır; aynı olay iki kez uygulanamaz.
+- `failureTotal` ve geçmiş hata toplamı olaylardan türetilir ve silinmez.
+- Aşama sayaçları ve eksik miktarlar negatif olamaz.
+
+### 5.13 Item kavramı kaldırılmıştır
+
+Kullanıcı ürün modelinde `Item` (öge) **bulunmaz**. Öge altında görev gruplama,
+aktif öge zorunluluğu, renk varyantlarının aynı öge altında toplanması ve oyun
+detayında öge listesi hükümlerinin tamamı geçersizdir.
+
+`items` tablosu Faz 1'de oluşturulmuştur ve şu an veritabanında durmaktadır.
+**Gelecekteki bir migration'da kaldırılacaktır**; hedef modelde `Task` doğrudan bir
+`TaskSegment` üzerinden hücreye bağlanır. Kaldırma sırası `18.` bölümde
+tanımlanmıştır.
 
 ## 6. 3D baskı ilerleme modeli
 
@@ -282,6 +435,9 @@ Başlangıç davranışı:
 - Ana baskı daha önce tamamlandı olarak işaretlenmemişse, eksik/hata bildirimi baskı denemesi yapıldığını varsayar ve `primaryBatchCompleted` değerini etkinleştirir.
 - Görev `NEEDS_REPRINT` durumuna döner veya bu durumda kalır.
 - Eylem tamamlanan görevlerin geçmiş görünümünde de kullanılabilir; yeni bir eksik/hata bildirimi görevi yeniden aktif havuza taşır.
+- Tek öge çok renk görevinde bildirim görevi **bütün** renk havuzlarına birden geri getirir; bu tek bir görev olduğu için tek yazma yeter.
+- **Oyun tamamlanmışsa** aynı transaction içinde oyun da yeniden açılır: `isManuallyCompleted` kaldırılır, `completedAt` temizlenir ve satırın yeşil görünümü kalkar. Oyun `Devam Eden` görünümüne döner.
+- Oyunun diğer tamamlanmış görevleri yeniden açılmaz; yalnız bildirimi yapılan görev etkilenir.
 
 #### Eksik giderildi
 
@@ -304,7 +460,7 @@ Kurallar:
 - `currentMissingQuantity`, gerekli adedi aşamaz.
 - `failureTotal`, tekrar tekrar yapılan hatalı baskılar nedeniyle gerekli adedi aşabilir.
 - Gerekli adet bilinmiyorsa görev `BILGI_EKSIK` durumunda tutulabilir veya kullanıcı manuel tamamlanma kullanabilir.
-- Tamamlanma durumu ayrı, bağımsız ve kolayca tutarsızlaşabilecek bir boolean olarak saklanmamalıdır; yukarıdaki verilerden türetilmelidir.
+- Tamamlanma durumu sayaçlar ve olaylarla tutarlı kalmalıdır. Görev üzerinde tutulan `isCompleted` bir gösterim kolaylığı değil, kullanıcının ve toplu tamamlamanın yazdığı gerçek durumdur; sayaçlarla çelişmesine izin veren hiçbir yol bulunmamalıdır.
 
 ## 7. Kart üretim hattı
 
@@ -503,26 +659,24 @@ Orijinal metin hiçbir zaman sessizce değiştirilmez veya kaybedilmez.
 - Seçili metinden görev oluştur
 - Elle boş görev oluştur
 - Görevi bir havuza ata
-- Renk veya alternatif renk seç
+- Kesin rengi veya renkleri seç, ya da görevi renksiz bırak
 - Adet gir veya bilinmiyor olarak bırak
 - `**` ipucunu kabul et/reddet
 - Yeşil oyun hücresi ipucunu kabul et/reddet
-- Görevi mevcut bir `Item` altına bağla
+- Görevi hedef oyunun ilgili hücresine bağla
 - Ham bloğu işlendi olarak işaretle
 - İçe aktarma grubunu topluca onayla (geri alma Faz 2 kapsamındadır)
 
-### 11.4.1 Oyun ve öge kurulumu
+### 11.4.1 Oyun ve hücre kurulumu
 
 Hedef yapıyı yalnızca kullanıcı kurar.
 
-- İçe aktarma hiçbir zaman `Game` veya `Item` kaydını kendiliğinden oluşturmaz.
+- İçe aktarma hiçbir zaman `Game` kaydını kendiliğinden oluşturmaz.
 - Oyun adı hücresinden otomatik `Game` türetilmez.
-- `Item` adı ham bloktan tahmin edilmez.
-- Kullanıcı oyunları ve ögeleri oyun listesi ve oyun ayrıntısı ekranlarından elle
-  oluşturur.
+- Kullanıcı oyun satırlarını oyun tablosundan elle oluşturur.
+- Hedef `GameCell`, oyun satırı oluşturulduğunda o oyunun sütunu olarak hazır bulunur.
 - Elle oluşturulan bir oyunun `sourceImportBatchId` alanı boştur.
-- Oyun tamamlanma durumu yalnızca açık kullanıcı eylemiyle değişir; bir oyunu
-  tamamlamak ögelerini veya görevlerini değiştirmez.
+- Oyun tamamlanma durumu yalnızca açık kullanıcı eylemiyle veya eksik parça bildirimiyle değişir; bir oyunu tamamlamak hücrelerinin metnini değiştirmez.
 
 ### 11.4.2 İçe aktarmayı onaylama
 
@@ -530,12 +684,12 @@ Onay, taslakları gerçek görevlere çeviren tek adımdır.
 
 Ön koşullar:
 
-- Kullanıcı her `DraftTask` için mevcut ve aktif bir hedef `Item` seçer.
+- Kullanıcı her `DraftTask` için mevcut ve aktif bir hedef `GameCell` seçer.
 - `selectedPoolType` ve `selectedTrackingMode` görev üretiminden önce zorunludur.
 - `requiredQuantity` havuz ve takip kurallarına göre doğrulanır.
 - Bir taslak eksik veya geçersizse bütün batch onayı engellenir; hiçbir taslak
   sessizce atlanmaz.
-- Hiç `Item` yoksa onay yapılamaz; kullanıcı önce oyun ve öge oluşturur.
+- Hiç oyun yoksa onay yapılamaz; kullanıcı önce oyun satırını oluşturur.
 - İşlenmemiş ham blok bulunması onayı doğrudan engellemez. Kullanıcıya işlenmemiş
   blok sayısı ve açık bir uyarı gösterilir; devam etmek için ayrıca onay vermesi
   gerekir.
@@ -543,8 +697,8 @@ Onay, taslakları gerçek görevlere çeviren tek adımdır.
 Onayın kendisi:
 
 - Onay tek bir Room transaction’ında gerçekleşir.
-- Her geçerli `DraftTask` tam olarak bir gerçek `Task` üretir.
-- Üretilen görev, taslağın `targetItemId` değerine bağlanır.
+- Her geçerli `DraftTask` tam olarak bir gerçek `Task` ve tam olarak bir `TaskSegment` üretir.
+- Üretilen görev, taslağın hedef hücresindeki bir `TaskSegment` üzerinden bağlanır.
 - `tasks.sourceRawImportBlockId` kaynak ham bloğu korur.
 - `draft_tasks.materializedTaskId` oluşturulan görevin kimliğiyle doldurulur.
 
@@ -567,7 +721,7 @@ döndürür. Bu, başarılı bir tekrar uygulama değil, korumalı bir reddediş
 - Ham bloklar ve taslaklar onaydan sonra silinmez; kaynak ve denetim izi olarak
   korunur.
 - `CONFIRMED` bir batch salt okunur görüntülenebilir, düzenlenemez.
-- Ham bloğun işlenmiş durumunu değiştirme, taslak düzenleme ve hedef öge
+- Ham bloğun işlenmiş durumunu değiştirme, taslak düzenleme ve hedef hücre
   değiştirme yalnızca `DRAFT` bir batch’te mümkündür.
 - “Taslağı kapatma” yalnızca ekrandan veya gezinmeden çıkmaktır; yeni bir
   veritabanı durumu oluşturmaz.
@@ -584,7 +738,7 @@ döndürür. Bu, başarılı bir tekrar uygulama değil, korumalı bir reddediş
 - Yazı rengi kaynak gerçek değildir; metindeki renk adı ve kullanıcının onayı esas alınır.
 - Renkli yazı ile metindeki renk uyuşmazsa kullanıcıya uyarı gösterilebilir.
 
-### 11.6 Alternatif renk ifadeleri
+### 11.6 Belirsiz renk ifadeleri
 
 Aşağıdaki ifadeler çok renkli görev olarak yorumlanmaz:
 
@@ -592,7 +746,14 @@ Aşağıdaki ifadeler çok renkli görev olarak yorumlanmaz:
 - `Beyaz/Gri`
 - `Açık Mavi veya Mavi`
 
-Bunlar alternatif renk seçenekleridir. Kullanıcı gerçek baskı rengini seçene kadar görev 3D renk havuzuna girmez ve `Renk seçilecek` listesinde kalır.
+Bunlar kullanıcının henüz karar vermediği renk ifadeleridir ve ham metin olarak
+korunur. Uygulama bunlardan bir renk ilişkisi türetmez ve kullanıcıya yalnızca
+ipucu olarak gösterir.
+
+Kullanıcı görevi oluştururken **kesin rengi seçer**. Seçim yapmazsa görev renksiz
+kalır, `Renk seçilecek` bölümünde görünür ve renk havuzlarına girmez. `ALTERNATIVE`
+renk ilişkisi ve “alternatiflerden birini sonra seç” davranışı ürün modelinde
+yoktur.
 
 ### 11.7 Bilinmeyen veya belirsiz değerler
 
@@ -618,7 +779,7 @@ game,source_type,raw_text
 Gelecekte yapılandırılmış dışa aktarma için şu kolonlar kullanılabilir:
 
 ```text
-game,item,task,pool,color_mode,colors,required_quantity,status,notes
+game,column,task,pool,colors,required_quantity,status,notes
 ```
 
 ## 12. Kullanıcı arayüzü ve gezinme
@@ -628,7 +789,7 @@ game,item,task,pool,color_mode,colors,required_quantity,status,notes
 Birincil masaüstü gezinmesi sol kenar çubuğu veya eşdeğer geniş ekran navigasyonu kullanır:
 
 - Ana Sayfa
-- Oyunlar
+- Oyun Tablosu
 - 3D Baskı
 - Kartlar
 - Mukavva
@@ -638,24 +799,26 @@ Birincil masaüstü gezinmesi sol kenar çubuğu veya eşdeğer geniş ekran nav
 - Renkler
 - Ayarlar
 
+Ayrı bir oyun listesi ekranı ve ayrı bir oyun detay ekranı **yoktur**. Görev
+oluşturma ve düzenleme oyun tablosunun hücrelerinde yapılır.
+
 ### 12.2 Ana sayfa
 
-Ana sayfanın üst bölümünde oyunlar bulunur:
+Ana sayfanın üst bölümünde oyun tablosuna giriş ve arama bulunur:
 
 - Arama
-- Yeni oyun
+- Yeni oyun satırı
 - Excel/CSV içe aktar
-- Aktif oyunlar
-- Tamamlanan oyunlar
+- Üç global tablo görünümüne hızlı geçiş
 - Son kullanılan veya sabitlenen oyunlar
 
-Oyunların altında havuz özetleri bulunur:
+Bunların altında havuz özetleri bulunur:
 
 ```text
 3D Baskı
 • Aktif görev sayısı
 • Yeniden basılması gereken eksik/hatalı parça sayısı
-• Renk kararı bekleyen görev sayısı
+• Renk seçilecek görev sayısı
 
 Kartlar
 • Baskı bekleyen
@@ -673,34 +836,228 @@ Mukavva
 
 Özet kartına tıklamak ilgili havuza götürür.
 
-### 12.3 Oyunlar ekranı
+### 12.3 Oyun tablosu
 
-- Yeni oyun oluşturma
+Uygulamanın temel çalışma yüzeyi Excel benzeri bir tablodur. Her oyun bir
+satırdır.
+
+Sütunlar:
+
+| Sütun | İçerik |
+|---|---|
+| Oyun adı | Oyunun adı ve tamamlanma tiki |
+| 3D | 3D hücresi |
+| Kart | Kart hücresi |
+| Mukavva | Mukavva hücresi |
+| Özel | Özel hücresi |
+| Notlar | Serbest not hücresi |
+
+3D, Kart, Mukavva, Özel ve Notlar ayrı hücrelerdir ve her biri kendi `GameCell`
+kaydına sahiptir.
+
+`Notlar` hücresi serbest içeriktir; üretim görevi veya havuz kaydı **üretmez** ve
+içinde görev bulunamaz.
+
+Tablo eylemleri:
+
+- Yeni oyun satırı oluşturma
 - Oyun adına göre arama
-- Aktif/tamamlanan filtresi
-- Manuel tamamla/yeniden aç eylemi
-- Oyun başına aktif ve tamamlanan görev sayıları
-- Oyun detayına geçiş
+- Hücreye serbest metin yazma
+- Hücredeki metinden görev oluşturma
+- Oyun satırındaki tamamlanma tikine basma
+- Oyun silme
 
-### 12.4 Oyun detay ekranı
+Tamamlanmış oyunun satırı tamamen yeşil gösterilir.
 
-- Oyun başlığı ve manuel tamamlanma durumu
-- Notlar
-- Oyunun ögeleri
-- Yeni öge ekleme
-- Havuzlara göre görev bölümleri
-- Yeni görev ekleme
-- Ham içe aktarma kaynağına geri dönme
-- Tamamlanan görevleri göster/gizle
-- Oyun silme/arşivleme
+### 12.4 Global tablo görünümleri
 
-### 12.5 3D Baskı Havuzu
+Ana ekrandan kolayca değiştirilebilen üç global tablo görünümü bulunur:
+
+- **Devam Eden** — kullanıcı tarafından tamamlanmamış oyun satırları
+- **Tamamlanan** — kullanıcı tarafından tamamlanmış oyun satırları
+- **Tümü** — her ikisi
+
+Kurallar:
+
+- Bunlar bir oyunun içindeki sekmeler değildir; bütün oyun tablosunun görünümleridir.
+- Kullanıcı üç görünümün herhangi birinde çalışabilir ve düzenleme yapabilir.
+- `Tümü` görünümünde önceki tamamlanan oyunlar da görülebilir ve düzenlenebilir.
+- `Tamamlanan` görünümü kullanıcının geçmiş oyunlarını görme ihtiyacını karşılar.
+- Oyun arşivi, arşiv tablosu veya arşivleme işlemi **bulunmaz**.
+- İçeride tek veri kaynağı ve sorgu filtreleri kullanılabilir; kullanıcı deneyiminde bunlar rahatça geçilen üç tablo görünümüdür.
+
+### 12.5 Hücre belgesi ve inline görevler
+
+Bir hücre, sıralı `CellSegment` parçalarından oluşan bir belgedir (`5.5`).
+
+`TaskSegment` görünümü:
+
+- Görev adını gösterir.
+- Görev rengine uygun çizilir.
+- `×15` gibi gerekli adedi yanında gösterir.
+- Tik kutusu taşır.
+- Fare üzerine geldiğinde tıklanabilir olduğu anlaşılır.
+
+`TaskSegment` atomiktir: klavyeyle ortasından silinemez ve ham metin gibi
+parçalanamaz. Düzenleme yalnızca görev menüsünden yapılır.
+
+`TaskSegment`'e tıklanınca kelimenin hemen üstünde küçük bir bağlamsal popover
+açılır. Popover ekranı kaplamaz. En az şu eylemler bulunur:
+
+- **Düzenle**
+- **Eksik parça**
+- **Görevi metne dönüştür**
+
+Tamamlanan görev:
+
+- Hücreden kaybolmaz.
+- Tikli görünür.
+- Metni üstü çizili olur.
+- Aktif üretim havuzundan çıkar.
+
+### 12.6 Metinden görev oluşturma
+
+Kullanıcı düz metinde bir kelime veya ifade seçer. Çift tıklama kelime seçimini
+kolaylaştırır.
+
+Akış:
+
+1. Kelimeyi seç.
+2. Seçili kelimenin hemen üstünde açılan küçük popover'dan `Göreve dönüştür` seç.
+3. Kompakt görev oluşturma paneli açılır.
+4. Oluşturma modunu, renkleri, adetleri ve gereken özellikleri gir.
+5. Kaydet.
+6. İlgili `PlainTextSegment` bir veya daha fazla `TaskSegment` ile değiştirilir.
+
+Tam ekran modal veya bütün ekranı kaplayan panel **kullanılmaz**.
+
+Görev oluşturma panelinin üstünde üç mod arasında geçiş yapılır. Modlar yalnızca
+form kolaylıklarıdır ve kaydedilmez (`5.10`, `12.7`).
+
+### 12.7 Üç oluşturma modu
+
+#### Tek renk
+
+- Bir `Task`
+- Bir gerekli adet
+- Bir `REQUIRED` renk ilişkisi
+- Tek renk havuzunda görünür
+
+#### Çoklu görev
+
+`Çoklu görev` kalıcı bir görev türü, grup veya üst görev **değildir**. Yalnızca
+toplu oluşturma kolaylığıdır.
+
+Kullanıcı görev adını bir kez girer/seçer ve birden fazla renk–adet satırı
+tanımlar:
+
+```text
+Token / Siyah / ×14
+Token / Beyaz / ×15
+Token / Sarı  / ×8
+```
+
+Kaydetme tek transaction içinde **üç bağımsız `Task` ve üç bağımsız
+`TaskSegment`** oluşturur.
+
+Her görev ayrı UUID, ayrı renk, ayrı `requiredQuantity`, ayrı eksik miktarı, ayrı
+tamamlanma durumu ve ayrı havuz üyeliği taşır.
+
+Aralarında `groupId`, `parentTaskId`, ortak sayaç, ortak tik, ortak tamamlanma
+veya sonradan toplu düzenleme **bulunmaz**.
+
+Hücrede yan yana ayrı görevler olarak görünürler:
+
+```text
+Token ×14   Token ×15   Token ×8
+```
+
+İsimlerinin başlangıçta aynı olması bir domain bağlantısı değildir; kullanıcı
+birini yeniden adlandırabilir ve diğerleri etkilenmez.
+
+#### Tek öge çok renk
+
+- Tek `Task`
+- Tek `TaskSegment`
+- Tek gerekli adet
+- Birden fazla sıralı `REQUIRED` renk ilişkisi
+- Tek tamamlanma ve tek eksik sayacı
+
+Görev bütün seçilen renk havuzlarında görünür; ancak bütün havuz kayıtları aynı
+`Task` kimliğine işaret eder. Bir havuzda tamamlanınca hepsinden çıkar, eksik
+bildirilince hepsine geri döner.
+
+Görev kelimesi renklerin `slotIndex` sırasına göre parçalara bölünerek çizilir:
+
+```text
+yarasa + üç renk  →  ya | ra | sa
+```
+
+Bölme kuralları:
+
+- Kullanıcının gördüğü grapheme kümeleri üzerinden çalışır; byte veya UTF-16 code unit üzerinden değil.
+- Eşit bölünemeyen fazlalıklar ilk renk parçalarına dağıtılır.
+- Dört renk varsa dört parça oluşur.
+- Gradient kullanılmaz; ardışık parçalar farklı düz renklerle çizilir.
+- Bütün parçalar birlikte **tek** tıklanabilir `TaskSegment` olarak kalır.
+- Okunurluk yetersizse otomatik kontrast çerçevesi veya soluk arka plan uygulanır.
+- Bölme saklanmaz; ad veya renk listesi değişince yeniden türetilir.
+
+### 12.8 Görevi metne dönüştürme
+
+`Görevi metne dönüştür` bir görevi silmez; onu normal metne geri döndürür.
+
+Kullanıcıdan onay istenir. Onaylanırsa tek transaction içinde:
+
+- `TaskSegment` kaldırılır.
+- Görevin adı aynı konumda `PlainTextSegment` olarak geri yazılır.
+- Görev kaydı ve havuz yansımaları kaldırılır.
+- `TaskColor`, `TaskStage` ve `ProgressEvent` ilişkileri güvenli biçimde temizlenir.
+- Aynı hücrede yan yana gelen `PlainTextSegment` parçaları birleştirilir.
+- Başka görevler etkilenmez.
+
+İşlem yarıda kalırsa hiçbir parça değişmez.
+
+### 12.9 Oyun tamamlanması
+
+Oyun tamamlanması, alt görevlerin tamamlanmasından ayrı bir kullanıcı kararıdır.
+Bütün görevler tamamlanınca oyun otomatik tamamlanmaz.
+
+Kullanıcı oyun satırındaki tamamlanma tikine bastığında:
+
+- Bitmemiş görev veya aşama yoksa oyun tamamlanır.
+- Bitmemiş görev veya aşama varsa `Tüm görevler tamamlandı mı?` onayı gösterilir.
+- Hayır denirse hiçbir şey değişmez.
+- Evet denirse tek transaction içinde oyuna ait bütün görevler ve aşamalar tamamlanır, ardından oyun manuel tamamlanmış olarak işaretlenir.
+
+Toplu tamamlama, transaction başladığı anda oyunda bulunan bütün işleri kapsar:
+
+- 3D görevleri
+- Çoklu oluşturmayla üretilmiş bağımsız görevler
+- Tek öge çok renk görevleri
+- Kartların baskı–lamine–kesme aşamaları
+- Mukavvanın baskı–yapıştırma–kesme aşamaları
+- Özel görevler
+
+Oyun tamamlanınca:
+
+- Satır tamamen yeşil olur.
+- Oyun `Tamamlanan` ve `Tümü` görünümlerinde gösterilir.
+- Oyun `Devam Eden` görünümünden çıkar.
+
+Tamamlamak arşivlemek değildir.
+
+### 12.10 3D Baskı Havuzu
+
+Havuzlar görevlerin **yansımalarıdır**. Havuz hiçbir zaman yeni veya kopya görev
+yazmaz; oyun tablosundaki aynı görevin üretim açısından okunmuş hâlini gösterir.
+Yazma bir havuz ekranından başlatılsa bile aynı `Task` üzerinde gerçekleşir.
 
 Aktif görevler aşağıdaki sırayla gösterilir:
 
-1. Renk seçimi gereken görevler
+1. Renk seçilecek görevler — renksiz görevler
 2. Tek renkli görevler — kanonik renge göre gruplu
-3. Çok renkli görevler — ayrı bölüm
+3. Tek öge çok renk görevleri — ayrı bölüm
 
 Her renk grubunda:
 
@@ -708,43 +1065,53 @@ Her renk grubunda:
 - Gruptaki görev sayısı
 - İlgili toplam gerekli adet
 - Eksik/hatalı yeniden baskı adedi
-- Oyun / öge / görev satırları
+- Oyun / görev satırları
 
 Görev satırı:
 
 - Oyun adı
-- Öge/görev adı
+- Görev adı
 - Gerekli adet
 - Ana baskı durumu
 - Mevcut eksik adet
 - Toplam hata kaydı
-- `Ana baskıyı tamamla`
-- `Eksik/hatalı bildir`
-- `Eksik giderildi`
+- Hızlı eylemler
 
-Tamamlanan görev aktif listeden çıkar; `Tamamlananları göster` filtresiyle görülebilir.
+Bir tek öge çok renk görevi seçtiği her renk grubunda görünür; hepsi aynı `Task`
+kimliğine işaret eder ve biri tamamlanınca hepsinden birden çıkar.
 
-### 12.6 Kart Havuzu
+### 12.11 Kart Havuzu
 
-- Oyuna göre gruplanabilir.
-- İlk tamamlanmamış aşamaya göre filtrelenebilir.
-- Görev satırında açılır aşama rozeti bulunur.
-- Eksik kart adı/numarası eklenebilir.
-- Toplam ve aşama sayaçları hızlı düzenlenebilir.
+- Kart görevleri açılır aşama rozetiyle gösterilir.
+- Rozet ilk tamamlanmamış aşamayı veya `Tamamlandı` durumunu gösterir.
+- Aşama sayaçları rozet genişletildiğinde düzenlenir.
+- Eksik kart ayrıntıları isteğe bağlıdır.
 
-### 12.7 Mukavva Havuzu
+### 12.12 Mukavva Havuzu
 
-- Kart havuzuyla benzer görünür.
-- Aşamalar `Basıldı`, `Yapıştırıldı`, `Kesildi` olarak sabittir.
-- Board, tile ve token türüne göre filtre isteğe bağlıdır.
+Kart havuzuyla aynı rozet ve sayaç davranışını kullanır; aşamalar Basıldı →
+Yapıştırıldı → Kesildi biçimindedir.
 
-### 12.8 Özel Havuz
+### 12.13 Özel Havuz
 
 - Checklist ve adetli görevleri destekler.
 - Boşken görünmez.
 - Görevlerin oyun bağlantısı açıkça gösterilir.
 
-### 12.9 Geçmiş
+### 12.14 Renkler
+
+Renkler bölümü şunları içerir:
+
+- Renk kataloğu: her rengin örneği ve yazılı adı
+- Renk çarkı ve kompakt parlaklık kontrolüyle yeni özel renk oluşturma; ad zorunludur
+- Renk adını ve değerini düzenleme
+- Rengi silme; kullanımdaysa ilişkili görev sayısıyla uyarı
+- `Temel renkleri geri yükle`
+- Ada göre arama
+
+Arşivli renk listesi, arşivleme ve geri açma **bulunmaz**.
+
+### 12.15 Geçmiş
 
 Geçmiş ekranı en az şunları gösterir:
 
@@ -753,25 +1120,28 @@ Geçmiş ekranı en az şunları gösterir:
 - Eksik giderme hareketleri
 - Kart/mukavva aşama değişiklikleri
 - İçe aktarma ve geri alma işlemleri
-- Silinen/arşivlenen kayıtlar
+- Silinen kayıtlar ve metne geri dönüştürülen görevler
 
 ## 13. Arama, filtreleme ve sıralama
 
 İlk sürümde:
 
-- Oyun, öge ve görev adında metin arama
+- Oyun ve görev adında metin arama
+- Üç global tablo görünümü: `Devam Eden`, `Tamamlanan`, `Tümü`
 - Havuz filtresi
-- Renk filtresi
+- Renk filtresi ve `Renk seçilecek` filtresi
 - Aktif/tamamlandı/bilgi eksik filtresi
 - `MISSING` ve `BORROWED` bayrak filtresi
 - 3D görevlerinde eksik/hatalı baskısı olanları öne alma
 - Kart/mukavvada ilk tamamlanmamış aşamaya göre filtreleme
+- Renk adına göre arama
 
 bulunmalıdır.
 
 Varsayılan sıralama:
 
-- Renk grupları kullanıcının renk sırasına göre
+- Oyun tablosunda oyun adı
+- Renk grupları kullanıcının renk sırasına (`sortOrder`) göre
 - Grup içinde önce eksik/hatalı baskılar, sonra oyun adı ve görev adı
 - Kart/mukavvada üretim hattında daha ileride olan görevler değil, sıradaki işi yapılabilir olan görevler öne çıkar
 
@@ -852,7 +1222,7 @@ app/
       backup/
     feature/
       home/
-      games/
+      gametable/
       printpool/
       cards/
       board/
@@ -882,7 +1252,14 @@ Tek modülle başlanabilir. Kod büyümeden gereksiz Gradle modüllerine ayrılm
 - Aynı olay iki kez uygulanmamalıdır; progress olaylarının benzersiz UUID’si bulunmalıdır.
 - `currentMissingQuantity` ve aşama sayaçları negatif olamaz.
 - Kart/mukavva aşama sırası bozulamaz.
-- Silinen renk kullanımda ise fiziksel olarak kaldırılamaz; arşivlenir.
+- Renk silme tek transaction'dır: renk ilişkileri ve alias'lar kaldırılmadan renk silinemez, ve işlem yarıda kalırsa hiçbiri değişmez. Renk silmek hiçbir görevi veya oyunu silmez.
+- `Temel renkleri geri yükle` ya hep ya hiç çalışır; mevcut hiçbir rengin üzerine yazmaz.
+- Bir hücrenin parçaları her zaman sıralı, boşluksuz ve örtüşmesizdir; yan yana düz metin parçaları birleştirilir.
+- Bir `Task` tam olarak bir `TaskSegment`'e aittir; çapasız görev veya iki parçaya bağlı görev oluşamaz.
+- Çoklu görev toplu oluşturma atomiktir, fakat ürettiği görevler arasında hiçbir kalıcı bağ yazılmaz.
+- Oyun toplu tamamlama tek transaction'dır; kısmen tamamlanmış oyun bırakmaz. Oyun bayrağı ile alt tamamlamalar aynı transaction içinde yazılır.
+- Tamamlanmış bir oyunda eksik parça bildirimi, görevin ve oyunun yeniden açılmasını aynı transaction içinde yapar.
+- `Görevi metne dönüştür` tek transaction'dır; yarıda kalırsa hiçbir parça değişmez.
 - İçe aktarma sırasında tek bir hücredeki hata bütün dosya aktarımını kaybettirmemelidir.
 - Uygulama kapanırsa onaylanmamış import taslağı yeniden açılabilmelidir.
 - Import rollback yalnızca ilgili import batch’in oluşturduğu kayıtları hedeflemelidir.
@@ -891,11 +1268,14 @@ Tek modülle başlanabilir. Kod büyümeden gereksiz Gradle modüllerine ayrılm
 ## 17. Erişilebilirlik ve kullanım kuralları
 
 - Renk hiçbir zaman tek bilgi taşıyıcısı olmamalıdır; her renk örneğinin yazılı adı bulunmalıdır.
+- Tek öge çok renk görevinin bölünmüş adı okunur kalmalıdır; kontrast yetersizse otomatik çerçeve veya soluk arka plan uygulanmalıdır.
+- Inline görev parçaları klavyeyle gezilebilmeli ve bağlamsal popover klavyeyle açılabilmelidir.
+- Bağlamsal popover ekranı kaplamamalı ve odağı kaybettirmemelidir.
 - Klavye ile bütün ana eylemlere ulaşılabilmelidir.
 - Odak sırası ve görünür odak göstergesi bulunmalıdır.
 - Metin ölçekleme ve yüksek DPI ekranlar desteklenmelidir.
 - Sayaç düğmelerinin erişilebilir adları olmalıdır.
-- Silme, import rollback ve büyük toplu değişikliklerde onay istenmelidir.
+- Silme, renk silme, görevi metne dönüştürme, oyun toplu tamamlama, temel renkleri geri yükleme ve import rollback işlemlerinde onay istenmelidir.
 - Türkçe karakterlerde büyük/küçük harf normalizasyonu doğru yapılmalıdır.
 - Uygulama metinleri kaynak dosyalarında tutulmalı, UI içine dağınık biçimde hardcode edilmemelidir.
 - İlk dil Türkçedir; yapı gelecekte başka dil eklemeyi engellememelidir.
@@ -932,6 +1312,13 @@ Linux’ta çalışan uygulama iskeletini, kalıcı domain modelini ve en riskli
 zincirine yazar; bu zincirin üst iki halkası yalnızca kullanıcı tarafından
 kurulduğu için oyun ve öge kurulumu onaydan önce gelmelidir.
 
+**Tarihsel not:** Faz 1 tamamlanmıştır ve yukarıdaki işler o zamanki modeli
+tarif eder. `Item` tablosu ve öge kurulumu akışı bu fazda gerçekten uygulanmıştır,
+fakat ürün modeli sonradan düzeltilmiştir: kullanıcıya gösterilen öge kavramı
+kaldırılmış, `Game → GameCell → CellSegment → Task` zinciri benimsenmiştir
+(`5.4`, `5.5`, `5.13`). Faz 1 kazanımları geçerli altyapıdır; yalnız öge ve
+alternatif renk yolları Faz 2'de kontrollü olarak sökülecektir.
+
 #### Faz 1 testleri
 
 - Veritabanı oluşturma ve yeniden açma
@@ -962,38 +1349,73 @@ kurulduğu için oyun ve öge kurulumu onaydan önce gelmelidir.
   onaylanmış görevler korunur.
 - Test ve lint kontrolleri başarılıdır.
 
-### Faz 2 — Üretim havuzları ve tam günlük kullanım
+### Faz 2 — Oyun tablosu, inline görevler ve üretim havuzları
 
 #### Amaç
 
-Uygulamanın Excel’den bağımsız olarak günlük üretim takibinde kullanılabilir hâle gelmesi.
+Uygulamanın Excel’den bağımsız olarak günlük üretim takibinde kullanılabilir hâle
+gelmesi. Kullanıcı bütün işini oyun tablosunda, hücrelerin içinde yapabilmelidir.
 
-#### İşler
+#### Uygulama sırası
 
-1. Ana sayfayı oyunlar üstte, havuz özetleri altta olacak şekilde tamamla.
-2. Oyun listesi ve oyun detay ekranını tamamla.
-3. Manuel tek görev ve toplu görev ekleme akışını oluştur.
-4. Global renk kataloğunu ve renk yönetimini uygula.
-5. Tek renk, renk varyantı, çok renkli ve alternatif renk davranışlarını uygula.
-6. Alternatif renk seçilmeden görevin renk havuzuna girmemesini sağla.
-7. 3D Baskı Havuzunu renk grupları ve ayrı çok-renkli bölümle tamamla.
-8. `Ana baskıyı tamamla`, `Eksik/hatalı bildir` ve `Eksik giderildi` eylemlerini uygula.
-9. Hata/eksik geçmişini ve isteğe bağlı notu uygula.
-10. Kart Havuzunu üç aşamalı sayaç ve açılır rozetle oluştur.
-11. Eksik kart adı/numarası kayıtlarını ekle.
-12. Mukavva Havuzunu üç aşamalı sayaç ve açılır rozetle oluştur.
-13. Özel Havuzu ve boşken gizlenme davranışını uygula.
-14. `MISSING`, `BORROWED`, `NEEDS_INFO`, `NEEDS_CLASSIFICATION` bayraklarını uygula.
-15. Arama, renk, durum ve havuz filtrelerini ekle.
-16. Tamamlanan görevlerin aktif havuzdan çıkmasını ve isteğe bağlı gösterilmesini sağla.
-17. Excel içe aktarma inceleme ekranını bütün havuz tipleriyle tamamla.
-18. CSV içe aktarma ve yapılandırılmış görev dışa aktarma ekle.
+Aşağıdaki sıra bağlayıcıdır. Her iş küçük, test edilebilir dikey dilimlere
+ayrılarak uygulanır; her dilim kendi otomatik testleri, körlük probları ve geçici
+XDG dizinleriyle yapılan manuel turuyla birlikte teslim edilir.
+
+1. PLAN'ı ve hedef veri modelini sabitle.
+2. Gerçek `pnp.db` dosyasının **salt okunur kopyasında** tablo doluluklarını ölç; göç maliyetini buna göre belirle.
+3. Artık geçersiz olan üretim yollarını kontrollü biçimde temizle: renk arşivleme, `Item` tabanlı görev oluşturma ve `ALTERNATIVE` renk ilişkisi.
+4. **Şema v4** — tablo/hücre/segment modeli ve renk sıralaması: `game_cells`, `cell_segments`, `task_colors.slot_index`, `colors.is_archived` kaldırılması, `items` tablosunun kaldırılması ve `tasks` bağlantısının `TaskSegment` üzerine alınması.
+5. **Şema v5** — görev tamamlanması, eksik sayaçları, aşamalar ve ilerleme olayları: `tasks.is_completed`/`completed_at`, 3D eksik sayacı, `task_stages`, `progress_events`.
+6. Oyun tablosunu ve üç global görünümü göster.
+7. Hücrede düz metin yazma.
+8. Metni tek renk göreve dönüştürme.
+9. Inline `TaskSegment` ve kelimeye çapalı popover.
+10. Çoklu görev toplu oluşturma.
+11. Tek öge çok renk ve grapheme bölmeli çizim.
+12. Basit renk seçici ve isimli özel renk oluşturma.
+13. Renk düzenleme, renk silme ve temel renkleri geri yükleme.
+14. Havuz yansımaları — dört havuzun salt okunur görünümleri.
+15. Görev tamamlanması ve eksik parça.
+16. Kart ve mukavva aşamaları.
+17. Oyun toplu tamamlama ve eksik parçada yeniden açılma.
+18. Excel içe aktarma verisini yeni hücre/segment modeline onaylı biçimde dönüştürme.
+
+Ek olarak Faz 2 içinde tamamlanacak yardımcı işler:
+
+- `MISSING`, `BORROWED`, `NEEDS_INFO`, `NEEDS_CLASSIFICATION` bayraklarını uygula.
+- Arama, renk, durum ve havuz filtrelerini ekle.
+- Tamamlanan görevlerin aktif havuzdan çıkmasını ve isteğe bağlı gösterilmesini sağla.
+- Özel Havuzu ve boşken gizlenme davranışını uygula.
+- Hata/eksik geçmişini ve isteğe bağlı notu uygula.
+- CSV içe aktarma ve yapılandırılmış görev dışa aktarma ekle.
 
 #### Faz 2 testleri
 
-- Renk varyantlarının ayrı sayaçları
-- Çok renkli görevin tek sayacı
-- Alternatif renkten tek seçim
+- Üç global tablo görünümünün doğru oyun kümelerini göstermesi
+- `Notlar` hücresinin görev veya havuz kaydı üretmemesi
+- Hücre parçalarının sıralı, boşluksuz ve örtüşmesiz kalması
+- Düz metin parçasının seçimden önce/görev/seçimden sonra biçiminde güvenli bölünmesi
+- Yan yana düz metin parçalarının birleştirilmesi
+- `TaskSegment`'in atomikliği: ortasından silinememesi
+- Görevi metne dönüştürmenin görevi silmesi fakat adının metin olarak kalması
+- Görevi metne dönüştürmenin başka görevleri etkilememesi
+- Çoklu görev oluşturmanın N bağımsız görev ve N bağımsız segment yazması
+- Çoklu görevle üretilen görevler arasında hiçbir ortak kimlik veya sayaç bulunmaması
+- Bir çoklu görevin tamamlanmasının diğerlerini etkilememesi
+- Tek öge çok renk görevinin tek görev, tek adet ve tek sayaç taşıması
+- Tek öge çok renk görevinin bütün renk havuzlarında aynı kimlikle görünmesi
+- Tek renk havuzunda tamamlanmanın görevi bütün havuzlardan çıkarması
+- Grapheme bölmesinin Türkçe karakterlerde doğru çalışması ve fazlalığı ilk parçalara dağıtması
+- Renksiz görevin silinmemesi ve `Renk seçilecek` bölümünde görünmesi
+- Adsız özel rengin kaydedilememesi ve göreve atanamaması
+- Renk adlarının Türkçe büyük/küçük harfe duyarsız benzersizliği
+- Renk silmenin görevleri ve oyunları koruması
+- Renk silmenin kalan `slotIndex` değerlerini `0…N-1` olarak sıkıştırması
+- Rengi kalmayan görevin `Renk seçilecek` durumuna geçmesi
+- Temel renkleri geri yüklemenin mevcut renklerin üzerine yazmaması
+- Temel renkleri geri yüklemenin çakışma varsa hiçbir seed yazmaması
+- Havuzların kopya görev yazmaması; havuzdan yapılan yazmanın aynı görev üzerinde gerçekleşmesi
 - Ana baskı tamamlanma durumu
 - Eksik miktar artırma ve azaltma
 - Failure event toplamı ve tekrar işleme koruması
@@ -1001,18 +1423,27 @@ Uygulamanın Excel’den bağımsız olarak günlük üretim takibinde kullanıl
 - Mukavva aşama invariantları
 - Eksik kart ayrıntılarının eklenmesi/çözülmesi
 - Hiç silinmemiş özel görev yokken Özel havuzun gizlenmesi
-- Oyun tamamlanması ile görev tamamlanmasının bağımsızlığı
+- Oyun toplu tamamlamanın bütün görev ve aşamaları kapsaması
+- Oyun toplu tamamlamanın kısmi sonuç bırakmaması
+- Bitmemiş iş yokken onay sorulmadan tamamlanması
+- Tamamlanmış oyunda eksik parça bildiriminin oyunu yeniden açması
+- Yeniden açılmanın diğer tamamlanmış görevleri etkilememesi
+- Tamamlanan görevin hücrede tikli ve üstü çizili kalması
 - Arama ve filtrelerin Türkçe karakterlerle çalışması
-- Tamamlanan görevin aktif havuzdan çıkması
 
 #### Faz 2 tamamlanma ölçütü
 
-- Kullanıcı Excel olmadan yeni oyun ve görev oluşturabilir.
-- Bütün dört havuz beklenen kurallarla çalışır.
-- 3D görevleri renklere göre doğru gruplandırılır.
+- Kullanıcı Excel olmadan yeni oyun satırı, hücre metni ve görev oluşturabilir.
+- Oyun tablosu üç global görünümde çalışır ve `Tümü` görünümünde tamamlanan oyunlar düzenlenebilir.
+- Görevler hücrenin içinde inline olarak görünür, tıklanabilir ve düzenlenebilir.
+- Üç oluşturma modu beklenen kayıtları üretir; çoklu görev hiçbir kalıcı bağ yazmaz.
+- Tek öge çok renk görevi bütün renk havuzlarında tek kimlikle görünür.
+- Bütün dört havuz beklenen kurallarla çalışır ve kopya görev üretmez.
+- Renk kataloğu isimli renklerle çalışır; renk silinebilir ve temel renkler geri yüklenebilir.
 - Kart ve mukavva üretimi aşamalarla takip edilir.
 - Eksik/hatalı 3D parçalar kaydedilip sonradan giderilebilir.
-- Tamamlanan görevler geçmişleri kaybolmadan aktif listeden çıkar.
+- Oyun toplu tamamlama ve eksik parçada yeniden açılma çalışır.
+- Tamamlanan görevler hücrede kalarak aktif havuzdan çıkar.
 - Referans Excel’deki karmaşık örnekler kullanıcı tarafından manuel olarak doğru görevlere dönüştürülebilir.
 
 ### Faz 3 — Güvenilirlik, yedekleme ve Linux sürümü
@@ -1064,7 +1495,7 @@ Kişisel kullanımda veri kaybı riski düşük, test edilmiş ve Garuda Linux�
 
 ## 19. Referans kabul senaryoları
 
-### Senaryo 1 — Harmonies renk varyantları
+### Senaryo 1 — Harmonies çoklu görev
 
 Kaynak:
 
@@ -1076,7 +1507,9 @@ Kaynak:
 
 Beklenti:
 
-- Kullanıcı ham bloktan renk başına ayrı token görevleri oluşturabilir.
+- Kullanıcı hücredeki metinden `Çoklu görev` moduyla renk başına ayrı token görevleri oluşturabilir.
+- Oluşan görevler tamamen bağımsızdır; aralarında üst görev, grup veya ortak sayaç bulunmaz.
+- Hücrede `Token ×15   Token ×19   Token ×19 …` biçiminde yan yana ayrı görevler görünür.
 - `**` görülen ifadeler tamamlanmış görev ipucu alır.
 - Turuncu küçük küp ve beyaz küp ayrı görev olabilir.
 - Tamamlanma ipuçları kullanıcı tarafından değiştirilebilir.
@@ -1092,12 +1525,13 @@ MAVİ** KIRMIZI** YEŞİL** SARI** SİYAH** RENKLERDE
 
 Beklenti:
 
-- Ham metin korunur.
+- Ham metin düz metin parçası olarak korunur.
 - Kullanıcı tren, istasyon ve daire tokenlerini ayrı görevler olarak oluşturabilir.
-- Her görev renk varyantlarına ayrılabilir.
+- Her biri `Çoklu görev` moduyla renk başına bağımsız görevlere ayrılabilir.
 - Uygulama otomatik ve geri döndürülemez biçimde 15 görev üretmez; kullanıcı onayı gerekir.
+- Kullanıcı yanlış oluşturduğu bir görevi `Görevi metne dönüştür` ile geri alabilir; kelime metne döner.
 
-### Senaryo 3 — Alternatif renk
+### Senaryo 3 — Belirsiz renk ifadesi ve renksiz görev
 
 Kaynak:
 
@@ -1107,11 +1541,13 @@ Kaynak:
 
 Beklenti:
 
-- Mavi ve Açık Mavi alternatiflerdir.
-- Kullanıcı bir renk seçmeden görev renk grubuna girmez.
-- Seçim değiştirilebilir ve görev yeni renk grubuna taşınır.
+- `Mavi/Açık Mavi` ham metin olarak korunur ve kullanıcıya yalnızca ipucu olur.
+- Uygulama bundan bir renk ilişkisi türetmez; `ALTERNATIVE` ilişkisi yoktur.
+- Kullanıcı görevi oluştururken kesin rengi seçer.
+- Kesin renk seçilmezse görev renksiz kalır, `Renk seçilecek` bölümünde görünür ve renk havuzlarına girmez.
+- Kullanıcı sonradan rengi seçtiğinde görev ilgili renk grubuna girer.
 
-### Senaryo 4 — Tek çok renkli model
+### Senaryo 4 — Tek öge çok renk
 
 Kaynak:
 
@@ -1121,8 +1557,11 @@ RESEARCH STATION BEYAZ KAHVERENGİ
 
 Beklenti:
 
-- Kullanıcı bunu tek görev ve iki zorunlu renk olarak tanımlayabilir.
-- Tek gerekli adet ve tek eksik/hata sayacı vardır.
+- Kullanıcı bunu `Tek öge çok renk` moduyla tek görev ve iki sıralı zorunlu renk olarak tanımlayabilir.
+- Tek `Task`, tek `TaskSegment`, tek gerekli adet ve tek eksik/hata sayacı vardır.
+- Görev hem Beyaz hem Kahverengi havuzunda görünür; her ikisi de aynı görev kimliğine işaret eder.
+- Beyaz havuzunda tamamlanınca Kahverengi havuzundan da çıkar.
+- Görev adı iki renk parçasına bölünerek çizilir; bölme grapheme kümeleri üzerindendir.
 - Alt parça kaydı oluşturulmaz.
 
 ### Senaryo 5 — Oyun tamamlanması bağımsızdır
@@ -1130,6 +1569,43 @@ Beklenti:
 - Oyun içe aktarımda yeşil görünür ve kullanıcı tamamlanma ipucunu kabul eder.
 - Oyunun aktif 3D görevi bulunabilir.
 - Oyun tamamlandı kalırken görev 3D havuzunda görünmeye devam eder.
+- Bütün görevler bitse bile oyun kendiliğinden tamamlanmaz.
+
+### Senaryo 5b — Oyun toplu tamamlama
+
+- Oyunda iki bitmemiş 3D görevi ve bir yarım kart hattı vardır.
+- Kullanıcı oyun satırındaki tamamlanma tikine basar.
+- Uygulama `Tüm görevler tamamlandı mı?` diye sorar.
+- Kullanıcı hayır derse hiçbir şey değişmez.
+- Kullanıcı evet derse tek transaction içinde iki 3D görevi, kartın üç aşaması ve varsa diğer bütün işler tamamlanır; ardından oyun tamamlanmış işaretlenir ve satır yeşile döner.
+- Oyun `Devam Eden` görünümünden çıkar, `Tamamlanan` ve `Tümü` görünümlerinde kalır.
+
+### Senaryo 5c — Eksik parçada yeniden açılma
+
+- Yukarıdaki oyun tamamlanmış durumdadır ve satırı yeşildir.
+- Kullanıcı tamamlanmış bir 3D görevinde `Eksik parça` ile 2 bildirir.
+- Görev yeniden tamamlanmamış olur ve aktif 3D havuzuna döner.
+- Oyunun tamamlanma işareti kalkar, `completedAt` temizlenir, satır yeşilden çıkar ve oyun `Devam Eden` görünümüne döner.
+- Oyunun diğer tamamlanmış görevleri yeniden açılmaz.
+
+### Senaryo 5d — Görevi metne dönüştürme
+
+- Hücrede `Token ×14` görevi bulunur.
+- Kullanıcı görev popover'ından `Görevi metne dönüştür` seçer ve onaylar.
+- `TaskSegment` kaldırılır, aynı konumda `Token` düz metin olarak kalır.
+- Görev kaydı, renk ilişkileri, aşamaları ve havuz yansımaları kaldırılır.
+- Aynı hücredeki diğer görevler etkilenmez.
+- Yan yana kalan düz metin parçaları birleştirilir.
+
+### Senaryo 5e — Renk silme
+
+- `Gri` rengi üç görevde kullanılmaktadır; biri tek öge çok renk görevidir.
+- Kullanıcı rengi silmek ister; uygulama ilişkili görev sayısını göstererek uyarır.
+- Kullanıcı onaylar.
+- Tek transaction içinde renk ilişkileri ve alias'ları kaldırılır, renk fiziksel olarak silinir.
+- Üç görevin hiçbiri silinmez.
+- Tek renkli iki görev `Renk seçilecek` durumuna geçer.
+- Tek öge çok renk görevinden yalnız `Gri` kalkar; kalan renklerin `slotIndex` değerleri sıkıştırılır ve kelime kalan renklere yeniden bölünür.
 
 ### Senaryo 6 — 3D eksik/hatalı baskı
 
@@ -1180,8 +1656,11 @@ Beklenti:
 ### Birim testleri
 
 - Domain durum hesapları
-- Renk normalizasyonu
-- Alternatif/çok renkli kuralları
+- Renk normalizasyonu ve Türkçe duyarsız benzersizlik
+- Tek renk / çoklu görev / tek öge çok renk kuralları
+- Renksiz görev davranışı
+- Grapheme bölmesi ve fazlalık dağıtımı
+- Hücre parça listesi invariantları ve birleştirme
 - 3D eksik ve failure event hesapları
 - Kart/mukavva aşama invariantları
 - Oyun ve görev tamamlanmasının bağımsızlığı
@@ -1198,18 +1677,25 @@ Beklenti:
 
 ### Entegrasyon testleri
 
-- Excel → RawImportBlock → DraftTask → Task
+- Excel → RawImportBlock → DraftTask → Task → TaskSegment
 - Import rollback
 - Yedek → temiz veritabanı → geri yükle
-- Tamamlanan görevin aktif havuz sorgusundan çıkması
+- Tamamlanan görevin aktif havuz sorgusundan çıkması ve hücrede kalması
+- Oyun toplu tamamlama ve eksik parçada yeniden açılma
+- Renk silme sonrası görevlerin korunması
 
 ### UI testleri
 
+- Oyun tablosu ve üç global görünüm
 - Ana sayfa havuz özetleri
 - Özel havuzun koşullu görünmesi
-- Renk seçimi gereken görev
+- Inline `TaskSegment` görünümü, tik ve üstü çizili metin
+- Kelimeye çapalı popover
+- `Renk seçilecek` görev bölümü
+- Renk çarkı ve isim zorunluluğu
 - Açılır kart/mukavva rozeti
-- Eksik/hatalı bildir popover/dialog
+- Eksik/hatalı bildir popover
+- Tamamlanmış oyunun yeşil satırı
 - Büyük metin ve klavye odağı
 
 ### Her fazda çalıştırılacak kontroller
@@ -1292,20 +1778,27 @@ içermelidir.
 
 - Garuda Linux’ta temiz kurulumdan açılır.
 - İnternet olmadan bütün ana işlevler çalışır.
-- Oyunlar ve dört havuz tanımlanan kurallara uyar.
+- Oyun tablosu ve üç global görünüm tanımlanan kurallara uyar.
+- Oyunlar ve dört havuz tanımlanan kurallara uyar; havuzlar kopya görev üretmez.
 - Hiç silinmemiş özel görev yokken Özel havuz görünmez.
 - 3D görevleri renklere doğru gruplanır.
-- Renk varyantı, çok renkli ve alternatif renk ayrımı çalışır.
+- Tek renk, çoklu görev ve tek öge çok renk ayrımı çalışır; çoklu görev hiçbir kalıcı bağ yazmaz.
+- Renksiz görev `Renk seçilecek` bölümünde görünür ve kaybolmaz.
 - Ayrı fiziksel parça modeli bulunmaz.
+- Oyun ve renk arşivi bulunmaz.
 - 3D görevlerinde ana baskı, eksik/hatalı bildirim ve eksik giderme çalışır.
 - Kartlar Basıldı → Lamine Edildi → Kesildi hattıyla takip edilir.
 - Mukavva işleri Basıldı → Yapıştırıldı → Kesildi hattıyla takip edilir.
-- Oyun tamamlanması görevlerden bağımsızdır.
+- Oyun tamamlanması görevlerden bağımsız bir kullanıcı kararıdır; toplu tamamlama bütün görev ve aşamaları kapsar.
+- Tamamlanmış oyunda eksik parça bildirimi oyunu yeniden açar.
+- Renkler isimlidir; adsız renk oluşturulamaz.
+- 12 temel renk düzenlenebilir ve silinebilir; `Temel renkleri geri yükle` çalışır.
+- Renk silmek görevleri ve oyunları korur.
 - Excel’deki bütün dolu hücreler ham kaynak olarak korunur.
-- Kullanıcı ham hücreleri elle görevlere ayırabilir.
-- `**`, yeşil hücre ve alternatif renk ipuçları kullanıcı onayıyla işlenir.
+- Kullanıcı hücre metnini seçerek elle görevlere ayırabilir ve bir görevi metne geri döndürebilir.
+- `**`, yeşil hücre ve belirsiz renk ipuçları kullanıcı onayıyla işlenir.
 - Bilinmeyen renk/adet ve sınıflandırılmamış işler kaybolmaz.
-- Tamamlanan görev aktif havuzdan çıkar, oyun ve geçmişte kalır.
+- Tamamlanan görev aktif havuzdan çıkar; hücrede tikli ve üstü çizili kalır, oyun ve geçmişte durur.
 - JSON yedekleme ve geri yükleme doğrulanmıştır.
 - Şema migrationları testlidir.
 - Kritik domain, veritabanı ve UI testleri geçer.
