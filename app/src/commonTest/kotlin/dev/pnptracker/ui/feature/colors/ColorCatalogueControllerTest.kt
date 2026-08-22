@@ -143,6 +143,29 @@ class ColorCatalogueControllerTest {
     }
 
     @Test
+    fun `giving up on the form takes the refusal down with it`() {
+        val catalogue = FakeCatalogue()
+        catalogue.colors.value = listOf(aColor("Gri", "#808080"))
+        catalogue.failWith = ColorSetupFailure.NAME_ALREADY_USED
+        withCatalogue(catalogue) { controller ->
+            val before = assertIs<ColorCatalogueState.Content>(controller.state.catalogue).colors
+            controller.fillIn(name = "GRİ", hex = "#1A237E")
+            controller.save()
+            assertEquals(ColorSetupFailure.NAME_ALREADY_USED, controller.state.failure, "the refusal was never shown")
+
+            controller.cancelComposer()
+
+            assertNull(controller.state.composer, "the form stayed open")
+            assertNull(
+                controller.state.failure,
+                "the refusal outlived the form it belonged to, so it now sits above a form that is not there",
+            )
+            assertEquals(before, assertIs<ColorCatalogueState.Content>(controller.state.catalogue).colors)
+            assertEquals(0, catalogue.created.size, "giving up wrote a colour")
+        }
+    }
+
+    @Test
     fun `a blank name cannot be saved and writes nothing`() {
         val catalogue = FakeCatalogue()
         withCatalogue(catalogue) { controller ->

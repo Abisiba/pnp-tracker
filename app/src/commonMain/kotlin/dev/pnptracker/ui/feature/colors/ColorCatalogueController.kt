@@ -61,9 +61,15 @@ class ColorCatalogueController(
         state = state.copy(composer = composer.copy(colorsSharingHex = sharing))
     }
 
-    /** Changes nothing anywhere; the colour was never written. */
+    /**
+     * Changes nothing anywhere; the colour was never written.
+     *
+     * A refusal belongs to the form that earned it, so it goes when the form
+     * goes. Left behind, it would sit above a form that is not there any more and
+     * describe an attempt the user had already abandoned.
+     */
     fun cancelComposer() {
-        state = state.copy(composer = null)
+        state = state.copy(composer = null, failure = null)
     }
 
     /**
