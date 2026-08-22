@@ -83,7 +83,7 @@ class Migration2To3Test {
                 val item = database.itemDao().allItemsIncludingDeleted().single()
                 val task = assertNotNull(database.taskDao().taskByIdIncludingArchivedAndDeleted(taskId))
                 val taskColors = database.taskColorDao().colorsOfTask(taskId)
-                val colors = database.colorDao().allColorsIncludingArchived()
+                val colors = database.colorDao().allColors()
 
                 assertEquals(gameId, game.id)
                 assertEquals("Harmonies", game.name)
@@ -194,7 +194,7 @@ class Migration2To3Test {
                 assertNull(game.sourceImportBatchId)
                 assertEquals(itemId, item.id)
                 assertEquals(gameId, item.gameId)
-                assertEquals(12, database.colorDao().allColorsIncludingArchived().size)
+                assertEquals(12, database.colorDao().allColors().size)
                 listOf("colors", "color_aliases", "tasks", "task_colors", "import_batches", "raw_import_blocks", "draft_tasks")
                     .forEach { assertContains(tables, it) }
             } finally {

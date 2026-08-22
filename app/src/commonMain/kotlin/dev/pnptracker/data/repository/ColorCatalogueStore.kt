@@ -16,18 +16,20 @@ import kotlinx.coroutines.flow.map
 /**
  * The global colour catalogue, and adding to it.
  *
- * The catalogue is never empty: a database is created with the colours the plan
- * starts everyone off with, so there is no "nothing here yet" case to handle.
+ * A new database is created with the colours the plan starts everyone off with,
+ * so the catalogue arrives full. It is not guaranteed to stay that way: every
+ * colour, the seeded ones included, can be removed, so an empty catalogue is a
+ * state this path may hand on.
  *
  * Nothing on this path touches a task. A colour exists in its own right, and
  * what a task is produced in is decided elsewhere.
  */
 interface ColorCatalogue {
-    /** Every colour still offered, in the order the user put them in. */
+    /** Every colour, in the order the user put them in. */
     fun observeColors(): Flow<List<ColorSummary>>
 
     /**
-     * The colours already written in [hex], including archived ones.
+     * The colours already written in [hex].
      *
      * For telling the user that a value is taken, which is a remark and not a
      * refusal: two colours may share a value.
@@ -54,7 +56,7 @@ class ColorCatalogueStore(
     private val colorDao: ColorDao,
     private val idGenerator: IdGenerator = IdGenerator.Random,
 ) : ColorCatalogue {
-    override fun observeColors(): Flow<List<ColorSummary>> = colorDao.observeActiveColors().map { colors -> colors.map(::summaryOf) }
+    override fun observeColors(): Flow<List<ColorSummary>> = colorDao.observeColors().map { colors -> colors.map(::summaryOf) }
 
     override suspend fun colorsUsingHex(hex: String): List<ColorSummary> =
         if (!isValidColorHex(hex)) emptyList() else colorDao.colorsWithHex(hex).map(::summaryOf)

@@ -15,7 +15,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 /** The colour catalogue of a database created fresh at version 2. */
 class ColorCatalogueTest {
@@ -40,7 +39,7 @@ class ColorCatalogueTest {
     @Test
     fun `a fresh database is seeded with the twelve colors in order`() =
         runBlocking<Unit> {
-            val colors = database.colorDao().activeColors()
+            val colors = database.colorDao().allColors()
 
             assertEquals(12, colors.size)
             assertEquals(
@@ -68,11 +67,11 @@ class ColorCatalogueTest {
     @Test
     fun `reopening a fresh database does not repeat the seed`() =
         runBlocking<Unit> {
-            database.colorDao().activeColors()
+            database.colorDao().allColors()
             database.close()
             database = DatabaseFactory().open(directory.databaseFile)
 
-            assertEquals(12, database.colorDao().allColorsIncludingArchived().size)
+            assertEquals(12, database.colorDao().allColors().size)
         }
 
     @Test
@@ -143,22 +142,12 @@ class ColorCatalogueTest {
             assertEquals(emptyList(), database.colorDao().aliasesOf(red.id))
         }
 
+    // The two tests below pin what the v3 foreign keys do, not what the product
+    // promises. PLAN 5.9 has the user delete a colour outright: the relations are
+    // removed first and the tasks survive without one. That flow arrives with the
+    // v4 slice; until it does, a bare DELETE is still refused, and these say so.
     @Test
-    fun `an archived color leaves the active catalogue but still resolves`() =
-        runBlocking<Unit> {
-            val pink = assertNotNull(database.colorDao().resolve("Pembe"))
-
-            assertEquals(1, database.colorDao().archive(pink.id))
-
-            assertEquals(11, database.colorDao().activeColors().size)
-            assertTrue(database.colorDao().activeColors().none { it.id == pink.id })
-            assertEquals(12, database.colorDao().allColorsIncludingArchived().size)
-            assertTrue(assertNotNull(database.colorDao().colorById(pink.id)).isArchived)
-            assertEquals(pink.id, assertNotNull(database.colorDao().resolve("pembe")).id)
-        }
-
-    @Test
-    fun `a color that is used by a task cannot be hard deleted`() =
+    fun `the current schema refuses a bare delete of a color a task uses`() =
         runBlocking<Unit> {
             val grey = assertNotNull(database.colorDao().resolve("Gri"))
             val task = insertGameItemAndTask(database)
@@ -179,7 +168,7 @@ class ColorCatalogueTest {
         }
 
     @Test
-    fun `a color that owns an alias cannot be hard deleted`() =
+    fun `the current schema refuses a bare delete of a color that owns an alias`() =
         runBlocking<Unit> {
             val purple = assertNotNull(database.colorDao().resolve("Mor"))
             database.colorDao().addAlias(purple.id, "Lila")

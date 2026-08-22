@@ -126,7 +126,7 @@ class Migration1To2Test {
             val first = DatabaseFactory().open(directory.databaseFile)
             val seeded =
                 try {
-                    first.colorDao().allColorsIncludingArchived()
+                    first.colorDao().allColors()
                 } finally {
                     first.close()
                 }
@@ -141,7 +141,7 @@ class Migration1To2Test {
 
             val second = DatabaseFactory().open(directory.databaseFile)
             try {
-                assertEquals(12, second.colorDao().allColorsIncludingArchived().size)
+                assertEquals(12, second.colorDao().allColors().size)
                 assertEquals(
                     "Açık Mavi",
                     assertNotNull(second.colorDao().colorByNormalizedName("açik mavi")).canonicalName,

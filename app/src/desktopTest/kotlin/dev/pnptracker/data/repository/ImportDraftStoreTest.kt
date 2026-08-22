@@ -193,7 +193,7 @@ class ImportDraftStoreTest {
             assertEquals(0, database.gameDao().activeCount())
             assertEquals(emptyList(), database.itemDao().allItemsIncludingDeleted())
             assertEquals(emptyList(), database.taskDao().allTasksIncludingArchivedAndDeleted())
-            assertEquals(12, database.colorDao().allColorsIncludingArchived().size, "the seed colours are untouched")
+            assertEquals(12, database.colorDao().allColors().size, "the seed colours are untouched")
         }
 
     @Test

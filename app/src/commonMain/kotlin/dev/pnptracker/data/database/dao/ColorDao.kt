@@ -16,8 +16,9 @@ import kotlinx.coroutines.flow.Flow
 /**
  * Reads and writes the color catalogue.
  *
- * Colors are never removed: one that is still referenced by a task is archived,
- * which takes it out of the pick list while leaving existing relations alone.
+ * Every colour in the table is offered. There is no hidden half of the
+ * catalogue and nothing here filters one out, so what a query returns is the
+ * whole of what the user has.
  */
 @Dao
 interface ColorDao {
@@ -27,25 +28,24 @@ interface ColorDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertAlias(alias: ColorAliasEntity)
 
-    @Query("SELECT * FROM colors WHERE is_archived = 0 ORDER BY sort_order")
-    suspend fun activeColors(): List<ColorEntity>
+    /**
+     * The whole catalogue, in the order the user put it in.
+     *
+     * `id` last keeps the list from reshuffling when two colours were given the
+     * same place.
+     */
+    @Query("SELECT * FROM colors ORDER BY sort_order, id")
+    suspend fun allColors(): List<ColorEntity>
 
     /**
      * The catalogue as the colour section lists it.
      *
-     * Archived colours stay out: they are still resolvable for rows written
-     * earlier, but they are no longer offered. `id` last keeps the list from
-     * reshuffling when two colours were given the same place.
+     * The same rows [allColors] returns, as a stream.
      */
-    @Query("SELECT * FROM colors WHERE is_archived = 0 ORDER BY sort_order, id")
-    fun observeActiveColors(): Flow<List<ColorEntity>>
+    @Query("SELECT * FROM colors ORDER BY sort_order, id")
+    fun observeColors(): Flow<List<ColorEntity>>
 
-    /**
-     * Where a new colour goes: after everything already in the catalogue.
-     *
-     * Archived colours count too, so unarchiving one can never collide with a
-     * place that has since been handed out.
-     */
+    /** Where a new colour goes: after everything already in the catalogue. */
     @Query("SELECT COALESCE(MAX(sort_order), -1) + 1 FROM colors")
     suspend fun nextSortOrder(): Int
 
@@ -58,9 +58,6 @@ interface ColorDao {
      */
     @Query("SELECT * FROM colors WHERE UPPER(hex) = UPPER(:hex) ORDER BY sort_order, id")
     suspend fun colorsWithHex(hex: String): List<ColorEntity>
-
-    @Query("SELECT * FROM colors ORDER BY sort_order")
-    suspend fun allColorsIncludingArchived(): List<ColorEntity>
 
     @Query("SELECT * FROM colors WHERE id = :id")
     suspend fun colorById(id: EntityId): ColorEntity?
@@ -80,16 +77,9 @@ interface ColorDao {
     @Query("SELECT * FROM color_aliases WHERE color_id = :colorId ORDER BY normalized_alias")
     suspend fun aliasesOf(colorId: EntityId): List<ColorAliasEntity>
 
-    @Query("UPDATE colors SET is_archived = 1 WHERE id = :id")
-    suspend fun archive(id: EntityId): Int
-
-    @Query("UPDATE colors SET is_archived = 0 WHERE id = :id")
-    suspend fun unarchive(id: EntityId): Int
-
     /**
      * Resolves what the user typed to a color, matching the canonical name first
-     * and then the aliases. Archived colors still resolve, because rows written
-     * earlier must keep making sense.
+     * and then the aliases.
      */
     @Transaction
     suspend fun resolve(term: String): ColorEntity? {

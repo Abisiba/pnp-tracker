@@ -104,14 +104,14 @@ class ColorCatalogueStoreTest {
     @Test
     fun `the four ways of typing an existing name are all refused`() =
         runBlocking {
-            val before = database.colorDao().allColorsIncludingArchived()
+            val before = database.colorDao().allColors()
 
             listOf("GRİ", "Gri", "gri", "GRI").forEach { attempt ->
                 val refusal = assertFailsWith<ColorSetupException> { store.createColor(attempt, "#123456") }
                 assertEquals(ColorSetupFailure.NAME_ALREADY_USED, refusal.failure, "'$attempt' was not seen as Gri")
             }
 
-            assertEquals(before, database.colorDao().allColorsIncludingArchived(), "a refused name still changed a row")
+            assertEquals(before, database.colorDao().allColors(), "a refused name still changed a row")
         }
 
     @Test
@@ -119,29 +119,29 @@ class ColorCatalogueStoreTest {
         runBlocking {
             val gri = assertNotNull(database.colorDao().colorByNormalizedName("gri"))
             database.colorDao().addAlias(gri.id, "Gri Ton")
-            val before = database.colorDao().allColorsIncludingArchived()
+            val before = database.colorDao().allColors()
 
             val refusal = assertFailsWith<ColorSetupException> { store.createColor("gri ton", "#123456") }
 
             assertEquals(ColorSetupFailure.NAME_IS_ANOTHER_COLORS_ALIAS, refusal.failure)
-            assertEquals(before, database.colorDao().allColorsIncludingArchived())
+            assertEquals(before, database.colorDao().allColors())
             assertEquals(gri.id, assertNotNull(database.colorDao().resolve("Gri Ton")).id, "the alias was disturbed")
         }
 
     @Test
     fun `a blank name is refused as a broken rule rather than a saving problem`() =
         runBlocking {
-            val before = database.colorDao().allColorsIncludingArchived()
+            val before = database.colorDao().allColors()
 
             assertFailsWith<IllegalArgumentException> { store.createColor("   ", "#1A237E") }
 
-            assertEquals(before, database.colorDao().allColorsIncludingArchived())
+            assertEquals(before, database.colorDao().allColors())
         }
 
     @Test
     fun `a value that is not written as RRGGBB is refused and nothing is written`() =
         runBlocking {
-            val before = database.colorDao().allColorsIncludingArchived()
+            val before = database.colorDao().allColors()
 
             listOf("1A237E", "#1A237", "#1A237EE", "#GGGGGG", "").forEach { attempt ->
                 assertFailsWith<IllegalArgumentException>("'$attempt' was accepted") {
@@ -149,7 +149,7 @@ class ColorCatalogueStoreTest {
                 }
             }
 
-            assertEquals(before, database.colorDao().allColorsIncludingArchived())
+            assertEquals(before, database.colorDao().allColors())
         }
 
     @Test
@@ -187,26 +187,13 @@ class ColorCatalogueStoreTest {
         }
 
     @Test
-    fun `an archived colour leaves the catalogue but still resolves`() =
+    fun `every seeded colour is offered, because nothing hides one`() =
         runBlocking {
             val gri = assertNotNull(database.colorDao().colorByNormalizedName("gri"))
 
-            assertEquals(1, database.colorDao().archive(gri.id))
-
-            assertTrue(catalogue().none { it.id == gri.id }, "an archived colour is still being offered")
-            assertEquals(11, catalogue().size)
-            assertEquals(gri.id, assertNotNull(database.colorDao().resolve("GRİ")).id, "an old row lost its colour")
-        }
-
-    @Test
-    fun `an archived colour keeps its place, so unarchiving cannot collide`() =
-        runBlocking {
-            val gri = assertNotNull(database.colorDao().colorByNormalizedName("gri"))
-            database.colorDao().archive(gri.id)
-
-            val added = assertNotNull(database.colorDao().colorById(store.createColor("Lacivert", "#1A237E")))
-
-            assertEquals(12, added.sortOrder, "the archived colour's place was handed out again")
+            assertEquals(12, catalogue().size)
+            assertTrue(catalogue().any { it.id == gri.id }, "a seeded colour was left out of the catalogue")
+            assertEquals(catalogue().map { it.id }, database.colorDao().allColors().map { it.id })
         }
 
     @Test
@@ -225,23 +212,18 @@ class ColorCatalogueStoreTest {
         }
 
     @Test
-    fun `reopening never takes back what the user did to a seeded colour`() =
+    fun `reopening a catalogue the user has added to does not run the seed again`() =
         runBlocking {
-            val gri = assertNotNull(database.colorDao().colorByNormalizedName("gri"))
-            // The only edits this slice can make to a seeded row; renaming arrives
-            // later, and the seed must not undo that either.
-            assertEquals(1, database.colorDao().archive(gri.id))
+            val seeded = database.colorDao().allColors()
             store.createColor("Lacivert", "#1A237E")
 
             database.close()
             database = DatabaseFactory().open(directory.databaseFile)
             store = ColorCatalogueStore(database.colorDao())
 
-            assertTrue(
-                assertNotNull(database.colorDao().colorById(gri.id)).isArchived,
-                "reopening brought an archived colour back",
-            )
-            assertEquals(13, database.colorDao().allColorsIncludingArchived().size, "the seed ran a second time")
+            val reopened = database.colorDao().allColors()
+            assertEquals(13, reopened.size, "the seed ran a second time")
+            assertEquals(seeded, reopened.take(seeded.size), "reopening rewrote a seeded colour")
         }
 
     @Test

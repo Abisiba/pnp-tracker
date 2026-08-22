@@ -7,9 +7,10 @@ import dev.pnptracker.domain.rules.isValidColorHex
 /**
  * Where the colour catalogue is.
  *
- * There is no "nothing here yet" case, and that is not an omission: a database is
- * created with the colours the plan starts everyone off with, so an empty
- * catalogue would be a state the application cannot produce.
+ * An empty catalogue is [Content] with nothing in it rather than a case of its
+ * own. A new database arrives with the colours the plan starts everyone off
+ * with, but every one of them can be removed, so the screen has to be able to
+ * show a catalogue with nothing left in it.
  */
 sealed interface ColorCatalogueState {
     data object Loading : ColorCatalogueState
@@ -30,7 +31,7 @@ data class ColorComposer(
     val name: String = "",
     val hex: String = "",
     /**
-     * The colours already written in this value, archived ones included.
+     * The colours already written in this value.
      *
      * A remark rather than a refusal: two colours are allowed to share a value,
      * so this never stops a save.

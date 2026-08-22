@@ -12,8 +12,8 @@ import dev.pnptracker.domain.rules.requireValidColorHex
  * A color in the global catalogue.
  *
  * [canonicalName] is what the user sees and types; [normalizedName] is what the
- * application matches on. A color that is still used by a task is archived rather
- * than deleted, which is why there is no `deletedAt` here.
+ * application matches on. A colour the user removes is deleted outright, which
+ * is why there is no `deletedAt` here.
  */
 @Entity(
     tableName = "colors",
@@ -31,6 +31,13 @@ data class ColorEntity(
     val hex: String,
     @ColumnInfo(name = "sort_order")
     val sortOrder: Int,
+    /**
+     * Left over from the archiving the product no longer has.
+     *
+     * Nothing reads it and nothing sets it to anything but `false`. The column
+     * goes with the v4 schema, which is the first point a column can be dropped;
+     * until then the field has to stay for Room to match the table.
+     */
     @ColumnInfo(name = "is_archived", defaultValue = "0")
     val isArchived: Boolean = false,
 ) {
