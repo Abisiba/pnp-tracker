@@ -7,6 +7,8 @@ import dev.pnptracker.domain.model.HintDecision
 import dev.pnptracker.domain.model.ImportBatchStatus
 import dev.pnptracker.domain.model.ImportSourceFormat
 import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.model.ProductionStage
+import dev.pnptracker.domain.model.ProgressEventKind
 import dev.pnptracker.domain.model.SegmentKind
 import dev.pnptracker.domain.model.SourceColumnType
 import dev.pnptracker.domain.model.TrackingMode
@@ -77,6 +79,18 @@ object DatabaseConverters {
 
     @ColumnTypeConverter
     fun textToSourceColumnType(name: String): SourceColumnType = SourceColumnType.valueOf(name)
+
+    @ColumnTypeConverter
+    fun productionStageToText(stage: ProductionStage): String = stage.name
+
+    @ColumnTypeConverter
+    fun textToProductionStage(name: String): ProductionStage = ProductionStage.valueOf(name)
+
+    @ColumnTypeConverter
+    fun progressEventKindToText(kind: ProgressEventKind): String = kind.name
+
+    @ColumnTypeConverter
+    fun textToProgressEventKind(name: String): ProgressEventKind = ProgressEventKind.valueOf(name)
 
     @ColumnTypeConverter
     fun hintDecisionToText(decision: HintDecision): String = decision.name

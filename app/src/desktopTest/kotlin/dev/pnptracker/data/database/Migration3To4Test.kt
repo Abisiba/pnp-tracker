@@ -99,7 +99,7 @@ class Migration3To4Test {
     private fun rows(table: String) = CommittedSchema.countRowsOf(directory.databaseFile, table)
 
     @Test
-    fun `a seeded version 3 database reaches version 4`() =
+    fun `a seeded version 3 database reaches the current version`() =
         runBlocking<Unit> {
             createSeededVersion3Database()
             assertEquals(3L, version(), "the fixture is not a version 3 database")
@@ -109,7 +109,7 @@ class Migration3To4Test {
                 // Room opens the file on first use, so the migration has not run
                 // until something is actually read.
                 assertEquals(emptyList(), database.taskDao().allTasksIncludingDeleted())
-                assertEquals(4L, version())
+                assertEquals(5L, version())
             } finally {
                 database.close()
             }
@@ -238,7 +238,7 @@ class Migration3To4Test {
             assertNull(draft.targetCellId, "a target survived that can no longer be meant")
             assertNull(draft.materializedTaskId)
 
-            assertEquals(4, version())
+            assertEquals(5, version())
             assertEquals(12, rows("colors"))
             assertEquals(0, rows("game_cells"))
             assertEquals(0, rows("cell_segments"))
@@ -304,7 +304,7 @@ class Migration3To4Test {
         }
 
     @Test
-    fun `a database created straight at version 4 opens and reopens`() =
+    fun `a database created straight at the current version opens and reopens`() =
         runBlocking<Unit> {
             val first = DatabaseFactory().open(directory.databaseFile)
             val seeded =
@@ -313,7 +313,7 @@ class Migration3To4Test {
                 } finally {
                     first.close()
                 }
-            assertEquals(4L, version())
+            assertEquals(5L, version())
 
             val second = DatabaseFactory().open(directory.databaseFile)
             try {

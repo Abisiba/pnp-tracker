@@ -13,6 +13,7 @@ import dev.pnptracker.data.database.dao.GameDao
 import dev.pnptracker.data.database.dao.ImportDao
 import dev.pnptracker.data.database.dao.TaskColorDao
 import dev.pnptracker.data.database.dao.TaskDao
+import dev.pnptracker.data.database.dao.TaskProgressDao
 import dev.pnptracker.data.database.entity.CellSegmentEntity
 import dev.pnptracker.data.database.entity.ColorAliasEntity
 import dev.pnptracker.data.database.entity.ColorEntity
@@ -20,9 +21,11 @@ import dev.pnptracker.data.database.entity.DraftTaskEntity
 import dev.pnptracker.data.database.entity.GameCellEntity
 import dev.pnptracker.data.database.entity.GameEntity
 import dev.pnptracker.data.database.entity.ImportBatchEntity
+import dev.pnptracker.data.database.entity.ProgressEventEntity
 import dev.pnptracker.data.database.entity.RawImportBlockEntity
 import dev.pnptracker.data.database.entity.TaskColorEntity
 import dev.pnptracker.data.database.entity.TaskEntity
+import dev.pnptracker.data.database.entity.TaskStageEntity
 
 @Database(
     entities = [
@@ -33,11 +36,13 @@ import dev.pnptracker.data.database.entity.TaskEntity
         ColorAliasEntity::class,
         TaskEntity::class,
         TaskColorEntity::class,
+        TaskStageEntity::class,
+        ProgressEventEntity::class,
         ImportBatchEntity::class,
         RawImportBlockEntity::class,
         DraftTaskEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 @ColumnTypeConverters(DatabaseConverters::class)
@@ -54,6 +59,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun taskDao(): TaskDao
 
     abstract fun taskColorDao(): TaskColorDao
+
+    abstract fun taskProgressDao(): TaskProgressDao
 
     abstract fun importDao(): ImportDao
 }

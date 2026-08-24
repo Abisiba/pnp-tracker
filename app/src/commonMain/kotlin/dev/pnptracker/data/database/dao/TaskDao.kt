@@ -8,10 +8,12 @@ import androidx.room3.Transaction
 import dev.pnptracker.data.database.CELL_COLUMN_DISPLAY_ORDER
 import dev.pnptracker.data.database.entity.CellSegmentEntity
 import dev.pnptracker.data.database.entity.TaskEntity
+import dev.pnptracker.data.database.entity.TaskStageEntity
 import dev.pnptracker.data.database.projection.GameTaskRow
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.model.stagesOf
 import dev.pnptracker.domain.tasks.TaskSetupException
 import dev.pnptracker.domain.tasks.TaskSetupFailure
 import kotlinx.coroutines.flow.Flow
@@ -31,6 +33,9 @@ interface TaskDao {
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertSegment(segment: CellSegmentEntity)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertStage(stage: TaskStageEntity)
 
     /** 1 while the cell exists and its game has not been deleted, 0 otherwise. */
     @Query(
@@ -67,6 +72,10 @@ interface TaskDao {
      * general refusal would also have swallowed programming mistakes that
      * happened to arrive as the same kind of exception.
      *
+     * A card or board task gets its whole pipeline here too. PLAN 7.2 and 8 fix
+     * the stages by pool, so they are not a later decision, and writing them with
+     * the task is what keeps a pipeline from ever existing half described.
+     *
      * @throws TaskSetupException with [TaskSetupFailure.CELL_NOT_AVAILABLE],
      *   [TaskSetupFailure.CELL_DOES_NOT_HOLD_TASKS] or
      *   [TaskSetupFailure.CELL_POOL_MISMATCH]; nothing is written in those cases.
@@ -92,6 +101,17 @@ interface TaskDao {
                 moment = moment,
             ),
         )
+        stagesOf(task.poolType).forEachIndexed { index, stage ->
+            insertStage(
+                TaskStageEntity(
+                    taskId = task.id,
+                    stage = stage,
+                    orderIndex = index,
+                    createdAt = moment,
+                    updatedAt = moment,
+                ),
+            )
+        }
     }
 
     /**
@@ -167,6 +187,9 @@ interface TaskDao {
      * Having no colour is a state a task can be in from the start, and one it can
      * fall back into when the last colour it used is deleted. PLAN 5.10 keeps
      * such a task alive and out of the colour groups until someone picks one.
+     *
+     * PLAN 12.10 lists this as the first section of the *active* pool, so a
+     * finished task leaves it along with everything else that is done.
      */
     @Query(
         """
@@ -175,6 +198,7 @@ interface TaskDao {
         INNER JOIN game_cells ON game_cells.id = cell_segments.cell_id
         INNER JOIN games ON games.id = game_cells.game_id
         WHERE tasks.deleted_at IS NULL AND games.deleted_at IS NULL
+          AND tasks.is_completed = 0
           AND tasks.pool_type = :poolType
           AND NOT EXISTS (SELECT 1 FROM task_colors WHERE task_colors.task_id = tasks.id)
         ORDER BY tasks.name, tasks.id
@@ -193,6 +217,97 @@ interface TaskDao {
         """,
     )
     suspend fun activeTaskById(id: EntityId): TaskEntity?
+
+    /**
+     * The work still to be done in one pool.
+     *
+     * This is what a pool screen shows. PLAN 5.6 keeps a finished task in its
+     * cell and takes it only out of the active pool, which is exactly the
+     * difference between this and [tasksOfPoolIncludingCompleted].
+     */
+    @Query(
+        """
+        SELECT tasks.* FROM tasks
+        INNER JOIN cell_segments ON cell_segments.task_id = tasks.id
+        INNER JOIN game_cells ON game_cells.id = cell_segments.cell_id
+        INNER JOIN games ON games.id = game_cells.game_id
+        WHERE tasks.pool_type = :poolType
+          AND tasks.deleted_at IS NULL AND games.deleted_at IS NULL
+          AND tasks.is_completed = 0
+        ORDER BY tasks.name, tasks.id
+        """,
+    )
+    suspend fun activeUnfinishedTasksInPool(poolType: PoolType): List<TaskEntity>
+
+    /** What has been finished in one pool, for the history view. */
+    @Query(
+        """
+        SELECT tasks.* FROM tasks
+        INNER JOIN cell_segments ON cell_segments.task_id = tasks.id
+        INNER JOIN game_cells ON game_cells.id = cell_segments.cell_id
+        INNER JOIN games ON games.id = game_cells.game_id
+        WHERE tasks.pool_type = :poolType
+          AND tasks.deleted_at IS NULL AND games.deleted_at IS NULL
+          AND tasks.is_completed = 1
+        ORDER BY tasks.completed_at DESC, tasks.name, tasks.id
+        """,
+    )
+    suspend fun completedTasksInPool(poolType: PoolType): List<TaskEntity>
+
+    /**
+     * Everything in one pool, finished or not.
+     *
+     * Named for what it includes rather than left to be inferred, so a caller
+     * choosing this over [activeUnfinishedTasksInPool] is choosing it knowingly.
+     * Deleted work is still left out: a deleted task is gone from every view but
+     * the ones that say they show deleted rows.
+     */
+    @Query(
+        """
+        SELECT tasks.* FROM tasks
+        INNER JOIN cell_segments ON cell_segments.task_id = tasks.id
+        INNER JOIN game_cells ON game_cells.id = cell_segments.cell_id
+        INNER JOIN games ON games.id = game_cells.game_id
+        WHERE tasks.pool_type = :poolType
+          AND tasks.deleted_at IS NULL AND games.deleted_at IS NULL
+        ORDER BY tasks.name, tasks.id
+        """,
+    )
+    suspend fun tasksOfPoolIncludingCompleted(poolType: PoolType): List<TaskEntity>
+
+    /**
+     * Every task written in one game, finished ones included.
+     *
+     * The game table shows work that is done as well as work that is not — PLAN
+     * 5.6 leaves a finished task in its cell, ticked and struck through — so this
+     * is the query behind a game row rather than the pool ones above.
+     */
+    @Query(
+        """
+        SELECT tasks.* FROM tasks
+        INNER JOIN cell_segments ON cell_segments.task_id = tasks.id
+        INNER JOIN game_cells ON game_cells.id = cell_segments.cell_id
+        INNER JOIN games ON games.id = game_cells.game_id
+        WHERE game_cells.game_id = :gameId
+          AND tasks.deleted_at IS NULL AND games.deleted_at IS NULL
+        ORDER BY """ + CELL_COLUMN_DISPLAY_ORDER + """, cell_segments.order_index, tasks.id
+        """,
+    )
+    suspend fun tasksOfGameIncludingCompleted(gameId: EntityId): List<TaskEntity>
+
+    /** Every task written in one cell, finished ones included. */
+    @Query(
+        """
+        SELECT tasks.* FROM tasks
+        INNER JOIN cell_segments ON cell_segments.task_id = tasks.id
+        INNER JOIN game_cells ON game_cells.id = cell_segments.cell_id
+        INNER JOIN games ON games.id = game_cells.game_id
+        WHERE cell_segments.cell_id = :cellId
+          AND tasks.deleted_at IS NULL AND games.deleted_at IS NULL
+        ORDER BY cell_segments.order_index
+        """,
+    )
+    suspend fun tasksOfCellIncludingCompleted(cellId: EntityId): List<TaskEntity>
 
     @Query("SELECT * FROM tasks WHERE id = :id")
     suspend fun taskByIdIncludingDeleted(id: EntityId): TaskEntity?

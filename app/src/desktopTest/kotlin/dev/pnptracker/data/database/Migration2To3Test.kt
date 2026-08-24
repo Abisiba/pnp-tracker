@@ -85,14 +85,14 @@ class Migration2To3Test {
     ): List<String> = queryTexts(database, "SELECT \"table\" FROM pragma_foreign_key_list('$table')").sorted()
 
     @Test
-    fun `the colours and aliases of a version 2 database survive the walk to v4`() =
+    fun `the colours and aliases of a version 2 database survive the walk to v5`() =
         runBlocking<Unit> {
             createVersion2DatabaseWithColoursOnly()
 
             val database = DatabaseFactory().open(directory.databaseFile)
             try {
                 val colours = database.colorDao().allColors()
-                assertEquals(4L, CommittedSchema.readVersion(directory.databaseFile))
+                assertEquals(5L, CommittedSchema.readVersion(directory.databaseFile))
                 assertEquals(seedColors.map { it.id }, colours.map { it.id })
                 assertEquals(seedColors.map { it.canonicalName }, colours.map { it.canonicalName })
                 assertEquals(seedColors.map { it.hex }, colours.map { it.hex })
@@ -159,7 +159,7 @@ class Migration2To3Test {
         }
 
     @Test
-    fun `a version 1 database can be walked all the way to version 4`() =
+    fun `a version 1 database can be walked all the way to version 5`() =
         runBlocking<Unit> {
             CommittedSchema.createDatabase(directory.databaseFile, version = 1) { }
 
@@ -167,7 +167,7 @@ class Migration2To3Test {
             try {
                 assertEquals(12, database.colorDao().allColors().size)
                 assertEquals(emptyList(), database.taskDao().allTasksIncludingDeleted())
-                assertEquals(4L, CommittedSchema.readVersion(directory.databaseFile))
+                assertEquals(5L, CommittedSchema.readVersion(directory.databaseFile))
             } finally {
                 database.close()
             }

@@ -1,0 +1,63 @@
+package dev.pnptracker.data.database.entity
+
+import androidx.room3.ColumnInfo
+import androidx.room3.Entity
+import androidx.room3.ForeignKey
+import androidx.room3.Index
+import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.ProductionStage
+import kotlin.time.Instant
+
+/**
+ * How far one step of a card or board task has got.
+ *
+ * A task's stages are written when the task is, all of them together, so a
+ * pipeline is never half described. The set is fixed by the pool — PLAN 7.2 and
+ * 8 — and the primary key keeps a task from carrying the same stage twice.
+ *
+ * [orderIndex] is the position in that pool's pipeline, stored rather than
+ * derived so a query can order by it without knowing the enum. It is what the
+ * rule `0 <= cut <= laminated <= printed <= total` is checked along: a stage may
+ * never be counted further than the one before it.
+ *
+ * There is no "done" flag. A stage is done when its count reaches the task's
+ * total, which is one fact rather than two that could disagree.
+ */
+@Entity(
+    tableName = "task_stages",
+    primaryKeys = ["task_id", "stage"],
+    foreignKeys = [
+        ForeignKey(
+            entity = TaskEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["task_id"],
+            onDelete = ForeignKey.RESTRICT,
+            onUpdate = ForeignKey.RESTRICT,
+        ),
+    ],
+    indices = [
+        Index(value = ["task_id", "order_index"], unique = true),
+    ],
+)
+data class TaskStageEntity(
+    @ColumnInfo(name = "task_id")
+    val taskId: EntityId,
+    @ColumnInfo(name = "stage")
+    val stage: ProductionStage,
+    @ColumnInfo(name = "order_index")
+    val orderIndex: Int,
+    /** How many pieces have been through this step. */
+    @ColumnInfo(name = "completed_quantity", defaultValue = "0")
+    val completedQuantity: Int = 0,
+    @ColumnInfo(name = "created_at")
+    val createdAt: Instant,
+    @ColumnInfo(name = "updated_at")
+    val updatedAt: Instant,
+) {
+    init {
+        require(orderIndex >= 0) { "A stage cannot come before the start of its pipeline: $orderIndex" }
+        require(completedQuantity >= 0) {
+            "A stage cannot have made less than nothing, was: $completedQuantity"
+        }
+    }
+}

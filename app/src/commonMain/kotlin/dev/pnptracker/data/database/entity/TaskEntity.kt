@@ -19,9 +19,22 @@ import kotlin.time.Instant
  * belongs to says which game and which column the task is in. Keeping it one
  * directional means a task cannot claim to be in a cell that does not have it.
  *
- * Completion is not stored here: it will be derived from the counters and events
- * the v5 schema adds. There is no archive flag either, because the product
- * archives nothing.
+ * Completion is stored, not worked out on the way to the screen. PLAN 6.4 is
+ * explicit that [isCompleted] is the real state the user and bulk completion
+ * write, and that nothing may let it contradict the counters — so the same
+ * transaction that changes one changes the other.
+ *
+ * [currentMissingQuantity] is a cached total: it always equals what has been
+ * reported failed less what has been made good, over this task's progress
+ * events. It is kept as a column because every pool query reads it and no query
+ * should have to sum a history to draw a row, and every write path that touches
+ * it writes the matching event in the same transaction.
+ *
+ * The failure total PLAN 6.2 also names is deliberately **not** here. It is a
+ * sum over the events and nothing else, so there is no second copy of it to fall
+ * out of step.
+ *
+ * There is no archive flag, because the product archives nothing.
  */
 @Entity(
     tableName = "tasks",
@@ -37,6 +50,7 @@ import kotlin.time.Instant
     indices = [
         Index(value = ["pool_type"]),
         Index(value = ["deleted_at"]),
+        Index(value = ["is_completed"]),
         Index(value = ["source_raw_import_block_id"]),
     ],
 )
@@ -54,6 +68,16 @@ data class TaskEntity(
     val requiredQuantity: Int? = null,
     @ColumnInfo(name = "notes")
     val notes: String? = null,
+    @ColumnInfo(name = "is_completed", defaultValue = "0")
+    val isCompleted: Boolean = false,
+    @ColumnInfo(name = "completed_at")
+    val completedAt: Instant? = null,
+    /** Whether the one print run PLAN 6.2 counts a 3D task by has been made. */
+    @ColumnInfo(name = "primary_batch_completed", defaultValue = "0")
+    val primaryBatchCompleted: Boolean = false,
+    /** How much still has to be made again; never negative, never above the total. */
+    @ColumnInfo(name = "current_missing_quantity", defaultValue = "0")
+    val currentMissingQuantity: Int = 0,
     @ColumnInfo(name = "created_at")
     val createdAt: Instant,
     @ColumnInfo(name = "updated_at")
@@ -70,5 +94,15 @@ data class TaskEntity(
             "A required quantity is either unknown (null) or greater than zero, was: $requiredQuantity"
         }
         requireAllowedTrackingMode(poolType, trackingMode)
+        require(currentMissingQuantity >= 0) {
+            "What is still owed cannot be less than nothing, was: $currentMissingQuantity"
+        }
+        require(requiredQuantity == null || currentMissingQuantity <= requiredQuantity) {
+            "More is owed ($currentMissingQuantity) than the task needs in total ($requiredQuantity)."
+        }
+        // PLAN 6.4: the two say the same thing or the row is not a valid one.
+        require(isCompleted == (completedAt != null)) {
+            "A task is finished exactly when it has a time it was finished at, was: $isCompleted / $completedAt"
+        }
     }
 }

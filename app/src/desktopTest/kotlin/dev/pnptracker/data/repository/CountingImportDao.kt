@@ -6,6 +6,7 @@ import dev.pnptracker.data.database.entity.DraftTaskEntity
 import dev.pnptracker.data.database.entity.ImportBatchEntity
 import dev.pnptracker.data.database.entity.RawImportBlockEntity
 import dev.pnptracker.data.database.entity.TaskEntity
+import dev.pnptracker.data.database.entity.TaskStageEntity
 import dev.pnptracker.data.database.projection.CellColumnRow
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
@@ -116,6 +117,8 @@ class CountingImportDao(
     override suspend fun deleteDraftBatchRow(id: EntityId): Int = outOfReach("deleteDraftBatchRow")
 
     override suspend fun insertSegment(segment: CellSegmentEntity): Unit = outOfReach("insertSegment")
+
+    override suspend fun insertStage(stage: TaskStageEntity): Unit = outOfReach("insertStage")
 
     override suspend fun insertTask(task: TaskEntity): Unit = outOfReach("insertTask")
 

@@ -11,6 +11,7 @@ import dev.pnptracker.data.database.entity.DraftTaskEntity
 import dev.pnptracker.data.database.entity.ImportBatchEntity
 import dev.pnptracker.data.database.entity.RawImportBlockEntity
 import dev.pnptracker.data.database.entity.TaskEntity
+import dev.pnptracker.data.database.entity.TaskStageEntity
 import dev.pnptracker.data.database.projection.CellColumnRow
 import dev.pnptracker.domain.importconfirm.ImportConfirmationException
 import dev.pnptracker.domain.importconfirm.ImportConfirmationFailure
@@ -21,6 +22,7 @@ import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.ImportBatchStatus
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.model.stagesOf
 import dev.pnptracker.domain.rules.requireAllowedTrackingMode
 import kotlinx.coroutines.flow.Flow
 import kotlin.time.Instant
@@ -378,6 +380,9 @@ abstract class ImportDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     protected abstract suspend fun insertSegment(segment: CellSegmentEntity)
 
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    protected abstract suspend fun insertStage(stage: TaskStageEntity)
+
     /**
      * Records the user's decisions about one draft: where the task will go, which
      * pool it belongs to and how it is tracked.
@@ -492,6 +497,9 @@ abstract class ImportDao {
      * Confirming an import creates no game and no cell. It only writes tasks into
      * cells the user opened by hand, each one as a piece of that cell's document.
      *
+     * A card or board task arrives with its whole pipeline, exactly as one typed
+     * by hand does. There is no second kind of task with stages missing.
+     *
      * @return how many tasks were created.
      * @throws ImportConfirmationException if the import cannot be confirmed.
      */
@@ -572,6 +580,17 @@ abstract class ImportDao {
                     moment = moment,
                 ),
             )
+            stagesOf(poolType).forEachIndexed { index, stage ->
+                insertStage(
+                    TaskStageEntity(
+                        taskId = taskId,
+                        stage = stage,
+                        orderIndex = index,
+                        createdAt = moment,
+                        updatedAt = moment,
+                    ),
+                )
+            }
             val aimed = setDraftMaterializedTask(draft.id, taskId, moment)
             check(aimed == 1) { "The draft ${draft.id} could not be linked to the task it produced." }
             createdTaskCount++
