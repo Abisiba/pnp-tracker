@@ -39,9 +39,8 @@ import dev.pnptracker.AppInfo
 import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.feature.colors.ColorCatalogueController
 import dev.pnptracker.ui.feature.colors.ColorCatalogueScreen
-import dev.pnptracker.ui.feature.games.GameTasksController
-import dev.pnptracker.ui.feature.games.GamesController
-import dev.pnptracker.ui.feature.games.GamesScreen
+import dev.pnptracker.ui.feature.games.GameTableController
+import dev.pnptracker.ui.feature.games.GameTableScreen
 import dev.pnptracker.ui.feature.home.HomeScreen
 import dev.pnptracker.ui.feature.importreview.ImportController
 import dev.pnptracker.ui.feature.importworkspace.ImportConfirmationController
@@ -70,8 +69,7 @@ fun AppScaffold(
     importController: ImportController,
     reviewController: ImportReviewController,
     confirmationController: ImportConfirmationController,
-    gamesController: GamesController,
-    gameTasksController: GameTasksController,
+    gameTableController: GameTableController,
     colorCatalogueController: ColorCatalogueController,
     modifier: Modifier = Modifier,
 ) {
@@ -87,7 +85,7 @@ fun AppScaffold(
             Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                 when (navigation.currentScreen) {
                     Screen.Home -> HomeScreen()
-                    Screen.Games -> GamesScreen(gamesController, gameTasksController)
+                    Screen.Games -> GameTableScreen(gameTableController)
                     Screen.Colors -> ColorCatalogueScreen(colorCatalogueController)
                     Screen.Import -> ImportSection(importController, reviewController, confirmationController)
                 }

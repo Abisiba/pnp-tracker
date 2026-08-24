@@ -194,6 +194,29 @@ import dev.pnptracker.resources.source_column_game
 import dev.pnptracker.resources.source_column_missing
 import dev.pnptracker.resources.source_column_special
 import dev.pnptracker.resources.source_column_three_d
+import dev.pnptracker.resources.table_add_game
+import dev.pnptracker.resources.table_add_game_hint
+import dev.pnptracker.resources.table_cell_description
+import dev.pnptracker.resources.table_cell_empty
+import dev.pnptracker.resources.table_cell_empty_description
+import dev.pnptracker.resources.table_cell_more
+import dev.pnptracker.resources.table_column_game
+import dev.pnptracker.resources.table_completed_mark
+import dev.pnptracker.resources.table_empty_completed
+import dev.pnptracker.resources.table_empty_completed_hint
+import dev.pnptracker.resources.table_empty_library
+import dev.pnptracker.resources.table_empty_library_hint
+import dev.pnptracker.resources.table_empty_ongoing
+import dev.pnptracker.resources.table_empty_ongoing_hint
+import dev.pnptracker.resources.table_label
+import dev.pnptracker.resources.table_loading
+import dev.pnptracker.resources.table_row_completed
+import dev.pnptracker.resources.table_row_description
+import dev.pnptracker.resources.table_row_ongoing
+import dev.pnptracker.resources.table_view_all
+import dev.pnptracker.resources.table_view_completed
+import dev.pnptracker.resources.table_view_label
+import dev.pnptracker.resources.table_view_ongoing
 import dev.pnptracker.resources.tasks_cell_label
 import dev.pnptracker.resources.tasks_cell_required
 import dev.pnptracker.resources.tasks_create
@@ -454,6 +477,42 @@ object Strings {
     /** The columns of the game table. */
     object Columns {
         val notes = Res.string.column_notes
+
+        /** The first column, which holds the game's name rather than a cell. */
+        val game = Res.string.table_column_game
+    }
+
+    /** The game table itself: its three views, its cells and its one action. */
+    object Table {
+        val label = Res.string.table_label
+        val loading = Res.string.table_loading
+
+        val viewLabel = Res.string.table_view_label
+        val viewOngoing = Res.string.table_view_ongoing
+        val viewCompleted = Res.string.table_view_completed
+        val viewAll = Res.string.table_view_all
+
+        val emptyOngoing = Res.string.table_empty_ongoing
+        val emptyOngoingHint = Res.string.table_empty_ongoing_hint
+        val emptyCompleted = Res.string.table_empty_completed
+        val emptyCompletedHint = Res.string.table_empty_completed_hint
+        val emptyLibrary = Res.string.table_empty_library
+        val emptyLibraryHint = Res.string.table_empty_library_hint
+
+        val cellEmpty = Res.string.table_cell_empty
+        val cellEmptyDescription = Res.string.table_cell_empty_description
+        val cellDescription = Res.string.table_cell_description
+        val cellMore = Res.string.table_cell_more
+
+        val rowCompleted = Res.string.table_row_completed
+        val rowOngoing = Res.string.table_row_ongoing
+        val rowDescription = Res.string.table_row_description
+
+        /** Shown beside a finished game, so the green is never the only sign. */
+        val completedMark = Res.string.table_completed_mark
+
+        val addGame = Res.string.table_add_game
+        val addGameHint = Res.string.table_add_game_hint
     }
 
     /** Turning a reviewed import into real tasks. */

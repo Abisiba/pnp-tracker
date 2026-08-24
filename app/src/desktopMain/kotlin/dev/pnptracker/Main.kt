@@ -8,10 +8,10 @@ import androidx.compose.ui.window.rememberWindowState
 import dev.pnptracker.data.database.DatabaseFactory
 import dev.pnptracker.data.repository.ColorCatalogueStore
 import dev.pnptracker.data.repository.GameSetupStore
+import dev.pnptracker.data.repository.GameTableStore
 import dev.pnptracker.data.repository.ImportConfirmationStore
 import dev.pnptracker.data.repository.ImportDraftStore
 import dev.pnptracker.data.repository.ImportReviewStore
-import dev.pnptracker.data.repository.TaskSetupStore
 import dev.pnptracker.platform.awt.applyLinuxFileDialogPolicy
 import dev.pnptracker.platform.files.AppDirectoryInitializer
 import dev.pnptracker.platform.files.XdgAppPathsResolver
@@ -20,8 +20,7 @@ import dev.pnptracker.platform.xlsx.XlsxImportFileGateway
 import dev.pnptracker.ui.PnpTrackerApp
 import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.feature.colors.ColorCatalogueController
-import dev.pnptracker.ui.feature.games.GameTasksController
-import dev.pnptracker.ui.feature.games.GamesController
+import dev.pnptracker.ui.feature.games.GameTableController
 import dev.pnptracker.ui.feature.importreview.ImportController
 import dev.pnptracker.ui.feature.importworkspace.ImportConfirmationController
 import dev.pnptracker.ui.feature.importworkspace.ImportReviewController
@@ -59,8 +58,11 @@ fun main() {
         ImportConfirmationController(
             ImportConfirmationStore(database.importDao(), database.gameCellDao(), database.gameDao()),
         )
-    val gamesController = GamesController(GameSetupStore(database.gameDao(), database.gameCellDao()))
-    val gameTasksController = GameTasksController(TaskSetupStore(database.taskDao()))
+    val gameTableController =
+        GameTableController(
+            table = GameTableStore(database.gameDao(), database.gameCellDao(), database.gameTableDao()),
+            setup = GameSetupStore(database.gameDao(), database.gameCellDao()),
+        )
     val colorCatalogueController = ColorCatalogueController(ColorCatalogueStore(database.colorDao()))
 
     application {
@@ -80,8 +82,7 @@ fun main() {
                 importController,
                 reviewController,
                 confirmationController,
-                gamesController,
-                gameTasksController,
+                gameTableController,
                 colorCatalogueController,
             )
         }

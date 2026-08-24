@@ -1,5 +1,6 @@
 package dev.pnptracker.ui
 
+import dev.pnptracker.domain.games.GameTableView
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.PoolType
 import org.jetbrains.compose.resources.StringResource
@@ -35,4 +36,17 @@ fun columnNameOf(columnType: CellColumnType): StringResource =
     when (columnType) {
         CellColumnType.NOTES -> Strings.Columns.notes
         else -> poolNameOf(requireNotNull(columnType.poolType))
+    }
+
+/**
+ * The Turkish name of one of the three table views.
+ *
+ * PLAN 12.4 names them, and the `when` is exhaustive so a fourth view could not
+ * reach the screen without being given a word first.
+ */
+fun viewNameOf(view: GameTableView): StringResource =
+    when (view) {
+        GameTableView.ONGOING -> Strings.Table.viewOngoing
+        GameTableView.COMPLETED -> Strings.Table.viewCompleted
+        GameTableView.ALL -> Strings.Table.viewAll
     }

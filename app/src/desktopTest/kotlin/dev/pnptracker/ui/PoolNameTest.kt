@@ -9,7 +9,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.test.fail
-import dev.pnptracker.ui.feature.games.labelOf as gameTaskLabelOf
 import dev.pnptracker.ui.feature.importworkspace.labelOf as importLabelOf
 
 /**
@@ -56,8 +55,8 @@ class PoolNameTest {
     }
 
     @Test
-    fun `the board pool is called Mukavva in the game task section`() {
-        assertEquals("Mukavva", runBlocking { getString(gameTaskLabelOf(PoolType.BOARD)) })
+    fun `the board pool is called Mukavva wherever it is named`() {
+        assertEquals("Mukavva", runBlocking { getString(poolNameOf(PoolType.BOARD)) })
     }
 
     @Test
@@ -66,14 +65,13 @@ class PoolNameTest {
     }
 
     @Test
-    fun `the game task section and the import review section agree on every pool`() {
+    fun `the table and the import review section agree on every pool`() {
         PoolType.entries.forEach { poolType ->
             assertEquals(
-                runBlocking { getString(gameTaskLabelOf(poolType)) },
+                runBlocking { getString(poolNameOf(poolType)) },
                 runBlocking { getString(importLabelOf(poolType)) },
                 "$poolType reads differently depending on which screen the user is on",
             )
-            assertEquals(poolNameOf(poolType), gameTaskLabelOf(poolType), "$poolType: the task section named it itself")
             assertEquals(poolNameOf(poolType), importLabelOf(poolType), "$poolType: the import section named it itself")
         }
     }

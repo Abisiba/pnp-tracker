@@ -7,8 +7,8 @@ import kotlin.test.assertTrue
 
 class AppNavigationStateTest {
     @Test
-    fun `the window opens on the home screen`() {
-        assertEquals(Screen.Home, AppNavigationState().currentScreen)
+    fun `the window opens on the game table`() {
+        assertEquals(Screen.Games, AppNavigationState().currentScreen)
     }
 
     @Test

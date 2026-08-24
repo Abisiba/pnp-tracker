@@ -623,7 +623,7 @@ private fun DraftAiming(
                     selected = mode == trackingMode,
                     enabled = !isBusy,
                     onClick = { onAim(choice.cellId, poolType, choice.withTracking(mode).trackingMode) },
-                    label = { Text(labelOf(mode)) },
+                    label = { Text(stringResource(labelOf(mode))) },
                 )
             }
         }

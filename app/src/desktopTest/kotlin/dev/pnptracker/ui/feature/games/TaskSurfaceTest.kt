@@ -5,18 +5,14 @@ import dev.pnptracker.domain.tasks.TaskPoolGroup
 import dev.pnptracker.domain.tasks.TaskSummary
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 /**
- * What the tasks section is allowed to carry.
+ * What the task read shapes are allowed to carry.
  *
- * PLAN 6.4 says a task is finished because its pool's counters and events say so,
- * and none of those exist yet. Until they do, a completion field anywhere on this
- * path would be a second source of truth, and a screen that showed one would be
- * showing something nothing could keep right.
- *
- * These sets are pinned rather than merely searched, so adding a field here has
- * to be a decision someone writes down instead of something that slips in.
+ * These sets are pinned rather than merely searched, so adding a field has to be
+ * a decision someone writes down instead of something that slips in. The screens
+ * that once drew these live in the cells of the game table now, but the shapes
+ * themselves are what every later step reads a task through.
  */
 class TaskSurfaceTest {
     /**
@@ -55,47 +51,12 @@ class TaskSurfaceTest {
     }
 
     @Test
-    fun `the form carries only what the user fills in`() {
-        // The target and the pool are one field rather than two, because they are
-        // one answer: CellPoolChoice holds them together so the form cannot carry
-        // a pair the database would refuse.
-        assertEquals(
-            setOf("choice", "name", "quantity", "notes"),
-            fieldNamesOf(TaskComposer::class.java),
-        )
-    }
-
-    @Test
     fun `the target and the pool are kept together`() {
+        // The cell and the pool are one answer rather than two: CellPoolChoice
+        // holds them so nothing can carry a pair the database would refuse.
         assertEquals(
             setOf("cellId", "columnType", "poolType", "trackingMode"),
             fieldNamesOf(CellPoolChoice::class.java),
         )
-    }
-
-    @Test
-    fun `the section state carries the list, the form and what did not save`() {
-        assertEquals(setOf("tasks", "composer", "failure"), fieldNamesOf(GameTasksScreenState::class.java))
-    }
-
-    @Test
-    fun `nothing on this path offers to finish a task`() {
-        val words = listOf("complete", "completed", "done", "finish", "progress", "status")
-        val surfaces =
-            listOf(
-                TaskSummary::class.java,
-                TaskPoolGroup::class.java,
-                TaskComposer::class.java,
-                GameTasksScreenState::class.java,
-                GameTasksController::class.java,
-            )
-
-        surfaces.forEach { type ->
-            val named =
-                (type.declaredFields.map { it.name } + type.declaredMethods.map { it.name })
-                    .filterNot { it.startsWith("$") }
-                    .filter { member -> words.any { word -> member.lowercase().contains(word) } }
-            assertTrue(named.isEmpty(), "${type.simpleName} offers completion before there is anything to derive it from: $named")
-        }
     }
 }

@@ -12,12 +12,12 @@
 
     <!-- Screen titles -->
     <string name="home_title">Ana Sayfa</string>
-    <string name="games_title">Oyunlar</string>
+    <string name="games_title">Oyun Tablosu</string>
     <string name="import_title">İçe Aktarma</string>
 
     <!-- Screen descriptions -->
     <string name="home_description">Oyunların ve üretim havuzlarının özetleri bu ekranda toplanacak. Şu anda yalnızca uygulama kabuğu hazır.</string>
-    <string name="games_description">Oyun kayıtları bu ekrandan yönetilecek: oyun arama, aktif ve tamamlanan oyun ayrımı ve oyun detayına geçiş buraya gelecek.</string>
+    <string name="games_description">Bütün çalışma buradan yürür: her oyun bir satır, her sütun o oyunun bir hücresidir.</string>
     <string name="import_description">Excel ve CSV içe aktarma taslakları bu ekranda yönetilecek. Ham hücre metni değiştirilmeden saklanır, görev taslakları ham metinden elle oluşturulur.</string>
 
     <!-- Theme -->
@@ -140,6 +140,35 @@
     <string name="review_draft_discard">Vazgeç</string>
     <string name="review_draft_name_required">Görev adı boş olamaz.</string>
     <string name="review_draft_only_note">Bu bir taslaktır; gerçek görev oluşturmaz.</string>
+    <!-- Game table: the three global views -->
+    <string name="table_view_label">Görünüm</string>
+    <string name="table_view_ongoing">Devam Eden</string>
+    <string name="table_view_completed">Tamamlanan</string>
+    <string name="table_view_all">Tümü</string>
+    <string name="table_loading">Oyun tablosu yükleniyor…</string>
+    <string name="table_empty_ongoing">Devam eden oyun yok.</string>
+    <string name="table_empty_ongoing_hint">Yeni bir oyun ekleyin ya da Tümü görünümüne geçin.</string>
+    <string name="table_empty_completed">Tamamlanan oyun yok.</string>
+    <string name="table_empty_completed_hint">Bir oyunu tamamladığınızda burada görünür.</string>
+    <string name="table_empty_library">Henüz oyun yok.</string>
+    <string name="table_empty_library_hint">İlk oyununuzu ekleyin; satırı beş sütunuyla birlikte hazır gelir.</string>
+
+    <!-- Game table: columns and cells -->
+    <string name="table_column_game">Oyun</string>
+    <string name="table_cell_empty">—</string>
+    <string name="table_cell_empty_description">%1$s hücresi boş</string>
+    <string name="table_cell_description">%1$s hücresi: %2$s</string>
+    <string name="table_cell_more">devamı var</string>
+    <string name="table_row_completed">Tamamlandı</string>
+    <string name="table_row_ongoing">Devam ediyor</string>
+    <string name="table_completed_mark">✓</string>
+    <string name="table_label">Oyun tablosu</string>
+    <string name="table_row_description">%1$s — %2$s</string>
+
+    <!-- Game table: adding a game -->
+    <string name="table_add_game">Oyun ekle</string>
+    <string name="table_add_game_hint">Enter ile kaydedin, Esc ile vazgeçin.</string>
+
     <!-- Games: setting up games and items -->
     <string name="games_loading">Oyunlar yükleniyor…</string>
     <string name="games_empty_title">Henüz oyun yok</string>

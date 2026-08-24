@@ -7,8 +7,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import dev.pnptracker.AppInfo
 import dev.pnptracker.ui.feature.colors.ColorCatalogueController
-import dev.pnptracker.ui.feature.games.GameTasksController
-import dev.pnptracker.ui.feature.games.GamesController
+import dev.pnptracker.ui.feature.games.GameTableController
 import dev.pnptracker.ui.feature.importreview.ImportController
 import dev.pnptracker.ui.feature.importworkspace.ImportConfirmationController
 import dev.pnptracker.ui.feature.importworkspace.ImportReviewController
@@ -31,8 +30,7 @@ fun PnpTrackerApp(
     importController: ImportController,
     reviewController: ImportReviewController,
     confirmationController: ImportConfirmationController,
-    gamesController: GamesController,
-    gameTasksController: GameTasksController,
+    gameTableController: GameTableController,
     colorCatalogueController: ColorCatalogueController,
 ) {
     val navigation = remember { AppNavigationState() }
@@ -47,8 +45,7 @@ fun PnpTrackerApp(
             importController = importController,
             reviewController = reviewController,
             confirmationController = confirmationController,
-            gamesController = gamesController,
-            gameTasksController = gameTasksController,
+            gameTableController = gameTableController,
             colorCatalogueController = colorCatalogueController,
         )
     }

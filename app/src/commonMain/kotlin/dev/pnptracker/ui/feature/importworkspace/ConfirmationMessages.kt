@@ -34,10 +34,17 @@ fun messageOf(failure: ImportConfirmationFailure): StringResource =
 /** The pool names, taken from the one place that decides them. */
 fun labelOf(poolType: PoolType): StringResource = poolNameOf(poolType)
 
-fun labelOf(trackingMode: TrackingMode): String =
+/**
+ * How a task is tracked, in the user's words.
+ *
+ * From the catalogue like every other name. These four were written into the
+ * screen itself once, which put four Turkish words somewhere no language file
+ * knew about; PLAN 17 keeps the wording where it can be found and changed.
+ */
+fun labelOf(trackingMode: TrackingMode): StringResource =
     when (trackingMode) {
-        TrackingMode.THREE_D_BATCH -> "Parti"
-        TrackingMode.PIPELINE -> "Aşamalı"
-        TrackingMode.CHECKLIST -> "Kontrol listesi"
-        TrackingMode.COUNTED -> "Sayılı"
+        TrackingMode.THREE_D_BATCH -> Strings.Tracking.threeDBatch
+        TrackingMode.PIPELINE -> Strings.Tracking.pipeline
+        TrackingMode.CHECKLIST -> Strings.Tracking.checklist
+        TrackingMode.COUNTED -> Strings.Tracking.counted
     }

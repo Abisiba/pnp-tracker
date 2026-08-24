@@ -10,6 +10,7 @@ import dev.pnptracker.data.database.dao.CellSegmentDao
 import dev.pnptracker.data.database.dao.ColorDao
 import dev.pnptracker.data.database.dao.GameCellDao
 import dev.pnptracker.data.database.dao.GameDao
+import dev.pnptracker.data.database.dao.GameTableDao
 import dev.pnptracker.data.database.dao.ImportDao
 import dev.pnptracker.data.database.dao.TaskColorDao
 import dev.pnptracker.data.database.dao.TaskDao
@@ -59,6 +60,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun taskDao(): TaskDao
 
     abstract fun taskColorDao(): TaskColorDao
+
+    abstract fun gameTableDao(): GameTableDao
 
     abstract fun taskProgressDao(): TaskProgressDao
 

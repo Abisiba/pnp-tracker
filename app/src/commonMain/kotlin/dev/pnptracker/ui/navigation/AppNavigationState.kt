@@ -13,7 +13,10 @@ import androidx.compose.runtime.setValue
  * interface could produce or consume.
  */
 class AppNavigationState(
-    initialScreen: Screen = Screen.Home,
+    // The table is the surface the application is worked from, so it is what the
+    // window opens on: PLAN 12.3 makes it the primary working surface rather than
+    // somewhere the user has to navigate to first.
+    initialScreen: Screen = Screen.Games,
 ) {
     var currentScreen: Screen by mutableStateOf(initialScreen)
         private set
