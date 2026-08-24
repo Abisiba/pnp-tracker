@@ -391,10 +391,10 @@ Kullanıcı ürün modelinde `Item` (öge) **bulunmaz**. Öge altında görev gr
 aktif öge zorunluluğu, renk varyantlarının aynı öge altında toplanması ve oyun
 detayında öge listesi hükümlerinin tamamı geçersizdir.
 
-`items` tablosu Faz 1'de oluşturulmuştur ve şu an veritabanında durmaktadır.
-**Gelecekteki bir migration'da kaldırılacaktır**; hedef modelde `Task` doğrudan bir
-`TaskSegment` üzerinden hücreye bağlanır. Kaldırma sırası `18.` bölümde
-tanımlanmıştır.
+`items` tablosu Faz 1'de oluşturulmuştu ve **şema v4'te kaldırılmıştır**
+(`18.` bölüm, Faz 2 Adım 4). `Task` artık doğrudan bir `TaskSegment` üzerinden
+hücreye bağlanır; `tasks.item_id` sütunu da aynı dilimde düşmüştür. Tabloyu
+tanıyan tek yer, onu düşüren migration'ın kendisidir.
 
 ## 6. 3D baskı ilerleme modeli
 
