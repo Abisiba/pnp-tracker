@@ -13,6 +13,17 @@ import dev.pnptracker.resources.aim_title
 import dev.pnptracker.resources.app_name
 import dev.pnptracker.resources.app_version_label
 import dev.pnptracker.resources.app_window_title
+import dev.pnptracker.resources.cell_discard
+import dev.pnptracker.resources.cell_edit
+import dev.pnptracker.resources.cell_edit_action
+import dev.pnptracker.resources.cell_editor_hint
+import dev.pnptracker.resources.cell_editor_open_elsewhere
+import dev.pnptracker.resources.cell_error_contains_tasks
+import dev.pnptracker.resources.cell_error_could_not_save
+import dev.pnptracker.resources.cell_error_game_gone
+import dev.pnptracker.resources.cell_locked_by_tasks
+import dev.pnptracker.resources.cell_save
+import dev.pnptracker.resources.cell_saving
 import dev.pnptracker.resources.colors_count
 import dev.pnptracker.resources.colors_create
 import dev.pnptracker.resources.colors_description
@@ -513,6 +524,24 @@ object Strings {
 
         val addGame = Res.string.table_add_game
         val addGameHint = Res.string.table_add_game_hint
+    }
+
+    /** Writing in one cell of the table. */
+    object Cell {
+        val edit = Res.string.cell_edit
+        val editAction = Res.string.cell_edit_action
+        val editorHint = Res.string.cell_editor_hint
+        val save = Res.string.cell_save
+        val discard = Res.string.cell_discard
+        val saving = Res.string.cell_saving
+
+        val errorCouldNotSave = Res.string.cell_error_could_not_save
+        val errorGameGone = Res.string.cell_error_game_gone
+        val errorContainsTasks = Res.string.cell_error_contains_tasks
+
+        /** Said of a cell the whole-text editor may not touch. */
+        val lockedByTasks = Res.string.cell_locked_by_tasks
+        val editorOpenElsewhere = Res.string.cell_editor_open_elsewhere
     }
 
     /** Turning a reviewed import into real tasks. */

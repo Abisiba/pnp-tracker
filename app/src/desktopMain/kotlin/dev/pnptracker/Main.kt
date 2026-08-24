@@ -6,6 +6,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import dev.pnptracker.data.database.DatabaseFactory
+import dev.pnptracker.data.repository.CellTextStore
 import dev.pnptracker.data.repository.ColorCatalogueStore
 import dev.pnptracker.data.repository.GameSetupStore
 import dev.pnptracker.data.repository.GameTableStore
@@ -62,6 +63,7 @@ fun main() {
         GameTableController(
             table = GameTableStore(database.gameDao(), database.gameCellDao(), database.gameTableDao()),
             setup = GameSetupStore(database.gameDao(), database.gameCellDao()),
+            cells = CellTextStore(database.cellSegmentDao()),
         )
     val colorCatalogueController = ColorCatalogueController(ColorCatalogueStore(database.colorDao()))
 

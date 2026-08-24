@@ -199,7 +199,7 @@ class TaskProgressTest {
     fun `a task whose game was deleted cannot be worked on either`() =
         runBlocking<Unit> {
             val taskId = aTaskIn(PoolType.THREE_D)
-            val cellId = assertNotNull(database.cellSegmentDao().segmentOfTask(taskId)).cellId
+            val cellId = assertNotNull(database.cellSegmentDao().segmentOfTaskIncludingDeleted(taskId)).cellId
             val gameId = assertNotNull(database.gameCellDao().cellById(cellId)).gameId
             database.gameDao().softDelete(gameId, deletedAt)
 
@@ -227,8 +227,8 @@ class TaskProgressTest {
             assertEquals(emptyList(), database.taskDao().activeUnfinishedTasksInPool(PoolType.THREE_D))
             assertEquals(listOf(taskId), database.taskDao().completedTasksInPool(PoolType.THREE_D).map { it.id })
             // PLAN 5.6: the segment stays where it is, ticked and struck through.
-            assertNotNull(database.cellSegmentDao().segmentOfTask(taskId))
-            val cellId = assertNotNull(database.cellSegmentDao().segmentOfTask(taskId)).cellId
+            assertNotNull(database.cellSegmentDao().segmentOfTaskIncludingDeleted(taskId))
+            val cellId = assertNotNull(database.cellSegmentDao().segmentOfTaskIncludingDeleted(taskId)).cellId
             assertEquals(listOf(taskId), database.taskDao().tasksOfCellIncludingCompleted(cellId).map { it.id })
         }
 

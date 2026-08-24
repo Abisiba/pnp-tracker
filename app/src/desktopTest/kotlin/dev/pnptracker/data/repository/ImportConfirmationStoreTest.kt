@@ -163,7 +163,8 @@ class ImportConfirmationStoreTest {
         tasks = database.taskDao().allTasksIncludingDeleted(),
     )
 
-    private suspend fun segmentCellOf(taskId: EntityId): EntityId = assertNotNull(database.cellSegmentDao().segmentOfTask(taskId)).cellId
+    private suspend fun segmentCellOf(taskId: EntityId): EntityId =
+        assertNotNull(database.cellSegmentDao().segmentOfTaskIncludingDeleted(taskId)).cellId
 
     private suspend fun tasks() = database.taskDao().allTasksIncludingDeleted()
 

@@ -1,5 +1,7 @@
 package dev.pnptracker.data.database
 
+import androidx.room3.useWriterConnection
+import dev.pnptracker.data.database.entity.CellSegmentEntity
 import dev.pnptracker.data.database.entity.DraftTaskEntity
 import dev.pnptracker.data.database.entity.GameCellEntity
 import dev.pnptracker.data.database.entity.GameEntity
@@ -229,3 +231,34 @@ fun aDraftTask(
         createdAt = createdAt,
         updatedAt = createdAt,
     )
+
+/**
+ * Writes a cell piece straight into the table, for building fixtures.
+ *
+ * The production path writes pieces only through the one transaction that knows
+ * what a cell may look like afterwards, so its insert is not reachable from
+ * outside the DAO. A test that needs a cell in a shape the editor would never
+ * produce — several adjacent pieces, say — writes it here instead, which keeps
+ * that ability in the tests rather than opening it up in production.
+ */
+suspend fun insertSegmentDirectly(
+    database: AppDatabase,
+    segment: CellSegmentEntity,
+) {
+    database.useWriterConnection { transactor ->
+        transactor.usePrepared(
+            "INSERT INTO cell_segments (id, cell_id, order_index, kind, text, task_id, created_at, updated_at) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        ) { statement ->
+            statement.bindText(1, segment.id.toString())
+            statement.bindText(2, segment.cellId.toString())
+            statement.bindLong(3, segment.orderIndex.toLong())
+            statement.bindText(4, segment.kind.name)
+            segment.text?.let { statement.bindText(5, it) } ?: statement.bindNull(5)
+            segment.taskId?.let { statement.bindText(6, it.toString()) } ?: statement.bindNull(6)
+            statement.bindLong(7, segment.createdAt.toEpochMilliseconds())
+            statement.bindLong(8, segment.updatedAt.toEpochMilliseconds())
+            statement.step()
+        }
+    }
+}

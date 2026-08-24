@@ -58,15 +58,42 @@ data class CellSegmentPreview(
  * [cellId] is null when the game has no cell in this column yet. That is an
  * ordinary state and not a gap to be filled: PLAN 5.4 gives a game *at most* one
  * cell per column, so a column nobody has written in has none, and the table
- * shows the slot regardless. Opening the cell is a write, and writes belong to
- * the editing step — reading the table must never quietly create rows.
+ * shows the slot regardless. Opening the cell is a write, and a read of the
+ * table must never quietly perform one.
+ *
+ * [holdsTasks] is read from what is stored rather than from what is previewed. A
+ * piece naming a task the user deleted shows nothing, but the piece is still
+ * there, and a cell holding one is still a cell whose text cannot be rewritten
+ * wholesale.
  */
 data class CellPreview(
     val columnType: CellColumnType,
     val cellId: EntityId? = null,
     val segments: List<CellSegmentPreview> = emptyList(),
+    val holdsTasks: Boolean = false,
 ) {
     val isEmpty: Boolean get() = segments.isEmpty()
+
+    /**
+     * What the cell reads as, end to end.
+     *
+     * Straight concatenation and nothing else. The pieces of a cell carry their
+     * own spacing — PLAN 5.5 makes the document the pieces in order, not a list
+     * of words to be joined — so a separator invented here would be a character
+     * the user never typed, appearing in the table and read out by a screen
+     * reader as though it were theirs.
+     */
+    val text: String get() = segments.joinToString(separator = "") { it.text }
+
+    /**
+     * The text an editor may replace, or null when it may not.
+     *
+     * A cell holding a task has no whole-text form that could be written back:
+     * flattening it would turn tasks into words and take their colours, stages
+     * and history with them. Editing those belongs to the segment editor of a
+     * later step, so until then the answer here is honestly nothing.
+     */
+    val editableText: String? get() = if (holdsTasks) null else text
 }
 
 /**

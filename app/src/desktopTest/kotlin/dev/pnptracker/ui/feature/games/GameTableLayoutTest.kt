@@ -107,12 +107,114 @@ class GameTableLayoutTest {
     }
 
     @Test
-    fun `nothing in a cell offers an editor that is not there yet`() {
-        // Writing in a cell is the next step. A cell that looked clickable now
-        // would promise something nothing behind it could do.
-        val cellSlot = source.substringAfter("private fun CellSlot(").substringBefore("private fun EmptyTable(")
-        listOf("clickable", "onClick", "Button", "TextField").forEach { interactive ->
-            assertTrue(interactive !in cellSlot, "a read only cell offers $interactive")
+    fun `a cell holding a task offers no editor and says why`() {
+        // Flattening it would cost the task its colours, its stages and its
+        // history, so the cell refuses the click rather than doing the damage.
+        // The whole gesture is disabled, not merely ignored when pressed.
+        val cellSlot = source.substringAfter("private fun CellSlot(").substringBefore("private fun CellEditorSlot(")
+        assertTrue("val editable = cell.editableText != null" in cellSlot, "a cell does not ask whether it may be edited")
+        assertTrue("enabled = editable" in cellSlot, "a cell holding a task can still be double clicked")
+        assertTrue("if (!editable)" in cellSlot, "a cell holding a task does not say so")
+        assertTrue("Strings.Cell.lockedByTasks" in cellSlot, "the reason is not taken from the text catalogue")
+        // The editor itself is a separate composable; a read only cell has none.
+        assertTrue("TextField" !in cellSlot, "the read only cell carries a text field")
+    }
+
+    // -------------------------------------------------- writing in a cell
+
+    @Test
+    fun `a cell is opened by double click and from the keyboard`() {
+        // PLAN 17 asks for every main action to be reachable by keyboard, and a
+        // dense table wants the single click to do nothing but take the focus,
+        // so passing over a cell never puts an editor into it.
+        assertTrue(source.contains("combinedClickable("), "a cell cannot be double clicked")
+        assertTrue(source.contains("onDoubleClick = onEdit"), "the double click does not open the editor")
+        assertTrue(source.contains("onClick = {}"), "a single click does more than take the focus")
+        assertTrue(source.contains("Key.F2"), "F2 does not open the editor")
+        assertTrue(source.contains(".focusable()"), "a cell cannot take the keyboard at all")
+    }
+
+    @Test
+    fun `the editor saves with Ctrl and Enter and gives up with Escape`() {
+        val editor = source.substringAfter("private fun CellEditorSlot(").substringBefore("private fun messageOf(")
+        assertTrue("event.isCtrlPressed" in editor, "Ctrl+Enter does not save")
+        assertTrue("Key.Escape" in editor, "Escape does not give up")
+        assertTrue("controller.cancelEditing()" in editor, "giving up does nothing")
+        // A plain Enter has to fall through to the field so it makes a line.
+        assertTrue("singleLine = false" in editor, "the editor is one line, so Enter cannot break a line")
+        assertTrue("minLines" in editor, "the editor opens too small to write a note in")
+    }
+
+    @Test
+    fun `the editor takes the keyboard when it opens and names its two actions`() {
+        val editor = source.substringAfter("private fun CellEditorSlot(").substringBefore("private fun messageOf(")
+        assertTrue("focus.requestFocus()" in editor, "the editor does not take the keyboard when it opens")
+        assertTrue("contentDescription = saveLabel" in editor, "the save action has no accessible name")
+        assertTrue("contentDescription = discardLabel" in editor, "the discard action has no accessible name")
+    }
+
+    @Test
+    fun `the editor is drawn in the cell and not over the window`() {
+        // PLAN 12.5 keeps editing where the content is; a panel over the middle
+        // of the window would hide the very row being worked on.
+        val editor = source.substringAfter("private fun CellEditorSlot(").substringBefore("private fun messageOf(")
+        assertTrue("width(CellColumnWidth)" in editor, "the editor is not the width of its own column")
+        listOf("Dialog", "AlertDialog", "Popup", "ModalBottomSheet").forEach { overlay ->
+            assertTrue(overlay !in source, "the table opens a $overlay over the window")
         }
+    }
+
+    @Test
+    fun `nothing parses what is typed or pasted`() {
+        // Turning lines into tasks is a later step and an action the user asks
+        // for. A split here would quietly make decisions about their words.
+        val editor = source.substringAfter("private fun CellEditorSlot(").substringBefore("private fun messageOf(")
+        listOf(".split(", ".lines()", ".trim(", ".replace(").forEach { transform ->
+            assertTrue(transform !in editor, "the editor performs $transform on what the user typed")
+        }
+    }
+
+    @Test
+    fun `the table joins a cell's pieces with nothing at all`() {
+        // The pieces carry their own spacing. Anything between them would be a
+        // character the user never typed, shown in the table and read out by a
+        // screen reader as though it were theirs.
+        assertTrue(
+            "SEGMENT_SEPARATOR" !in source,
+            "the table still puts something between a cell's pieces",
+        )
+        assertTrue("cell.text" in source, "the cell's text is not read from the model that concatenates it")
+    }
+
+    @Test
+    fun `a finished row uses the stated green rather than a Material role`() {
+        assertTrue(
+            "PnpStatus.colors.completedContainer" in source,
+            "the finished row is painted with something other than the stated status colour",
+        )
+        assertTrue(
+            "tertiaryContainer" !in source,
+            "the finished row still borrows a Material role whose name only sounds green",
+        )
+    }
+
+    @Test
+    fun `the table stays dense rather than turning into cards`() {
+        // A cell is a cell in a grid, not a card with a shadow. The padding is
+        // small and the border is a line.
+        listOf("Card(", "elevation", "shadow").forEach { cardlike ->
+            assertTrue(cardlike !in source, "a cell is drawn as a $cardlike")
+        }
+        assertTrue("cellBorder(" in source, "cells have no readable boundary")
+        val cellPadding =
+            Regex("""padding\(horizontal = (\d+)\.dp, vertical = (\d+)\.dp\)""")
+                .findAll(source)
+                .map { it.groupValues[1].toInt() to it.groupValues[2].toInt() }
+                .toList()
+        assertTrue(cellPadding.isNotEmpty(), "no cell padding is stated at all")
+        assertTrue(
+            cellPadding.all { (horizontal, vertical) -> horizontal <= 12 && vertical <= 10 },
+            "a cell is padded like a card rather than a table cell: $cellPadding",
+        )
     }
 }

@@ -1,10 +1,13 @@
 package dev.pnptracker.ui.feature.games
 
+import dev.pnptracker.data.repository.CellTextEditing
 import dev.pnptracker.data.repository.GameSetup
 import dev.pnptracker.data.repository.GameTableSource
 import dev.pnptracker.domain.games.CellPreview
 import dev.pnptracker.domain.games.CellSegmentPreview
 import dev.pnptracker.domain.games.CellSummary
+import dev.pnptracker.domain.games.CellTextException
+import dev.pnptracker.domain.games.CellTextFailure
 import dev.pnptracker.domain.games.GameSetupException
 import dev.pnptracker.domain.games.GameSetupFailure
 import dev.pnptracker.domain.games.GameSummary
@@ -25,6 +28,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -115,10 +119,28 @@ class GameTableControllerTest {
     /** Lets a value pushed into the source reach the controller. */
     private suspend fun settle() = yield()
 
+    /** Records what was written, and can be told to refuse. */
+    private class FakeCells(
+        private val failure: CellTextFailure? = null,
+    ) : CellTextEditing {
+        val saved = mutableListOf<Triple<EntityId, CellColumnType, String>>()
+
+        override suspend fun savePlainText(
+            gameId: EntityId,
+            columnType: CellColumnType,
+            exactText: String,
+        ): Boolean {
+            failure?.let { throw CellTextException(it) }
+            saved += Triple(gameId, columnType, exactText)
+            return true
+        }
+    }
+
     private fun controllerOf(
         table: FakeTable,
         setup: FakeSetup = FakeSetup(),
-    ) = GameTableController(table, setup)
+        cells: FakeCells = FakeCells(),
+    ) = GameTableController(table, setup, cells)
 
     private fun visibleNames(controller: GameTableController): List<String> =
         assertIs<GameTableRowsState.Content>(controller.state.rows).rows.map { it.gameName }
@@ -392,5 +414,226 @@ class GameTableControllerTest {
             }
 
             assertEquals(listOf("Harmonies", "Harmonies"), setup.createdNames)
+        }
+
+    // ------------------------------------------------------ writing in a cell
+
+    private fun cellsOf(vararg pieces: Pair<CellColumnType, String>) =
+        pieces.associate { (column, text) -> column to listOf(CellSegmentPreview(null, text)) }
+
+    @Test
+    fun `opening a cell puts what it already says into the editor`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "40 gri"))
+            val controller = controllerOf(FakeTable(listOf(row)))
+            val collecting = collect(controller)
+
+            controller.beginEditing(row.gameId, CellColumnType.THREE_D)
+
+            val editor = assertNotNull(controller.state.editor)
+            assertEquals("40 gri", editor.draft)
+            assertEquals("40 gri", editor.originalText)
+            assertFalse(editor.hasChanges)
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a cell holding a task cannot be opened as whole text`() =
+        runBlocking<Unit> {
+            val row =
+                GameTableRow(
+                    gameId = IdGenerator.Random.newId(),
+                    gameName = "Harmonies",
+                    isCompleted = false,
+                    cells =
+                        CellColumnType.entries.map { columnType ->
+                            CellPreview(
+                                columnType = columnType,
+                                cellId = IdGenerator.Random.newId(),
+                                segments =
+                                    if (columnType == CellColumnType.THREE_D) {
+                                        listOf(CellSegmentPreview(IdGenerator.Random.newId(), "Gri token"))
+                                    } else {
+                                        emptyList()
+                                    },
+                                holdsTasks = columnType == CellColumnType.THREE_D,
+                            )
+                        },
+                )
+            val controller = controllerOf(FakeTable(listOf(row)))
+            val collecting = collect(controller)
+
+            controller.beginEditing(row.gameId, CellColumnType.THREE_D)
+
+            assertNull(controller.state.editor, "a cell holding a task was opened for whole text editing")
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `only one cell is written in at a time`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "40 gri"))
+            val controller = controllerOf(FakeTable(listOf(row)))
+            val collecting = collect(controller)
+            controller.beginEditing(row.gameId, CellColumnType.THREE_D)
+            controller.editCellText("yarım kalmış")
+
+            controller.beginEditing(row.gameId, CellColumnType.CARD)
+
+            val editor = assertNotNull(controller.state.editor)
+            assertEquals(CellColumnType.THREE_D, editor.columnType, "the open cell was swapped out")
+            assertEquals("yarım kalmış", editor.draft, "a half typed note was thrown away")
+            assertTrue(controller.state.blockedByEditor, "the user was not told why nothing happened")
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `giving up writes nothing`() =
+        runBlocking<Unit> {
+            val cells = FakeCells()
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "40 gri"))
+            val controller = controllerOf(FakeTable(listOf(row)), cells = cells)
+            val collecting = collect(controller)
+            controller.beginEditing(row.gameId, CellColumnType.THREE_D)
+            controller.editCellText("bambaşka bir şey")
+
+            controller.cancelEditing()
+
+            assertNull(controller.state.editor)
+            assertEquals(emptyList(), cells.saved, "giving up reached the database")
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `saving hands over exactly what was typed`() =
+        runBlocking<Unit> {
+            val cells = FakeCells()
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "40 gri"))
+            val controller = controllerOf(FakeTable(listOf(row)), cells = cells)
+            val collecting = collect(controller)
+            controller.beginEditing(row.gameId, CellColumnType.THREE_D)
+            val exact = "  40  gri  token \n ikinci satır "
+            controller.editCellText(exact)
+
+            controller.saveEditing()
+
+            assertEquals(listOf(Triple(row.gameId, CellColumnType.THREE_D, exact)), cells.saved)
+            assertNull(controller.state.editor, "the editor stayed open after a good save")
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a refused save keeps the editor open with the words in it`() =
+        runBlocking<Unit> {
+            val cells = FakeCells(failure = CellTextFailure.COULD_NOT_SAVE)
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "40 gri"))
+            val controller = controllerOf(FakeTable(listOf(row)), cells = cells)
+            val collecting = collect(controller)
+            controller.beginEditing(row.gameId, CellColumnType.THREE_D)
+            controller.editCellText("kaybolmaması gereken metin")
+
+            controller.saveEditing()
+
+            val editor = assertNotNull(controller.state.editor, "a failed save closed the editor")
+            assertEquals("kaybolmaması gereken metin", editor.draft, "a failed save lost the typing")
+            assertEquals(CellTextFailure.COULD_NOT_SAVE, editor.failure)
+            assertFalse(editor.isSaving)
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a change to another game leaves the draft alone`() =
+        runBlocking<Unit> {
+            val first = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "40 gri"))
+            val second = row("Wingspan")
+            val table = FakeTable(listOf(first, second))
+            val controller = controllerOf(table)
+            val collecting = collect(controller)
+            controller.beginEditing(first.gameId, CellColumnType.THREE_D)
+            controller.editCellText("yazmakta olduğum metin")
+
+            table.rows.value = listOf(first, second, row("Azul"))
+            settle()
+
+            val editor = assertNotNull(controller.state.editor, "another game's change closed the editor")
+            assertEquals("yazmakta olduğum metin", editor.draft, "another game's change wiped the draft")
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `the same cell arriving again does not rewind what is being typed`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "40 gri"))
+            val table = FakeTable(listOf(row))
+            val controller = controllerOf(table)
+            val collecting = collect(controller)
+            controller.beginEditing(row.gameId, CellColumnType.THREE_D)
+            controller.editCellText("yeni hâli")
+
+            table.rows.value = listOf(row)
+            settle()
+
+            assertEquals("yeni hâli", assertNotNull(controller.state.editor).draft)
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `changing the view is refused while a cell is open, and loses nothing`() =
+        runBlocking<Unit> {
+            // The row being written in may not be in the view being moved to.
+            // Dropping the draft would lose typing; saving it would write words
+            // the user never agreed to keep, and PLAN describes no automatic save.
+            val cells = FakeCells()
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "40 gri"))
+            val controller = controllerOf(FakeTable(listOf(row)), cells = cells)
+            val collecting = collect(controller)
+            controller.beginEditing(row.gameId, CellColumnType.THREE_D)
+            controller.editCellText("yarım kalmış")
+
+            controller.showView(GameTableView.COMPLETED)
+
+            assertEquals(GameTableView.ONGOING, controller.state.view, "the view moved out from under the editor")
+            assertEquals("yarım kalmış", assertNotNull(controller.state.editor).draft)
+            assertTrue(controller.state.blockedByEditor)
+            assertEquals(emptyList(), cells.saved, "the view change saved the draft behind the user")
+
+            controller.cancelEditing()
+            controller.showView(GameTableView.COMPLETED)
+            assertEquals(GameTableView.COMPLETED, controller.state.view, "the view stayed stuck after giving up")
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `text typed into the editor never reaches the database on its own`() =
+        runBlocking<Unit> {
+            val cells = FakeCells()
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "40 gri"))
+            val controller = controllerOf(FakeTable(listOf(row)), cells = cells)
+            val collecting = collect(controller)
+            controller.beginEditing(row.gameId, CellColumnType.THREE_D)
+
+            listOf("4", "40", "40 ", "40 g", "40 gri token").forEach(controller::editCellText)
+
+            assertEquals(emptyList(), cells.saved, "the editor saved as the user typed")
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `multi line text pasted in is kept as one piece of text`() =
+        runBlocking<Unit> {
+            // Nothing here parses what arrives. Turning lines into tasks is a
+            // separate action the user asks for, in a later step.
+            val cells = FakeCells()
+            val row = row("Harmonies")
+            val controller = controllerOf(FakeTable(listOf(row)), cells = cells)
+            val collecting = collect(controller)
+            controller.beginEditing(row.gameId, CellColumnType.CARD)
+            val pasted = "Bird Cards 170\nBonus Cards 26\nGoal Cards 16"
+
+            controller.editCellText(pasted)
+            controller.saveEditing()
+
+            assertEquals(listOf(Triple(row.gameId, CellColumnType.CARD, pasted)), cells.saved)
+            collecting.cancelAndJoin()
         }
 }

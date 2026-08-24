@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 
 /**
  * Material 3 with the baseline light and dark schemes, whose text and background
@@ -26,6 +27,17 @@ fun PnpTrackerTheme(
                 ThemeMode.LIGHT -> lightColorScheme()
                 ThemeMode.DARK -> darkColorScheme()
             },
-        content = content,
-    )
+    ) {
+        // Material's scheme carries no green, so the one meaning that needs a
+        // colour of its own travels beside it rather than borrowing a role whose
+        // name happens to sound right.
+        CompositionLocalProvider(
+            LocalStatusColors provides
+                when (themeMode) {
+                    ThemeMode.LIGHT -> LightStatusColors
+                    ThemeMode.DARK -> DarkStatusColors
+                },
+            content = content,
+        )
+    }
 }

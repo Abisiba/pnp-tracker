@@ -68,10 +68,16 @@ class GameTableStore(
                 cells =
                     CellColumnType.entries.map { columnType ->
                         val cell = ofThisGame[columnType]
+                        val contents = cell?.let { contentsByCell[it.id].orEmpty() }.orEmpty()
                         CellPreview(
                             columnType = columnType,
                             cellId = cell?.id,
-                            segments = cell?.let { previewsOf(contentsByCell[it.id].orEmpty()) }.orEmpty(),
+                            segments = previewsOf(contents),
+                            // Asked of what is stored, not of what is shown: a
+                            // piece naming a deleted task previews as nothing
+                            // and still makes the cell one an editor must not
+                            // rewrite as a single string.
+                            holdsTasks = contents.any { it.kind == SegmentKind.TASK },
                         )
                     },
             )

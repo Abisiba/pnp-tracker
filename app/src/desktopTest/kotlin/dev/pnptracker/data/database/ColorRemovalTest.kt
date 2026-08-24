@@ -174,10 +174,10 @@ class ColorRemovalTest {
             val task = insertGameCellAndTask(database, columnType = CellColumnType.THREE_D)
             val grey = colorId("Gri")
             database.taskColorDao().addColorToTask(task.id, grey)
-            val segment = assertNotNull(database.cellSegmentDao().segmentOfTask(task.id))
+            val segment = assertNotNull(database.cellSegmentDao().segmentOfTaskIncludingDeleted(task.id))
 
             database.colorDao().deleteColorTheUserHasConfirmed(grey)
 
-            assertEquals(segment, assertNotNull(database.cellSegmentDao().segmentOfTask(task.id)))
+            assertEquals(segment, assertNotNull(database.cellSegmentDao().segmentOfTaskIncludingDeleted(task.id)))
         }
 }

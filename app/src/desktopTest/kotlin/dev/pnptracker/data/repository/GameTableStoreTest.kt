@@ -12,6 +12,7 @@ import dev.pnptracker.data.database.createdAt
 import dev.pnptracker.data.database.deletedAt
 import dev.pnptracker.data.database.entity.CellSegmentEntity
 import dev.pnptracker.data.database.entity.GameEntity
+import dev.pnptracker.data.database.insertSegmentDirectly
 import dev.pnptracker.domain.games.GameTableRow
 import dev.pnptracker.domain.games.GameTableView
 import dev.pnptracker.domain.model.CellColumnType
@@ -90,7 +91,8 @@ class GameTableStoreTest {
         text: String,
         orderIndex: Int,
     ) {
-        database.cellSegmentDao().insert(
+        insertSegmentDirectly(
+            database,
             CellSegmentEntity.plainText(
                 id = ids.newId(),
                 cellId = cellId,

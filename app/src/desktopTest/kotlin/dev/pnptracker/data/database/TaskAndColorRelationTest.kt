@@ -149,7 +149,7 @@ class TaskAndColorRelationTest {
             val task = aTask()
             database.taskDao().addTaskToCell(task, cell.id, newId(), createdAt)
 
-            val segment = assertNotNull(database.cellSegmentDao().segmentOfTask(task.id))
+            val segment = assertNotNull(database.cellSegmentDao().segmentOfTaskIncludingDeleted(task.id))
             assertEquals(cell.id, segment.cellId)
             assertEquals(SegmentKind.TASK, segment.kind)
             assertEquals(0, segment.orderIndex)
@@ -164,7 +164,8 @@ class TaskAndColorRelationTest {
             database.taskDao().addTaskToCell(task, cell.id, newId(), createdAt)
 
             assertFailsWith<SQLiteException> {
-                database.cellSegmentDao().insert(
+                insertSegmentDirectly(
+                    database,
                     CellSegmentEntity.task(newId(), cell.id, orderIndex = 1, taskId = task.id, moment = createdAt),
                 )
             }
@@ -176,12 +177,14 @@ class TaskAndColorRelationTest {
     fun `two segments of one cell cannot claim the same place`() =
         runBlocking<Unit> {
             val cell = insertGameAndCell(database)
-            database.cellSegmentDao().insert(
+            insertSegmentDirectly(
+                database,
                 CellSegmentEntity.plainText(newId(), cell.id, orderIndex = 0, text = "Knight", moment = createdAt),
             )
 
             assertFailsWith<SQLiteException> {
-                database.cellSegmentDao().insert(
+                insertSegmentDirectly(
+                    database,
                     CellSegmentEntity.plainText(newId(), cell.id, orderIndex = 0, text = "Token", moment = createdAt),
                 )
             }

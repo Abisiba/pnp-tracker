@@ -118,7 +118,7 @@ class TaskSetupStoreTest {
                 )
 
             val row = assertNotNull(database.taskDao().activeTaskById(id))
-            assertEquals(cellId, assertNotNull(database.cellSegmentDao().segmentOfTask(id)).cellId)
+            assertEquals(cellId, assertNotNull(database.cellSegmentDao().segmentOfTaskIncludingDeleted(id)).cellId)
             assertEquals("Mavi kart", row.name)
             assertEquals(PoolType.CARD, row.poolType)
             assertEquals(TrackingMode.PIPELINE, row.trackingMode)

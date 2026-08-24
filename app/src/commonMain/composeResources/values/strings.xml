@@ -169,6 +169,19 @@
     <string name="table_add_game">Oyun ekle</string>
     <string name="table_add_game_hint">Enter ile kaydedin, Esc ile vazgeçin.</string>
 
+    <!-- Game table: writing in a cell -->
+    <string name="cell_edit">Düzenle</string>
+    <string name="cell_edit_action">%1$s hücresini düzenle</string>
+    <string name="cell_editor_hint">Enter satır ekler, Ctrl+Enter kaydeder, Esc vazgeçer.</string>
+    <string name="cell_save">Kaydet</string>
+    <string name="cell_discard">Vazgeç</string>
+    <string name="cell_saving">Kaydediliyor…</string>
+    <string name="cell_error_could_not_save">Hücre kaydedilemedi. Yazdığınız metin duruyor; yeniden deneyebilirsiniz.</string>
+    <string name="cell_error_game_gone">Bu oyun artık kayıtlı değil.</string>
+    <string name="cell_error_contains_tasks">Bu hücrede görev var; görevli hücre tek parça metin olarak düzenlenemez.</string>
+    <string name="cell_locked_by_tasks">Görev içeriyor</string>
+    <string name="cell_editor_open_elsewhere">Önce açık hücreyi kaydedin veya vazgeçin.</string>
+
     <!-- Games: setting up games and items -->
     <string name="games_loading">Oyunlar yükleniyor…</string>
     <string name="games_empty_title">Henüz oyun yok</string>

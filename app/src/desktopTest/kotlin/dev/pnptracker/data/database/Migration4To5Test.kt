@@ -249,7 +249,7 @@ class Migration4To5Test {
             )
             assertEquals(
                 cardCellId,
-                assertNotNull(database.cellSegmentDao().segmentOfTask(cardTaskId)).cellId,
+                assertNotNull(database.cellSegmentDao().segmentOfTaskIncludingDeleted(cardTaskId)).cellId,
             )
             val plainText = database.cellSegmentDao().segmentsOfCell(notesCellId).single()
             assertEquals("Kutu ölçüsü 30×30", plainText.text)
