@@ -88,14 +88,19 @@ class ImportConfirmationStore(
     override suspend fun summarize(batchId: EntityId): ImportConfirmationSummary? {
         val batch = importDao.batchById(batchId) ?: return null
         val drafts = importDao.draftTasksOfBatch(batchId)
+        // Every draft's target looked up at once. Asking per draft made the
+        // screen's re-read after each change cost one query per draft, and the
+        // answer is the same either way: a cell missing from here is a cell that
+        // is gone or whose game has been deleted.
+        val aimedAt = drafts.mapNotNull { it.targetCellId }.toSet()
+        val liveCells =
+            if (aimedAt.isEmpty()) emptyMap() else importDao.activeCellColumns(aimedAt).associateBy { it.cellId }
         val problems =
             drafts.mapNotNull { draft ->
                 val failure =
                     when {
                         draft.targetCellId == null -> ImportConfirmationFailure.TARGET_CELL_MISSING
-                        importDao.activeCellCount(draft.targetCellId) != 1 ->
-                            ImportConfirmationFailure.TARGET_CELL_NOT_AVAILABLE
-
+                        draft.targetCellId !in liveCells -> ImportConfirmationFailure.TARGET_CELL_NOT_AVAILABLE
                         draft.selectedPoolType == null -> ImportConfirmationFailure.POOL_TYPE_MISSING
                         draft.selectedTrackingMode == null -> ImportConfirmationFailure.TRACKING_MODE_MISSING
                         else -> null
@@ -119,9 +124,11 @@ class ImportConfirmationStore(
         poolType: PoolType?,
         trackingMode: TrackingMode?,
     ) {
-        // Only a storage failure becomes something the user can act on. A broken
-        // invariant travels out as it is, because it is a defect and not a
-        // saved-or-not.
+        // A target that cannot take this task already arrives as an
+        // ImportConfirmationException naming which way it was wrong, and passes
+        // straight through to the screen. Only a storage refusal is turned into
+        // one here; a broken invariant travels out as it is, because it is a
+        // defect and not a saved-or-not.
         try {
             importDao.setDraftTargetUnderReview(
                 draftId = draftId,

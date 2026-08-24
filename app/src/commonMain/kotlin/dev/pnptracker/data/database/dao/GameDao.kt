@@ -57,7 +57,7 @@ interface GameDao {
      * Only this one game is touched, and only while it still exists: the id is the
      * whole of the predicate besides the soft delete check. Nothing below a game
      * is looked at, because a game being finished is the user's statement and not
-     * a summary of its items or tasks.
+     * a summary of its cells or tasks.
      *
      * @return 1 when the game was there and active, 0 otherwise.
      */

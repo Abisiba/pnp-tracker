@@ -24,6 +24,7 @@ fun messageOf(failure: ImportConfirmationFailure): StringResource =
         ImportConfirmationFailure.UNPROCESSED_BLOCKS_NOT_ACKNOWLEDGED -> Strings.Confirm.errorUnprocessed
         ImportConfirmationFailure.TARGET_CELL_MISSING -> Strings.Confirm.errorTargetMissing
         ImportConfirmationFailure.TARGET_CELL_NOT_AVAILABLE -> Strings.Confirm.errorTargetUnavailable
+        ImportConfirmationFailure.TARGET_CELL_NOT_TASK_CAPABLE -> Strings.Confirm.errorTargetNotTaskCapable
         ImportConfirmationFailure.TARGET_CELL_WRONG_COLUMN -> Strings.Confirm.errorTargetWrongColumn
         ImportConfirmationFailure.POOL_TYPE_MISSING -> Strings.Confirm.errorPoolMissing
         ImportConfirmationFailure.TRACKING_MODE_MISSING -> Strings.Confirm.errorTrackingMissing

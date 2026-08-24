@@ -37,7 +37,9 @@ interface TaskSetup {
      *   known; a number that is given has to be greater than zero.
      * @throws IllegalArgumentException if the name says nothing, the quantity is
      *   not a usable one, or the pool does not allow the tracking mode.
-     * @throws TaskSetupException if the cell is gone, or the task did not save.
+     * @throws TaskSetupException if the cell is gone, holds no tasks, belongs to
+     *   a column the pool disagrees with, or the task did not save; which one it
+     *   was is on the exception.
      */
     suspend fun createTask(
         cellId: EntityId,
@@ -101,16 +103,16 @@ class TaskSetupStore(
                 sourceRawImportBlockId = null,
             )
         try {
+            // The cell refusals already arrive as a TaskSetupException saying
+            // which one it was, so they pass straight through. Nothing here
+            // catches IllegalArgumentException: doing so would file a
+            // programming mistake under a failure the user is asked to fix.
             taskDao.addTaskToCell(
                 task = task,
                 cellId = cellId,
                 segmentId = idGenerator.newId(),
                 moment = moment,
             )
-        } catch (cause: IllegalArgumentException) {
-            // What that check reports is a cell that is not there any more, or one
-            // whose column cannot hold this task; both are things the user can see.
-            throw TaskSetupException(TaskSetupFailure.CELL_NOT_AVAILABLE, cause)
         } catch (cause: SQLiteException) {
             throw TaskSetupException(TaskSetupFailure.COULD_NOT_SAVE, cause)
         }

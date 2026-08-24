@@ -287,9 +287,12 @@ class TaskSetupStoreTest {
         runBlocking {
             val (_, cellId) = aGameWithACell()
 
-            // The three refusals above are invariants, not storage failures. Were
-            // they reported as TaskSetupException the screen would tell the user
-            // the database was at fault and offer them nothing to fix.
+            // The three refusals below are invariants, not storage failures, and
+            // not one of the cell cases either. Were they reported as
+            // TaskSetupException the screen would tell the user the database was
+            // at fault and offer them nothing to fix — which is exactly what a
+            // blanket `catch (IllegalArgumentException)` around the write would
+            // do, and why there is not one.
             val refusals =
                 listOf<suspend () -> Unit>(
                     { store.createTask(cellId, " ", PoolType.THREE_D, TrackingMode.THREE_D_BATCH) },
@@ -297,6 +300,68 @@ class TaskSetupStoreTest {
                     { store.createTask(cellId, "Gri token", PoolType.CARD, TrackingMode.COUNTED) },
                 )
             refusals.forEach { attempt -> assertFailsWith<IllegalArgumentException> { attempt() } }
+        }
+
+    @Test
+    fun `the notes column refuses a task, and says that is why`() =
+        runBlocking {
+            val (_, notesCellId) = aGameWithACell(columnType = CellColumnType.NOTES)
+
+            val refusal =
+                assertFailsWith<TaskSetupException> {
+                    store.createTask(notesCellId, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
+                }
+
+            assertEquals(TaskSetupFailure.CELL_DOES_NOT_HOLD_TASKS, refusal.failure)
+            assertEquals(emptyList(), everyTaskRow())
+            assertEquals(0, database.cellSegmentDao().segmentCountOfCell(notesCellId))
+        }
+
+    @Test
+    fun `a 3D task refuses the card column, and says that is why`() =
+        runBlocking {
+            val (_, cardCellId) = aGameWithACell(columnType = CellColumnType.CARD)
+
+            val refusal =
+                assertFailsWith<TaskSetupException> {
+                    store.createTask(cardCellId, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
+                }
+
+            assertEquals(TaskSetupFailure.CELL_POOL_MISMATCH, refusal.failure)
+            // Neither half of the pair survives a refusal: a task nothing points
+            // at would be unreachable, and a segment naming no task undrawable.
+            assertEquals(emptyList(), everyTaskRow())
+            assertEquals(0, database.cellSegmentDao().segmentCountOfCell(cardCellId))
+        }
+
+    @Test
+    fun `no refusal leaves half of a task behind`() =
+        runBlocking {
+            val (gameId, threeDCellId) = aGameWithACell()
+            val cardCell = aCell(gameId = gameId, columnType = CellColumnType.CARD)
+            val notesCell = aCell(gameId = gameId, columnType = CellColumnType.NOTES)
+            database.gameCellDao().insert(cardCell)
+            database.gameCellDao().insert(notesCell)
+
+            val refused =
+                listOf<suspend () -> Unit>(
+                    { store.createTask(cardCell.id, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH) },
+                    { store.createTask(notesCell.id, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH) },
+                    {
+                        store.createTask(
+                            IdGenerator.Random.newId(),
+                            "Gri token",
+                            PoolType.THREE_D,
+                            TrackingMode.THREE_D_BATCH,
+                        )
+                    },
+                )
+            refused.forEach { attempt -> assertFailsWith<TaskSetupException> { attempt() } }
+
+            assertEquals(emptyList(), everyTaskRow())
+            listOf(threeDCellId, cardCell.id, notesCell.id).forEach { cellId ->
+                assertEquals(0, database.cellSegmentDao().segmentCountOfCell(cellId), "a segment was left in $cellId")
+            }
         }
 
     @Test
@@ -429,12 +494,11 @@ class TaskSetupStoreTest {
             store.createTask(tokens, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
             store.createTask(cards.id, "Anlaşma kartı", PoolType.CARD, TrackingMode.PIPELINE)
 
-            // Cells come in column order, and inside a cell the pieces come in the
-            // order they were written.
-            // Cells come in column order — the column is stored under its name, so
-            // CARD sorts before THREE_D — and inside a cell the pieces come in the
-            // order they were written.
-            val expected = listOf("Olay kartı", "Anlaşma kartı", "Gri token")
+            // Cells come in the order the table is read in — 3D before cards,
+            // whatever order the tasks were written in and whatever the stored
+            // text would sort as — and inside a cell the pieces come in the order
+            // they were written.
+            val expected = listOf("Gri token", "Olay kartı", "Anlaşma kartı")
             assertEquals(expected, tasksOf(gameId).map { it.name })
             assertEquals(expected, tasksOf(gameId).map { it.name }, "a second read reordered the list")
         }

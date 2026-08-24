@@ -58,7 +58,7 @@
     <string name="import_multiline_cell_count">Çok satırlı hücre: %1$d</string>
     <string name="import_column_counts_title">Sütun türüne göre hücreler</string>
     <string name="import_column_count_row">%1$s: %2$d</string>
-    <string name="import_nothing_created_note">Bu adımda oyun, öge veya görev oluşturulmaz. Yalnızca ham hücreler taslak olarak saklanır.</string>
+    <string name="import_nothing_created_note">Bu adımda oyun, hücre veya görev oluşturulmaz. Yalnızca ham hücreler taslak olarak saklanır.</string>
 
     <!-- Import screen: source column names -->
     <string name="source_column_game">Oyun</string>
@@ -126,7 +126,7 @@
     <string name="review_could_not_save">Değişiklik kaydedilemedi; önceki değer korundu.</string>
     <string name="review_green_hint_pending">Yeşil hücre ipucu onay bekliyor</string>
     <string name="review_completion_hint_pending">Tamamlanma ipucu onay bekliyor</string>
-    <string name="review_no_real_records">Bu ekranda oyun, öge veya görev oluşturulmaz. İçe aktarma onaylanana kadar taslak kalır.</string>
+    <string name="review_no_real_records">Bu ekranda oyun, hücre veya görev oluşturulmaz. İçe aktarma onaylanana kadar taslak kalır.</string>
 
     <!-- Import review: accessibility -->
     <string name="review_select_cell_accessibility">Ham hücreyi seç</string>
@@ -143,7 +143,7 @@
     <!-- Games: setting up games and items -->
     <string name="games_loading">Oyunlar yükleniyor…</string>
     <string name="games_empty_title">Henüz oyun yok</string>
-    <string name="games_empty_hint">İlk oyununuzu oluşturun; ögeleri ve görevleri bunun altında toplanır.</string>
+    <string name="games_empty_hint">İlk oyununuzu oluşturun; hücreleri ve görevleri bunun altında toplanır.</string>
     <string name="games_create">Yeni oyun oluştur</string>
     <string name="games_name_label">Oyun adı</string>
     <string name="games_name_required">Oyun adı boş olamaz.</string>
@@ -154,7 +154,7 @@
     <string name="games_completed_badge">Tamamlandı</string>
     <string name="games_mark_completed">Tamamlandı olarak işaretle</string>
     <string name="games_mark_active">Yeniden aç</string>
-    <string name="games_completion_note">Tamamlanma yalnızca sizin kararınızdır; ögeleri ve görevleri değiştirmez.</string>
+    <string name="games_completion_note">Tamamlanma yalnızca sizin kararınızdır; hücrelerini ve görevlerini değiştirmez.</string>
     <string name="games_unavailable_title">Oyun bulunamadı</string>
     <string name="games_unavailable">Bu oyun artık kayıtlı değil.</string>
     <string name="games_cells_title">Sütunlar</string>
@@ -170,7 +170,7 @@
     <string name="confirm_unavailable">Bu içe aktarma artık kayıtlı değil.</string>
     <string name="confirm_summary">%1$d taslaktan %2$d görev oluşturulacak.</string>
     <string name="confirm_ready">Bütün taslaklar hazır. Onaylandığında %1$d gerçek görev oluşturulacak.</string>
-    <string name="confirm_no_games_created">Onaylamak hiçbir oyun veya öge oluşturmaz; görevler yalnızca sizin oluşturduğunuz ögelere bağlanır.</string>
+    <string name="confirm_no_games_created">Onaylamak hiçbir oyun veya hücre oluşturmaz; görevler yalnızca sizin açtığınız hücrelere bağlanır.</string>
     <string name="confirm_action">Onayla ve görevleri oluştur</string>
     <string name="confirm_dialog_title">İçe aktarmayı onaylıyor musunuz?</string>
     <string name="confirm_dialog_body">%1$d gerçek görev oluşturulacak. Bu işlem tek seferliktir ve bu sürümde geri alınamaz.</string>
@@ -190,31 +190,32 @@
     <string name="confirm_error_already_confirmed">Bu içe aktarma zaten onaylanmış. Yeni görev oluşturulmadı.</string>
     <string name="confirm_error_not_a_draft">Bu içe aktarma taslak durumunda değil, bu yüzden onaylanamaz.</string>
     <string name="confirm_error_no_drafts">Onaylanacak taslak yok. Önce ham hücrelerden taslak görev oluşturun.</string>
-    <string name="confirm_error_no_cells">Henüz hiç öge yok. Önce Oyunlar ekranından bir oyun ve öge oluşturun.</string>
+    <string name="confirm_error_no_cells">Henüz hiç hücre yok. Önce Oyunlar ekranından bir oyun oluşturup hücresini açın.</string>
     <string name="confirm_error_unprocessed">İncelenmemiş hücreler var; devam etmek için onay kutusunu işaretleyin.</string>
-    <string name="confirm_error_target_missing">Bu taslağa hedef öge seçilmedi.</string>
+    <string name="confirm_error_target_missing">Bu taslağa hedef hücre seçilmedi.</string>
     <string name="confirm_error_target_wrong_column">Seçilen sütun bu görevin havuzuna uymuyor.</string>
-    <string name="confirm_error_target_unavailable">Bu taslağın hedef ögesi artık kayıtlı değil.</string>
+    <string name="confirm_error_target_unavailable">Bu taslağın hedef hücresi artık kullanılamıyor.</string>
+    <string name="confirm_error_target_not_task_capable">Notlar sütununa görev yazılamaz; başka bir hücre seçin.</string>
     <string name="confirm_error_pool_missing">Bu taslağa üretim havuzu seçilmedi.</string>
     <string name="confirm_error_tracking_missing">Bu taslağa takip biçimi seçilmedi.</string>
     <string name="confirm_error_could_not_save">Onay kaydedilemedi; hiçbir görev oluşturulmadı ve içe aktarma taslak olarak kaldı.</string>
 
-    <!-- Aiming a draft at the item its task will belong to. -->
+    <!-- Aiming a draft at the cell its task will be written in. -->
     <string name="aim_title">Hedef</string>
-    <string name="aim_none">Hedef öge seçilmedi</string>
-    <string name="aim_item_label">%1$s › %2$s</string>
-    <string name="aim_choose_item">Hedef öge</string>
+    <string name="aim_none">Hedef hücre seçilmedi</string>
+    <string name="aim_cell_label">%1$s › %2$s</string>
+    <string name="aim_choose_cell">Hedef hücre</string>
     <string name="aim_choose_pool">Üretim havuzu</string>
     <string name="aim_choose_tracking">Takip biçimi</string>
     <string name="aim_ready">Hazır</string>
-    <string name="aim_no_items">Önce bir oyun ve öge oluşturun.</string>
+    <string name="aim_no_cells">Önce bir oyun oluşturup hücresini açın.</string>
     <string name="aim_materialized">Bu taslak gerçek göreve dönüştürüldü.</string>
 
     <!-- Görevler bölümü: elle görev oluşturma ve havuzlara göre listeleme -->
     <string name="tasks_title">Görevler</string>
     <string name="tasks_loading">Görevler yükleniyor…</string>
     <string name="tasks_empty">Bu oyunun henüz görevi yok.</string>
-    <string name="tasks_empty_hint">Bir ögenin altına ilk görevi ekleyin; görevler havuzlarına göre gruplanır.</string>
+    <string name="tasks_empty_hint">Bir hücreye ilk görevi ekleyin; görevler havuzlarına göre gruplanır.</string>
     <string name="tasks_needs_cell">Görev eklemek için önce bir sütun açın.</string>
     <string name="tasks_create">Yeni görev ekle</string>
     <string name="tasks_name_label">Görev adı</string>
@@ -231,12 +232,14 @@
     <string name="tasks_notes_label">Not</string>
     <string name="column_notes">Notlar</string>
     <string name="tasks_save">Görevi kaydet</string>
-    <string name="tasks_row_item">Öge: %1$s</string>
+    <string name="tasks_row_column">Sütun: %1$s</string>
     <string name="tasks_row_quantity">Gerekli adet: %1$s</string>
     <string name="tasks_row_quantity_unknown">Gerekli adet bilinmiyor</string>
     <string name="tasks_row_from_import">İçe aktarmadan geldi</string>
     <string name="tasks_error_could_not_save">Görev kaydedilemedi; hiçbir şey yazılmadı.</string>
-    <string name="tasks_error_item_unavailable">Bu öge artık kayıtlı değil, bu yüzden görev oluşturulamadı.</string>
+    <string name="tasks_error_cell_unavailable">Hedef hücre artık kullanılamıyor, bu yüzden görev oluşturulamadı.</string>
+    <string name="tasks_error_cell_holds_no_tasks">Notlar sütununa görev yazılamaz; başka bir hücre seçin.</string>
+    <string name="tasks_error_cell_pool_mismatch">Seçilen hücrenin sütunu bu görevin havuzuna uymuyor.</string>
     <string name="pool_three_d">3D Baskı</string>
     <string name="pool_card">Kart</string>
     <string name="pool_board">Mukavva</string>

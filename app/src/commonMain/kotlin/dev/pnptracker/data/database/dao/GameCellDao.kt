@@ -5,6 +5,7 @@ import androidx.room3.Insert
 import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
 import androidx.room3.Transaction
+import dev.pnptracker.data.database.CELL_COLUMN_DISPLAY_ORDER
 import dev.pnptracker.data.database.entity.GameCellEntity
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
@@ -20,7 +21,8 @@ interface GameCellDao {
     @Query("SELECT * FROM game_cells WHERE id = :id")
     suspend fun cellById(id: EntityId): GameCellEntity?
 
-    @Query("SELECT * FROM game_cells WHERE game_id = :gameId ORDER BY column_type")
+    /** One game's cells, left to right across the table. */
+    @Query("SELECT * FROM game_cells WHERE game_id = :gameId ORDER BY " + CELL_COLUMN_DISPLAY_ORDER)
     suspend fun cellsOfGame(gameId: EntityId): List<GameCellEntity>
 
     @Query("SELECT * FROM game_cells WHERE game_id = :gameId AND column_type = :columnType")
@@ -29,12 +31,13 @@ interface GameCellDao {
         columnType: CellColumnType,
     ): GameCellEntity?
 
+    /** Every active game's cells, each game's in table order. */
     @Query(
         """
         SELECT game_cells.* FROM game_cells
         INNER JOIN games ON games.id = game_cells.game_id
         WHERE games.deleted_at IS NULL
-        ORDER BY games.name, games.id, game_cells.column_type
+        ORDER BY games.name, games.id, """ + CELL_COLUMN_DISPLAY_ORDER + """
         """,
     )
     fun observeCellsOfActiveGames(): Flow<List<GameCellEntity>>

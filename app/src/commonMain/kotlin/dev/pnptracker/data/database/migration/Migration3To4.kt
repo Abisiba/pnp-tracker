@@ -52,6 +52,12 @@ class UnconvertibleLegacyDataException(
  * target changes from an item to a cell, and because an item can no longer be
  * meant, every draft's target is cleared. The user aims them again at a cell,
  * which is the only honest answer when the thing they pointed at is gone.
+ *
+ * A draft's `materialized_task_id` is cleared for the same reason and with
+ * nothing lost: it names the task a draft was turned into, every task table row
+ * is dropped here, and a foreign key stops a draft from naming a task that is
+ * not there. So a draft that carried one could only exist in a database holding
+ * tasks — which is a database this migration refuses before it writes anything.
  */
 val Migration3To4: Migration =
     object : Migration(3, 4) {

@@ -1,5 +1,6 @@
 package dev.pnptracker.ui.feature.games
 
+import dev.pnptracker.domain.tasks.CellPoolChoice
 import dev.pnptracker.domain.tasks.TaskPoolGroup
 import dev.pnptracker.domain.tasks.TaskSummary
 import kotlin.test.Test
@@ -55,9 +56,20 @@ class TaskSurfaceTest {
 
     @Test
     fun `the form carries only what the user fills in`() {
+        // The target and the pool are one field rather than two, because they are
+        // one answer: CellPoolChoice holds them together so the form cannot carry
+        // a pair the database would refuse.
         assertEquals(
-            setOf("cellId", "name", "poolType", "trackingMode", "quantity", "notes"),
+            setOf("choice", "name", "quantity", "notes"),
             fieldNamesOf(TaskComposer::class.java),
+        )
+    }
+
+    @Test
+    fun `the target and the pool are kept together`() {
+        assertEquals(
+            setOf("cellId", "columnType", "poolType", "trackingMode"),
+            fieldNamesOf(CellPoolChoice::class.java),
         )
     }
 

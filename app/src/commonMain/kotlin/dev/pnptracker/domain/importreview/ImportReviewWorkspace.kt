@@ -57,7 +57,7 @@ data class ReviewDraftTask(
  * screen never has to filter and can never show a cell or a draft belonging to a
  * different file.
  *
- * Nothing here creates a game, an item or a task. Reviewing is reading and note
+ * Nothing here creates a game, a cell or a task. Reviewing is reading and note
  * taking; turning any of it into real records is a later step.
  */
 data class ImportReviewWorkspace(

@@ -1,6 +1,7 @@
 package dev.pnptracker.ui.feature.games
 
 import dev.pnptracker.data.repository.TaskSetup
+import dev.pnptracker.domain.games.CellSummary
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
@@ -29,7 +30,7 @@ import kotlin.test.assertTrue
 
 /** What a task the fake was asked to create looked like. */
 private data class CreatedTask(
-    val itemId: EntityId,
+    val cellId: EntityId,
     val name: String,
     val poolType: PoolType,
     val trackingMode: TrackingMode,
@@ -52,7 +53,7 @@ private class FakeTaskSetup : TaskSetup {
     override fun observeTasks(gameId: EntityId): Flow<List<TaskSummary>> = tasksFlow(gameId)
 
     override suspend fun createTask(
-        itemId: EntityId,
+        cellId: EntityId,
         name: String,
         poolType: PoolType,
         trackingMode: TrackingMode,
@@ -62,26 +63,26 @@ private class FakeTaskSetup : TaskSetup {
         heldSave?.await()
         breakWith?.let { throw it }
         failWith?.let { throw TaskSetupException(it) }
-        created += CreatedTask(itemId, name, poolType, trackingMode, requiredQuantity, notes)
+        created += CreatedTask(cellId, name, poolType, trackingMode, requiredQuantity, notes)
         return IdGenerator.Random.newId()
     }
 }
 
 class GameTasksControllerTest {
     private val gameId: EntityId = IdGenerator.Random.newId()
-    private val tokens: EntityId = IdGenerator.Random.newId()
-    private val cards: EntityId = IdGenerator.Random.newId()
+    private val tokens = CellSummary(IdGenerator.Random.newId(), gameId, CellColumnType.THREE_D)
+    private val cards = CellSummary(IdGenerator.Random.newId(), gameId, CellColumnType.CARD)
+    private val special = CellSummary(IdGenerator.Random.newId(), gameId, CellColumnType.SPECIAL)
 
     private fun aTask(
         name: String,
         poolType: PoolType = PoolType.THREE_D,
-        cellId: EntityId = tokens,
-        columnType: CellColumnType = CellColumnType.THREE_D,
+        cell: CellSummary = tokens,
         trackingMode: TrackingMode = TrackingMode.THREE_D_BATCH,
     ) = TaskSummary(
         id = IdGenerator.Random.newId(),
-        cellId = cellId,
-        columnType = columnType,
+        cellId = cell.id,
+        columnType = cell.columnType,
         poolType = poolType,
         trackingMode = trackingMode,
         name = name,
@@ -104,10 +105,10 @@ class GameTasksControllerTest {
     /** Fills in everything the form needs, so a test can change one thing at a time. */
     private fun GameTasksController.fillIn(
         name: String = "Gri token",
-        itemId: EntityId? = tokens,
+        cell: CellSummary? = tokens,
         poolType: PoolType = PoolType.THREE_D,
     ) {
-        startComposer(itemId)
+        startComposer(cell)
         editName(name)
         choosePool(poolType)
     }
@@ -130,7 +131,7 @@ class GameTasksControllerTest {
         setup.tasksFlow(gameId).value =
             listOf(
                 aTask("Ayraç", PoolType.SPECIAL, trackingMode = TrackingMode.CHECKLIST),
-                aTask("Olay kartı", PoolType.CARD, cellId = cards, columnType = CellColumnType.CARD, trackingMode = TrackingMode.PIPELINE),
+                aTask("Olay kartı", PoolType.CARD, cell = cards, trackingMode = TrackingMode.PIPELINE),
                 aTask("Gri token"),
             )
         withTasks(setup) { controller ->
@@ -168,7 +169,7 @@ class GameTasksControllerTest {
         setup.tasksFlow(gameId).value =
             listOf(
                 aTask("Gri token"),
-                aTask("Olay kartı", PoolType.CARD, cellId = cards, columnType = CellColumnType.CARD, trackingMode = TrackingMode.PIPELINE),
+                aTask("Olay kartı", PoolType.CARD, cell = cards, trackingMode = TrackingMode.PIPELINE),
             )
         withTasks(setup) { controller ->
             val content = assertIs<GameTasksState.Content>(controller.state.tasks)
@@ -204,7 +205,7 @@ class GameTasksControllerTest {
         withTasks(FakeTaskSetup()) { controller ->
             controller.startComposer(tokens)
 
-            assertEquals(tokens, assertNotNull(controller.state.composer).cellId)
+            assertEquals(tokens.id, assertNotNull(controller.state.composer).cellId)
         }
     }
 
@@ -215,7 +216,7 @@ class GameTasksControllerTest {
 
             controller.chooseCell(cards)
 
-            assertEquals(cards, assertNotNull(controller.state.composer).cellId)
+            assertEquals(cards.id, assertNotNull(controller.state.composer).cellId)
         }
     }
 
@@ -250,7 +251,7 @@ class GameTasksControllerTest {
     fun `a task cannot be saved before a cell is chosen`() {
         val setup = FakeTaskSetup()
         withTasks(setup) { controller ->
-            controller.fillIn(itemId = null)
+            controller.fillIn(cell = null)
 
             assertTrue(!assertNotNull(controller.state.composer).canSave)
             controller.save()
@@ -260,16 +261,83 @@ class GameTasksControllerTest {
     }
 
     @Test
-    fun `a task cannot be saved before a pool is chosen`() {
+    fun `a form opened on no cell has no pool either`() {
         val setup = FakeTaskSetup()
         withTasks(setup) { controller ->
-            controller.startComposer(tokens)
+            controller.startComposer()
             controller.editName("Gri token")
 
-            assertTrue(!assertNotNull(controller.state.composer).canSave)
+            val composer = assertNotNull(controller.state.composer)
+            assertNull(composer.poolType, "a pool was settled without a cell to take it from")
+            assertTrue(!composer.canSave)
             controller.save()
 
             assertEquals(0, setup.created.size)
+        }
+    }
+
+    @Test
+    fun `choosing a cell settles the pool from its column`() {
+        withTasks(FakeTaskSetup()) { controller ->
+            controller.startComposer()
+
+            controller.chooseCell(cards)
+
+            val composer = assertNotNull(controller.state.composer)
+            assertEquals(cards.id, composer.cellId)
+            assertEquals(CellColumnType.CARD, composer.columnType)
+            assertEquals(PoolType.CARD, composer.poolType)
+        }
+    }
+
+    @Test
+    fun `changing the pool lets go of a cell that no longer suits it`() {
+        withTasks(FakeTaskSetup()) { controller ->
+            controller.startComposer(tokens)
+
+            controller.choosePool(PoolType.CARD)
+
+            val composer = assertNotNull(controller.state.composer)
+            assertNull(composer.cellId, "a 3D cell was kept for a card task")
+            assertEquals(PoolType.CARD, composer.poolType)
+            assertTrue(!composer.canSave, "a task could be saved with nowhere to write it")
+        }
+    }
+
+    @Test
+    fun `keeping the pool the cell already implies keeps the cell`() {
+        withTasks(FakeTaskSetup()) { controller ->
+            controller.startComposer(cards)
+
+            controller.choosePool(PoolType.CARD)
+
+            assertEquals(cards.id, assertNotNull(controller.state.composer).cellId)
+        }
+    }
+
+    @Test
+    fun `the form can never hold a cell and a pool that disagree`() {
+        withTasks(FakeTaskSetup()) { controller ->
+            controller.startComposer()
+
+            // Every order the two can be chosen in, including the ones that used
+            // to leave a pair the database would have refused at save time.
+            for (cell in listOf(tokens, cards, special)) {
+                for (pool in PoolType.entries) {
+                    controller.chooseCell(cell)
+                    controller.choosePool(pool)
+                    val afterPool = assertNotNull(controller.state.composer)
+                    assertTrue(
+                        afterPool.columnType == null || afterPool.columnType?.poolType == afterPool.poolType,
+                        "pool ${afterPool.poolType} was left with a ${afterPool.columnType} cell",
+                    )
+
+                    controller.choosePool(pool)
+                    controller.chooseCell(cell)
+                    val afterCell = assertNotNull(controller.state.composer)
+                    assertEquals(cell.columnType.poolType, afterCell.poolType)
+                }
+            }
         }
     }
 
@@ -290,10 +358,8 @@ class GameTasksControllerTest {
     fun `a pool that allows two tracking modes waits for the user to say`() {
         val setup = FakeTaskSetup()
         withTasks(setup) { controller ->
-            controller.startComposer(tokens)
+            controller.startComposer(special)
             controller.editName("Ayraç")
-
-            controller.choosePool(PoolType.SPECIAL)
 
             val composer = assertNotNull(controller.state.composer)
             assertNull(composer.trackingMode, "a mode was guessed for a pool that allows two")
@@ -308,9 +374,8 @@ class GameTasksControllerTest {
     fun `choosing one of the two modes finishes the special pool form`() {
         val setup = FakeTaskSetup()
         withTasks(setup) { controller ->
-            controller.startComposer(tokens)
+            controller.startComposer(special)
             controller.editName("Ayraç")
-            controller.choosePool(PoolType.SPECIAL)
 
             controller.chooseTracking(TrackingMode.COUNTED)
 
@@ -335,8 +400,7 @@ class GameTasksControllerTest {
     @Test
     fun `changing the pool drops a mode the new pool would not allow`() {
         withTasks(FakeTaskSetup()) { controller ->
-            controller.startComposer(tokens)
-            controller.choosePool(PoolType.SPECIAL)
+            controller.startComposer(special)
             controller.chooseTracking(TrackingMode.COUNTED)
 
             controller.choosePool(PoolType.CARD)
@@ -411,7 +475,7 @@ class GameTasksControllerTest {
             controller.save()
 
             assertEquals(
-                CreatedTask(tokens, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH, 14, "Destek gerekmiyor"),
+                CreatedTask(tokens.id, "Gri token", PoolType.THREE_D, TrackingMode.THREE_D_BATCH, 14, "Destek gerekmiyor"),
                 setup.created.single(),
             )
         }

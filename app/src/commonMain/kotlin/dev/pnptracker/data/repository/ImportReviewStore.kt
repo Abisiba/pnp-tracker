@@ -49,7 +49,7 @@ interface ImportReview {
      * of markers: they were shown the cell text and then edited it, so what they
      * ended up with is the answer.
      *
-     * The draft is only a draft. No game, item or task comes of it here, the cell
+     * The draft is only a draft. No game, cell or task comes of it here, the cell
      * it came from keeps its review mark, and the import stays a draft.
      *
      * @throws ImportReviewException if the draft did not reach the database.

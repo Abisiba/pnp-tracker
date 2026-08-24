@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.collect
 /**
  * Setting up the games the user tracks and the cells in them.
  *
- * Both lists are read as streams, so a game or an item that is created shows up
+ * Both lists are read as streams, so a game or a cell that is opened shows up
  * without anything here having to remember to reload.
  *
  * Nothing on this path touches an import. Games and cells exist because someone

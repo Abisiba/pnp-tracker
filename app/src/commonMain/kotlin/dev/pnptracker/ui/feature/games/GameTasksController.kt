@@ -4,9 +4,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.pnptracker.data.repository.TaskSetup
+import dev.pnptracker.domain.games.CellSummary
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.tasks.CellPoolChoice
 import dev.pnptracker.domain.tasks.TaskSetupException
 import dev.pnptracker.domain.tasks.groupByPool
 import kotlinx.coroutines.flow.collect
@@ -14,9 +16,9 @@ import kotlinx.coroutines.flow.collect
 /**
  * The tasks of whichever game is open, and the one form that adds to them.
  *
- * Kept apart from [GamesController] on purpose: the games and items section
+ * Kept apart from [GamesController] on purpose: the games and cells section
  * already works, and growing it would put the two under one saving flag, where
- * adding a task would grey out the item form and the other way round.
+ * adding a task would grey out the game form and the other way round.
  *
  * The pool sections are worked out here rather than while drawing, so what the
  * screen is told to show is something a test can hold on to.
@@ -58,15 +60,23 @@ class GameTasksController(
     /**
      * Opens the form.
      *
-     * @param cellId the item the user came from, when they came from one; they
-     *   can still pick another before saving.
+     * @param cell the cell the user came from, when they came from one; they can
+     *   still pick another before saving. Coming from a cell settles the pool
+     *   too, because the column it belongs to decides that.
      */
-    fun startComposer(cellId: EntityId? = null) {
-        state = state.copy(composer = TaskComposer(cellId = cellId), failure = null)
+    fun startComposer(cell: CellSummary? = null) {
+        val choice = cell?.let { CellPoolChoice().withCell(it.id, it.columnType) } ?: CellPoolChoice()
+        state = state.copy(composer = TaskComposer(choice = choice), failure = null)
     }
 
-    fun chooseCell(cellId: EntityId) {
-        state = state.copy(composer = state.composer?.copy(cellId = cellId))
+    /**
+     * Aims the form at a cell, taking the pool from its column.
+     *
+     * The two are never asked separately, so the form cannot be carrying a pair
+     * the database would refuse by the time the user presses save.
+     */
+    fun chooseCell(cell: CellSummary) {
+        state = state.copy(composer = state.composer?.let { it.copy(choice = it.choice.withCell(cell.id, cell.columnType)) })
     }
 
     fun editName(name: String) {
@@ -79,16 +89,16 @@ class GameTasksController(
      * A pool with one mode has it set outright rather than being offered a list
      * of one, but the value is written explicitly; nothing later guesses it. A
      * pool with a real choice starts with none made, so the user has to say.
+     *
+     * Changing the pool drops a cell that no longer suits it. There is no honest
+     * way to guess which other cell was meant, so the user says where it goes.
      */
     fun choosePool(poolType: PoolType) {
-        state = state.copy(composer = state.composer?.copy(poolType = poolType, trackingMode = onlyTrackingModeOf(poolType)))
+        state = state.copy(composer = state.composer?.let { it.copy(choice = it.choice.withPool(poolType)) })
     }
 
     fun chooseTracking(trackingMode: TrackingMode) {
-        val composer = state.composer ?: return
-        val poolType = composer.poolType ?: return
-        if (trackingMode !in trackingModesOf(poolType)) return
-        state = state.copy(composer = composer.copy(trackingMode = trackingMode))
+        state = state.copy(composer = state.composer?.let { it.copy(choice = it.choice.withTracking(trackingMode)) })
     }
 
     fun editQuantity(quantity: String) {

@@ -33,17 +33,20 @@ enum class ImportConfirmationFailure {
     /** There is nothing to turn into tasks yet. */
     NO_DRAFTS_TO_CONFIRM,
 
-    /** There is no item anywhere to attach a task to; the user creates one first. */
+    /** There is no cell anywhere to write a task in; the user opens one first. */
     NO_CELLS_AVAILABLE,
 
     /** Cells are still unreviewed and the user has not said to go ahead anyway. */
     UNPROCESSED_BLOCKS_NOT_ACKNOWLEDGED,
 
-    /** A draft has no target item chosen. */
+    /** A draft has no target cell chosen. */
     TARGET_CELL_MISSING,
 
-    /** A draft points at an item that is gone, or whose game is gone. */
+    /** A draft points at a cell that is gone, or whose game is gone. */
     TARGET_CELL_NOT_AVAILABLE,
+
+    /** The target belongs to the notes column, which PLAN 5.4 keeps tasks out of. */
+    TARGET_CELL_NOT_TASK_CAPABLE,
 
     /** The cell the draft points at belongs to a different column than its pool. */
     TARGET_CELL_WRONG_COLUMN,

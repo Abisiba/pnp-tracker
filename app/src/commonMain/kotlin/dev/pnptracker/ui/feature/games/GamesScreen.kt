@@ -39,6 +39,8 @@ import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.tasks.TaskSetupFailure
 import dev.pnptracker.domain.tasks.TaskSummary
+import dev.pnptracker.domain.tasks.suitsPool
+import dev.pnptracker.domain.tasks.trackingModesOf
 import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.columnNameOf
 import kotlinx.coroutines.launch
@@ -48,7 +50,7 @@ import org.jetbrains.compose.resources.stringResource
 private val MAX_CONTENT_WIDTH = 720.dp
 
 /**
- * The games the user is tracking, and the items under each one.
+ * The games the user is tracking, and the cells opened in each one.
  *
  * This is where the target structure an import will eventually write into gets
  * built, and it is built by hand: nothing here is derived from a spreadsheet.
@@ -325,9 +327,12 @@ private fun LazyListScope.tasksSection(
 /**
  * One task.
  *
- * It names the item it belongs to, because the sections above it are pools
- * rather than items. An unknown amount is said to be unknown rather than shown
- * as a zero nobody typed. Nothing here says whether the task is finished.
+ * It names the column it is written in, because the sections above it are pools
+ * rather than columns. The name comes from [columnNameOf] rather than from the
+ * value itself: a `CellColumnType` printed straight into a string would put the
+ * English constant on a Turkish screen. An unknown amount is said to be unknown
+ * rather than shown as a zero nobody typed. Nothing here says whether the task
+ * is finished.
  */
 @Composable
 private fun TaskRow(task: TaskSummary) {
@@ -338,7 +343,7 @@ private fun TaskRow(task: TaskSummary) {
         ) {
             Text(text = task.name, style = MaterialTheme.typography.bodyLarge)
             Text(
-                text = stringResource(Strings.Tasks.rowItem, task.columnType),
+                text = stringResource(Strings.Tasks.rowColumn, stringResource(columnNameOf(task.columnType))),
                 style = MaterialTheme.typography.labelMedium,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -377,7 +382,7 @@ private fun TaskComposerOrButton(
     }
 
     if (composer == null) {
-        Button(onClick = { tasks.startComposer(usable.singleOrNull()?.id) }, enabled = !isSaving) {
+        Button(onClick = { tasks.startComposer(usable.singleOrNull()) }, enabled = !isSaving) {
             Text(stringResource(Strings.Tasks.create))
         }
         return
@@ -387,7 +392,7 @@ private fun TaskComposerOrButton(
         composer = composer,
         cells = cells,
         isSaving = isSaving,
-        onChooseCell = { id -> tasks.chooseCell(id) },
+        onChooseCell = { cell -> tasks.chooseCell(cell) },
         onEditName = { name -> tasks.editName(name) },
         onChoosePool = { pool -> tasks.choosePool(pool) },
         onChooseTracking = { mode -> tasks.chooseTracking(mode) },
@@ -410,7 +415,7 @@ private fun TaskForm(
     composer: TaskComposer,
     cells: List<CellSummary>,
     isSaving: Boolean,
-    onChooseCell: (EntityId) -> Unit,
+    onChooseCell: (CellSummary) -> Unit,
     onEditName: (String) -> Unit,
     onChoosePool: (PoolType) -> Unit,
     onChooseTracking: (TrackingMode) -> Unit,
@@ -435,13 +440,16 @@ private fun TaskForm(
                 RequiredLine(stringResource(Strings.Tasks.nameRequired))
             }
 
+            // Only the cells the chosen pool can be written in are offered, and
+            // picking one sets the pool from its column. The two lists therefore
+            // cannot be brought into a state the database would refuse.
             Text(text = stringResource(Strings.Tasks.cellLabel), style = MaterialTheme.typography.labelMedium)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                cells.filter { it.columnType.holdsTasks }.forEach { cell ->
+                cells.filter { it.columnType.suitsPool(composer.poolType) }.forEach { cell ->
                     FilterChip(
                         selected = cell.id == composer.cellId,
                         enabled = !isSaving,
-                        onClick = { onChooseCell(cell.id) },
+                        onClick = { onChooseCell(cell) },
                         label = { Text(stringResource(columnNameOf(cell.columnType))) },
                     )
                 }

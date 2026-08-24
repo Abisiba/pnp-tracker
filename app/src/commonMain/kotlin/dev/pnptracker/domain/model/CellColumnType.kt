@@ -7,6 +7,13 @@ package dev.pnptracker.domain.model
  * fifth is the notes column, which carries free text and nothing else. The four
  * share their names with the pools they feed so the two can be read together
  * without a translation table in between.
+ *
+ * **The order they are declared in is the order the user sees them in**, left to
+ * right across the game table. Nothing may sort a column by its stored text:
+ * SQLite would put `BOARD` before `THREE_D` and hand the user an alphabet from a
+ * language the screen is not written in. Queries order by
+ * [dev.pnptracker.data.database.CELL_COLUMN_DISPLAY_ORDER] and lists in memory
+ * order by [entries]; `CellColumnOrderTest` holds the two together.
  */
 enum class CellColumnType {
     THREE_D,

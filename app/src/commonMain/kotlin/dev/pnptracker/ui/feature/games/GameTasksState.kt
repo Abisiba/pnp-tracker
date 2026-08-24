@@ -1,11 +1,13 @@
 package dev.pnptracker.ui.feature.games
 
+import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
-import dev.pnptracker.domain.rules.allowedTrackingModes
+import dev.pnptracker.domain.tasks.CellPoolChoice
 import dev.pnptracker.domain.tasks.TaskPoolGroup
 import dev.pnptracker.domain.tasks.TaskSetupFailure
+import dev.pnptracker.domain.tasks.trackingModesOf
 
 /**
  * Where one game's tasks section is.
@@ -42,13 +44,21 @@ sealed interface GameTasksState {
  * from "filled in with something that is not a usable count".
  */
 data class TaskComposer(
-    val cellId: EntityId? = null,
+    val choice: CellPoolChoice = CellPoolChoice(),
     val name: String = "",
-    val poolType: PoolType? = null,
-    val trackingMode: TrackingMode? = null,
     val quantity: String = "",
     val notes: String = "",
 ) {
+    /** The cell the task will be written in, once one has been picked. */
+    val cellId: EntityId? get() = choice.cellId
+
+    /** The column of that cell, which is what decides [poolType]. */
+    val columnType: CellColumnType? get() = choice.columnType
+
+    val poolType: PoolType? get() = choice.poolType
+
+    val trackingMode: TrackingMode? get() = choice.trackingMode
+
     /** The amount that would be saved, or null when it is being left unknown. */
     val requiredQuantity: Int? get() = quantity.trim().toIntOrNull()
 
@@ -64,22 +74,10 @@ data class TaskComposer(
         }
 
     /** True when the pool leaves the user a real choice of tracking mode. */
-    val offersTrackingChoice: Boolean get() = poolType != null && trackingModesOf(poolType).size > 1
+    val offersTrackingChoice: Boolean get() = poolType?.let { trackingModesOf(it).size > 1 } == true
 
-    val canSave: Boolean
-        get() =
-            name.isNotBlank() &&
-                cellId != null &&
-                poolType != null &&
-                trackingMode != null &&
-                !hasUnusableQuantity
+    val canSave: Boolean get() = name.isNotBlank() && choice.isComplete && !hasUnusableQuantity
 }
-
-/** The tracking modes a pool allows, in a fixed order the screen can draw. */
-fun trackingModesOf(poolType: PoolType): List<TrackingMode> = allowedTrackingModes.getValue(poolType).sortedBy { it.ordinal }
-
-/** The mode a pool leaves no choice about, or null when it allows more than one. */
-fun onlyTrackingModeOf(poolType: PoolType): TrackingMode? = allowedTrackingModes.getValue(poolType).singleOrNull()
 
 /** What the tasks section is showing, what is being typed, and what did not save. */
 data class GameTasksScreenState(

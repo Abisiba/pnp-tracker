@@ -640,16 +640,97 @@ class ImportConfirmationStoreTest {
             val fixture = given(draftCount = 1)
             val before = snapshot(fixture.batchId, fixture.gameId)
 
-            assertFailsWith<IllegalArgumentException> {
-                store.aimDraft(
-                    fixture.draftOneId,
-                    IdGenerator.Random.newId(),
-                    PoolType.THREE_D,
-                    TrackingMode.THREE_D_BATCH,
-                )
-            }
+            val refusal =
+                assertFailsWith<ImportConfirmationException> {
+                    store.aimDraft(
+                        fixture.draftOneId,
+                        IdGenerator.Random.newId(),
+                        PoolType.THREE_D,
+                        TrackingMode.THREE_D_BATCH,
+                    )
+                }
 
+            // Named rather than general: the screen shows a different sentence for
+            // a target that is gone than for one that cannot take this task.
+            assertEquals(ImportConfirmationFailure.TARGET_CELL_NOT_AVAILABLE, refusal.failure)
+            assertEquals(fixture.draftOneId, refusal.draftTaskId)
             assertEquals(before, snapshot(fixture.batchId, fixture.gameId))
+        }
+
+    @Test
+    fun `aiming a draft at the notes column is refused and writes nothing`() =
+        runBlocking {
+            val fixture = given(draftCount = 1)
+            val notesCell = aCell(gameId = fixture.gameId, columnType = CellColumnType.NOTES)
+            database.gameCellDao().insert(notesCell)
+            val before = snapshot(fixture.batchId, fixture.gameId)
+
+            val refusal =
+                assertFailsWith<ImportConfirmationException> {
+                    store.aimDraft(fixture.draftOneId, notesCell.id, PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
+                }
+
+            assertEquals(ImportConfirmationFailure.TARGET_CELL_NOT_TASK_CAPABLE, refusal.failure)
+            assertEquals(before, snapshot(fixture.batchId, fixture.gameId))
+        }
+
+    @Test
+    fun `aiming a card draft at the 3D column is refused and writes nothing`() =
+        runBlocking {
+            val fixture = given(draftCount = 1)
+            val before = snapshot(fixture.batchId, fixture.gameId)
+
+            val refusal =
+                assertFailsWith<ImportConfirmationException> {
+                    store.aimDraft(fixture.draftOneId, fixture.threeDCellId, PoolType.CARD, TrackingMode.PIPELINE)
+                }
+
+            assertEquals(ImportConfirmationFailure.TARGET_CELL_WRONG_COLUMN, refusal.failure)
+            assertEquals(before, snapshot(fixture.batchId, fixture.gameId))
+        }
+
+    @Test
+    fun `a draft aimed at a cell of a deleted game counts as a target that is gone`() =
+        runBlocking {
+            val fixture = given(draftCount = 1)
+            store.aimDraft(fixture.draftOneId, fixture.threeDCellId, PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
+            database.gameDao().softDelete(fixture.gameId, moment)
+
+            val summary = assertNotNull(store.summarize(fixture.batchId))
+
+            assertEquals(
+                listOf(ImportConfirmationFailure.TARGET_CELL_NOT_AVAILABLE),
+                summary.problems.map { it.failure },
+            )
+            assertEquals(ImportConfirmationFailure.NO_CELLS_AVAILABLE, summary.blockingFailure)
+        }
+
+    @Test
+    fun `the summary asks about every target at once, however many drafts there are`() =
+        runBlocking {
+            val fixture = given()
+            store.aimDraft(fixture.draftOneId, fixture.threeDCellId, PoolType.THREE_D, TrackingMode.THREE_D_BATCH)
+            store.aimDraft(fixture.draftTwoId, fixture.cardCellId, PoolType.CARD, TrackingMode.PIPELINE)
+
+            // The screen re-reads this after every change the user makes, so the
+            // cost has to be the same whether the batch holds two drafts or two
+            // hundred. Counting the reads is the only way to hold that: the
+            // answers below would look the same either way.
+            val counter = CountingImportDao(database.importDao())
+            val counted =
+                ImportConfirmationStore(
+                    importDao = counter,
+                    gameCellDao = database.gameCellDao(),
+                    gameDao = database.gameDao(),
+                    clock = StoppedClock(moment),
+                )
+
+            val summary = assertNotNull(counted.summarize(fixture.batchId))
+
+            assertEquals(emptyList(), summary.problems)
+            assertEquals(2, summary.readyTaskCount)
+            assertEquals(1, counter.activeCellColumnsCalls, "the targets were not looked up together")
+            assertEquals(0, counter.activeCellCountCalls, "a target was still asked about one at a time")
         }
 
     @Test

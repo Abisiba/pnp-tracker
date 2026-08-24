@@ -1,7 +1,7 @@
 package dev.pnptracker.domain.games
 
 /**
- * What can go wrong while setting up games and items, in words a screen can show.
+ * What can go wrong while setting up games and cells, in words a screen can show.
  *
  * A blank name is not here: it is refused before anything is written, so it is a
  * state of the form rather than the outcome of an attempt.
@@ -10,7 +10,7 @@ enum class GameSetupFailure {
     /** The storage refused the change, so nothing was written. */
     COULD_NOT_SAVE,
 
-    /** The game an item was going under is gone, or has been deleted. */
+    /** The game a cell was going to be opened in is gone, or has been deleted. */
     GAME_NOT_AVAILABLE,
 }
 

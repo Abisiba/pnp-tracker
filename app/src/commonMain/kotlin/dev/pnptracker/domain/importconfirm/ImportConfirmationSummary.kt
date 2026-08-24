@@ -4,7 +4,7 @@ import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.ImportBatchStatus
 
-/** One item the user can send a task to, named the way the screen lists it. */
+/** One cell the user can send a task to, named the way the screen lists it. */
 data class TargetCellChoice(
     val cellId: EntityId,
     val gameId: EntityId,

@@ -56,7 +56,7 @@ interface ImportDrafts {
  * identifiers about. The clock is read exactly once per save, which is what
  * makes every row of one import share a timestamp.
  *
- * This step creates no game, item, task or draft task. An import is a record of
+ * This step creates no game, cell, task or draft task. An import is a record of
  * what a file said; turning any of it into production records is a separate
  * decision the user has not made yet.
  */

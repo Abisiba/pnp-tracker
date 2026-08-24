@@ -1,12 +1,12 @@
 package dev.pnptracker.ui
 
 import dev.pnptracker.resources.Res
-import dev.pnptracker.resources.aim_choose_item
+import dev.pnptracker.resources.aim_cell_label
+import dev.pnptracker.resources.aim_choose_cell
 import dev.pnptracker.resources.aim_choose_pool
 import dev.pnptracker.resources.aim_choose_tracking
-import dev.pnptracker.resources.aim_item_label
 import dev.pnptracker.resources.aim_materialized
-import dev.pnptracker.resources.aim_no_items
+import dev.pnptracker.resources.aim_no_cells
 import dev.pnptracker.resources.aim_none
 import dev.pnptracker.resources.aim_ready
 import dev.pnptracker.resources.aim_title
@@ -49,6 +49,7 @@ import dev.pnptracker.resources.confirm_error_no_drafts
 import dev.pnptracker.resources.confirm_error_not_a_draft
 import dev.pnptracker.resources.confirm_error_pool_missing
 import dev.pnptracker.resources.confirm_error_target_missing
+import dev.pnptracker.resources.confirm_error_target_not_task_capable
 import dev.pnptracker.resources.confirm_error_target_unavailable
 import dev.pnptracker.resources.confirm_error_target_wrong_column
 import dev.pnptracker.resources.confirm_error_tracking_missing
@@ -198,8 +199,10 @@ import dev.pnptracker.resources.tasks_cell_required
 import dev.pnptracker.resources.tasks_create
 import dev.pnptracker.resources.tasks_empty
 import dev.pnptracker.resources.tasks_empty_hint
+import dev.pnptracker.resources.tasks_error_cell_holds_no_tasks
+import dev.pnptracker.resources.tasks_error_cell_pool_mismatch
+import dev.pnptracker.resources.tasks_error_cell_unavailable
 import dev.pnptracker.resources.tasks_error_could_not_save
-import dev.pnptracker.resources.tasks_error_item_unavailable
 import dev.pnptracker.resources.tasks_loading
 import dev.pnptracker.resources.tasks_name_label
 import dev.pnptracker.resources.tasks_name_required
@@ -210,8 +213,8 @@ import dev.pnptracker.resources.tasks_pool_required
 import dev.pnptracker.resources.tasks_quantity_hint
 import dev.pnptracker.resources.tasks_quantity_label
 import dev.pnptracker.resources.tasks_quantity_unusable
+import dev.pnptracker.resources.tasks_row_column
 import dev.pnptracker.resources.tasks_row_from_import
-import dev.pnptracker.resources.tasks_row_item
 import dev.pnptracker.resources.tasks_row_quantity
 import dev.pnptracker.resources.tasks_row_quantity_unknown
 import dev.pnptracker.resources.tasks_save
@@ -332,7 +335,7 @@ object Strings {
         val sheetAccessibilityLabel = Res.string.import_sheet_accessibility_label
     }
 
-    /** Setting up the games and items the user tracks. */
+    /** Setting up the games the user tracks and the cells in them. */
     object Games {
         val loading = Res.string.games_loading
         val emptyTitle = Res.string.games_empty_title
@@ -393,13 +396,15 @@ object Strings {
         val notesLabel = Res.string.tasks_notes_label
         val save = Res.string.tasks_save
 
-        val rowItem = Res.string.tasks_row_item
+        val rowColumn = Res.string.tasks_row_column
         val rowQuantity = Res.string.tasks_row_quantity
         val rowQuantityUnknown = Res.string.tasks_row_quantity_unknown
         val rowFromImport = Res.string.tasks_row_from_import
 
         val errorCouldNotSave = Res.string.tasks_error_could_not_save
-        val errorItemUnavailable = Res.string.tasks_error_item_unavailable
+        val errorCellUnavailable = Res.string.tasks_error_cell_unavailable
+        val errorCellHoldsNoTasks = Res.string.tasks_error_cell_holds_no_tasks
+        val errorCellPoolMismatch = Res.string.tasks_error_cell_pool_mismatch
     }
 
     /** The four production pools, under the names PLAN 3.4 gives them. */
@@ -495,25 +500,26 @@ object Strings {
         val errorUnprocessed = Res.string.confirm_error_unprocessed
         val errorTargetMissing = Res.string.confirm_error_target_missing
         val errorTargetUnavailable = Res.string.confirm_error_target_unavailable
+        val errorTargetNotTaskCapable = Res.string.confirm_error_target_not_task_capable
         val errorTargetWrongColumn = Res.string.confirm_error_target_wrong_column
         val errorPoolMissing = Res.string.confirm_error_pool_missing
         val errorTrackingMissing = Res.string.confirm_error_tracking_missing
         val errorCouldNotSave = Res.string.confirm_error_could_not_save
     }
 
-    /** Choosing where one draft's task will go. */
+    /** Choosing which cell one draft's task will be written in. */
     object Aim {
         val title = Res.string.aim_title
         val none = Res.string.aim_none
 
-        /** Takes the game name and the item name. */
-        val itemLabel = Res.string.aim_item_label
+        /** Takes the game name and the column name. */
+        val cellLabel = Res.string.aim_cell_label
 
-        val chooseItem = Res.string.aim_choose_item
+        val chooseCell = Res.string.aim_choose_cell
         val choosePool = Res.string.aim_choose_pool
         val chooseTracking = Res.string.aim_choose_tracking
         val ready = Res.string.aim_ready
-        val noItems = Res.string.aim_no_items
+        val noCells = Res.string.aim_no_cells
         val materialized = Res.string.aim_materialized
     }
 

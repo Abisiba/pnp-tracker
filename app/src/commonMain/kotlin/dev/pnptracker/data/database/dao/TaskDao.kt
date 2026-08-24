@@ -5,12 +5,15 @@ import androidx.room3.Insert
 import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
 import androidx.room3.Transaction
+import dev.pnptracker.data.database.CELL_COLUMN_DISPLAY_ORDER
 import dev.pnptracker.data.database.entity.CellSegmentEntity
 import dev.pnptracker.data.database.entity.TaskEntity
 import dev.pnptracker.data.database.projection.GameTaskRow
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.tasks.TaskSetupException
+import dev.pnptracker.domain.tasks.TaskSetupFailure
 import kotlinx.coroutines.flow.Flow
 import kotlin.time.Instant
 
@@ -50,15 +53,23 @@ interface TaskDao {
      *
      * The two are written together because neither means anything alone: a task
      * nothing points at is unreachable, and a segment naming no task cannot be
-     * drawn. Both guards are made in the same transaction as the writes, so a
+     * drawn. Every guard is made in the same transaction as the writes, so a
      * cell cannot be taken away between the check and the insert.
      *
      * The task's pool has to match the column it is written in. PLAN 5.4 keeps
      * tasks out of the notes column entirely, and a card task in the cardboard
      * column would show up in a pool its cell says nothing about.
      *
-     * @throws IllegalArgumentException if the cell is gone or belongs to a column
-     *   that cannot hold this task; nothing is written in that case.
+     * The three refusals are told apart rather than lumped into one, because
+     * they are different things to be told: the cell is gone, the column was
+     * never a place for tasks, or the pool and the column disagree. A screen can
+     * only say the right sentence if it is handed the right one, and a single
+     * general refusal would also have swallowed programming mistakes that
+     * happened to arrive as the same kind of exception.
+     *
+     * @throws TaskSetupException with [TaskSetupFailure.CELL_NOT_AVAILABLE],
+     *   [TaskSetupFailure.CELL_DOES_NOT_HOLD_TASKS] or
+     *   [TaskSetupFailure.CELL_POOL_MISMATCH]; nothing is written in those cases.
      */
     @Transaction
     suspend fun addTaskToCell(
@@ -67,12 +78,10 @@ interface TaskDao {
         segmentId: EntityId,
         moment: Instant,
     ) {
-        require(activeCellCount(cellId) == 1) { "There is no cell $cellId to write a task in." }
-        val columnType = requireNotNull(columnTypeOfCell(cellId)) { "The cell $cellId has no column." }
-        require(columnType.holdsTasks) { "The $columnType column holds no tasks." }
-        require(columnType.poolType == task.poolType) {
-            "A ${task.poolType} task does not belong in the $columnType column."
-        }
+        if (activeCellCount(cellId) != 1) throw TaskSetupException(TaskSetupFailure.CELL_NOT_AVAILABLE)
+        val columnType = columnTypeOfCell(cellId) ?: throw TaskSetupException(TaskSetupFailure.CELL_NOT_AVAILABLE)
+        if (!columnType.holdsTasks) throw TaskSetupException(TaskSetupFailure.CELL_DOES_NOT_HOLD_TASKS)
+        if (columnType.poolType != task.poolType) throw TaskSetupException(TaskSetupFailure.CELL_POOL_MISMATCH)
         insert(task)
         insertSegment(
             CellSegmentEntity.task(
@@ -92,9 +101,9 @@ interface TaskDao {
      * no other game's row can come back from here, whatever id is passed in, and
      * a task whose game has been deleted stays out along with it.
      *
-     * The ordering is a presentation choice and carries no meaning of its own;
-     * the segment order is the order the user sees inside a cell, and `id` last
-     * keeps the list from reshuffling when two rows tie.
+     * The rows come back column by column in the order the table is read in, and
+     * within a column in the order the pieces sit in the cell; `id` last keeps
+     * the list from reshuffling when two rows tie.
      */
     @Query(
         """
@@ -108,7 +117,7 @@ interface TaskDao {
         INNER JOIN games ON games.id = game_cells.game_id
         WHERE game_cells.game_id = :gameId
           AND tasks.deleted_at IS NULL AND games.deleted_at IS NULL
-        ORDER BY game_cells.column_type, cell_segments.order_index, tasks.id
+        ORDER BY """ + CELL_COLUMN_DISPLAY_ORDER + """, cell_segments.order_index, tasks.id
         """,
     )
     fun observeActiveTasksOfGame(gameId: EntityId): Flow<List<GameTaskRow>>

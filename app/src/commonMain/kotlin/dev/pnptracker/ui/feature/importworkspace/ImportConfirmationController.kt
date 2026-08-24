@@ -9,7 +9,7 @@ import dev.pnptracker.domain.importconfirm.TargetCellChoice
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
-import dev.pnptracker.domain.rules.allowedTrackingModes
+import dev.pnptracker.domain.tasks.onlyTrackingModeOf
 import kotlinx.coroutines.flow.collect
 
 /**
@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.collect
  * Kept apart from [ImportReviewController] because the two answer different
  * questions: that one is about reading a file and taking notes on it, this one
  * is about writing to the production tables. Nothing here creates a game or an
- * item; it only points drafts at the chain the user already built.
+ * cell; it only points drafts at the cells the user already opened.
  *
  * Everything this class shows is advisory. The decision is made by the store,
  * inside the transaction, which re-checks all of it.
@@ -29,7 +29,7 @@ class ImportConfirmationController(
     var state: ImportConfirmationState by mutableStateOf(ImportConfirmationState.Loading)
         private set
 
-    /** Every item the user has made, for the target picker. */
+    /** Every cell the user has opened that can hold a task, for the target picker. */
     var targetCells: List<TargetCellChoice> by mutableStateOf(emptyList())
         private set
 
@@ -50,7 +50,7 @@ class ImportConfirmationController(
     var hasAcknowledgedUnprocessed: Boolean by mutableStateOf(false)
         private set
 
-    /** Collects the list of items to aim drafts at, until cancelled. */
+    /** Collects the list of cells to aim drafts at, until cancelled. */
     suspend fun observeTargetCells() {
         confirmation.observeTargetCells().collect { targetCells = it }
     }
@@ -152,12 +152,5 @@ class ImportConfirmationController(
     private fun reportFailure(failure: ImportConfirmationException) {
         val ready = state as? ImportConfirmationState.Ready ?: return
         state = ready.copy(failure = failure.failure)
-    }
-
-    companion object {
-        /** The one mode a pool allows, or null when the user has to choose. */
-        fun onlyTrackingModeOf(poolType: PoolType): TrackingMode? = allowedTrackingModes.getValue(poolType).singleOrNull()
-
-        fun trackingModesOf(poolType: PoolType): List<TrackingMode> = allowedTrackingModes.getValue(poolType).toList()
     }
 }

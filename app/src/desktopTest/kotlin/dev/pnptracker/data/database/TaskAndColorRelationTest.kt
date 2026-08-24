@@ -9,6 +9,8 @@ import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.SegmentKind
 import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.tasks.TaskSetupException
+import dev.pnptracker.domain.tasks.TaskSetupFailure
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import kotlin.test.AfterTest
@@ -99,10 +101,15 @@ class TaskAndColorRelationTest {
         runBlocking<Unit> {
             val notes = insertGameAndCell(database, columnType = CellColumnType.NOTES)
 
-            assertFailsWith<IllegalArgumentException> {
-                database.taskDao().addTaskToCell(aTask(), notes.id, newId(), createdAt)
-            }
+            val refusal =
+                assertFailsWith<TaskSetupException> {
+                    database.taskDao().addTaskToCell(aTask(), notes.id, newId(), createdAt)
+                }
 
+            // Which refusal it was, not just that there was one: the screen shows
+            // a different sentence for each and can only pick the right one if
+            // this is carried out rather than flattened into a general failure.
+            assertEquals(TaskSetupFailure.CELL_DOES_NOT_HOLD_TASKS, refusal.failure)
             assertEquals(emptyList(), database.taskDao().allTasksIncludingDeleted())
             assertEquals(0, database.cellSegmentDao().segmentCountOfCell(notes.id))
         }
@@ -112,20 +119,26 @@ class TaskAndColorRelationTest {
         runBlocking<Unit> {
             val cardCell = insertGameAndCell(database, columnType = CellColumnType.CARD)
 
-            assertFailsWith<IllegalArgumentException> {
-                database.taskDao().addTaskToCell(aTask(), cardCell.id, newId(), createdAt)
-            }
+            val refusal =
+                assertFailsWith<TaskSetupException> {
+                    // aTask() is a 3D task, and this is the card column.
+                    database.taskDao().addTaskToCell(aTask(), cardCell.id, newId(), createdAt)
+                }
 
+            assertEquals(TaskSetupFailure.CELL_POOL_MISMATCH, refusal.failure)
             assertEquals(emptyList(), database.taskDao().allTasksIncludingDeleted())
+            assertEquals(0, database.cellSegmentDao().segmentCountOfCell(cardCell.id))
         }
 
     @Test
     fun `a task cannot be written into a cell that is not there`() =
         runBlocking<Unit> {
-            assertFailsWith<IllegalArgumentException> {
-                database.taskDao().addTaskToCell(aTask(), newId(), newId(), createdAt)
-            }
+            val refusal =
+                assertFailsWith<TaskSetupException> {
+                    database.taskDao().addTaskToCell(aTask(), newId(), newId(), createdAt)
+                }
 
+            assertEquals(TaskSetupFailure.CELL_NOT_AVAILABLE, refusal.failure)
             assertEquals(emptyList(), database.taskDao().allTasksIncludingDeleted())
         }
 
@@ -382,6 +395,36 @@ class TaskAndColorRelationTest {
 
             assertEquals(emptyList(), database.taskColorDao().colorsOfTask(task.id))
             assertEquals(listOf(task), database.taskDao().activeTasksAwaitingAColor(PoolType.THREE_D))
+        }
+
+    @Test
+    fun `a deleted task is not waiting for a colour`() =
+        runBlocking<Unit> {
+            val cell = insertGameAndCell(database)
+            val task = aTask(name = "Whale", requiredQuantity = 5)
+            database.taskDao().addTaskToCell(task, cell.id, newId(), createdAt)
+            assertEquals(listOf(task), database.taskDao().activeTasksAwaitingAColor(PoolType.THREE_D))
+
+            database.taskDao().softDelete(task.id, deletedAt)
+
+            // Having no colour is a reason to be listed; having been deleted is a
+            // reason not to be, and the second wins.
+            assertEquals(emptyList(), database.taskDao().activeTasksAwaitingAColor(PoolType.THREE_D))
+        }
+
+    @Test
+    fun `a task of a deleted game is not waiting for a colour either`() =
+        runBlocking<Unit> {
+            val cell = insertGameAndCell(database)
+            val task = aTask(name = "Whale", requiredQuantity = 5)
+            database.taskDao().addTaskToCell(task, cell.id, newId(), createdAt)
+            assertEquals(listOf(task), database.taskDao().activeTasksAwaitingAColor(PoolType.THREE_D))
+
+            // The task itself is untouched: it is the game above its cell that went.
+            database.gameDao().softDelete(cell.gameId, deletedAt)
+
+            assertEquals(emptyList(), database.taskDao().activeTasksAwaitingAColor(PoolType.THREE_D))
+            assertNotNull(database.taskDao().taskByIdIncludingDeleted(task.id))
         }
 
     @Test

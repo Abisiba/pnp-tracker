@@ -14,7 +14,7 @@ import dev.pnptracker.domain.model.TrackingMode
  * those counters exist.
  *
  * [columnType] travels with the task because a game's tasks are shown grouped by
- * pool rather than by item, so a row has to say for itself what it belongs to.
+ * pool rather than by column, so a row has to say for itself where it is written.
  *
  * [isFromImport] only says whether there is a source cell behind this task; the
  * cell's identity stays in the database, where the audit trail belongs.

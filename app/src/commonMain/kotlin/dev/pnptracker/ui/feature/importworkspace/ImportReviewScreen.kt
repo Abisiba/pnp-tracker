@@ -46,7 +46,11 @@ import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.HintDecision
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.tasks.CellPoolChoice
+import dev.pnptracker.domain.tasks.suitsPool
+import dev.pnptracker.domain.tasks.trackingModesOf
 import dev.pnptracker.ui.Strings
+import dev.pnptracker.ui.columnNameOf
 import dev.pnptracker.ui.feature.importreview.nameOf
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -495,7 +499,11 @@ private fun DraftRow(
                     if (target == null) {
                         stringResource(Strings.Aim.none)
                     } else {
-                        stringResource(Strings.Aim.itemLabel, target.gameName, target.columnType)
+                        stringResource(
+                            Strings.Aim.cellLabel,
+                            target.gameName,
+                            stringResource(columnNameOf(target.columnType)),
+                        )
                     },
                 style = MaterialTheme.typography.labelMedium,
                 color =
@@ -534,7 +542,7 @@ private fun DraftRow(
 }
 
 /**
- * Choosing the item, the pool and — only when the pool leaves a choice — the
+ * Choosing the cell, the pool and — only when the pool leaves a choice — the
  * tracking mode for one draft.
  *
  * A pool that allows exactly one mode sets that mode outright rather than
@@ -550,24 +558,43 @@ private fun DraftAiming(
 ) {
     if (targetCells.isEmpty()) {
         Text(
-            text = stringResource(Strings.Aim.noItems),
+            text = stringResource(Strings.Aim.noCells),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.error,
         )
         return
     }
 
-    val poolType = draft.selectedPoolType
-    val trackingMode = draft.selectedTrackingMode
+    // What the draft already says, read back through the one rule that keeps a
+    // cell and a pool from contradicting each other. Both chip rows below change
+    // it through that rule, so the pair sent to the database is always one it
+    // will take — the same way the game's task form does it.
+    val aimedAt = targetCells.firstOrNull { it.cellId == draft.targetCellId }
+    val choice =
+        CellPoolChoice()
+            .let { start -> aimedAt?.let { start.withCell(it.cellId, it.columnType) } ?: start }
+            .let { withCell -> draft.selectedPoolType?.let(withCell::withPool) ?: withCell }
+            .let { withPool -> draft.selectedTrackingMode?.let(withPool::withTracking) ?: withPool }
+    val poolType = choice.poolType
+    val trackingMode = choice.trackingMode
 
-    Text(text = stringResource(Strings.Aim.chooseItem), style = MaterialTheme.typography.labelMedium)
+    Text(text = stringResource(Strings.Aim.chooseCell), style = MaterialTheme.typography.labelMedium)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        targetCells.forEach { choice ->
+        targetCells.filter { it.columnType.suitsPool(poolType) }.forEach { target ->
+            val aimed = choice.withCell(target.cellId, target.columnType)
             FilterChip(
-                selected = choice.cellId == draft.targetCellId,
+                selected = target.cellId == choice.cellId,
                 enabled = !isBusy,
-                onClick = { onAim(choice.cellId, poolType, trackingMode) },
-                label = { Text(stringResource(Strings.Aim.itemLabel, choice.gameName, choice.columnType)) },
+                onClick = { onAim(aimed.cellId, aimed.poolType, aimed.trackingMode) },
+                label = {
+                    Text(
+                        stringResource(
+                            Strings.Aim.cellLabel,
+                            target.gameName,
+                            stringResource(columnNameOf(target.columnType)),
+                        ),
+                    )
+                },
             )
         }
     }
@@ -575,19 +602,19 @@ private fun DraftAiming(
     Text(text = stringResource(Strings.Aim.choosePool), style = MaterialTheme.typography.labelMedium)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         PoolType.entries.forEach { pool ->
+            // Changing the pool drops a mode it does not allow, and a cell it
+            // cannot be written in.
+            val picked = choice.withPool(pool)
             FilterChip(
                 selected = pool == poolType,
                 enabled = !isBusy,
-                onClick = {
-                    // Changing the pool drops a mode the new pool does not allow.
-                    onAim(draft.targetCellId, pool, ImportConfirmationController.onlyTrackingModeOf(pool))
-                },
+                onClick = { onAim(picked.cellId, picked.poolType, picked.trackingMode) },
                 label = { Text(stringResource(labelOf(pool))) },
             )
         }
     }
 
-    val modes = poolType?.let(ImportConfirmationController::trackingModesOf).orEmpty()
+    val modes = poolType?.let(::trackingModesOf).orEmpty()
     if (modes.size > 1) {
         Text(text = stringResource(Strings.Aim.chooseTracking), style = MaterialTheme.typography.labelMedium)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -595,7 +622,7 @@ private fun DraftAiming(
                 FilterChip(
                     selected = mode == trackingMode,
                     enabled = !isBusy,
-                    onClick = { onAim(draft.targetCellId, poolType, mode) },
+                    onClick = { onAim(choice.cellId, poolType, choice.withTracking(mode).trackingMode) },
                     label = { Text(labelOf(mode)) },
                 )
             }

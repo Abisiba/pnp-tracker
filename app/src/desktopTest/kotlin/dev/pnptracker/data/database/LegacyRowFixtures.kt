@@ -111,3 +111,112 @@ fun insertVersion2ColorAlias(
             statement.step()
         }
 }
+
+/**
+ * An import batch as version 3 held one. Imports create no game and no task, so
+ * a database can hold these and nothing else — which is the one shape the v4
+ * migration both accepts and has rows to carry across.
+ */
+fun insertVersion3ImportBatch(
+    connection: SQLiteConnection,
+    batchId: EntityId,
+    fileName: String = "Kitap1(1).xlsx",
+) {
+    connection
+        .prepare(
+            "INSERT INTO import_batches (id, file_name, sha256, source_format, sheet_name, " +
+                "start_row_index, end_row_index, start_column_index, end_column_index, " +
+                "created_game_count, raw_block_count, created_task_count, status, imported_at, updated_at) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ).use { statement ->
+            statement.bindText(1, batchId.toString())
+            statement.bindText(2, fileName)
+            statement.bindText(3, "0".repeat(64))
+            statement.bindText(4, "XLSX")
+            statement.bindText(5, "Sayfa1")
+            statement.bindInt(6, 0)
+            statement.bindInt(7, 9)
+            statement.bindInt(8, 0)
+            statement.bindInt(9, 6)
+            statement.bindInt(10, 0)
+            statement.bindInt(11, 1)
+            statement.bindInt(12, 0)
+            statement.bindText(13, "DRAFT")
+            statement.bindLong(14, EPOCH_MILLISECONDS_CREATED)
+            statement.bindLong(15, EPOCH_MILLISECONDS_UPDATED)
+            statement.step()
+        }
+}
+
+fun insertVersion3RawImportBlock(
+    connection: SQLiteConnection,
+    blockId: EntityId,
+    batchId: EntityId,
+    rawText: String = "15 KIRMIZI**\nBıçak ve kabza ayrı",
+) {
+    connection
+        .prepare(
+            "INSERT INTO raw_import_blocks (id, import_batch_id, raw_text, sheet_name, row_index, " +
+                "column_index, source_column_type, fill_color_argb, game_completion_hint, is_processed, " +
+                "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ).use { statement ->
+            statement.bindText(1, blockId.toString())
+            statement.bindText(2, batchId.toString())
+            statement.bindText(3, rawText)
+            statement.bindText(4, "Sayfa1")
+            statement.bindInt(5, 3)
+            statement.bindInt(6, 2)
+            statement.bindText(7, "CARD")
+            statement.bindNull(8)
+            statement.bindText(9, "NONE")
+            statement.bindInt(10, 0)
+            statement.bindLong(11, EPOCH_MILLISECONDS_CREATED)
+            statement.bindLong(12, EPOCH_MILLISECONDS_UPDATED)
+            statement.step()
+        }
+}
+
+/**
+ * A draft with every optional field filled in, so the v4 copy has something to
+ * lose if it drops or transposes a column.
+ *
+ * `target_item_id` is left null on purpose: a draft that named an item could only
+ * exist alongside an items row, and the migration refuses such a database before
+ * it writes anything.
+ */
+fun insertVersion3DraftTask(
+    connection: SQLiteConnection,
+    draftId: EntityId,
+    blockId: EntityId,
+    name: String = "Kırmızı token",
+) {
+    connection
+        .prepare(
+            "INSERT INTO draft_tasks (id, raw_import_block_id, name, suggested_pool_type, " +
+                "selected_pool_type, selected_tracking_mode, required_quantity, notes, target_item_id, " +
+                "selection_start_index, selection_end_index, completion_hint, is_missing, is_borrowed, " +
+                "needs_info, needs_classification, materialized_task_id, created_at, updated_at) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ).use { statement ->
+            statement.bindText(1, draftId.toString())
+            statement.bindText(2, blockId.toString())
+            statement.bindText(3, name)
+            statement.bindText(4, "CARD")
+            statement.bindText(5, "CARD")
+            statement.bindText(6, "PIPELINE")
+            statement.bindInt(7, 15)
+            statement.bindText(8, "Sayısına bakılacak")
+            statement.bindNull(9)
+            statement.bindInt(10, 3)
+            statement.bindInt(11, 10)
+            statement.bindText(12, "ACCEPTED")
+            statement.bindInt(13, 1)
+            statement.bindInt(14, 0)
+            statement.bindInt(15, 1)
+            statement.bindInt(16, 0)
+            statement.bindNull(17)
+            statement.bindLong(18, EPOCH_MILLISECONDS_CREATED)
+            statement.bindLong(19, EPOCH_MILLISECONDS_UPDATED)
+            statement.step()
+        }
+}

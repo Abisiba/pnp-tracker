@@ -11,6 +11,7 @@ import dev.pnptracker.data.database.entity.DraftTaskEntity
 import dev.pnptracker.data.database.entity.ImportBatchEntity
 import dev.pnptracker.data.database.entity.RawImportBlockEntity
 import dev.pnptracker.data.database.entity.TaskEntity
+import dev.pnptracker.data.database.projection.CellColumnRow
 import dev.pnptracker.domain.importconfirm.ImportConfirmationException
 import dev.pnptracker.domain.importconfirm.ImportConfirmationFailure
 import dev.pnptracker.domain.model.CellColumnType
@@ -350,6 +351,27 @@ abstract class ImportDao {
     @Query("SELECT column_type FROM game_cells WHERE id = :cellId")
     abstract suspend fun columnTypeOfCell(cellId: EntityId): CellColumnType?
 
+    /**
+     * The cells among [cellIds] that are still there, with the column each one
+     * belongs to.
+     *
+     * One query for a whole batch of drafts rather than one per draft: the review
+     * screen re-reads its summary after every change the user makes, and asking
+     * the same question separately for each draft turned a single decision into a
+     * pile of round trips. A cell that is gone, or whose game has been deleted,
+     * simply does not come back — which is the same answer the per-cell count
+     * gave, arrived at once.
+     */
+    @Query(
+        """
+        SELECT game_cells.id AS cell_id, game_cells.column_type AS column_type
+        FROM game_cells
+        INNER JOIN games ON games.id = game_cells.game_id
+        WHERE game_cells.id IN (:cellIds) AND games.deleted_at IS NULL
+        """,
+    )
+    abstract suspend fun activeCellColumns(cellIds: Collection<EntityId>): List<CellColumnRow>
+
     @Query("SELECT COALESCE(MAX(order_index), -1) + 1 FROM cell_segments WHERE cell_id = :cellId")
     abstract suspend fun nextSegmentIndex(cellId: EntityId): Int
 
@@ -364,8 +386,19 @@ abstract class ImportDao {
      * by a confirmed batch being read only. The target cell is checked in the same
      * transaction, so a draft can never be pointed at a cell that has just gone.
      *
-     * @throws IllegalArgumentException if the draft is unknown, its import is no
-     *   longer a draft, or the target cell is not available; nothing is written.
+     * The three ways a target can be wrong come back as an
+     * [ImportConfirmationException] carrying which one it was, because all three
+     * are things a user can reach and each needs its own sentence on screen. A
+     * draft or an import that is not there is a different matter and stays an
+     * [IllegalArgumentException]: the screen aims drafts it is showing, so being
+     * handed one that does not exist is a defect and travels out as one.
+     *
+     * @throws ImportConfirmationException with
+     *   [ImportConfirmationFailure.TARGET_CELL_NOT_AVAILABLE],
+     *   [ImportConfirmationFailure.TARGET_CELL_NOT_TASK_CAPABLE] or
+     *   [ImportConfirmationFailure.TARGET_CELL_WRONG_COLUMN]; nothing is written.
+     * @throws IllegalArgumentException if the draft is unknown or its import is no
+     *   longer a draft; nothing is written in that case either.
      */
     @Transaction
     open suspend fun setDraftTargetUnderReview(
@@ -385,15 +418,17 @@ abstract class ImportDao {
             "A draft can only be aimed while its import is a draft, but ${batch.id} is ${batch.status}."
         }
         if (targetCellId != null) {
-            require(activeCellCount(targetCellId) == 1) {
-                "There is no cell $targetCellId to send a task to."
+            if (activeCellCount(targetCellId) != 1) {
+                refuse(ImportConfirmationFailure.TARGET_CELL_NOT_AVAILABLE, draftId)
             }
-            val columnType = requireNotNull(columnTypeOfCell(targetCellId)) { "The cell $targetCellId has no column." }
-            require(columnType.holdsTasks) { "The $columnType column holds no tasks." }
-            if (poolType != null) {
-                require(columnType.poolType == poolType) {
-                    "A $poolType task does not belong in the $columnType column."
-                }
+            val columnType =
+                columnTypeOfCell(targetCellId)
+                    ?: refuse(ImportConfirmationFailure.TARGET_CELL_NOT_AVAILABLE, draftId)
+            if (!columnType.holdsTasks) {
+                refuse(ImportConfirmationFailure.TARGET_CELL_NOT_TASK_CAPABLE, draftId)
+            }
+            if (poolType != null && columnType.poolType != poolType) {
+                refuse(ImportConfirmationFailure.TARGET_CELL_WRONG_COLUMN, draftId)
             }
         }
         if (poolType != null && trackingMode != null) {
@@ -447,8 +482,8 @@ abstract class ImportDao {
      * Turns every draft of one import into a real task, or does nothing at all.
      *
      * All of it lives in one transaction on purpose: the guards below are not
-     * advice given beforehand but the conditions the writes happen under, so an
-     * item cannot be deleted, and the batch cannot be confirmed by a second
+     * advice given beforehand but the conditions the writes happen under, so a
+     * cell cannot be deleted, and the batch cannot be confirmed by a second
      * caller, in the gap between checking and writing. Anything thrown from here
      * — a refused guard, a rejected row, a broken postcondition — takes every
      * write with it, which is what PLAN 11.4.2 means by no task remaining and no
@@ -500,8 +535,13 @@ abstract class ImportDao {
             if (activeCellCount(targetCellId) != 1) {
                 refuse(ImportConfirmationFailure.TARGET_CELL_NOT_AVAILABLE, draft.id)
             }
-            val columnType = columnTypeOfCell(targetCellId)
-            if (columnType == null || columnType.poolType != poolType) {
+            val columnType =
+                columnTypeOfCell(targetCellId)
+                    ?: refuse(ImportConfirmationFailure.TARGET_CELL_NOT_AVAILABLE, draft.id)
+            if (!columnType.holdsTasks) {
+                refuse(ImportConfirmationFailure.TARGET_CELL_NOT_TASK_CAPABLE, draft.id)
+            }
+            if (columnType.poolType != poolType) {
                 refuse(ImportConfirmationFailure.TARGET_CELL_WRONG_COLUMN, draft.id)
             }
             // A stored draft cannot hold a quantity of zero or a pool the mode

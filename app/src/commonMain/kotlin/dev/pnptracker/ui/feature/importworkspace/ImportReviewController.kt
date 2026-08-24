@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.collect
  * or adding a draft simply arrives; nothing here has to remember to reload, and
  * two views of the same import cannot drift apart.
  *
- * Nothing in this class creates a game, an item or a task, and nothing moves the
+ * Nothing in this class creates a game, a cell or a task, and nothing moves the
  * import out of being a draft. Marking a cell reviewed and making a draft are
  * separate decisions: neither one triggers the other.
  */

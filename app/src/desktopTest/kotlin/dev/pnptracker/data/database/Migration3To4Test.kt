@@ -2,7 +2,11 @@ package dev.pnptracker.data.database
 
 import androidx.room3.useReaderConnection
 import dev.pnptracker.data.database.migration.UnconvertibleLegacyDataException
+import dev.pnptracker.domain.model.HintDecision
 import dev.pnptracker.domain.model.IdGenerator
+import dev.pnptracker.domain.model.ImportBatchStatus
+import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.model.TrackingMode
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import kotlin.test.AfterTest
@@ -12,6 +16,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -30,6 +35,9 @@ class Migration3To4Test {
     private val itemId = IdGenerator.Random.newId()
     private val taskId = IdGenerator.Random.newId()
     private val greyColorId = seedColors[2].id
+    private val batchId = IdGenerator.Random.newId()
+    private val blockId = IdGenerator.Random.newId()
+    private val draftId = IdGenerator.Random.newId()
 
     @BeforeTest
     fun createTemporaryDirectory() {
@@ -64,6 +72,25 @@ class Migration3To4Test {
             insertSeedColors(connection)
             insertVersion2Task(connection, taskId = taskId, itemId = itemId)
             insertVersion2TaskColor(connection, taskId = taskId, colorId = greyColorId)
+        }
+    }
+
+    /**
+     * A version 3 database with an import in it and nothing else.
+     *
+     * This is the only shape that both passes the refusal check and has rows for
+     * the migration to carry: reviewing an import creates no game and no task, so
+     * a user who imported a file and closed the application before confirming
+     * leaves exactly this behind. It is also the only `INSERT ... SELECT` in the
+     * migration that a row can reach — `games` is copied too, but a database with
+     * a game in it is refused before the copy runs.
+     */
+    private fun createVersion3DatabaseWithAnUnconfirmedImport() {
+        CommittedSchema.createDatabase(directory.databaseFile, version = 3) { connection ->
+            insertSeedColors(connection)
+            insertVersion3ImportBatch(connection, batchId)
+            insertVersion3RawImportBlock(connection, blockId, batchId)
+            insertVersion3DraftTask(connection, draftId, blockId)
         }
     }
 
@@ -161,6 +188,79 @@ class Migration3To4Test {
             assertEquals(1, rows("tasks"))
             assertEquals(1, rows("task_colors"))
             assertEquals(12, rows("colors"))
+        }
+
+    @Test
+    fun `an unconfirmed import is carried across whole`() =
+        runBlocking<Unit> {
+            createVersion3DatabaseWithAnUnconfirmedImport()
+
+            val database = DatabaseFactory().open(directory.databaseFile)
+            val draft =
+                try {
+                    val batch = assertNotNull(database.importDao().batchById(batchId))
+                    assertEquals("Kitap1(1).xlsx", batch.fileName)
+                    assertEquals(ImportBatchStatus.DRAFT, batch.status)
+
+                    val block = assertNotNull(database.importDao().rawBlockById(blockId))
+                    // The raw text is the record of what the file said; PLAN 11.3
+                    // has it never quietly changed or lost.
+                    assertEquals("15 KIRMIZI**\nBıçak ve kabza ayrı", block.rawText)
+                    assertEquals("Sayfa1", block.sheetName)
+                    assertEquals(3, block.rowIndex)
+                    assertEquals(2, block.columnIndex)
+
+                    assertNotNull(database.importDao().draftTaskById(draftId))
+                } finally {
+                    database.close()
+                }
+
+            // Every field of the draft, one by one. A copy that dropped a column
+            // or transposed two would still leave the right number of rows.
+            assertEquals(draftId, draft.id)
+            assertEquals(blockId, draft.rawImportBlockId)
+            assertEquals("Kırmızı token", draft.name)
+            assertEquals(PoolType.CARD, draft.suggestedPoolType)
+            assertEquals(PoolType.CARD, draft.selectedPoolType)
+            assertEquals(TrackingMode.PIPELINE, draft.selectedTrackingMode)
+            assertEquals(15, draft.requiredQuantity)
+            assertEquals("Sayısına bakılacak", draft.notes)
+            assertEquals(3, draft.selectionStartIndex)
+            assertEquals(10, draft.selectionEndIndex)
+            assertEquals(HintDecision.ACCEPTED, draft.completionHint)
+            assertTrue(draft.isMissing)
+            assertFalse(draft.isBorrowed)
+            assertTrue(draft.needsInfo)
+            assertFalse(draft.needsClassification)
+
+            // The two that are deliberately let go of: an item can no longer be
+            // meant, and the task a draft was turned into cannot exist here.
+            assertNull(draft.targetCellId, "a target survived that can no longer be meant")
+            assertNull(draft.materializedTaskId)
+
+            assertEquals(4, version())
+            assertEquals(12, rows("colors"))
+            assertEquals(0, rows("game_cells"))
+            assertEquals(0, rows("cell_segments"))
+        }
+
+    @Test
+    fun `an unconfirmed import leaves no foreign key dangling after the walk`() =
+        runBlocking<Unit> {
+            createVersion3DatabaseWithAnUnconfirmedImport()
+
+            val database = DatabaseFactory().open(directory.databaseFile)
+            try {
+                val violations =
+                    database.useReaderConnection { transactor ->
+                        transactor.usePrepared("PRAGMA foreign_key_check") { statement ->
+                            buildList { while (statement.step()) add(statement.getText(0)) }
+                        }
+                    }
+                assertEquals(emptyList(), violations)
+            } finally {
+                database.close()
+            }
         }
 
     @Test

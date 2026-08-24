@@ -21,11 +21,16 @@ fun labelOf(trackingMode: TrackingMode): StringResource =
 /**
  * What to tell the user about a task that did not save.
  *
- * Both cases are spelled out rather than falling back to one general apology,
- * because they have different next steps: try again, or go and look at the item.
+ * Every case is spelled out rather than falling back to one general apology,
+ * because the next step differs: try again, wait for the cell list to catch up,
+ * aim at a column that takes tasks, or settle the disagreement between the pool
+ * and the column. The `when` is exhaustive on purpose, so a failure added later
+ * has to be given words before the code will build.
  */
 fun messageOf(failure: TaskSetupFailure): StringResource =
     when (failure) {
         TaskSetupFailure.COULD_NOT_SAVE -> Strings.Tasks.errorCouldNotSave
-        TaskSetupFailure.CELL_NOT_AVAILABLE -> Strings.Tasks.errorItemUnavailable
+        TaskSetupFailure.CELL_NOT_AVAILABLE -> Strings.Tasks.errorCellUnavailable
+        TaskSetupFailure.CELL_DOES_NOT_HOLD_TASKS -> Strings.Tasks.errorCellHoldsNoTasks
+        TaskSetupFailure.CELL_POOL_MISMATCH -> Strings.Tasks.errorCellPoolMismatch
     }

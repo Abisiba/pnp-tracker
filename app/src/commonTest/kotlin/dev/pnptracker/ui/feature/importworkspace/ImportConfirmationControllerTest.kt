@@ -13,6 +13,8 @@ import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.ImportBatchStatus
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.tasks.onlyTrackingModeOf
+import dev.pnptracker.domain.tasks.trackingModesOf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -229,10 +231,10 @@ class ImportConfirmationControllerTest {
 
     @Test
     fun `a pool with a real choice is left for the user to make`() {
-        assertNull(ImportConfirmationController.onlyTrackingModeOf(PoolType.SPECIAL))
+        assertNull(onlyTrackingModeOf(PoolType.SPECIAL))
         assertEquals(
             setOf(TrackingMode.CHECKLIST, TrackingMode.COUNTED),
-            ImportConfirmationController.trackingModesOf(PoolType.SPECIAL).toSet(),
+            trackingModesOf(PoolType.SPECIAL).toSet(),
         )
     }
 
