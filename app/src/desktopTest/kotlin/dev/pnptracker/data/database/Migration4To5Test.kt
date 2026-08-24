@@ -41,6 +41,8 @@ class Migration4To5Test {
     private val boardTaskId = IdGenerator.Random.newId()
     private val specialTaskId = IdGenerator.Random.newId()
     private val deletedTaskId = IdGenerator.Random.newId()
+    private val deletedCardTaskId = IdGenerator.Random.newId()
+    private val deletedBoardTaskId = IdGenerator.Random.newId()
 
     private val plainTextSegmentId = IdGenerator.Random.newId()
     private val batchId = IdGenerator.Random.newId()
@@ -80,12 +82,35 @@ class Migration4To5Test {
             insertVersion4Task(connection, boardTaskId, "BOARD", "PIPELINE", "Plaj tile", 16)
             insertVersion4Task(connection, specialTaskId, "SPECIAL", "COUNTED", "Özel zar", 8)
             insertVersion4Task(connection, deletedTaskId, "THREE_D", "THREE_D_BATCH", "Silinmiş", 5, deleted = true)
+            // Deleted work in the two pools that *do* have a pipeline, so what
+            // the migration does with them is pinned rather than left to the 3D
+            // row above, which would pass for having no pipeline at all.
+            insertVersion4Task(
+                connection,
+                deletedCardTaskId,
+                "CARD",
+                "PIPELINE",
+                "Silinmiş kart",
+                12,
+                deleted = true,
+            )
+            insertVersion4Task(
+                connection,
+                deletedBoardTaskId,
+                "BOARD",
+                "PIPELINE",
+                "Silinmiş tile",
+                9,
+                deleted = true,
+            )
 
             insertVersion4TaskSegment(connection, IdGenerator.Random.newId(), threeDCellId, 0, threeDTaskId)
             insertVersion4TaskSegment(connection, IdGenerator.Random.newId(), cardCellId, 0, cardTaskId)
             insertVersion4TaskSegment(connection, IdGenerator.Random.newId(), boardCellId, 0, boardTaskId)
             insertVersion4TaskSegment(connection, IdGenerator.Random.newId(), specialCellId, 0, specialTaskId)
             insertVersion4TaskSegment(connection, IdGenerator.Random.newId(), threeDCellId, 1, deletedTaskId)
+            insertVersion4TaskSegment(connection, IdGenerator.Random.newId(), cardCellId, 1, deletedCardTaskId)
+            insertVersion4TaskSegment(connection, IdGenerator.Random.newId(), boardCellId, 1, deletedBoardTaskId)
             insertVersion4PlainTextSegment(connection, plainTextSegmentId, notesCellId, 0, "Kutu ölçüsü 30×30")
 
             // One task with a single colour, one with two in a fixed order.
@@ -128,8 +153,8 @@ class Migration4To5Test {
         assertEquals(5L, version())
         assertEquals(1, rows("games"))
         assertEquals(5, rows("game_cells"))
-        assertEquals(6, rows("cell_segments"))
-        assertEquals(5, rows("tasks"), "a task was dropped by the migration")
+        assertEquals(8, rows("cell_segments"))
+        assertEquals(7, rows("tasks"), "a task was dropped by the migration")
         assertEquals(3, rows("task_colors"))
         assertEquals(12, rows("colors"))
         assertEquals(1, rows("color_aliases"))
@@ -202,7 +227,7 @@ class Migration4To5Test {
             assertEquals(emptyList(), database.taskProgressDao().stagesOfTask(specialTaskId))
             // Including the deleted one: a pool with no pipeline never gets rows.
             assertEquals(emptyList(), database.taskProgressDao().stagesOfTask(deletedTaskId))
-            assertEquals(6, rows("task_stages"), "a stage row was written for a pool with no pipeline")
+            assertEquals(12, rows("task_stages"), "a stage row was written for a pool with no pipeline")
         }
 
     @Test
@@ -323,6 +348,60 @@ class Migration4To5Test {
             assertEquals(5L, version())
             assertEquals(0, rows("task_stages"))
             assertEquals(0, rows("progress_events"))
+        }
+
+    @Test
+    fun `a deleted card or board task keeps its pipeline and stays deleted`() =
+        withMigratedDatabase { database ->
+            // Deleting a task is soft, so its rows stay exactly as they were and
+            // it gets the same pipeline a live one does. That is what a task
+            // deleted *after* version 5 looks like too, so the migration and the
+            // live path describe the same thing.
+            listOf(
+                deletedCardTaskId to listOf(ProductionStage.PRINT, ProductionStage.LAMINATE, ProductionStage.CUT),
+                deletedBoardTaskId to listOf(ProductionStage.PRINT, ProductionStage.GLUE, ProductionStage.CUT),
+            ).forEach { (taskId, pipeline) ->
+                val row = assertNotNull(database.taskDao().taskByIdIncludingDeleted(taskId))
+                assertEquals(deletedAt, row.deletedAt, "a deleted task lost its tombstone")
+                assertFalse(row.isCompleted)
+                assertNull(row.completedAt)
+                assertFalse(row.primaryBatchCompleted)
+                assertEquals(0, row.currentMissingQuantity)
+
+                val stages = database.taskProgressDao().stagesOfTask(taskId)
+                assertEquals(pipeline, stages.map { it.stage })
+                assertEquals(listOf(0, 0, 0), stages.map { it.completedQuantity })
+                assertEquals(listOf(0, 1, 2), stages.map { it.orderIndex })
+                // The same timestamps a live task's stages get: the task's own.
+                assertEquals(listOf(createdAt, createdAt, createdAt), stages.map { it.createdAt })
+
+                assertEquals(emptyList(), database.taskProgressDao().progressEventsOfTask(taskId))
+            }
+        }
+
+    @Test
+    fun `deleted card and board tasks stay out of every active view`() =
+        withMigratedDatabase { database ->
+            assertNull(database.taskDao().activeTaskById(deletedCardTaskId))
+            assertNull(database.taskDao().activeTaskById(deletedBoardTaskId))
+            assertEquals(
+                listOf(cardTaskId),
+                database.taskDao().activeUnfinishedTasksInPool(PoolType.CARD).map { it.id },
+            )
+            assertEquals(
+                listOf(boardTaskId),
+                database.taskDao().activeUnfinishedTasksInPool(PoolType.BOARD).map { it.id },
+            )
+            assertEquals(
+                listOf(cardTaskId),
+                database.taskDao().tasksOfCellIncludingCompleted(cardCellId).map { it.id },
+                "a deleted task showed up in the cell it used to be written in",
+            )
+            assertFalse(
+                database.taskDao().tasksOfGameIncludingCompleted(gameId).any {
+                    it.id == deletedCardTaskId || it.id == deletedBoardTaskId
+                },
+            )
         }
 
     @Test

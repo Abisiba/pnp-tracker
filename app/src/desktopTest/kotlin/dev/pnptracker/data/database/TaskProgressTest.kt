@@ -8,7 +8,11 @@ import dev.pnptracker.domain.model.ProgressEventKind
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.tasks.TaskProgressException
 import dev.pnptracker.domain.tasks.TaskProgressFailure
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -16,6 +20,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -456,7 +461,6 @@ class TaskProgressTest {
     fun `a note and a card reference are kept exactly as they were given`() =
         runBlocking<Unit> {
             val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 170, name = "Bird Cards")
-            progress.completePrimaryBatch(taskId, clock)
 
             progress.reportFailure(
                 eventId = ids.newId(),
@@ -478,22 +482,29 @@ class TaskProgressTest {
             // The second was recorded as a bare number and stays one.
             assertNull(events.last().cardReference)
 
-            // Only the shortages that name a card show up in the detail list.
-            assertEquals(listOf("Bird #142"), progress.openShortageDetailsOf(taskId).map { it.cardReference })
+            // Only the shortages that name a card show up in the card history.
+            assertEquals(listOf("Bird #142"), progress.cardShortageHistoryOf(taskId).map { it.cardReference })
         }
 
     @Test
-    fun `shortage details close when the task owes nothing again`() =
+    fun `the card shortage history keeps a record after it has been made good`() =
         runBlocking<Unit> {
+            // The query is the history and says so. Nothing stored today ties a
+            // resolution to the particular card it made good, so hiding a record
+            // once the task owes nothing would be claiming to know which one was
+            // settled. PLAN 7.4 leaves that model to a later step.
             val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 170, name = "Bird Cards")
             progress.reportFailure(ids.newId(), taskId, 1, clock, cardReference = "Bird #142")
-            assertEquals(1, progress.openShortageDetailsOf(taskId).size)
+            assertEquals(1, progress.cardShortageHistoryOf(taskId).size)
 
             progress.resolveShortage(ids.newId(), taskId, 1, clock)
 
-            assertEquals(emptyList(), progress.openShortageDetailsOf(taskId))
-            // Closed, not deleted: the history still has it.
-            assertEquals(1, progress.progressEventsOfTask(taskId).count { it.cardReference == "Bird #142" })
+            assertEquals(0, taskOf(taskId).currentMissingQuantity)
+            assertEquals(
+                listOf("Bird #142"),
+                progress.cardShortageHistoryOf(taskId).map { it.cardReference },
+                "the record of which card came out short was dropped once the number was settled",
+            )
         }
 
     // --------------------------------------------------------------- pipelines
@@ -715,5 +726,460 @@ class TaskProgressTest {
             // And the same task into the right cell brings its whole pipeline.
             database.taskDao().addTaskToCell(task, cell.id, ids.newId(), createdAt)
             assertEquals(3, progress.stagesOfTask(task.id).size)
+        }
+
+    // ------------------------------------- the print run belongs to one pool
+
+    @Test
+    fun `a card task has no print run to record`() =
+        runBlocking<Unit> {
+            // PLAN 6 is the 3D model throughout. A card task is counted by its
+            // pipeline, so recording a run on it would finish 170 cards with
+            // nothing printed — the contradiction PLAN 6.4 forbids outright.
+            val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 170, name = "Bird Cards")
+
+            val refusal =
+                assertFailsWith<TaskProgressException> { progress.completePrimaryBatch(taskId, clock) }
+
+            assertEquals(TaskProgressFailure.PRIMARY_BATCH_ONLY_FOR_THREE_D, refusal.failure)
+            val task = taskOf(taskId)
+            assertFalse(task.isCompleted, "a card task was finished with nothing printed")
+            assertFalse(task.primaryBatchCompleted)
+            assertNull(task.completedAt)
+            assertEquals(listOf(0, 0, 0), progress.stagesOfTask(taskId).map { it.completedQuantity })
+            assertEquals(
+                listOf(taskId),
+                database.taskDao().activeUnfinishedTasksInPool(PoolType.CARD).map { it.id },
+                "a refused print run took the task out of its pool anyway",
+            )
+        }
+
+    @Test
+    fun `a board task has no print run to record either`() =
+        runBlocking<Unit> {
+            val taskId = aTaskIn(PoolType.BOARD, requiredQuantity = 16, name = "Plaj tile")
+
+            val refusal =
+                assertFailsWith<TaskProgressException> { progress.completePrimaryBatch(taskId, clock) }
+
+            assertEquals(TaskProgressFailure.PRIMARY_BATCH_ONLY_FOR_THREE_D, refusal.failure)
+            assertFalse(taskOf(taskId).isCompleted)
+            assertEquals(listOf(0, 0, 0), progress.stagesOfTask(taskId).map { it.completedQuantity })
+        }
+
+    @Test
+    fun `a special task has no print run either, though it has no pipeline`() =
+        runBlocking<Unit> {
+            // Having no stages is not the same as being printed in one run. The
+            // rule names the pool rather than asking whether stages exist,
+            // because a special task would pass that question and still be wrong.
+            val taskId = aTaskIn(PoolType.SPECIAL, requiredQuantity = 8, name = "Özel zar")
+
+            val refusal =
+                assertFailsWith<TaskProgressException> { progress.completePrimaryBatch(taskId, clock) }
+
+            assertEquals(TaskProgressFailure.PRIMARY_BATCH_ONLY_FOR_THREE_D, refusal.failure)
+            assertFalse(taskOf(taskId).isCompleted)
+            assertFalse(taskOf(taskId).primaryBatchCompleted)
+        }
+
+    @Test
+    fun `a refused print run writes nothing at all`() =
+        runBlocking<Unit> {
+            val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 170, name = "Bird Cards")
+            val before = taskOf(taskId)
+
+            assertFailsWith<TaskProgressException> { progress.completePrimaryBatch(taskId, clock) }
+
+            assertEquals(before, taskOf(taskId), "a refused print run changed the task row")
+            assertEquals(0, clock.reads, "a refused print run read the clock")
+            assertEquals(0, CommittedSchema.countRowsOf(directory.databaseFile, "progress_events"))
+            assertEquals(
+                listOf(createdAt, createdAt, createdAt),
+                progress.stagesOfTask(taskId).map { it.updatedAt },
+                "a refused print run moved a stage's time",
+            )
+        }
+
+    // ---------------------------------------- what finishing means, by pool
+
+    @Test
+    fun `making a card shortage good does not finish a task that never printed`() =
+        runBlocking<Unit> {
+            // Owing nothing is not the same as having done the work. Before this
+            // rule the task went straight to finished with an empty pipeline.
+            val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 10, name = "Bird Cards")
+            progress.reportFailure(ids.newId(), taskId, 3, clock)
+
+            assertTrue(progress.resolveShortage(ids.newId(), taskId, 3, clock))
+
+            val task = taskOf(taskId)
+            assertEquals(0, task.currentMissingQuantity)
+            assertFalse(task.isCompleted, "a card task finished with nothing printed")
+            assertEquals(listOf(taskId), database.taskDao().activeUnfinishedTasksInPool(PoolType.CARD).map { it.id })
+        }
+
+    @Test
+    fun `making a shortage good finishes a card task whose pipeline is done`() =
+        runBlocking<Unit> {
+            // PLAN: a reprint reported on finished work reopens the task, and
+            // making it good finishes it again. The stages were not touched by
+            // either step — which of them has to be redone is a judgement PLAN
+            // leaves to a later step, and guessing it here would be inventing.
+            val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 4, name = "Bird Cards")
+            listOf(ProductionStage.PRINT, ProductionStage.LAMINATE, ProductionStage.CUT).forEach {
+                progress.setStageQuantity(taskId, it, 4, clock)
+            }
+            assertTrue(taskOf(taskId).isCompleted)
+
+            progress.reportFailure(ids.newId(), taskId, 2, clock, cardReference = "Bird #7")
+            assertFalse(taskOf(taskId).isCompleted, "a reprint report left the task finished")
+            assertEquals(listOf(4, 4, 4), progress.stagesOfTask(taskId).map { it.completedQuantity })
+
+            assertTrue(progress.resolveShortage(ids.newId(), taskId, 2, clock))
+
+            assertTrue(taskOf(taskId).isCompleted, "the task did not finish again once nothing was owed")
+            assertEquals(2, progress.failureTotalOf(taskId))
+        }
+
+    @Test
+    fun `a special task is never finished behind the user's back`() =
+        runBlocking<Unit> {
+            // PLAN 9 measures special work by nothing the database keeps, so
+            // there is no state that could mean "done" on its own.
+            val taskId = aTaskIn(PoolType.SPECIAL, requiredQuantity = 8, name = "Özel zar")
+            progress.reportFailure(ids.newId(), taskId, 2, clock)
+
+            assertTrue(progress.resolveShortage(ids.newId(), taskId, 2, clock))
+
+            assertFalse(taskOf(taskId).isCompleted, "a special task finished itself")
+            assertEquals(0, taskOf(taskId).currentMissingQuantity)
+            // It is still finished the moment the user says so.
+            assertTrue(progress.completeTask(taskId, clock, ids))
+            assertTrue(taskOf(taskId).isCompleted)
+        }
+
+    @Test
+    fun `a pipeline counted up does not finish a task that owes a reprint`() =
+        runBlocking<Unit> {
+            val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 4, name = "Bird Cards")
+            progress.setStageQuantity(taskId, ProductionStage.PRINT, 4, clock)
+            progress.setStageQuantity(taskId, ProductionStage.LAMINATE, 4, clock)
+            progress.reportFailure(ids.newId(), taskId, 1, clock)
+
+            assertTrue(progress.setStageQuantity(taskId, ProductionStage.CUT, 4, clock))
+
+            val task = taskOf(taskId)
+            assertFalse(task.isCompleted, "a task owing a reprint was finished by its last stage")
+            assertEquals(1, task.currentMissingQuantity)
+            assertEquals(listOf(4, 4, 4), progress.stagesOfTask(taskId).map { it.completedQuantity })
+        }
+
+    @Test
+    fun `a task with no total given is still finished by hand`() =
+        runBlocking<Unit> {
+            // PLAN 6.4 keeps the manual finish for exactly this case; the new
+            // rule must not have taken it away.
+            val taskId = aTaskIn(PoolType.CARD, requiredQuantity = null, name = "Bird Cards")
+
+            assertTrue(progress.completeTask(taskId, clock, ids))
+
+            assertTrue(taskOf(taskId).isCompleted)
+            assertEquals(listOf(0, 0, 0), progress.stagesOfTask(taskId).map { it.completedQuantity })
+        }
+
+    // ------------------------------------------- retrying and reusing a name
+
+    @Test
+    fun `a retry with the same details is the same event`() =
+        runBlocking<Unit> {
+            val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 170, name = "Bird Cards")
+            val eventId = ids.newId()
+            assertTrue(
+                progress.reportFailure(
+                    eventId,
+                    taskId,
+                    3,
+                    clock,
+                    note = "Köşesi ezilmiş",
+                    cardReference = "Bird #142",
+                    stage = ProductionStage.CUT,
+                ),
+            )
+            val after = taskOf(taskId)
+            val readsAfterFirst = clock.reads
+
+            assertFalse(
+                progress.reportFailure(
+                    eventId,
+                    taskId,
+                    3,
+                    clock,
+                    note = "Köşesi ezilmiş",
+                    cardReference = "Bird #142",
+                    stage = ProductionStage.CUT,
+                ),
+                "the retry claimed to have recorded",
+            )
+
+            assertEquals(after, taskOf(taskId), "the retry moved the task")
+            assertEquals(readsAfterFirst, clock.reads, "the retry read the clock")
+            assertEquals(1, progress.progressEventsOfTask(taskId).size)
+            assertEquals(3, progress.failureTotalOf(taskId))
+        }
+
+    @Test
+    fun `the same name on a different task is refused rather than swallowed`() =
+        runBlocking<Unit> {
+            val first = aTaskIn(PoolType.THREE_D)
+            val second = aTaskIn(PoolType.THREE_D)
+            val eventId = ids.newId()
+            progress.reportFailure(eventId, first, 2, clock)
+
+            val refusal =
+                assertFailsWith<TaskProgressException> { progress.reportFailure(eventId, second, 4, clock) }
+
+            assertEquals(TaskProgressFailure.EVENT_ID_ALREADY_USED, refusal.failure)
+            assertEquals(0, taskOf(second).currentMissingQuantity, "the shortage went missing quietly")
+            assertEquals(emptyList(), progress.progressEventsOfTask(second))
+            assertEquals(2, taskOf(first).currentMissingQuantity, "the first task was disturbed")
+        }
+
+    @Test
+    fun `the same name on a different kind is refused`() =
+        runBlocking<Unit> {
+            val taskId = aTaskIn(PoolType.THREE_D)
+            val eventId = ids.newId()
+            progress.reportFailure(eventId, taskId, 5, clock)
+
+            val refusal =
+                assertFailsWith<TaskProgressException> { progress.resolveShortage(eventId, taskId, 5, clock) }
+
+            assertEquals(TaskProgressFailure.EVENT_ID_ALREADY_USED, refusal.failure)
+            assertEquals(5, taskOf(taskId).currentMissingQuantity, "the resolution was applied anyway")
+            assertEquals(0, progress.resolvedTotalOf(taskId))
+        }
+
+    @Test
+    fun `the same name for a different amount is refused`() =
+        runBlocking<Unit> {
+            val taskId = aTaskIn(PoolType.THREE_D)
+            val eventId = ids.newId()
+            progress.reportFailure(eventId, taskId, 2, clock)
+
+            val refusal =
+                assertFailsWith<TaskProgressException> { progress.reportFailure(eventId, taskId, 3, clock) }
+
+            assertEquals(TaskProgressFailure.EVENT_ID_ALREADY_USED, refusal.failure)
+            assertEquals(2, taskOf(taskId).currentMissingQuantity)
+            assertEquals(1, progress.progressEventsOfTask(taskId).size)
+        }
+
+    @Test
+    fun `the same name with a different note is refused`() =
+        runBlocking<Unit> {
+            val taskId = aTaskIn(PoolType.THREE_D)
+            val eventId = ids.newId()
+            progress.reportFailure(eventId, taskId, 2, clock, note = "Kırık çıktı")
+
+            val refusal =
+                assertFailsWith<TaskProgressException> {
+                    progress.reportFailure(eventId, taskId, 2, clock, note = "Eğri çıktı")
+                }
+
+            assertEquals(TaskProgressFailure.EVENT_ID_ALREADY_USED, refusal.failure)
+            assertEquals("Kırık çıktı", progress.progressEventsOfTask(taskId).single().note)
+        }
+
+    @Test
+    fun `the same name with a different card is refused`() =
+        runBlocking<Unit> {
+            val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 170, name = "Bird Cards")
+            val eventId = ids.newId()
+            progress.reportFailure(eventId, taskId, 1, clock, cardReference = "Bird #142")
+
+            val refusal =
+                assertFailsWith<TaskProgressException> {
+                    progress.reportFailure(eventId, taskId, 1, clock, cardReference = "Bird #7")
+                }
+
+            assertEquals(TaskProgressFailure.EVENT_ID_ALREADY_USED, refusal.failure)
+            assertEquals("Bird #142", progress.progressEventsOfTask(taskId).single().cardReference)
+        }
+
+    @Test
+    fun `the same name with a different stage is refused`() =
+        runBlocking<Unit> {
+            val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 170, name = "Bird Cards")
+            val eventId = ids.newId()
+            progress.reportFailure(eventId, taskId, 1, clock, stage = ProductionStage.PRINT)
+
+            val refusal =
+                assertFailsWith<TaskProgressException> {
+                    progress.reportFailure(eventId, taskId, 1, clock, stage = ProductionStage.CUT)
+                }
+
+            assertEquals(TaskProgressFailure.EVENT_ID_ALREADY_USED, refusal.failure)
+            assertEquals(ProductionStage.PRINT, progress.progressEventsOfTask(taskId).single().stage)
+        }
+
+    @Test
+    fun `a retry keeps the time the first attempt was recorded at`() =
+        runBlocking<Unit> {
+            val taskId = aTaskIn(PoolType.THREE_D)
+            val eventId = ids.newId()
+            progress.reportFailure(eventId, taskId, 2, clock)
+            val recordedAt = progress.progressEventsOfTask(taskId).single().recordedAt
+
+            // A later clock must not make this a new event, nor move the old one.
+            assertFalse(progress.reportFailure(eventId, taskId, 2, clock))
+
+            assertEquals(recordedAt, progress.progressEventsOfTask(taskId).single().recordedAt)
+        }
+
+    // --------------------------------------------- detail that fits the task
+
+    @Test
+    fun `a shortage cannot be pinned to a stage of the other pipeline`() =
+        runBlocking<Unit> {
+            val card = aTaskIn(PoolType.CARD, requiredQuantity = 170, name = "Bird Cards")
+            val board = aTaskIn(PoolType.BOARD, requiredQuantity = 16, name = "Plaj tile")
+
+            assertEquals(
+                TaskProgressFailure.STAGE_NOT_IN_PIPELINE,
+                assertFailsWith<TaskProgressException> {
+                    progress.reportFailure(ids.newId(), card, 1, clock, stage = ProductionStage.GLUE)
+                }.failure,
+            )
+            assertEquals(
+                TaskProgressFailure.STAGE_NOT_IN_PIPELINE,
+                assertFailsWith<TaskProgressException> {
+                    progress.reportFailure(ids.newId(), board, 1, clock, stage = ProductionStage.LAMINATE)
+                }.failure,
+            )
+            assertEquals(0, CommittedSchema.countRowsOf(directory.databaseFile, "progress_events"))
+            assertEquals(0, taskOf(card).currentMissingQuantity)
+            assertEquals(0, taskOf(board).currentMissingQuantity)
+        }
+
+    @Test
+    fun `a pool with no pipeline takes no stage on a shortage`() =
+        runBlocking<Unit> {
+            val threeD = aTaskIn(PoolType.THREE_D)
+            val special = aTaskIn(PoolType.SPECIAL, requiredQuantity = 8, name = "Özel zar")
+
+            listOf(threeD, special).forEach { taskId ->
+                val refusal =
+                    assertFailsWith<TaskProgressException> {
+                        progress.reportFailure(ids.newId(), taskId, 1, clock, stage = ProductionStage.PRINT)
+                    }
+                assertEquals(TaskProgressFailure.TASK_HAS_NO_STAGES, refusal.failure)
+            }
+            assertEquals(0, CommittedSchema.countRowsOf(directory.databaseFile, "progress_events"))
+        }
+
+    @Test
+    fun `only a card task can say which card came out short`() =
+        runBlocking<Unit> {
+            // PLAN 7.4 gives the naming to the card pipeline. Anywhere else it
+            // would be a detail nothing reads back.
+            val others =
+                listOf(
+                    aTaskIn(PoolType.BOARD, requiredQuantity = 16, name = "Plaj tile"),
+                    aTaskIn(PoolType.THREE_D),
+                    aTaskIn(PoolType.SPECIAL, requiredQuantity = 8, name = "Özel zar"),
+                )
+
+            others.forEach { taskId ->
+                val refusal =
+                    assertFailsWith<TaskProgressException> {
+                        progress.reportFailure(ids.newId(), taskId, 1, clock, cardReference = "Bird #142")
+                    }
+                assertEquals(TaskProgressFailure.CARD_REFERENCE_ONLY_FOR_CARDS, refusal.failure)
+                assertEquals(0, taskOf(taskId).currentMissingQuantity)
+            }
+            assertEquals(0, CommittedSchema.countRowsOf(directory.databaseFile, "progress_events"))
+        }
+
+    @Test
+    fun `making good cannot name a card on a task that is not made of cards`() =
+        runBlocking<Unit> {
+            val taskId = aTaskIn(PoolType.THREE_D)
+            progress.reportFailure(ids.newId(), taskId, 2, clock)
+
+            val refusal =
+                assertFailsWith<TaskProgressException> {
+                    progress.resolveShortage(ids.newId(), taskId, 2, clock, cardReference = "Bird #142")
+                }
+
+            assertEquals(TaskProgressFailure.CARD_REFERENCE_ONLY_FOR_CARDS, refusal.failure)
+            assertEquals(2, taskOf(taskId).currentMissingQuantity)
+        }
+
+    @Test
+    fun `a note is welcome on any pool`() =
+        runBlocking<Unit> {
+            listOf(
+                aTaskIn(PoolType.THREE_D),
+                aTaskIn(PoolType.CARD, requiredQuantity = 170, name = "Bird Cards"),
+                aTaskIn(PoolType.BOARD, requiredQuantity = 16, name = "Plaj tile"),
+                aTaskIn(PoolType.SPECIAL, requiredQuantity = 8, name = "Özel zar"),
+            ).forEach { taskId ->
+                assertTrue(progress.reportFailure(ids.newId(), taskId, 1, clock, note = "Kırık çıktı"))
+                assertEquals("Kırık çıktı", progress.progressEventsOfTask(taskId).single().note)
+            }
+        }
+
+    // ------------------------------------------------- two callers at once
+
+    @Test
+    fun `eight callers handing in the same retry produce one event`() =
+        runBlocking<Unit> {
+            // The check-then-insert is only safe if the insert itself decides
+            // the winner, so this is run against a real database rather than
+            // reasoned about.
+            val taskId = aTaskIn(PoolType.THREE_D, requiredQuantity = 100)
+            val eventId = ids.newId()
+
+            val outcomes =
+                withContext(Dispatchers.IO) {
+                    (1..8).map { async { progress.reportFailure(eventId, taskId, 1, clock) } }.awaitAll()
+                }
+
+            assertEquals(1, outcomes.count { it }, "more than one caller claimed to have recorded")
+            assertEquals(7, outcomes.count { !it })
+            assertEquals(1, progress.progressEventsOfTask(taskId).size)
+            assertEquals(1, taskOf(taskId).currentMissingQuantity, "the counter moved more than once")
+            assertEquals(1, progress.failureTotalOf(taskId))
+        }
+
+    @Test
+    fun `two callers racing with the same name and different details do not lose one`() =
+        runBlocking<Unit> {
+            // Whoever loses the race must be told, not quietly dropped: the two
+            // are different shortages and only one of them can be recorded.
+            val taskId = aTaskIn(PoolType.THREE_D, requiredQuantity = 100)
+            val eventId = ids.newId()
+
+            val outcomes =
+                withContext(Dispatchers.IO) {
+                    listOf(2, 5)
+                        .map { quantity ->
+                            async { runCatching { progress.reportFailure(eventId, taskId, quantity, clock) } }
+                        }.awaitAll()
+                }
+
+            assertEquals(1, outcomes.count { it.getOrNull() == true }, "the two shortages were not told apart")
+            val refused = outcomes.mapNotNull { it.exceptionOrNull() }
+            assertEquals(1, refused.size, "the losing caller was not told anything")
+            assertEquals(
+                TaskProgressFailure.EVENT_ID_ALREADY_USED,
+                assertIs<TaskProgressException>(refused.single()).failure,
+            )
+            assertFalse(outcomes.any { it.getOrNull() == false }, "a real shortage was reported as a retry")
+
+            val recorded = progress.progressEventsOfTask(taskId).single()
+            assertEquals(recorded.quantity, taskOf(taskId).currentMissingQuantity, "the counter lost track")
+            assertEquals(recorded.quantity, progress.failureTotalOf(taskId))
         }
 }

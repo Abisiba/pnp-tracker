@@ -12,6 +12,7 @@ import dev.pnptracker.data.database.entity.ImportBatchEntity
 import dev.pnptracker.data.database.entity.RawImportBlockEntity
 import dev.pnptracker.data.database.entity.TaskEntity
 import dev.pnptracker.data.database.entity.TaskStageEntity
+import dev.pnptracker.data.database.entity.stageRowsFor
 import dev.pnptracker.data.database.projection.CellColumnRow
 import dev.pnptracker.domain.importconfirm.ImportConfirmationException
 import dev.pnptracker.domain.importconfirm.ImportConfirmationFailure
@@ -22,7 +23,6 @@ import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.ImportBatchStatus
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
-import dev.pnptracker.domain.model.stagesOf
 import dev.pnptracker.domain.rules.requireAllowedTrackingMode
 import kotlinx.coroutines.flow.Flow
 import kotlin.time.Instant
@@ -580,17 +580,7 @@ abstract class ImportDao {
                     moment = moment,
                 ),
             )
-            stagesOf(poolType).forEachIndexed { index, stage ->
-                insertStage(
-                    TaskStageEntity(
-                        taskId = taskId,
-                        stage = stage,
-                        orderIndex = index,
-                        createdAt = moment,
-                        updatedAt = moment,
-                    ),
-                )
-            }
+            stageRowsFor(taskId, poolType, moment).forEach { insertStage(it) }
             val aimed = setDraftMaterializedTask(draft.id, taskId, moment)
             check(aimed == 1) { "The draft ${draft.id} could not be linked to the task it produced." }
             createdTaskCount++

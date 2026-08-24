@@ -41,6 +41,34 @@ enum class TaskProgressFailure {
      * PLAN 6.3 keeps the outstanding amount from going below zero.
      */
     MORE_RESOLVED_THAN_OUTSTANDING,
+
+    /**
+     * The print run was recorded on a task that is not counted by one.
+     *
+     * PLAN 6 is the 3D model throughout, and the one batch a task is printed in
+     * is its idea alone. A card or board task is counted by its pipeline, and a
+     * special task by whatever the user chose — neither has a run to finish, so
+     * asking for one is a mistake rather than a thing to be quietly allowed.
+     */
+    PRIMARY_BATCH_ONLY_FOR_THREE_D,
+
+    /**
+     * A card was named on a shortage for a task that is not made of cards.
+     *
+     * PLAN 7.4 gives the naming to the card pipeline, where knowing *which* card
+     * came out short is what makes the record useful. On any other pool it would
+     * be a detail nothing can read back.
+     */
+    CARD_REFERENCE_ONLY_FOR_CARDS,
+
+    /**
+     * The identifier of this event has already been used for a different one.
+     *
+     * PLAN 5.12 has an event applied at most once, which is why the caller names
+     * it. Handing the same name to a different movement is not a retry, and
+     * treating it as one would drop the movement without telling anybody.
+     */
+    EVENT_ID_ALREADY_USED,
 }
 
 /**

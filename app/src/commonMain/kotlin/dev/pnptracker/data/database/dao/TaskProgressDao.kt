@@ -30,13 +30,22 @@ import kotlin.time.Instant
  * * what is still owed never exceeds what has been reported failed less what has
  *   been made good, so the cached counter can always be justified by the history;
  * * a task is finished exactly when it has a time it was finished at;
- * * a finished task owes nothing and, when its total is known, has every stage
- *   counted up to it.
+ * * a finished task owes nothing and has done the work its own pool measures it
+ *   by — a 3D task its print run, a card or board task every stage of its
+ *   pipeline counted up to a total that was given.
  *
  * That last pair is PLAN 6.4's rule that `isCompleted` may never contradict the
  * counters. It is why finishing a task is not simply a flag being set: the
  * counters are settled in the same transaction, and the settling is recorded as
  * an event rather than done quietly, so the history still adds up afterwards.
+ * What "done" means is asked of one function, so no path can answer it its own
+ * way, and asked again after the write, so a path that answers wrongly takes
+ * itself down rather than leaving the task behind.
+ *
+ * Events are named by their caller so a retry can be recognised. A name that
+ * comes back with the same event is a retry and does nothing; a name that comes
+ * back attached to a different event is refused, because treating that as a
+ * retry would drop a real movement while telling the caller all was well.
  *
  * The clock is passed in rather than read at the top of each method. Repeating
  * an operation that has already happened is a no-op, and a no-op must not move a
@@ -107,37 +116,49 @@ abstract class TaskProgressDao {
     abstract suspend fun resolvedTotalOf(taskId: EntityId): Int
 
     /**
-     * The shortages still open on a task that name a card, newest last.
+     * Every shortage on a task that named a card, oldest first.
      *
      * PLAN 7.4 lets a user say which card was short as well as how many, and
      * leaves the naming optional; a shortage recorded as a bare number simply
-     * does not appear here. They are called open because the task still owes
-     * something: which particular card was made good is a judgement PLAN leaves
-     * to the stage work of a later step, so nothing here claims to know it.
+     * does not appear here.
+     *
+     * This is the **history** and nothing more. It does not say which of these
+     * records is still outstanding, and it must not be read as though it did:
+     * making a shortage good is recorded against the task as a number, not
+     * against the particular card that was named, so nothing stored today can
+     * tell one of these apart from another. Telling them apart needs a model of
+     * its own, which PLAN 7.4 leaves to a later step. Until then the honest
+     * answer is the whole list, and the name says so.
      */
     @Query(
         """
-        SELECT progress_events.* FROM progress_events
-        INNER JOIN tasks ON tasks.id = progress_events.task_id
-        WHERE progress_events.task_id = :taskId
-          AND progress_events.kind = 'FAILURE_REPORTED'
-          AND progress_events.card_reference IS NOT NULL
-          AND tasks.current_missing_quantity > 0
-        ORDER BY progress_events.recorded_at, progress_events.id
+        SELECT * FROM progress_events
+        WHERE task_id = :taskId
+          AND kind = 'FAILURE_REPORTED'
+          AND card_reference IS NOT NULL
+        ORDER BY recorded_at, id
         """,
     )
-    abstract suspend fun openShortageDetailsOf(taskId: EntityId): List<ProgressEventEntity>
+    abstract suspend fun cardShortageHistoryOf(taskId: EntityId): List<ProgressEventEntity>
 
-    @Query("SELECT COUNT(*) FROM progress_events WHERE id = :eventId")
-    abstract suspend fun countOfEvent(eventId: EntityId): Int
+    /** One event by the name its caller gave it, or null when that name is free. */
+    @Query("SELECT * FROM progress_events WHERE id = :eventId")
+    abstract suspend fun eventById(eventId: EntityId): ProgressEventEntity?
 
     // ------------------------------------------------------------- writing
 
-    @Insert(onConflict = OnConflictStrategy.ABORT)
-    abstract suspend fun insertStage(stage: TaskStageEntity)
-
-    @Insert(onConflict = OnConflictStrategy.ABORT)
-    protected abstract suspend fun insertEvent(event: ProgressEventEntity)
+    /**
+     * Writes an event unless its name is taken, and says which happened.
+     *
+     * Ignoring the clash rather than aborting is what makes the race safe: two
+     * callers handing in the same event at once both reach here, exactly one
+     * inserts, and the other is told so by the return value instead of by an
+     * exception it would have to interpret.
+     *
+     * @return the new row, or -1 when an event of that name was already there.
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    protected abstract suspend fun insertEventIfNew(event: ProgressEventEntity): Long
 
     @Query(
         """
@@ -173,31 +194,6 @@ abstract class TaskProgressDao {
     // -------------------------------------------------------- transactions
 
     /**
-     * Writes the stage rows a pool's pipeline needs, all of them or none.
-     *
-     * Called from the same transaction that writes the task, so a card task
-     * never exists with half a pipeline under it. A pool with no pipeline gets
-     * nothing rather than a row saying so.
-     */
-    suspend fun openStagesFor(
-        taskId: EntityId,
-        poolType: PoolType,
-        moment: Instant,
-    ) {
-        stagesOf(poolType).forEachIndexed { index, stage ->
-            insertStage(
-                TaskStageEntity(
-                    taskId = taskId,
-                    stage = stage,
-                    orderIndex = index,
-                    createdAt = moment,
-                    updatedAt = moment,
-                ),
-            )
-        }
-    }
-
-    /**
      * Marks a task finished, settling what it owes in the same breath.
      *
      * PLAN 6.4 forbids the finished flag from contradicting the counters, and
@@ -223,15 +219,20 @@ abstract class TaskProgressDao {
         val moment = clock.now()
 
         if (task.currentMissingQuantity > 0) {
-            insertEvent(
-                ProgressEventEntity(
-                    id = idGenerator.newId(),
-                    taskId = taskId,
-                    kind = ProgressEventKind.SHORTAGE_RESOLVED,
-                    quantity = task.currentMissingQuantity,
-                    recordedAt = moment,
-                ),
-            )
+            val settled =
+                insertEventIfNew(
+                    ProgressEventEntity(
+                        id = idGenerator.newId(),
+                        taskId = taskId,
+                        kind = ProgressEventKind.SHORTAGE_RESOLVED,
+                        quantity = task.currentMissingQuantity,
+                        recordedAt = moment,
+                    ),
+                )
+            // A generated name that was already taken is not a retry of anything;
+            // it is an identifier collision, and settling silently without the
+            // event would leave the counter unexplained.
+            check(settled != -1L) { "The settling event for $taskId was given a name that was already taken." }
         }
         task.requiredQuantity?.let { total ->
             stagesOfTask(taskId).forEach { stage ->
@@ -288,8 +289,17 @@ abstract class TaskProgressDao {
      * PLAN 6.2: with the run made and nothing owed, the task is finished. If
      * something is owed it stays active and waits to be made good.
      *
+     * **Only a 3D task has a run to record.** The whole of PLAN 6 is the 3D
+     * model, and the flag belongs to it: a card or board task is counted by its
+     * pipeline, a special one by whatever the user chose. Allowing the run to be
+     * recorded on those would finish a card task with nothing printed, which is
+     * exactly the contradiction PLAN 6.4 forbids. So the pool is named rather
+     * than asked whether it has stages — a special task has no pipeline either,
+     * and it still has no print run.
+     *
      * @return true when this call was the one that recorded the run.
-     * @throws TaskProgressException if there is no task to record it on.
+     * @throws TaskProgressException if there is no task to record it on, or the
+     *   task is not counted by a print run.
      */
     @Transaction
     open suspend fun completePrimaryBatch(
@@ -297,6 +307,7 @@ abstract class TaskProgressDao {
         clock: Clock,
     ): Boolean {
         val task = workableTaskById(taskId) ?: refuse(TaskProgressFailure.TASK_NOT_AVAILABLE)
+        if (task.poolType != PoolType.THREE_D) refuse(TaskProgressFailure.PRIMARY_BATCH_ONLY_FOR_THREE_D)
         if (task.primaryBatchCompleted) return false
         val moment = clock.now()
         val finished = task.currentMissingQuantity == 0
@@ -325,12 +336,21 @@ abstract class TaskProgressDao {
      * while the failure total is free to go past it — a piece can be spoiled more
      * than once. That is why the two are different numbers.
      *
-     * Handing the same [eventId] again does nothing at all. It is how a retry
-     * after an uncertain failure stays a retry rather than becoming a second
-     * report of the same shortage.
+     * Handing the same [eventId] back with the same details does nothing at all.
+     * It is how a retry after an uncertain failure stays a retry rather than
+     * becoming a second report of the same shortage. Handing it back with
+     * *different* details is refused instead: that is not a retry, and taking it
+     * for one would drop a real shortage without telling anybody.
+     *
+     * The optional detail is checked against the task rather than stored
+     * blindly. [stage] has to be one this task's pool actually works through —
+     * the same template the pipeline itself is built from — and [cardReference]
+     * only means something on a card task, per PLAN 7.4. A [note] fits any pool.
      *
      * @return true when this call was the one that recorded the shortage.
-     * @throws TaskProgressException if there is no task to record it on.
+     * @throws TaskProgressException if there is no task to record it on, the
+     *   detail does not belong to it, or the event name is already spent on a
+     *   different event.
      * @throws IllegalArgumentException if the amount is not at least one piece.
      */
     @Transaction
@@ -345,10 +365,8 @@ abstract class TaskProgressDao {
     ): Boolean {
         require(quantity > 0) { "A shortage has to be about at least one piece, was: $quantity" }
         val task = workableTaskById(taskId) ?: refuse(TaskProgressFailure.TASK_NOT_AVAILABLE)
-        if (countOfEvent(eventId) > 0) return false
-        val moment = clock.now()
-
-        insertEvent(
+        requireDetailBelongsTo(task, cardReference, stage)
+        val event =
             ProgressEventEntity(
                 id = eventId,
                 taskId = taskId,
@@ -357,9 +375,13 @@ abstract class TaskProgressDao {
                 note = note,
                 cardReference = cardReference,
                 stage = stage,
-                recordedAt = moment,
-            ),
-        )
+                // Filled in below, once we know this is not a retry. Never read.
+                recordedAt = task.updatedAt,
+            )
+        if (alreadyRecorded(event)) return false
+        val moment = clock.now()
+        if (!recordOnce(event.copy(recordedAt = moment))) return false
+
         val owed = task.currentMissingQuantity + quantity
         writeProgress(
             taskId = taskId,
@@ -377,16 +399,23 @@ abstract class TaskProgressDao {
      * Records that some of what was owed has been made again.
      *
      * PLAN 6.3: what is owed comes down, never below nothing, and reaching
-     * nothing finishes the task — but only once the print run has been made,
-     * because a task that owes nothing and has never been printed has not been
-     * done, it has not been started.
+     * nothing finishes the task — but only if the rest of the work says it is
+     * done too. What that means is the pool's business, so the question is asked
+     * of [readyToFinish] rather than answered here: a 3D task needs its print
+     * run made, a card or board task needs its pipeline counted all the way up,
+     * and a special task is never finished behind the user's back.
+     *
+     * That is what keeps this from finishing a card task with nothing printed.
+     * Owing nothing is not the same as having done the work; it only means
+     * nothing is outstanding from what *was* done.
      *
      * The failure total is untouched, which is the point of keeping it as a sum
      * over the events: making good is a new event, not the deletion of an old one.
      *
      * @return true when this call was the one that recorded it.
-     * @throws TaskProgressException if there is no such task, or more was made
-     *   good than was owed.
+     * @throws TaskProgressException if there is no such task, more was made good
+     *   than was owed, the detail does not belong to the task, or the event name
+     *   is already spent on a different event.
      * @throws IllegalArgumentException if the amount is not at least one piece.
      */
     @Transaction
@@ -400,13 +429,8 @@ abstract class TaskProgressDao {
     ): Boolean {
         require(quantity > 0) { "Making good has to be about at least one piece, was: $quantity" }
         val task = workableTaskById(taskId) ?: refuse(TaskProgressFailure.TASK_NOT_AVAILABLE)
-        if (countOfEvent(eventId) > 0) return false
-        if (quantity > task.currentMissingQuantity) {
-            refuse(TaskProgressFailure.MORE_RESOLVED_THAN_OUTSTANDING)
-        }
-        val moment = clock.now()
-
-        insertEvent(
+        requireDetailBelongsTo(task, cardReference, stage = null)
+        val event =
             ProgressEventEntity(
                 id = eventId,
                 taskId = taskId,
@@ -414,11 +438,17 @@ abstract class TaskProgressDao {
                 quantity = quantity,
                 note = note,
                 cardReference = cardReference,
-                recordedAt = moment,
-            ),
-        )
+                recordedAt = task.updatedAt,
+            )
+        if (alreadyRecorded(event)) return false
+        if (quantity > task.currentMissingQuantity) {
+            refuse(TaskProgressFailure.MORE_RESOLVED_THAN_OUTSTANDING)
+        }
+        val moment = clock.now()
+        if (!recordOnce(event.copy(recordedAt = moment))) return false
+
         val owed = task.currentMissingQuantity - quantity
-        val finished = owed == 0 && task.primaryBatchCompleted
+        val finished = owed == 0 && readyToFinish(task, stagesOfTask(taskId))
         writeProgress(
             taskId = taskId,
             isCompleted = finished,
@@ -482,7 +512,11 @@ abstract class TaskProgressDao {
 
         val moment = clock.now()
         writeStage(taskId, stage, completedQuantity, moment)
-        val finished = stages.all { if (it.stage == stage) completedQuantity == total else it.completedQuantity == total }
+        val worked = stages.map { if (it.stage == stage) it.copy(completedQuantity = completedQuantity) else it }
+        // A pipeline counted all the way up still does not finish a task that
+        // owes a reprint: PLAN 6.4 will not have the finished mark stand against
+        // a counter saying work is left.
+        val finished = task.currentMissingQuantity == 0 && readyToFinish(task, worked)
         writeProgress(
             taskId = taskId,
             isCompleted = finished,
@@ -496,9 +530,99 @@ abstract class TaskProgressDao {
     }
 
     /**
+     * Whether the work a task is measured by has all been done.
+     *
+     * The one place the question is answered, so every path that can finish a
+     * task agrees about what finished means. It says nothing about what is owed
+     * — that is a separate condition each caller adds — only about whether the
+     * work itself is complete.
+     *
+     * * A 3D task is measured by its one print run (PLAN 6.2).
+     * * A card or board task is measured by its pipeline: every stage counted up
+     *   to the total (PLAN 7.2, 8). With no total given there is nothing to
+     *   count up to, so it cannot finish on its own — PLAN 6.4 leaves that case
+     *   to the user finishing it by hand, which [completeTask] is.
+     * * A special task is measured by nothing the database knows (PLAN 9), so it
+     *   is never finished except by being finished deliberately.
+     */
+    private fun readyToFinish(
+        task: TaskEntity,
+        stages: List<TaskStageEntity>,
+    ): Boolean =
+        when (task.poolType) {
+            PoolType.THREE_D -> task.primaryBatchCompleted
+            PoolType.CARD, PoolType.BOARD ->
+                task.requiredQuantity?.let { total -> stages.all { it.completedQuantity == total } } == true
+            PoolType.SPECIAL -> false
+        }
+
+    /**
+     * Refuses detail that does not belong to the task it is being recorded on.
+     *
+     * The stage is checked against [stagesOf] — the same template the pipeline
+     * was built from — rather than against a second list written out here, so
+     * there is no way for the two to drift apart.
+     */
+    private fun requireDetailBelongsTo(
+        task: TaskEntity,
+        cardReference: String?,
+        stage: ProductionStage?,
+    ) {
+        if (cardReference != null && task.poolType != PoolType.CARD) {
+            refuse(TaskProgressFailure.CARD_REFERENCE_ONLY_FOR_CARDS)
+        }
+        if (stage != null) {
+            val pipeline = stagesOf(task.poolType)
+            if (pipeline.isEmpty()) refuse(TaskProgressFailure.TASK_HAS_NO_STAGES)
+            if (stage !in pipeline) refuse(TaskProgressFailure.STAGE_NOT_IN_PIPELINE)
+        }
+    }
+
+    /**
+     * Whether this exact event is already in the history.
+     *
+     * Everything the caller decided is compared; only [ProgressEventEntity.recordedAt]
+     * is left out, because a genuine retry arrives later than the attempt it is
+     * repeating and the first attempt's time is the one that stands.
+     *
+     * A name already spent on a *different* event is refused rather than
+     * reported as a duplicate. Returning false there would look to the caller
+     * exactly like a successful retry while the movement it asked for was never
+     * recorded.
+     */
+    private suspend fun alreadyRecorded(event: ProgressEventEntity): Boolean {
+        val existing = eventById(event.id) ?: return false
+        if (existing.copy(recordedAt = event.recordedAt) != event) {
+            refuse(TaskProgressFailure.EVENT_ID_ALREADY_USED)
+        }
+        return true
+    }
+
+    /**
+     * Writes the event unless another writer got there first.
+     *
+     * [alreadyRecorded] has already answered for the ordinary case; this covers
+     * the one where two callers hand in the same event at the same moment. The
+     * insert itself decides which of them wins, and the loser checks that what
+     * landed really is its own event before treating the clash as a retry.
+     *
+     * @return true when this call was the one that wrote the event.
+     */
+    private suspend fun recordOnce(event: ProgressEventEntity): Boolean {
+        if (insertEventIfNew(event) != -1L) return true
+        check(alreadyRecorded(event)) { "The event ${event.id} vanished between two reads of it." }
+        return false
+    }
+
+    /**
      * Reads back what the transaction has just written and refuses to let it
      * stand unless the task still adds up. Still inside the transaction, so a
      * broken invariant takes every write with it.
+     *
+     * This is the second line rather than the first. Each transaction already
+     * decides carefully what to write; this is here so that a path which decides
+     * wrongly — today's or a later step's — fails loudly instead of leaving a
+     * task the rest of the application would have to be taught to distrust.
      */
     private suspend fun requireProgressHolds(taskId: EntityId) {
         val task = checkNotNull(taskById(taskId)) { "The task $taskId disappeared while it was being worked on." }
@@ -521,9 +645,34 @@ abstract class TaskProgressDao {
         check(task.currentMissingQuantity <= outstanding) {
             "The task $taskId owes ${task.currentMissingQuantity} but its history accounts for $outstanding."
         }
-        stagesOfTask(taskId).zipWithNext { earlier, later ->
+        val stages = stagesOfTask(taskId)
+        stages.zipWithNext { earlier, later ->
             check(later.completedQuantity <= earlier.completedQuantity) {
                 "The task $taskId has ${later.stage} ahead of ${earlier.stage}."
+            }
+        }
+        // PLAN 6.4: the finished mark is the real state and may not contradict
+        // the counters. So a finished task has to have done the work its own
+        // pool measures it by — and only that. Asking a special task for a
+        // pipeline it never had, or a print run that is not its idea, would
+        // invent a rule rather than enforce one.
+        if (task.isCompleted) {
+            when (task.poolType) {
+                PoolType.THREE_D ->
+                    check(task.primaryBatchCompleted) {
+                        "The finished 3D task $taskId never had its print run made."
+                    }
+                PoolType.CARD, PoolType.BOARD ->
+                    // With no total given there is nothing for a stage to reach,
+                    // and PLAN 6.4 leaves that task to be finished by hand.
+                    task.requiredQuantity?.let { total ->
+                        check(stages.all { it.completedQuantity == total }) {
+                            "The finished task $taskId has a pipeline at " +
+                                "${stages.map { it.completedQuantity }} of $total."
+                        }
+                    }
+                // Measured by nothing the database keeps, so nothing to check.
+                PoolType.SPECIAL -> Unit
             }
         }
     }

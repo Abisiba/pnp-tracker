@@ -9,11 +9,11 @@ import dev.pnptracker.data.database.CELL_COLUMN_DISPLAY_ORDER
 import dev.pnptracker.data.database.entity.CellSegmentEntity
 import dev.pnptracker.data.database.entity.TaskEntity
 import dev.pnptracker.data.database.entity.TaskStageEntity
+import dev.pnptracker.data.database.entity.stageRowsFor
 import dev.pnptracker.data.database.projection.GameTaskRow
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.PoolType
-import dev.pnptracker.domain.model.stagesOf
 import dev.pnptracker.domain.tasks.TaskSetupException
 import dev.pnptracker.domain.tasks.TaskSetupFailure
 import kotlinx.coroutines.flow.Flow
@@ -101,17 +101,7 @@ interface TaskDao {
                 moment = moment,
             ),
         )
-        stagesOf(task.poolType).forEachIndexed { index, stage ->
-            insertStage(
-                TaskStageEntity(
-                    taskId = task.id,
-                    stage = stage,
-                    orderIndex = index,
-                    createdAt = moment,
-                    updatedAt = moment,
-                ),
-            )
-        }
+        stageRowsFor(task.id, task.poolType, moment).forEach { insertStage(it) }
     }
 
     /**

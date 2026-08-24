@@ -5,7 +5,9 @@ import androidx.room3.Entity
 import androidx.room3.ForeignKey
 import androidx.room3.Index
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.ProductionStage
+import dev.pnptracker.domain.model.stagesOf
 import kotlin.time.Instant
 
 /**
@@ -61,3 +63,29 @@ data class TaskStageEntity(
         }
     }
 }
+
+/**
+ * The stage rows a task of this pool starts life with, at nothing done.
+ *
+ * A plain function over [stagesOf] rather than a step any writer performs, so
+ * the two places that create tasks — one by hand, one from an import — shape a
+ * pipeline the same way without either reaching into the other's transaction.
+ * Each caller inserts these rows inside its own write, which is what keeps a
+ * task and its pipeline atomic.
+ *
+ * A pool with no pipeline returns nothing, so a caller needs no special case.
+ */
+fun stageRowsFor(
+    taskId: EntityId,
+    poolType: PoolType,
+    moment: Instant,
+): List<TaskStageEntity> =
+    stagesOf(poolType).mapIndexed { index, stage ->
+        TaskStageEntity(
+            taskId = taskId,
+            stage = stage,
+            orderIndex = index,
+            createdAt = moment,
+            updatedAt = moment,
+        )
+    }
