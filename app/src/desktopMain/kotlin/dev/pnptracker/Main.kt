@@ -13,6 +13,7 @@ import dev.pnptracker.data.repository.GameTableStore
 import dev.pnptracker.data.repository.ImportConfirmationStore
 import dev.pnptracker.data.repository.ImportDraftStore
 import dev.pnptracker.data.repository.ImportReviewStore
+import dev.pnptracker.data.repository.TaskFromTextStore
 import dev.pnptracker.platform.awt.applyLinuxFileDialogPolicy
 import dev.pnptracker.platform.files.AppDirectoryInitializer
 import dev.pnptracker.platform.files.XdgAppPathsResolver
@@ -59,13 +60,18 @@ fun main() {
         ImportConfirmationController(
             ImportConfirmationStore(database.importDao(), database.gameCellDao(), database.gameDao()),
         )
+    // One catalogue behind both the colour section and the task panel, so a
+    // colour the user adds is offered by the panel without a second read.
+    val colorCatalogue = ColorCatalogueStore(database.colorDao())
     val gameTableController =
         GameTableController(
             table = GameTableStore(database.gameDao(), database.gameCellDao(), database.gameTableDao()),
             setup = GameSetupStore(database.gameDao(), database.gameCellDao()),
             cells = CellTextStore(database.cellSegmentDao()),
+            colors = colorCatalogue,
+            taskCreation = TaskFromTextStore(database.taskFromTextDao()),
         )
-    val colorCatalogueController = ColorCatalogueController(ColorCatalogueStore(database.colorDao()))
+    val colorCatalogueController = ColorCatalogueController(colorCatalogue)
 
     application {
         Window(

@@ -27,13 +27,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.pnptracker.domain.colors.ColorSetupFailure
 import dev.pnptracker.domain.colors.ColorSummary
 import dev.pnptracker.ui.Strings
+import dev.pnptracker.ui.theme.opaqueColorOf
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
@@ -136,21 +136,6 @@ private fun Swatch(
                 .background(opaqueColorOf(hex))
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, SWATCH_SHAPE)
                 .semantics { contentDescription = description },
-    )
-}
-
-/**
- * `#RRGGBB` as an opaque colour.
- *
- * Only ever called with a value the form has already accepted, so there is
- * nothing here to fall back to.
- */
-private fun opaqueColorOf(hex: String): Color {
-    val digits = hex.removePrefix("#")
-    return Color(
-        red = digits.substring(0, 2).toInt(radix = 16),
-        green = digits.substring(2, 4).toInt(radix = 16),
-        blue = digits.substring(4, 6).toInt(radix = 16),
     )
 }
 

@@ -17,6 +17,8 @@ import dev.pnptracker.domain.model.SegmentKind
  * so a cell keeps its other pieces instead of vanishing along with it.
  */
 data class CellContentRow(
+    @ColumnInfo(name = "segment_id")
+    val segmentId: EntityId,
     @ColumnInfo(name = "cell_id")
     val cellId: EntityId,
     @ColumnInfo(name = "order_index")
@@ -32,4 +34,7 @@ data class CellContentRow(
     val taskName: String?,
     @ColumnInfo(name = "task_is_completed")
     val taskIsCompleted: Boolean?,
+    /** How many the task needs, or null when the piece is text or the count is unknown. */
+    @ColumnInfo(name = "task_required_quantity")
+    val taskRequiredQuantity: Int?,
 )

@@ -183,7 +183,10 @@ class GameTableLayoutTest {
             "SEGMENT_SEPARATOR" !in source,
             "the table still puts something between a cell's pieces",
         )
-        assertTrue("cell.text" in source, "the cell's text is not read from the model that concatenates it")
+        val drawn = source.substringAfter("private fun cellContentOf(").substringBefore("private fun spokenContentOf(")
+        assertTrue("append(segment.text)" in drawn, "a piece is not drawn as the text it carries")
+        val spoken = source.substringAfter("private fun spokenContentOf(").substringBefore("private fun spokenTaskOf(")
+        assertTrue("""joinToString(separator = "")""" in spoken, "the spoken cell puts something between its pieces")
     }
 
     @Test
@@ -216,5 +219,166 @@ class GameTableLayoutTest {
             cellPadding.all { (horizontal, vertical) -> horizontal <= 12 && vertical <= 10 },
             "a cell is padded like a card rather than a table cell: $cellPadding",
         )
+    }
+
+    // ------------------------------------------- a task standing in a cell
+
+    @Test
+    fun `a task is painted in its own colour with ink chosen against it`() {
+        // The colour is the user's, picked for filament rather than for reading
+        // text on. PLAN 17 asks for text that can still be read, so the ink is
+        // worked out from the ground instead of being fixed.
+        val drawn = source.substringAfter("private fun cellContentOf(").substringBefore("private fun spokenContentOf(")
+        assertTrue("opaqueColorOf(it.hex)" in drawn, "a task's colour is not taken from its colour record")
+        assertTrue("readableInkOn" in drawn, "the ink on a task is not chosen against the colour behind it")
+        assertTrue("background = ground" in drawn, "a task is not painted at all")
+        // No value copied into the screen: whatever a colour is, it is its own.
+        assertTrue(
+            Regex("""["']#[0-9A-Fa-f]{6}["']""").find(source) == null,
+            "a colour value is written into the screen instead of read from its record",
+        )
+    }
+
+    @Test
+    fun `the count beside a task comes from the task and not from anybody's text`() {
+        val drawn = source.substringAfter("private fun cellContentOf(").substringBefore("private fun spokenContentOf(")
+        assertTrue("segment.requiredQuantity" in drawn, "the count is not read from the task")
+        assertTrue("Strings.CellTask.quantityMark" in drawn, "the count mark is not taken from the text catalogue")
+        // The mark is drawn around the document and never inside it.
+        assertTrue("QUANTITY_GAP" in drawn, "the count is drawn up against the word before it")
+    }
+
+    @Test
+    fun `a finished task is struck through where it stands`() {
+        // PLAN 5.6 leaves a finished task in its cell rather than removing it.
+        val drawn = source.substringAfter("private fun cellContentOf(").substringBefore("private fun spokenContentOf(")
+        assertTrue("segment.isCompletedTask" in drawn, "a finished task looks exactly like an unfinished one")
+        assertTrue("TextDecoration.LineThrough" in drawn, "a finished task is not struck through")
+    }
+
+    @Test
+    fun `a task is not drawn as something that can be clicked`() {
+        // Its popover belongs to a later step. Anything that looked pressable
+        // would promise something that is not there.
+        val drawn = source.substringAfter("private fun cellContentOf(").substringBefore("private fun spokenContentOf(")
+        listOf("clickable", "onClick", "pointerHoverIcon", "Button").forEach { interactive ->
+            assertTrue(interactive !in drawn, "a task in a cell is drawn as a $interactive")
+        }
+    }
+
+    @Test
+    fun `a task says its name, its colours and its count out loud`() {
+        // PLAN 17: colour is never the only thing carrying a meaning.
+        val spoken = source.substringAfter("private fun spokenTaskOf(").substringBefore("/**")
+        assertTrue("Strings.CellTask.description" in spoken, "a task has no spoken description")
+        assertTrue("canonicalName" in spoken, "the colours are not said in words")
+        assertTrue("Strings.CellTask.noColor" in spoken, "a task with no colour says nothing about it")
+        assertTrue("Strings.CellTask.completed" in spoken, "a finished task does not say so out loud")
+        assertTrue("Strings.Table.cellDescription" in source, "the cell no longer describes itself")
+    }
+
+    // ------------------------------------------- making a task out of words
+
+    @Test
+    fun `the offer to make a task waits for a real selection`() {
+        // PLAN 12.6 has the user pick a word and then convert it, so an action
+        // standing there with nothing chosen could not do what it says.
+        val actions = source.substringAfter("private fun CellEditorActions(").substringBefore("private fun TaskComposerPanel(")
+        assertTrue("field.selection.collapsed" in actions, "the offer does not ask whether anything is selected")
+        assertTrue("Strings.CellTask.create" in actions, "there is no offer to make a task")
+        assertTrue("controller.beginTaskComposer(" in actions, "the offer does nothing")
+        assertTrue("field.selection.min" in actions && "field.selection.max" in actions, "the offsets are not the field's own")
+    }
+
+    @Test
+    fun `the selection is the text field's own rather than something invented`() {
+        val editor = source.substringAfter("private fun CellEditorSlot(").substringBefore("private fun CellEditorActions(")
+        assertTrue("TextFieldValue" in editor, "the editor cannot report what is selected in it")
+        assertTrue("readOnly = composer != null" in editor, "the text can move while a selection points into it")
+    }
+
+    @Test
+    fun `unsaved words are not offered as a task`() {
+        val actions = source.substringAfter("private fun CellEditorActions(").substringBefore("private fun TaskComposerPanel(")
+        assertTrue("enabled = !editor.hasChanges" in actions, "a draft can be cut at offsets into stored text")
+        assertTrue("Strings.CellTask.saveTextFirst" in actions, "nothing says why the offer is unavailable")
+    }
+
+    @Test
+    fun `the task panel is drawn in the cell and not over the window`() {
+        // PLAN 12.6 rules out a full screen modal or a panel covering the window.
+        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun ColorChoices(")
+        listOf("Dialog", "AlertDialog", "Popup", "ModalBottomSheet", "fillMaxSize").forEach { overlay ->
+            assertTrue(overlay !in panel, "the task panel opens a $overlay")
+        }
+        val editor = source.substringAfter("private fun CellEditorSlot(").substringBefore("private fun CellEditorActions(")
+        assertTrue("width(CellColumnWidth)" in editor, "the cell being worked in is not the width of its own column")
+    }
+
+    @Test
+    fun `the panel saves with Ctrl and Enter and gives up only on itself with Escape`() {
+        val editor = source.substringAfter("private fun CellEditorSlot(").substringBefore("private fun CellEditorActions(")
+        assertTrue("controller.cancelTaskComposer()" in editor, "Escape does not close the panel")
+        assertTrue("saveTask()" in editor, "Ctrl+Enter does not save the task")
+        assertTrue("event.isCtrlPressed" in editor, "there is no Ctrl+Enter at all")
+        // The note is a note, so a plain Enter still makes a line in it.
+        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun ColorChoices(")
+        assertTrue("singleLine = false" in panel, "the note is one line, so Enter cannot break a line in it")
+    }
+
+    @Test
+    fun `the panel's own keys work wherever the keyboard is inside it`() {
+        // Handling them on one field only left Ctrl+Enter dead as soon as the
+        // user was typing a note, which is exactly where they finish.
+        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun ColorChoices(")
+        val onTheColumn = panel.substringAfter("Column(").substringBefore(") {")
+        assertTrue("onPreviewKeyEvent" in onTheColumn, "the panel's keys are caught by one field rather than the panel")
+        assertTrue("controller.cancelTaskComposer()" in onTheColumn, "Escape does not close the panel from inside it")
+        assertTrue("onSave()" in onTheColumn, "Ctrl+Enter does not save from inside the panel")
+    }
+
+    @Test
+    fun `two tasks side by side do not run into one another`() {
+        // Their names and counts would otherwise touch. The gap goes between two
+        // things that are drawn, never between two pieces of the document.
+        val drawn = source.substringAfter("private fun cellContentOf(").substringBefore("private fun spokenContentOf(")
+        assertTrue("cell.segments.getOrNull(index - 1)?.isTask" in drawn, "two tasks are drawn touching one another")
+    }
+
+    @Test
+    fun `the keyboard comes back to the open work after a refusal`() {
+        val editor = source.substringAfter("private fun CellEditorSlot(").substringBefore("private fun CellEditorActions(")
+        assertTrue("focusRecall" in editor, "the cell never takes the keyboard back")
+        assertTrue("focus.requestFocus()" in editor, "the cell does not ask for the keyboard")
+        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun ColorChoices(")
+        assertTrue("LaunchedEffect(focusRecall)" in panel, "the panel never takes the keyboard back")
+    }
+
+    @Test
+    fun `a colour is chosen from the catalogue and never typed as a value`() {
+        // PLAN 5.7 keeps every colour a named record; this step creates none.
+        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun ColorChoices(")
+        assertTrue("Strings.CellTask.colorSearch" in panel, "the catalogue cannot be searched by name")
+        assertTrue("Strings.Colors.hexLabel" !in panel, "the panel asks for a colour value")
+        val choices = source.substringAfter("private fun ColorChoices(").substringBefore("/** One line of explanation")
+        assertTrue("color.canonicalName" in choices, "a swatch is offered without its written name")
+        assertTrue("opaqueColorOf(color.hex)" in choices, "the swatch is not the colour it stands for")
+        assertTrue("stateDescription = stateText" in choices, "which colour is chosen is carried by fill alone")
+    }
+
+    @Test
+    fun `the panel asks how a task is tracked only where the pool leaves a choice`() {
+        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun ColorChoices(")
+        assertTrue("trackingModesOf(" in panel, "the tracking modes are not taken from the one place that decides them")
+        assertTrue("trackingChoices.size > 1" in panel, "the user is asked a question that has only one answer")
+    }
+
+    @Test
+    fun `nothing about the three creation modes is drawn yet`() {
+        // PLAN 12.7 has three modes; this step is the first of them, and a
+        // switch that did nothing would promise the other two.
+        listOf("Çoklu", "multiTask", "multiColor", "creationMode").forEach { later ->
+            assertTrue(later !in source, "the table draws a $later control that does nothing")
+        }
     }
 }

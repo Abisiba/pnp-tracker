@@ -364,7 +364,7 @@ class GameTableStoreTest {
 
             assertEquals(42, rows.size)
             assertEquals(forTwoGames, counting.queries, "the number of queries grew with the number of games")
-            assertEquals(3, counting.queries, "the table is meant to be three whole-table reads")
+            assertEquals(4, counting.queries, "the table is meant to be four whole-table reads")
         }
 
     @Test
@@ -388,5 +388,123 @@ class GameTableStoreTest {
                 rowNamed("Harmonies").cell(CellColumnType.CARD).isEmpty,
                 "a column nobody wrote in gained content by being read",
             )
+        }
+
+    // ------------------------------------------- what a task brings with it
+
+    private suspend fun colorNamed(name: String): EntityId =
+        assertNotNull(database.colorDao().allColors().firstOrNull { it.canonicalName == name }).id
+
+    @Test
+    fun `a task piece brings its colours and its count with it`() =
+        runBlocking<Unit> {
+            val game = addGame("Harmonies")
+            val cell = addCell(game.id, CellColumnType.THREE_D)
+            addText(cell, "Basılacak: ", orderIndex = 0)
+            val task = addTask(cell, "Knight")
+            database.taskColorDao().addColorToTask(task, colorNamed("Siyah"))
+
+            val piece =
+                table()
+                    .single()
+                    .cell(CellColumnType.THREE_D)
+                    .segments
+                    .last()
+
+            assertEquals("Knight", piece.text)
+            assertEquals(14, piece.requiredQuantity)
+            assertEquals(listOf("Siyah"), piece.colors.map { it.canonicalName })
+            assertEquals(listOf("#111111"), piece.colors.map { it.hex })
+        }
+
+    @Test
+    fun `a task's colours come back in the order they were chosen`() =
+        runBlocking<Unit> {
+            // PLAN 5.10 keeps the slot order; a later step splits a name along it.
+            val game = addGame("Harmonies")
+            val cell = addCell(game.id, CellColumnType.THREE_D)
+            val task = addTask(cell, "Kılıç")
+            listOf("Gri", "Siyah", "Beyaz").forEach { database.taskColorDao().addColorToTask(task, colorNamed(it)) }
+
+            val piece =
+                table()
+                    .single()
+                    .cell(CellColumnType.THREE_D)
+                    .segments
+                    .single()
+
+            assertEquals(listOf("Gri", "Siyah", "Beyaz"), piece.colors.map { it.canonicalName })
+        }
+
+    @Test
+    fun `a task with no colour is drawn all the same`() =
+        runBlocking<Unit> {
+            // PLAN 5.10 says having no colour is a valid state, not a broken row.
+            val game = addGame("Harmonies")
+            val cell = addCell(game.id, CellColumnType.THREE_D)
+            addTask(cell, "Whale")
+
+            val piece =
+                table()
+                    .single()
+                    .cell(CellColumnType.THREE_D)
+                    .segments
+                    .single()
+
+            assertTrue(piece.colors.isEmpty())
+            assertEquals("Whale", piece.text)
+        }
+
+    @Test
+    fun `the count is never part of what the cell reads as`() =
+        runBlocking<Unit> {
+            val game = addGame("Harmonies")
+            val cell = addCell(game.id, CellColumnType.THREE_D)
+            addText(cell, "Basılacak: ", orderIndex = 0)
+            val task = addTask(cell, "Knight")
+            database.taskColorDao().addColorToTask(task, colorNamed("Siyah"))
+
+            val text = table().single().cell(CellColumnType.THREE_D).text
+
+            assertEquals("Basılacak: Knight", text)
+            assertTrue("×" !in text, "the count reached the document text")
+            assertTrue("14" !in text, "the count reached the document text")
+        }
+
+    @Test
+    fun `a task's colours cost no query of their own however many tasks there are`() =
+        runBlocking<Unit> {
+            val counting =
+                CountingGameTable(database.gameDao(), database.gameCellDao(), database.gameTableDao())
+            val siyah = colorNamed("Siyah")
+            repeat(2) { index ->
+                val game = addGame("Oyun $index")
+                val cell = addCell(game.id, CellColumnType.THREE_D)
+                database.taskColorDao().addColorToTask(addTask(cell, "Token $index"), siyah)
+            }
+            counting.observeTable().first()
+            val forTwoTasks = counting.queries
+
+            repeat(40) { index ->
+                val game = addGame("Sonraki $index")
+                val cell = addCell(game.id, CellColumnType.THREE_D)
+                database.taskColorDao().addColorToTask(addTask(cell, "Token $index"), siyah)
+            }
+            counting.reset()
+            val rows = counting.observeTable().first()
+
+            assertEquals(42, rows.size)
+            assertTrue(
+                rows.all {
+                    it
+                        .cell(CellColumnType.THREE_D)
+                        .segments
+                        .single()
+                        .colors.size == 1
+                },
+                "the colours did not come back at all",
+            )
+            assertEquals(forTwoTasks, counting.queries, "the number of queries grew with the number of tasks")
+            assertEquals(4, counting.queries, "a task's colours cost a read of their own")
         }
 }

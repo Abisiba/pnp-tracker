@@ -2,6 +2,7 @@ package dev.pnptracker.domain.games
 
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.tasks.CellTextSelection
 
 /**
  * Which games the table is showing.
@@ -34,20 +35,47 @@ enum class GameTableView {
 }
 
 /**
+ * One colour of a task, as a cell draws it.
+ *
+ * The name travels with the value and neither can be shown alone: PLAN 17 will
+ * not have colour be the only carrier of a meaning, so the swatch a cell paints
+ * and the word a screen reader says come from the same row.
+ *
+ * A list of these rather than a single colour, even though this step only ever
+ * creates one. PLAN 5.10 has a single task carry several ordered colours, and a
+ * shape that could hold only one would have to be replaced rather than drawn
+ * differently when that step arrives.
+ */
+data class TaskColorPreview(
+    val colorId: EntityId,
+    val canonicalName: String,
+    val hex: String,
+)
+
+/**
  * One piece of a cell as the table previews it.
  *
- * A piece of plain text shows its text and a task shows its name — PLAN 12.5 —
- * which is as far as this step goes. What the eventual cell draws around a task
- * (its colours, its count, its badge) is not here, because none of it is decided
- * by anything this reads.
+ * A piece of plain text shows its text and a task shows its name, the colours it
+ * is made in and how many are needed — PLAN 12.5.
+ *
+ * [text] is the piece's part of the **document**: for a task that is its name
+ * and nothing else. The count is not in it and must never be written into it —
+ * `×14` is something the table says about a task, not something the user typed —
+ * so a cell reads back exactly as it was written whatever is drawn around it.
  */
 data class CellSegmentPreview(
+    /** The row this piece is stored as; what a selection in it is anchored to. */
+    val segmentId: EntityId,
     /** The task this stands for, or null when the piece is plain text. */
     val taskId: EntityId?,
-    /** The text to show: the piece's own, or the task's name. */
+    /** The piece's part of the document: its own text, or the task's name. */
     val text: String,
     /** True when a task the user has finished; PLAN 5.6 leaves it in its cell. */
     val isCompletedTask: Boolean = false,
+    /** How many the task needs, or null on plain text and on an unknown count. */
+    val requiredQuantity: Int? = null,
+    /** The task's colours in the order they were chosen; empty on plain text. */
+    val colors: List<TaskColorPreview> = emptyList(),
 ) {
     val isTask: Boolean get() = taskId != null
 }
@@ -94,6 +122,48 @@ data class CellPreview(
      * later step, so until then the answer here is honestly nothing.
      */
     val editableText: String? get() = if (holdsTasks) null else text
+
+    /**
+     * Where a stretch of the cell's text really lives.
+     *
+     * The offsets arrive counted across the whole cell, because that is what the
+     * user dragged over, but a cut has to be made in one stored piece. This is
+     * the one place the two are reconciled: the selection is handed to the piece
+     * that wholly contains it, with the offsets moved into that piece's own
+     * frame.
+     *
+     * A selection that spans two pieces, or that lands on a task, has no answer
+     * here and gets none. Guessing which piece was meant would cut somewhere the
+     * user never pointed at, and that is the whole failure this shape exists to
+     * make impossible.
+     *
+     * @return null when nothing about the selection can be trusted.
+     */
+    fun locateSelection(
+        gameId: EntityId,
+        startOffset: Int,
+        endOffset: Int,
+    ): CellTextSelection? {
+        val cellId = cellId ?: return null
+        if (startOffset < 0 || startOffset >= endOffset) return null
+        var pieceStart = 0
+        segments.forEach { segment ->
+            val pieceEnd = pieceStart + segment.text.length
+            if (startOffset >= pieceStart && endOffset <= pieceEnd) {
+                if (segment.isTask) return null
+                return CellTextSelection(
+                    gameId = gameId,
+                    cellId = cellId,
+                    segmentId = segment.segmentId,
+                    expectedText = segment.text,
+                    startOffset = startOffset - pieceStart,
+                    endOffset = endOffset - pieceStart,
+                )
+            }
+            pieceStart = pieceEnd
+        }
+        return null
+    }
 }
 
 /**

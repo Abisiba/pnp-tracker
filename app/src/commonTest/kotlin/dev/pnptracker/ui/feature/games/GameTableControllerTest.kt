@@ -1,8 +1,11 @@
 package dev.pnptracker.ui.feature.games
 
 import dev.pnptracker.data.repository.CellTextEditing
+import dev.pnptracker.data.repository.ColorCatalogue
 import dev.pnptracker.data.repository.GameSetup
 import dev.pnptracker.data.repository.GameTableSource
+import dev.pnptracker.data.repository.TaskCreationFromText
+import dev.pnptracker.domain.colors.ColorSummary
 import dev.pnptracker.domain.games.CellPreview
 import dev.pnptracker.domain.games.CellSegmentPreview
 import dev.pnptracker.domain.games.CellSummary
@@ -16,6 +19,10 @@ import dev.pnptracker.domain.games.GameTableView
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
+import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.tasks.CellTextSelection
+import dev.pnptracker.domain.tasks.TaskFromTextException
+import dev.pnptracker.domain.tasks.TaskFromTextFailure
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
@@ -136,11 +143,80 @@ class GameTableControllerTest {
         }
     }
 
+    /** Hands out whatever catalogue a test gives it. */
+    private class FakeColors(
+        colors: List<ColorSummary> = emptyList(),
+    ) : ColorCatalogue {
+        val colors = MutableStateFlow(colors)
+
+        override fun observeColors(): Flow<List<ColorSummary>> = colors
+
+        override suspend fun colorsUsingHex(hex: String): List<ColorSummary> = emptyList()
+
+        override suspend fun createColor(
+            canonicalName: String,
+            hex: String,
+        ): EntityId = IdGenerator.Random.newId()
+    }
+
+    /** Records the tasks that were asked for, and can be told to refuse. */
+    private class FakeTaskCreation(
+        private val failure: TaskFromTextFailure? = null,
+    ) : TaskCreationFromText {
+        val created = mutableListOf<CreatedTask>()
+
+        override suspend fun createSingleColorTask(
+            selection: CellTextSelection,
+            colorId: EntityId,
+            requiredQuantity: Int,
+            trackingMode: TrackingMode,
+            notes: String?,
+        ): EntityId {
+            failure?.let { throw TaskFromTextException(it) }
+            created += CreatedTask(selection, colorId, requiredQuantity, trackingMode, notes)
+            return IdGenerator.Random.newId()
+        }
+    }
+
+    private data class CreatedTask(
+        val selection: CellTextSelection,
+        val colorId: EntityId,
+        val requiredQuantity: Int,
+        val trackingMode: TrackingMode,
+        val notes: String?,
+    )
+
+    private fun color(
+        name: String,
+        hex: String = "#808080",
+        sortOrder: Int = 0,
+    ) = ColorSummary(
+        id = IdGenerator.Random.newId(),
+        canonicalName = name,
+        hex = hex,
+        sortOrder = sortOrder,
+    )
+
+    /** One piece of plain text, with an identity of its own like a stored row. */
+    private fun plain(text: String) = CellSegmentPreview(segmentId = IdGenerator.Random.newId(), taskId = null, text = text)
+
+    private fun taskPiece(
+        name: String,
+        quantity: Int? = null,
+    ) = CellSegmentPreview(
+        segmentId = IdGenerator.Random.newId(),
+        taskId = IdGenerator.Random.newId(),
+        text = name,
+        requiredQuantity = quantity,
+    )
+
     private fun controllerOf(
         table: FakeTable,
         setup: FakeSetup = FakeSetup(),
         cells: FakeCells = FakeCells(),
-    ) = GameTableController(table, setup, cells)
+        colors: FakeColors = FakeColors(),
+        taskCreation: FakeTaskCreation = FakeTaskCreation(),
+    ) = GameTableController(table, setup, cells, colors, taskCreation)
 
     private fun visibleNames(controller: GameTableController): List<String> =
         assertIs<GameTableRowsState.Content>(controller.state.rows).rows.map { it.gameName }
@@ -295,7 +371,7 @@ class GameTableControllerTest {
                     listOf(
                         row(
                             "Harmonies",
-                            cells = mapOf(CellColumnType.THREE_D to listOf(CellSegmentPreview(null, "40 gri"))),
+                            cells = mapOf(CellColumnType.THREE_D to listOf(plain("40 gri"))),
                         ),
                     ),
                 )
@@ -418,8 +494,7 @@ class GameTableControllerTest {
 
     // ------------------------------------------------------ writing in a cell
 
-    private fun cellsOf(vararg pieces: Pair<CellColumnType, String>) =
-        pieces.associate { (column, text) -> column to listOf(CellSegmentPreview(null, text)) }
+    private fun cellsOf(vararg pieces: Pair<CellColumnType, String>) = pieces.associate { (column, text) -> column to listOf(plain(text)) }
 
     @Test
     fun `opening a cell puts what it already says into the editor`() =
@@ -452,7 +527,7 @@ class GameTableControllerTest {
                                 cellId = IdGenerator.Random.newId(),
                                 segments =
                                     if (columnType == CellColumnType.THREE_D) {
-                                        listOf(CellSegmentPreview(IdGenerator.Random.newId(), "Gri token"))
+                                        listOf(taskPiece("Gri token"))
                                     } else {
                                         emptyList()
                                     },
@@ -634,6 +709,415 @@ class GameTableControllerTest {
             controller.saveEditing()
 
             assertEquals(listOf(Triple(row.gameId, CellColumnType.CARD, pasted)), cells.saved)
+            collecting.cancelAndJoin()
+        }
+
+    // -------------------------------------- making a task out of selected words
+
+    private suspend fun CoroutineScope.editing(
+        controller: GameTableController,
+        row: GameTableRow,
+        columnType: CellColumnType = CellColumnType.THREE_D,
+    ): Job {
+        val job = collect(controller)
+        controller.beginEditing(row.gameId, columnType)
+        return job
+    }
+
+    @Test
+    fun `selecting a word offers a task with that word as its name`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Basılacak: Knight, token"))
+            val controller = controllerOf(FakeTable(listOf(row)))
+            val collecting = editing(controller, row)
+
+            controller.beginTaskComposer(11, 17)
+
+            val composer = assertNotNull(controller.state.taskComposer)
+            assertEquals("Knight", composer.name)
+            assertEquals(CellColumnType.THREE_D, composer.columnType)
+            assertEquals("Basılacak: Knight, token", composer.selection.expectedText)
+            assertNotNull(controller.state.editor, "the cell was closed by opening the panel")
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a pool that allows one way of tracking settles it without asking`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val controller = controllerOf(FakeTable(listOf(row)))
+            val collecting = editing(controller, row)
+
+            controller.beginTaskComposer(0, 6)
+
+            assertEquals(TrackingMode.THREE_D_BATCH, assertNotNull(controller.state.taskComposer).trackingMode)
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a pool that allows more than one way of tracking asks rather than guessing`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.SPECIAL to "kutu bandı"))
+            val controller = controllerOf(FakeTable(listOf(row)))
+            val collecting = editing(controller, row, CellColumnType.SPECIAL)
+
+            controller.beginTaskComposer(0, 4)
+
+            val composer = assertNotNull(controller.state.taskComposer)
+            assertNull(composer.trackingMode, "a tracking mode nobody chose was written into the task")
+            assertFalse(composer.canSave, "the task could be saved without a tracking mode")
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a selection of nothing but whitespace says why rather than opening the panel`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "40   token"))
+            val controller = controllerOf(FakeTable(listOf(row)))
+            val collecting = editing(controller, row)
+
+            controller.beginTaskComposer(2, 5)
+
+            assertNull(controller.state.taskComposer)
+            assertEquals(
+                TaskFromTextFailure.TASK_NAME_EMPTY,
+                assertNotNull(controller.state.editor).selectionFailure,
+            )
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a selection across a line ending says why rather than opening the panel`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "40 gri token\n26 ağaç"))
+            val controller = controllerOf(FakeTable(listOf(row)))
+            val collecting = editing(controller, row)
+
+            controller.beginTaskComposer(3, 20)
+
+            assertNull(controller.state.taskComposer)
+            assertEquals(
+                TaskFromTextFailure.SELECTION_CONTAINS_LINE_BREAK,
+                assertNotNull(controller.state.editor).selectionFailure,
+            )
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `words that have not been saved yet are not offered as a task`() =
+        runBlocking<Unit> {
+            // The cut is made in the database at offsets counted over what is
+            // stored. Cutting a draft would land somewhere else entirely, and
+            // saving on the user's behalf is not something PLAN describes.
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "40 gri"))
+            val controller = controllerOf(FakeTable(listOf(row)))
+            val collecting = editing(controller, row)
+            controller.editCellText("40 gri token")
+
+            controller.beginTaskComposer(7, 12)
+
+            assertNull(controller.state.taskComposer, "a draft was cut at offsets into stored text")
+            assertEquals("40 gri token", assertNotNull(controller.state.editor).draft, "the draft was lost")
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `the notes column is never offered a task`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.NOTES to "kutu 30x30"))
+            val controller = controllerOf(FakeTable(listOf(row)))
+            val collecting = editing(controller, row, CellColumnType.NOTES)
+
+            controller.beginTaskComposer(0, 4)
+
+            assertNull(controller.state.taskComposer)
+            assertEquals(
+                TaskFromTextFailure.CELL_DOES_NOT_HOLD_TASKS,
+                assertNotNull(controller.state.editor).selectionFailure,
+            )
+            collecting.cancelAndJoin()
+        }
+
+    // -------------------------------------------------- the quantity as typed
+
+    @Test
+    fun `only a whole number greater than zero counts as a quantity`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = FakeColors(listOf(color("Siyah")))
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val collecting = collect(controller)
+            val catalogue = launch { controller.observeColorCatalogue() }
+            settle()
+            controller.beginEditing(row.gameId, CellColumnType.THREE_D)
+            controller.beginTaskComposer(0, 6)
+            controller.chooseTaskColor(
+                controller.state.colors
+                    .single()
+                    .id,
+            )
+
+            listOf("0", "-3", "1.5", "12a", "99999999999", " ", "").forEach { typed ->
+                controller.editTaskQuantity(typed)
+                val composer = assertNotNull(controller.state.taskComposer)
+                assertNull(composer.quantity, "'$typed' was taken as a quantity")
+                assertFalse(composer.canSave, "'$typed' let the task be saved")
+                // What was typed stays visible rather than being swallowed.
+                assertEquals(typed, composer.quantityText)
+            }
+
+            controller.editTaskQuantity("14")
+            val ready = assertNotNull(controller.state.taskComposer)
+            assertEquals(14, ready.quantity)
+            assertTrue(ready.canSave)
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    // ------------------------------------------------------ the colour catalogue
+
+    @Test
+    fun `the colour list is searched by name, whichever way it is typed`() =
+        runBlocking<Unit> {
+            // PLAN 5.7: the two Turkish i's are the same letter on a colour name.
+            val colors = FakeColors(listOf(color("Gri"), color("Kırmızı"), color("Açık Mavi")))
+            val controller = controllerOf(FakeTable(), colors = colors)
+            val catalogue = launch { controller.observeColorCatalogue() }
+            settle()
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            controller.state.colors.let { assertEquals(3, it.size) }
+
+            assertEquals(listOf("Gri", "Kırmızı", "Açık Mavi"), controller.colorsOffered().map { it.canonicalName })
+
+            controller.beginEditing(row.gameId, CellColumnType.THREE_D)
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `typing part of a colour name narrows the list`() =
+        runBlocking<Unit> {
+            val colors = FakeColors(listOf(color("Gri"), color("Kırmızı"), color("Açık Mavi")))
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val collecting = collect(controller)
+            val catalogue = launch { controller.observeColorCatalogue() }
+            settle()
+            controller.beginEditing(row.gameId, CellColumnType.THREE_D)
+            controller.beginTaskComposer(0, 6)
+
+            controller.editTaskColorQuery("GRİ")
+            assertEquals(listOf("Gri"), controller.colorsOffered().map { it.canonicalName })
+
+            controller.editTaskColorQuery("mavi")
+            assertEquals(listOf("Açık Mavi"), controller.colorsOffered().map { it.canonicalName })
+
+            controller.editTaskColorQuery("yeşil")
+            assertTrue(controller.colorsOffered().isEmpty())
+
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    // ------------------------------------------------------------ saving
+
+    private suspend fun CoroutineScope.readyComposer(
+        controller: GameTableController,
+        row: GameTableRow,
+        colors: FakeColors,
+    ): Pair<Job, Job> {
+        val collecting = collect(controller)
+        val catalogue = launch { controller.observeColorCatalogue() }
+        settle()
+        controller.beginEditing(row.gameId, CellColumnType.THREE_D)
+        controller.beginTaskComposer(0, 6)
+        controller.chooseTaskColor(
+            controller.state.colors
+                .first()
+                .id,
+        )
+        controller.editTaskQuantity("15")
+        return collecting to catalogue
+    }
+
+    @Test
+    fun `a saved task closes the panel and the cell it was made in`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = FakeColors(listOf(color("Siyah")))
+            val creation = FakeTaskCreation()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+            controller.editTaskNotes("  ikisi yedek  ")
+
+            controller.saveTask()
+
+            val created = creation.created.single()
+            assertEquals("Knight", created.selection.expectedText)
+            assertEquals(15, created.requiredQuantity)
+            assertEquals(TrackingMode.THREE_D_BATCH, created.trackingMode)
+            // Kept exactly: a note is the user's own words.
+            assertEquals("  ikisi yedek  ", created.notes)
+            assertNull(controller.state.taskComposer, "the panel stayed open after a task was made")
+            assertNull(controller.state.editor, "the cell stayed open for whole text editing")
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `an empty note is no note at all`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = FakeColors(listOf(color("Siyah")))
+            val creation = FakeTaskCreation()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+
+            controller.saveTask()
+
+            assertNull(creation.created.single().notes)
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a refused save keeps the panel, the colour, the quantity and the note`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = FakeColors(listOf(color("Siyah")))
+            val creation = FakeTaskCreation(TaskFromTextFailure.COLOR_NOT_AVAILABLE)
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+            controller.editTaskNotes("iki yedek")
+
+            controller.saveTask()
+
+            val composer = assertNotNull(controller.state.taskComposer, "the panel was closed by a refusal")
+            assertEquals(TaskFromTextFailure.COLOR_NOT_AVAILABLE, composer.failure)
+            assertEquals("15", composer.quantityText)
+            assertEquals("iki yedek", composer.notes)
+            assertNotNull(composer.colorId)
+            assertFalse(composer.isSaving)
+            assertNotNull(controller.state.editor, "the cell was closed by a refusal")
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `giving up on the task leaves the cell and its words alone`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = FakeColors(listOf(color("Siyah")))
+            val creation = FakeTaskCreation()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+
+            controller.cancelTaskComposer()
+
+            assertNull(controller.state.taskComposer)
+            val editor = assertNotNull(controller.state.editor, "giving up on the task closed the cell")
+            assertEquals("Knight", editor.draft)
+            assertTrue(creation.created.isEmpty(), "giving up wrote a task anyway")
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    // ------------------------------------------- what an open panel protects
+
+    @Test
+    fun `a fresh list from the database leaves the panel exactly where it was`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val other = row("Wingspan")
+            val table = FakeTable(listOf(row, other))
+            val colors = FakeColors(listOf(color("Siyah")))
+            val controller = controllerOf(table, colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+            controller.editTaskNotes("iki yedek")
+            val before = assertNotNull(controller.state.taskComposer)
+
+            table.rows.value = listOf(row, other.copy(gameName = "Wingspan Avrupa"))
+            settle()
+
+            assertEquals(before, controller.state.taskComposer, "a change to another game disturbed the panel")
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `changing the view is refused while the panel is open`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = FakeColors(listOf(color("Siyah")))
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+            val before = assertNotNull(controller.state.taskComposer)
+
+            controller.showView(GameTableView.COMPLETED)
+
+            assertEquals(GameTableView.ONGOING, controller.state.view)
+            assertTrue(controller.state.blockedByEditor)
+            assertEquals(before, controller.state.taskComposer, "the panel lost what had been chosen")
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a refused action hands the keyboard back to the open work`() =
+        runBlocking<Unit> {
+            // Refusing on its own is not enough: the click that was refused took
+            // the focus with it, so Escape would reach the chip rather than the
+            // cell it is meant to close.
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val other = row("Wingspan", cells = cellsOf(CellColumnType.CARD to "60 kart"))
+            val controller = controllerOf(FakeTable(listOf(row, other)))
+            val collecting = editing(controller, row)
+            val start = controller.state.focusRecall
+
+            controller.showView(GameTableView.ALL)
+            assertEquals(start + 1, controller.state.focusRecall)
+
+            controller.beginEditing(other.gameId, CellColumnType.CARD)
+            assertEquals(start + 2, controller.state.focusRecall)
+
+            // And Escape still reaches the cell it was always meant to.
+            controller.cancelEditing()
+            assertNull(controller.state.editor)
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `closing the panel hands the keyboard back to the cell`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = FakeColors(listOf(color("Siyah")))
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+            val start = controller.state.focusRecall
+
+            controller.cancelTaskComposer()
+
+            assertEquals(start + 1, controller.state.focusRecall)
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `typing in the cell is held still while the panel is open`() =
+        runBlocking<Unit> {
+            // The panel holds offsets into the text as it stands; a keystroke
+            // would move the words out from under the selection.
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = FakeColors(listOf(color("Siyah")))
+            val cells = FakeCells()
+            val controller = controllerOf(FakeTable(listOf(row)), cells = cells, colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+
+            controller.editCellText("Knight değişti")
+            controller.saveEditing()
+
+            assertEquals("Knight", assertNotNull(controller.state.editor).draft)
+            assertTrue(cells.saved.isEmpty(), "the cell was written while a task was being made from it")
+            catalogue.cancelAndJoin()
             collecting.cancelAndJoin()
         }
 }

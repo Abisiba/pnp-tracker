@@ -24,6 +24,41 @@ import dev.pnptracker.resources.cell_error_game_gone
 import dev.pnptracker.resources.cell_locked_by_tasks
 import dev.pnptracker.resources.cell_save
 import dev.pnptracker.resources.cell_saving
+import dev.pnptracker.resources.cell_task_color_empty
+import dev.pnptracker.resources.cell_task_color_label
+import dev.pnptracker.resources.cell_task_color_none
+import dev.pnptracker.resources.cell_task_color_required
+import dev.pnptracker.resources.cell_task_color_search
+import dev.pnptracker.resources.cell_task_completed
+import dev.pnptracker.resources.cell_task_create
+import dev.pnptracker.resources.cell_task_description
+import dev.pnptracker.resources.cell_task_description_unknown_quantity
+import dev.pnptracker.resources.cell_task_discard
+import dev.pnptracker.resources.cell_task_error_cell_gone
+import dev.pnptracker.resources.cell_task_error_cell_no_tasks
+import dev.pnptracker.resources.cell_task_error_color_gone
+import dev.pnptracker.resources.cell_task_error_could_not_save
+import dev.pnptracker.resources.cell_task_error_game_gone
+import dev.pnptracker.resources.cell_task_error_invalid_selection
+import dev.pnptracker.resources.cell_task_error_line_break
+import dev.pnptracker.resources.cell_task_error_name_empty
+import dev.pnptracker.resources.cell_task_error_quantity
+import dev.pnptracker.resources.cell_task_error_segment_gone
+import dev.pnptracker.resources.cell_task_error_segment_not_text
+import dev.pnptracker.resources.cell_task_error_stale
+import dev.pnptracker.resources.cell_task_hint
+import dev.pnptracker.resources.cell_task_name_label
+import dev.pnptracker.resources.cell_task_no_color
+import dev.pnptracker.resources.cell_task_notes_label
+import dev.pnptracker.resources.cell_task_panel_title
+import dev.pnptracker.resources.cell_task_quantity_hint
+import dev.pnptracker.resources.cell_task_quantity_invalid
+import dev.pnptracker.resources.cell_task_quantity_label
+import dev.pnptracker.resources.cell_task_quantity_mark
+import dev.pnptracker.resources.cell_task_save
+import dev.pnptracker.resources.cell_task_save_text_first
+import dev.pnptracker.resources.cell_task_saving
+import dev.pnptracker.resources.cell_task_select_hint
 import dev.pnptracker.resources.colors_count
 import dev.pnptracker.resources.colors_create
 import dev.pnptracker.resources.colors_description
@@ -542,6 +577,62 @@ object Strings {
         /** Said of a cell the whole-text editor may not touch. */
         val lockedByTasks = Res.string.cell_locked_by_tasks
         val editorOpenElsewhere = Res.string.cell_editor_open_elsewhere
+    }
+
+    /**
+     * Turning words the user selected in a cell into a task.
+     *
+     * The quantity mark is here rather than written into the screen for the same
+     * reason every other word is: PLAN 17 keeps the wording where it can be found
+     * and changed. It is also the one place `×` is decided, which matters because
+     * the mark is something the table says about a task and never something
+     * stored in anybody's text.
+     */
+    object CellTask {
+        val create = Res.string.cell_task_create
+        val selectHint = Res.string.cell_task_select_hint
+        val saveTextFirst = Res.string.cell_task_save_text_first
+
+        val panelTitle = Res.string.cell_task_panel_title
+        val nameLabel = Res.string.cell_task_name_label
+        val colorLabel = Res.string.cell_task_color_label
+        val colorSearch = Res.string.cell_task_color_search
+        val colorRequired = Res.string.cell_task_color_required
+        val colorNone = Res.string.cell_task_color_none
+        val colorEmpty = Res.string.cell_task_color_empty
+        val quantityLabel = Res.string.cell_task_quantity_label
+        val quantityHint = Res.string.cell_task_quantity_hint
+        val quantityInvalid = Res.string.cell_task_quantity_invalid
+        val notesLabel = Res.string.cell_task_notes_label
+        val save = Res.string.cell_task_save
+        val discard = Res.string.cell_task_discard
+        val saving = Res.string.cell_task_saving
+        val hint = Res.string.cell_task_hint
+
+        /** Takes the quantity; shown beside a task and never stored as text. */
+        val quantityMark = Res.string.cell_task_quantity_mark
+
+        /** Takes the name, the colours and the quantity, in that order. */
+        val description = Res.string.cell_task_description
+
+        /** Takes the name and the colours, for a task whose count is unknown. */
+        val descriptionUnknownQuantity = Res.string.cell_task_description_unknown_quantity
+
+        val noColor = Res.string.cell_task_no_color
+        val completed = Res.string.cell_task_completed
+
+        val errorGameGone = Res.string.cell_task_error_game_gone
+        val errorCellGone = Res.string.cell_task_error_cell_gone
+        val errorCellHoldsNoTasks = Res.string.cell_task_error_cell_no_tasks
+        val errorSegmentGone = Res.string.cell_task_error_segment_gone
+        val errorSegmentNotText = Res.string.cell_task_error_segment_not_text
+        val errorStaleSelection = Res.string.cell_task_error_stale
+        val errorInvalidSelection = Res.string.cell_task_error_invalid_selection
+        val errorLineBreak = Res.string.cell_task_error_line_break
+        val errorNameEmpty = Res.string.cell_task_error_name_empty
+        val errorColorGone = Res.string.cell_task_error_color_gone
+        val errorQuantity = Res.string.cell_task_error_quantity
+        val errorCouldNotSave = Res.string.cell_task_error_could_not_save
     }
 
     /** Turning a reviewed import into real tasks. */

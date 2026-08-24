@@ -182,6 +182,47 @@
     <string name="cell_locked_by_tasks">Görev içeriyor</string>
     <string name="cell_editor_open_elsewhere">Önce açık hücreyi kaydedin veya vazgeçin.</string>
 
+    <!-- Game table: turning selected words into a task -->
+    <string name="cell_task_create">Görev oluştur</string>
+    <string name="cell_task_select_hint">Bir kelime seçin, sonra Görev oluştur düğmesine basın.</string>
+    <string name="cell_task_save_text_first">Görev, kaydedilmiş metinden oluşturulur. Önce değişikliklerinizi kaydedin.</string>
+    <string name="cell_task_panel_title">Görev oluştur</string>
+    <string name="cell_task_name_label">Seçilen görev adı</string>
+    <string name="cell_task_color_label">Renk</string>
+    <string name="cell_task_color_search">Renk ara</string>
+    <string name="cell_task_color_required">Bir renk seçin.</string>
+    <string name="cell_task_color_none">Aramaya uyan renk yok.</string>
+    <string name="cell_task_color_empty">Renk kataloğu boş.</string>
+    <string name="cell_task_quantity_label">Gerekli adet</string>
+    <string name="cell_task_quantity_hint">Sıfırdan büyük tam sayı; hücrede ×14 gibi görünür.</string>
+    <string name="cell_task_quantity_invalid">Adet sıfırdan büyük bir tam sayı olmalı.</string>
+    <string name="cell_task_notes_label">Not (isteğe bağlı)</string>
+    <string name="cell_task_save">Görevi kaydet</string>
+    <string name="cell_task_discard">Vazgeç</string>
+    <string name="cell_task_saving">Görev kaydediliyor…</string>
+    <string name="cell_task_hint">Ctrl+Enter kaydeder, Esc paneli kapatır.</string>
+
+    <!-- Game table: a task standing in a cell -->
+    <string name="cell_task_quantity_mark">×%1$d</string>
+    <string name="cell_task_description">%1$s, %2$s, %3$d adet</string>
+    <string name="cell_task_description_unknown_quantity">%1$s, %2$s, adet bilinmiyor</string>
+    <string name="cell_task_no_color">renk seçilecek</string>
+    <string name="cell_task_completed">tamamlandı</string>
+
+    <!-- Game table: why selected words did not become a task -->
+    <string name="cell_task_error_game_gone">Bu oyun artık kayıtlı değil.</string>
+    <string name="cell_task_error_cell_gone">Bu hücre artık kayıtlı değil.</string>
+    <string name="cell_task_error_cell_no_tasks">Notlar sütununda görev oluşturulamaz.</string>
+    <string name="cell_task_error_segment_gone">Seçtiğiniz metin parçası artık yok.</string>
+    <string name="cell_task_error_segment_not_text">Seçtiğiniz parça zaten bir görev.</string>
+    <string name="cell_task_error_stale">Hücre metni değişti. Seçimi yeniden yapın.</string>
+    <string name="cell_task_error_invalid_selection">Seçim tek bir metin parçası içinde olmalı.</string>
+    <string name="cell_task_error_line_break">Görev adı satır sonu içeremez. Daha dar bir metin seçin.</string>
+    <string name="cell_task_error_name_empty">Seçim yalnız boşluktan oluşuyor.</string>
+    <string name="cell_task_error_color_gone">Seçtiğiniz renk artık kayıtlı değil.</string>
+    <string name="cell_task_error_quantity">Adet sıfırdan büyük bir tam sayı olmalı.</string>
+    <string name="cell_task_error_could_not_save">Görev kaydedilemedi. Seçiminiz ve girdikleriniz duruyor; yeniden deneyebilirsiniz.</string>
+
     <!-- Games: setting up games and items -->
     <string name="games_loading">Oyunlar yükleniyor…</string>
     <string name="games_empty_title">Henüz oyun yok</string>

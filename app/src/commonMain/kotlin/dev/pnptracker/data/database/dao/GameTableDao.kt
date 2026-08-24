@@ -3,18 +3,19 @@ package dev.pnptracker.data.database.dao
 import androidx.room3.Dao
 import androidx.room3.Query
 import dev.pnptracker.data.database.projection.CellContentRow
+import dev.pnptracker.data.database.projection.TaskColorRow
 import kotlinx.coroutines.flow.Flow
 
 /**
  * The one read the game table is drawn from.
  *
- * The table needs three things: the games, their cells and what is written in
- * those cells. Each is a single query over every active game rather than one per
- * game, so the number of round trips does not grow with the library — the games
- * and the cells are read through [GameDao] and [GameCellDao], and everything
- * inside the cells is read here.
+ * The table needs four things: the games, their cells, what is written in those
+ * cells, and the colours of the tasks written there. Each is a single query over
+ * every active game rather than one per game, so the number of round trips does
+ * not grow with the library — the games and the cells are read through [GameDao]
+ * and [GameCellDao], and everything inside the cells is read here.
  *
- * They are kept as three streams rather than folded into one big join because
+ * They are kept as separate streams rather than folded into one big join because
  * Room re-runs a query when a table it touches changes: renaming a game then
  * re-reads the games, and leaves the far larger content query alone.
  */
@@ -33,13 +34,15 @@ interface GameTableDao {
      */
     @Query(
         """
-        SELECT cell_segments.cell_id AS cell_id,
+        SELECT cell_segments.id AS segment_id,
+               cell_segments.cell_id AS cell_id,
                cell_segments.order_index AS order_index,
                cell_segments.kind AS kind,
                cell_segments.text AS text,
                tasks.id AS task_id,
                tasks.name AS task_name,
-               tasks.is_completed AS task_is_completed
+               tasks.is_completed AS task_is_completed,
+               tasks.required_quantity AS task_required_quantity
         FROM cell_segments
         INNER JOIN game_cells ON game_cells.id = cell_segments.cell_id
         INNER JOIN games ON games.id = game_cells.game_id
@@ -49,4 +52,33 @@ interface GameTableDao {
         """,
     )
     fun observeCellContents(): Flow<List<CellContentRow>>
+
+    /**
+     * Every colour of every task written in every game the user still has.
+     *
+     * One read for the whole table, like the one above. A task's colours are
+     * needed to draw its piece of a cell — PLAN 12.5 — and asking for them per
+     * task would make the number of queries grow with the number of tasks, which
+     * is the one thing the table's reads are shaped to avoid.
+     *
+     * Ordered by task and then by the place the user gave each colour, so the
+     * fold can group without sorting and PLAN 5.10's slot order survives the
+     * journey to the screen.
+     */
+    @Query(
+        """
+        SELECT task_colors.task_id AS task_id,
+               colors.id AS color_id,
+               colors.canonical_name AS canonical_name,
+               colors.hex AS hex
+        FROM task_colors
+        INNER JOIN colors ON colors.id = task_colors.color_id
+        INNER JOIN cell_segments ON cell_segments.task_id = task_colors.task_id
+        INNER JOIN game_cells ON game_cells.id = cell_segments.cell_id
+        INNER JOIN games ON games.id = game_cells.game_id
+        WHERE games.deleted_at IS NULL
+        ORDER BY task_colors.task_id, task_colors.slot_index
+        """,
+    )
+    fun observeTaskColors(): Flow<List<TaskColorRow>>
 }

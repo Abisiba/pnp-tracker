@@ -4,14 +4,23 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.pnptracker.data.repository.CellTextEditing
+import dev.pnptracker.data.repository.ColorCatalogue
 import dev.pnptracker.data.repository.GameSetup
 import dev.pnptracker.data.repository.GameTableSource
+import dev.pnptracker.data.repository.TaskCreationFromText
+import dev.pnptracker.domain.colors.ColorSummary
 import dev.pnptracker.domain.games.CellTextException
 import dev.pnptracker.domain.games.GameSetupException
 import dev.pnptracker.domain.games.GameTableRow
 import dev.pnptracker.domain.games.GameTableView
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.rules.normalizeColorTerm
+import dev.pnptracker.domain.tasks.TaskFromTextException
+import dev.pnptracker.domain.tasks.TaskFromTextFailure
+import dev.pnptracker.domain.tasks.onlyTrackingModeOf
+import dev.pnptracker.domain.tasks.splitForTaskName
 import kotlinx.coroutines.flow.collect
 
 /**
@@ -36,6 +45,8 @@ class GameTableController(
     private val table: GameTableSource,
     private val setup: GameSetup,
     private val cells: CellTextEditing,
+    private val colors: ColorCatalogue,
+    private val taskCreation: TaskCreationFromText,
 ) {
     var state: GameTableScreenState by mutableStateOf(GameTableScreenState())
         private set
@@ -56,6 +67,19 @@ class GameTableController(
     }
 
     /**
+     * Collects the colour catalogue until cancelled.
+     *
+     * Only the catalogue is replaced. A colour the user has already picked stays
+     * picked even when the list changes underneath them; whether it is still
+     * there at all is settled once, inside the transaction that writes the task.
+     */
+    suspend fun observeColorCatalogue() {
+        colors.observeColors().collect { catalogue ->
+            state = state.copy(colors = catalogue)
+        }
+    }
+
+    /**
      * Shows another view of the same rows. Reads nothing and writes nothing.
      *
      * Refused while a cell is being written in. The row being edited may not be
@@ -65,13 +89,23 @@ class GameTableController(
      * something they never asked to keep.
      */
     fun showView(view: GameTableView) {
-        if (state.editor != null) {
-            state = state.copy(blockedByEditor = true)
+        if (state.editor != null || state.taskComposer != null) {
+            state = blockedByOpenWork()
             return
         }
         if (view == state.view) return
         state = state.copy(view = view, rows = rowsFor(view), blockedByEditor = false)
     }
+
+    /**
+     * Says an action was refused, and calls the keyboard back to the open work.
+     *
+     * Refusing is only half of it. The click that was refused took the focus with
+     * it, so without the recall the user would press Escape and reach the chip
+     * they had just pressed rather than the editor it is meant to close, and
+     * would have to go back to the mouse to get out of a state they never chose.
+     */
+    private fun blockedByOpenWork(): GameTableScreenState = state.copy(blockedByEditor = true, focusRecall = state.focusRecall + 1)
 
     // -------------------------------------------------------- writing a cell
 
@@ -91,8 +125,8 @@ class GameTableController(
     ) {
         val existing = state.editor
         if (existing != null) {
-            if (existing.isOn(gameId, columnType)) return
-            state = state.copy(blockedByEditor = true)
+            if (existing.isOn(gameId, columnType) && state.taskComposer == null) return
+            state = blockedByOpenWork()
             return
         }
         val cell = rowOf(gameId)?.cell(columnType) ?: return
@@ -110,15 +144,22 @@ class GameTableController(
             )
     }
 
+    /**
+     * Takes what has been typed.
+     *
+     * Refused while the task panel is open: the panel holds offsets into the text
+     * as it stands, and letting a keystroke through would move the words out from
+     * under a selection the user made.
+     */
     fun editCellText(text: String) {
         val editor = state.editor ?: return
-        if (editor.isSaving) return
-        state = state.copy(editor = editor.copy(draft = text, failure = null))
+        if (editor.isSaving || state.taskComposer != null) return
+        state = state.copy(editor = editor.copy(draft = text, failure = null, selectionFailure = null))
     }
 
-    /** Closes the editor without writing anything at all. */
+    /** Closes the editor, and any panel opened from it, without writing anything. */
     fun cancelEditing() {
-        state = state.copy(editor = null, blockedByEditor = false)
+        state = state.copy(editor = null, taskComposer = null, blockedByEditor = false)
     }
 
     /**
@@ -129,7 +170,7 @@ class GameTableController(
      */
     suspend fun saveEditing() {
         val editor = state.editor ?: return
-        if (editor.isSaving) return
+        if (editor.isSaving || state.taskComposer != null) return
         state = state.copy(editor = editor.copy(isSaving = true, failure = null))
         try {
             cells.savePlainText(editor.gameId, editor.columnType, editor.draft)
@@ -145,6 +186,159 @@ class GameTableController(
     /** Clears the note saying an action was refused while a cell was open. */
     fun acknowledgeEditorBlock() {
         state = state.copy(blockedByEditor = false)
+    }
+
+    // --------------------------------------------- making a task out of words
+
+    /**
+     * Opens the task panel on the stretch of text the user selected.
+     *
+     * The offsets arrive counted across the whole cell, which is what the field
+     * reports, and are handed to the one piece that wholly contains them. A
+     * selection spanning two pieces, or landing on a task, is refused rather than
+     * guessed at: cutting the wrong piece is exactly the damage the anchor exists
+     * to prevent.
+     *
+     * Only ever called against text that is already stored. The panel is not
+     * offered while there are unsaved changes, because the offsets would point
+     * into a draft and the transaction cuts what the database holds. Saving on
+     * the user's behalf to close that gap would be an automatic save PLAN does
+     * not describe, so the answer is to ask them to save first.
+     *
+     * Nothing is written here, and nothing is written when it refuses.
+     */
+    fun beginTaskComposer(
+        startOffset: Int,
+        endOffset: Int,
+    ) {
+        val editor = state.editor ?: return
+        if (state.taskComposer != null || editor.isSaving) return
+        if (editor.hasChanges) return refuseSelection(TaskFromTextFailure.STALE_TEXT_SELECTION)
+
+        val poolType = editor.columnType.poolType ?: return refuseSelection(TaskFromTextFailure.CELL_DOES_NOT_HOLD_TASKS)
+        val cell = rowOf(editor.gameId)?.cell(editor.columnType) ?: return
+        val selection =
+            cell.locateSelection(editor.gameId, startOffset, endOffset)
+                ?: return refuseSelection(TaskFromTextFailure.INVALID_SELECTION)
+        // Narrowed here only to show the user the name they are about to make.
+        // The transaction narrows the same offsets again over the stored text,
+        // so what is written is decided there and not from this preview.
+        val name =
+            try {
+                splitForTaskName(selection.expectedText, selection.startOffset, selection.endOffset).name
+            } catch (refusal: TaskFromTextException) {
+                return refuseSelection(refusal.failure)
+            }
+
+        state =
+            state.copy(
+                editor = editor.copy(selectionFailure = null),
+                taskComposer =
+                    TaskComposer(
+                        selection = selection,
+                        columnType = editor.columnType,
+                        name = name,
+                        // Settled where the pool leaves no choice, asked for where
+                        // it does; never invented either way.
+                        trackingMode = onlyTrackingModeOf(poolType),
+                    ),
+                blockedByEditor = false,
+            )
+    }
+
+    fun editTaskColorQuery(query: String) {
+        val composer = state.taskComposer ?: return
+        if (composer.isSaving) return
+        state = state.copy(taskComposer = composer.copy(colorQuery = query))
+    }
+
+    fun chooseTaskColor(colorId: EntityId) {
+        val composer = state.taskComposer ?: return
+        if (composer.isSaving) return
+        state = state.copy(taskComposer = composer.copy(colorId = colorId, failure = null))
+    }
+
+    /** Takes the quantity as typed; what is not a usable number stays visible. */
+    fun editTaskQuantity(text: String) {
+        val composer = state.taskComposer ?: return
+        if (composer.isSaving) return
+        state = state.copy(taskComposer = composer.copy(quantityText = text, failure = null))
+    }
+
+    /** Takes the note exactly as typed, spaces and all. */
+    fun editTaskNotes(text: String) {
+        val composer = state.taskComposer ?: return
+        if (composer.isSaving) return
+        state = state.copy(taskComposer = composer.copy(notes = text))
+    }
+
+    fun chooseTaskTracking(trackingMode: TrackingMode) {
+        val composer = state.taskComposer ?: return
+        if (composer.isSaving) return
+        state = state.copy(taskComposer = composer.copy(trackingMode = trackingMode, failure = null))
+    }
+
+    /**
+     * Closes the panel and nothing else.
+     *
+     * The cell stays open with its text exactly as it was: giving up on making a
+     * task is not giving up on what was written.
+     */
+    fun cancelTaskComposer() {
+        if (state.taskComposer == null) return
+        state = state.copy(taskComposer = null, focusRecall = state.focusRecall + 1)
+    }
+
+    /**
+     * Writes the task, and closes the cell when it lands.
+     *
+     * A refusal leaves the panel standing with the colour, the quantity and the
+     * note the user chose, so they can read what went wrong without losing the
+     * answers they already gave.
+     */
+    suspend fun saveTask() {
+        val composer = state.taskComposer ?: return
+        if (composer.isSaving) return
+        val colorId = composer.colorId ?: return
+        val quantity = composer.quantity ?: return
+        val trackingMode = composer.trackingMode ?: return
+
+        state = state.copy(taskComposer = composer.copy(isSaving = true, failure = null))
+        try {
+            taskCreation.createSingleColorTask(
+                selection = composer.selection,
+                colorId = colorId,
+                requiredQuantity = quantity,
+                trackingMode = trackingMode,
+                // An empty note is no note; anything else is kept as typed.
+                notes = composer.notes.takeIf { it.isNotEmpty() },
+            )
+            // The cell now holds a task, so the whole-text editor has nothing
+            // left to edit: it closes along with the panel.
+            state = state.copy(taskComposer = null, editor = null, blockedByEditor = false)
+        } catch (refusal: TaskFromTextException) {
+            state = state.copy(taskComposer = state.taskComposer?.copy(isSaving = false, failure = refusal.failure))
+        }
+    }
+
+    /**
+     * The colours the panel is offering, narrowed by what has been typed.
+     *
+     * Matched on the catalogue's own folding of a name, so `gri`, `Gri` and `GRİ`
+     * are the one colour they are on the user's keyboard. That folding is only
+     * ever right for colour names — it merges the two Turkish i's — which is why
+     * it is used here and nowhere near general search.
+     */
+    fun colorsOffered(): List<ColorSummary> {
+        val query = state.taskComposer?.colorQuery.orEmpty()
+        if (query.isBlank()) return state.colors
+        val needle = normalizeColorTerm(query)
+        return state.colors.filter { normalizeColorTerm(it.canonicalName).contains(needle) }
+    }
+
+    private fun refuseSelection(failure: TaskFromTextFailure) {
+        val editor = state.editor ?: return
+        state = state.copy(editor = editor.copy(selectionFailure = failure))
     }
 
     private fun rowOf(gameId: EntityId): GameTableRow? = allRows.firstOrNull { it.gameId == gameId }

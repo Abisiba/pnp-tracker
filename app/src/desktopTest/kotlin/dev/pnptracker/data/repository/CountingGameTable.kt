@@ -6,6 +6,7 @@ import dev.pnptracker.data.database.dao.GameTableDao
 import dev.pnptracker.data.database.entity.GameCellEntity
 import dev.pnptracker.data.database.entity.GameEntity
 import dev.pnptracker.data.database.projection.CellContentRow
+import dev.pnptracker.data.database.projection.TaskColorRow
 import dev.pnptracker.domain.games.GameTableRow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.onStart
@@ -15,8 +16,9 @@ import kotlinx.coroutines.flow.onStart
  *
  * It wraps the real DAOs rather than standing in for them, so what is counted is
  * the store's own behaviour against a real database and not a fake's idea of it.
- * Only the three reads the table is built from are counted; anything the store
- * started doing per game or per cell would show up as a number that grows.
+ * Only the whole-table reads the table is built from are counted; anything the
+ * store started doing per game, per cell or per task would show up as a number
+ * that grows.
  */
 class CountingGameTable(
     gameDao: GameDao,
@@ -52,5 +54,7 @@ class CountingGameTable(
         private val delegate: GameTableDao,
     ) : GameTableDao by delegate {
         override fun observeCellContents(): Flow<List<CellContentRow>> = delegate.observeCellContents().counting()
+
+        override fun observeTaskColors(): Flow<List<TaskColorRow>> = delegate.observeTaskColors().counting()
     }
 }
