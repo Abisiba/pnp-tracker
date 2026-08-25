@@ -7,8 +7,13 @@ import androidx.room3.Query
 import androidx.room3.Transaction
 import dev.pnptracker.data.database.entity.CellSegmentEntity
 import dev.pnptracker.data.database.entity.GameCellEntity
+import dev.pnptracker.data.database.projection.CellRunRow
 import dev.pnptracker.domain.games.CellTextException
 import dev.pnptracker.domain.games.CellTextFailure
+import dev.pnptracker.domain.games.DocumentChange
+import dev.pnptracker.domain.games.DocumentEditRefusal
+import dev.pnptracker.domain.games.DocumentRun
+import dev.pnptracker.domain.games.planDocumentChange
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
@@ -20,11 +25,11 @@ import kotlin.time.Instant
 /**
  * Reads and writes the pieces a cell is made of.
  *
- * The rules that span a whole cell live in [savePlainText] rather than in the
- * individual queries, and the queries that would let a caller break them are not
- * reachable from outside: writing a piece, deleting one and opening a cell are
- * all `protected`, so the only way to change a cell is the one transaction that
- * knows what a cell is allowed to look like afterwards.
+ * The rules that span a whole cell live in [saveDocumentText] rather than in
+ * the individual queries, and the queries that would let a caller break them are
+ * not reachable from outside: writing a piece, moving one, deleting one and
+ * opening a cell are all `protected`, so the only way to change a cell is the
+ * one transaction that knows what a cell is allowed to look like afterwards.
  */
 @Dao
 abstract class CellSegmentDao {
@@ -82,6 +87,30 @@ abstract class CellSegmentDao {
     )
     abstract suspend fun activeSegmentOfTask(taskId: EntityId): CellSegmentEntity?
 
+    /**
+     * One cell's pieces with the name of any task they stand for, in order.
+     *
+     * This is what the document is built from on the writing side. A piece
+     * naming a task the user deleted comes back with no name, which is right:
+     * nobody can see it, so it is not part of what the document says — but the
+     * piece is still here, still a task piece, and still keeps its place.
+     */
+    @Query(
+        """
+        SELECT cell_segments.id AS segment_id,
+               cell_segments.order_index AS order_index,
+               cell_segments.kind AS kind,
+               cell_segments.text AS text,
+               cell_segments.task_id AS task_id,
+               tasks.name AS task_name
+        FROM cell_segments
+        LEFT JOIN tasks ON tasks.id = cell_segments.task_id AND tasks.deleted_at IS NULL
+        WHERE cell_segments.cell_id = :cellId
+        ORDER BY cell_segments.order_index
+        """,
+    )
+    abstract suspend fun runsOfCell(cellId: EntityId): List<CellRunRow>
+
     /** Where the next piece of a cell goes: after everything already in it. */
     @Query("SELECT COALESCE(MAX(order_index), -1) + 1 FROM cell_segments WHERE cell_id = :cellId")
     abstract suspend fun nextOrderIndex(cellId: EntityId): Int
@@ -109,11 +138,20 @@ abstract class CellSegmentDao {
     @Query("DELETE FROM cell_segments WHERE id = :segmentId")
     protected abstract suspend fun deleteSegment(segmentId: EntityId): Int
 
-    @Query("UPDATE cell_segments SET text = :text, order_index = 0, updated_at = :updatedAt WHERE id = :segmentId")
-    protected abstract suspend fun writeSegmentText(
+    @Query(
+        "UPDATE cell_segments SET text = :text, order_index = :orderIndex, updated_at = :updatedAt WHERE id = :segmentId",
+    )
+    protected abstract suspend fun writeSegment(
         segmentId: EntityId,
         text: String,
+        orderIndex: Int,
         updatedAt: Instant,
+    ): Int
+
+    @Query("UPDATE cell_segments SET order_index = :orderIndex WHERE id = :segmentId")
+    protected abstract suspend fun moveSegment(
+        segmentId: EntityId,
+        orderIndex: Int,
     ): Int
 
     @Query("UPDATE game_cells SET updated_at = :updatedAt WHERE id = :cellId")
@@ -125,44 +163,46 @@ abstract class CellSegmentDao {
     // -------------------------------------------------------- transactions
 
     /**
-     * Makes a cell say exactly [exactText], and nothing else.
+     * Makes a cell's document say exactly [newDocumentText].
      *
-     * The text is stored as it arrived. It is not trimmed, its doubled spaces are
-     * not collapsed, its line breaks are not rewritten and its punctuation is not
-     * spaced out: a cell is the user's own note, and every character in it is
-     * theirs. Nor is anything normalised on the way in — a carriage return that
-     * came with a paste is stored, because dropping it would be the one lossy
-     * thing this method did.
+     * The document is the cell's pieces laid end to end: plain text as itself, a
+     * task as its name (PLAN 5.5). What the user typed over is compared against
+     * what is stored, and the region that actually differs has to fall inside a
+     * stretch of plain text. A change that reached into a task is refused —
+     * PLAN 5.5 makes a task piece atomic, and rewriting it as characters would
+     * cost it the colours, pipeline and history that hang off its identity.
      *
-     * The cell is opened only if there is something to put in it. Reading the
-     * table shows five columns for every game whether or not their cells exist,
-     * so a cell created merely by being looked at, or by an empty save, would be
-     * a row saying something nobody said. When the cell already exists and the
-     * text is cleared, the pieces go and **the cell stays**: a draft or an import
-     * may be aiming at its identity, and PLAN 11.4.1 has that identity be the
-     * game's column rather than its contents.
+     * Text is stored as it arrived: not trimmed, doubled spaces not collapsed,
+     * line breaks not rewritten, punctuation not spaced out. Nothing is
+     * normalised on the way in either — a carriage return that came with a paste
+     * is stored, because dropping it would be the one lossy thing this does.
      *
-     * Afterwards the cell holds at most one piece of text. PLAN 5.5 and 16 both
-     * say adjacent text is merged and no cell accumulates needless pieces, so a
-     * cell that arrives with several is left with one — keeping the first piece's
-     * identity, since it is the same piece of writing whatever has been typed
-     * into it since.
+     * Afterwards the cell is in its canonical shape without that having to be a
+     * separate step: the change is planned as the text of each *gap* between
+     * tasks, so neighbouring stretches of text cannot exist separately, an empty
+     * gap writes no piece at all, and the reading order is `0..N-1` with nothing
+     * missing. Tasks keep their identities and their places among the text.
      *
-     * A cell holding a task is refused rather than flattened. There is no whole
-     * text form of it that could be written back without destroying the task.
+     * The cell is opened only if there is something to put in it, and a cleared
+     * cell keeps its row: a draft or an import may be aiming at its identity, and
+     * PLAN 11.4.1 has that identity be the game's column rather than its
+     * contents.
      *
      * Saving what the cell already says does nothing at all: no write, no new
-     * identity, and the clock is not even read, so a repeated save cannot move a
+     * identity, and the clock is not read, so a repeated save cannot move a
      * timestamp.
      *
+     * @param expectedDocumentText what the cell said when the editor opened.
      * @return true when this call changed something.
-     * @throws CellTextException if the game is gone or the cell holds a task.
+     * @throws CellTextException if the game or cell is gone, the cell has since
+     *   changed, or the change reached a task; nothing is written in those cases.
      */
     @Transaction
-    open suspend fun savePlainText(
+    open suspend fun saveDocumentText(
         gameId: EntityId,
         columnType: CellColumnType,
-        exactText: String,
+        expectedDocumentText: String,
+        newDocumentText: String,
         clock: Clock,
         idGenerator: IdGenerator,
     ): Boolean {
@@ -170,8 +210,11 @@ abstract class CellSegmentDao {
         val cell = cellOfGame(gameId, columnType)
 
         if (cell == null) {
-            // Nothing there and nothing to put there: the column stays unopened.
-            if (exactText.isEmpty()) return false
+            // Nothing there yet. There is no document to have changed under the
+            // user, so the only thing that can be stale is a claim that it said
+            // something, and the only thing to write is text.
+            if (expectedDocumentText.isNotEmpty()) refuse(CellTextFailure.STALE_DOCUMENT)
+            if (newDocumentText.isEmpty()) return false
             val moment = clock.now()
             val cellId = idGenerator.newId()
             // The cell and its first piece are written together, so a failure
@@ -190,42 +233,109 @@ abstract class CellSegmentDao {
                     id = idGenerator.newId(),
                     cellId = cellId,
                     orderIndex = 0,
-                    text = exactText,
+                    text = newDocumentText,
                     moment = moment,
                 ),
             )
             return true
         }
 
-        val segments = segmentsOfCell(cell.id)
-        if (segments.any { it.kind == SegmentKind.TASK }) refuse(CellTextFailure.CELL_CONTAINS_TASKS)
+        val rows = runsOfCell(cell.id)
+        val runs = runsOf(rows)
         // Straight concatenation: the pieces carry their own spacing, so joining
         // them with anything would read back text the user never wrote.
-        val current = segments.joinToString(separator = "") { it.text.orEmpty() }
-        if (current == exactText) return false
+        val stored = runs.joinToString(separator = "") { it.text }
+        if (stored != expectedDocumentText) refuse(CellTextFailure.STALE_DOCUMENT)
+        if (stored == newDocumentText) return false
+
+        val plan =
+            when (val change = planDocumentChange(runs, stored, newDocumentText)) {
+                is DocumentChange.Planned -> change.plan
+                is DocumentChange.Refused ->
+                    refuse(
+                        when (change.reason) {
+                            DocumentEditRefusal.CROSSES_A_TASK -> CellTextFailure.CHANGE_CROSSES_A_TASK
+                        },
+                    )
+            }
 
         val moment = clock.now()
-        if (exactText.isEmpty()) {
-            segments.forEach { deleteSegment(it.id) }
-        } else {
-            val kept = segments.firstOrNull()
-            if (kept == null) {
-                insertSegment(
-                    CellSegmentEntity.plainText(
-                        id = idGenerator.newId(),
-                        cellId = cell.id,
-                        orderIndex = 0,
-                        text = exactText,
-                        moment = moment,
-                    ),
-                )
-            } else {
-                writeSegmentText(kept.id, exactText, moment)
-                segments.drop(1).forEach { deleteSegment(it.id) }
-            }
-        }
+        rewrite(cell.id, rows, plan.gapTexts, moment, idGenerator)
         touchCell(cell.id, moment)
         return true
+    }
+
+    /**
+     * Lays the cell out again from the planned text of each gap.
+     *
+     * Every existing piece is lifted out of the way first. Renumbering in place
+     * would collide with the unique index the moment one piece moved onto a
+     * place another still held; the negative range is never a resting state and
+     * exists only between the two halves of this transaction.
+     *
+     * A gap reuses the identity of the first piece of writing that was in it, so
+     * text keeps its row through being edited, joined or split. Pieces no gap
+     * kept are gone: an emptied stretch leaves no row behind.
+     */
+    private suspend fun rewrite(
+        cellId: EntityId,
+        rows: List<CellRunRow>,
+        gapTexts: List<String>,
+        moment: Instant,
+        idGenerator: IdGenerator,
+    ) {
+        val tasks = rows.filter { it.kind == SegmentKind.TASK }
+        val plains = rows.filter { it.kind == SegmentKind.PLAIN_TEXT }
+        // The pieces of writing that were in each gap, in order, so a gap can
+        // take back the identity of the first of them.
+        val plainsByGap = plains.groupBy { row -> tasks.count { it.orderIndex < row.orderIndex } }
+
+        rows.forEachIndexed { index, row -> moveSegment(row.segmentId, -(index + 1)) }
+
+        val kept = mutableSetOf<EntityId>()
+        val writes = mutableListOf<suspend (Int) -> Unit>()
+        gapTexts.forEachIndexed { gap, text ->
+            if (text.isNotEmpty()) {
+                val existing = plainsByGap[gap]?.firstOrNull()
+                if (existing == null) {
+                    writes += { order ->
+                        insertSegment(
+                            CellSegmentEntity.plainText(
+                                id = idGenerator.newId(),
+                                cellId = cellId,
+                                orderIndex = order,
+                                text = text,
+                                moment = moment,
+                            ),
+                        )
+                    }
+                } else {
+                    kept += existing.segmentId
+                    writes += { order -> writeSegment(existing.segmentId, text, order, moment) }
+                }
+            }
+            tasks.getOrNull(gap)?.let { task ->
+                kept += task.segmentId
+                writes += { order -> moveSegment(task.segmentId, order) }
+            }
+        }
+
+        rows.filterNot { it.segmentId in kept }.forEach { deleteSegment(it.segmentId) }
+        writes.forEachIndexed { order, write -> write(order) }
+    }
+
+    /** The document as runs, with a deleted task's piece taking up no room. */
+    private fun runsOf(rows: List<CellRunRow>): List<DocumentRun> {
+        var at = 0
+        return rows.map { row ->
+            val text = if (row.kind == SegmentKind.TASK) row.taskName.orEmpty() else row.text.orEmpty()
+            DocumentRun(
+                segmentId = row.segmentId,
+                taskId = row.taskId,
+                text = text,
+                start = at,
+            ).also { at = it.end }
+        }
     }
 
     private fun refuse(failure: CellTextFailure): Nothing = throw CellTextException(failure)

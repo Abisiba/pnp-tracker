@@ -42,7 +42,15 @@ interface GameTableDao {
                tasks.id AS task_id,
                tasks.name AS task_name,
                tasks.is_completed AS task_is_completed,
-               tasks.required_quantity AS task_required_quantity
+               tasks.required_quantity AS task_required_quantity,
+               tasks.notes AS task_notes,
+               tasks.tracking_mode AS task_tracking_mode,
+               (tasks.primary_batch_completed = 1
+                OR tasks.current_missing_quantity > 0
+                OR EXISTS (SELECT 1 FROM progress_events WHERE progress_events.task_id = tasks.id)
+                OR EXISTS (SELECT 1 FROM task_stages
+                           WHERE task_stages.task_id = tasks.id AND task_stages.completed_quantity > 0)
+               ) AS task_has_progress
         FROM cell_segments
         INNER JOIN game_cells ON game_cells.id = cell_segments.cell_id
         INNER JOIN games ON games.id = game_cells.game_id

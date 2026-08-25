@@ -11,16 +11,27 @@ enum class CellTextFailure {
     /** There is no such game, or it has been deleted. */
     GAME_NOT_AVAILABLE,
 
+    /** There is no such cell any more. */
+    CELL_NOT_AVAILABLE,
+
     /**
-     * The cell holds a task, so it has no whole-text form to write back.
+     * The change reached into or across a task.
      *
-     * Writing one would flatten the task into words and take its colours, its
-     * stages and its history with it. PLAN 12.5 edits a task through its own
-     * menu and PLAN 5.5 keeps a task piece from being split like text, so a
-     * whole-cell write is refused here rather than allowed to do the damage.
-     * Turning a task back into text is a separate action the user asks for.
+     * PLAN 5.5 makes a task piece atomic: it cannot be split like text, deleted
+     * through by the caret, or typed over. It keeps its colours, its pipeline
+     * and its history by keeping its identity, so a change that would rewrite it
+     * as characters is refused rather than allowed to do the damage. Turning a
+     * task back into text is a separate action the user asks for.
      */
-    CELL_CONTAINS_TASKS,
+    CHANGE_CROSSES_A_TASK,
+
+    /**
+     * The cell says something other than what the editor was opened on.
+     *
+     * Someone else changed it in between. Writing anyway would silently throw
+     * away whatever they did, so the user is told instead.
+     */
+    STALE_DOCUMENT,
 
     /** The storage refused the change, so nothing was written. */
     COULD_NOT_SAVE,

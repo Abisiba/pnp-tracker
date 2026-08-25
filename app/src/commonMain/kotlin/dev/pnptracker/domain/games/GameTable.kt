@@ -2,6 +2,7 @@ package dev.pnptracker.domain.games
 
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.tasks.CellTextSelection
 
 /**
@@ -76,6 +77,18 @@ data class CellSegmentPreview(
     val requiredQuantity: Int? = null,
     /** The task's colours in the order they were chosen; empty on plain text. */
     val colors: List<TaskColorPreview> = emptyList(),
+    /** The task's note, exactly as the user wrote it. */
+    val notes: String? = null,
+    val trackingMode: TrackingMode? = null,
+    /**
+     * True when work has been recorded against the task.
+     *
+     * Carried with the piece rather than asked for when a panel opens, so a menu
+     * over a task costs no query of its own. It is what decides whether changing
+     * the total is safe, and what the user is warned about before turning the
+     * task back into text.
+     */
+    val hasProgress: Boolean = false,
 ) {
     val isTask: Boolean get() = taskId != null
 }
@@ -114,14 +127,42 @@ data class CellPreview(
     val text: String get() = segments.joinToString(separator = "") { it.text }
 
     /**
-     * The text an editor may replace, or null when it may not.
+     * The document laid out with each run's place in it.
      *
-     * A cell holding a task has no whole-text form that could be written back:
-     * flattening it would turn tasks into words and take their colours, stages
-     * and history with them. Editing those belongs to the segment editor of a
-     * later step, so until then the answer here is honestly nothing.
+     * Worked out once and read by everything that has to reason about offsets:
+     * where a selection really is, whether a change reached into a task, where a
+     * task sits on screen. Counting it again in each of those places is how the
+     * three would come to disagree.
      */
-    val editableText: String? get() = if (holdsTasks) null else text
+    val runs: List<DocumentRun>
+        get() {
+            var at = 0
+            return segments.map { segment ->
+                DocumentRun(
+                    segmentId = segment.segmentId,
+                    taskId = segment.taskId,
+                    text = segment.text,
+                    start = at,
+                ).also { at = it.end }
+            }
+        }
+
+    /** The tasks written in this cell, in reading order. */
+    val tasks: List<CellSegmentPreview> get() = segments.filter { it.isTask }
+
+    /**
+     * The text an editor opens on.
+     *
+     * The whole document, tasks included. A task's characters are in here
+     * because that is what the user sees and points at — the editor counts its
+     * offsets over the same string — but they are not the editor's to change:
+     * [planDocumentChange] refuses any change that reaches one, so a task is
+     * present, visible, and untouchable.
+     *
+     * Null only when the cell has never been opened, which is not a document at
+     * all yet.
+     */
+    val editableText: String get() = text
 
     /**
      * Where a stretch of the cell's text really lives.

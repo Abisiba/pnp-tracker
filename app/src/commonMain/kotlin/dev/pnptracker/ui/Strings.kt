@@ -18,10 +18,11 @@ import dev.pnptracker.resources.cell_edit
 import dev.pnptracker.resources.cell_edit_action
 import dev.pnptracker.resources.cell_editor_hint
 import dev.pnptracker.resources.cell_editor_open_elsewhere
-import dev.pnptracker.resources.cell_error_contains_tasks
+import dev.pnptracker.resources.cell_error_cell_gone
 import dev.pnptracker.resources.cell_error_could_not_save
+import dev.pnptracker.resources.cell_error_crosses_task
 import dev.pnptracker.resources.cell_error_game_gone
-import dev.pnptracker.resources.cell_locked_by_tasks
+import dev.pnptracker.resources.cell_error_stale_document
 import dev.pnptracker.resources.cell_save
 import dev.pnptracker.resources.cell_saving
 import dev.pnptracker.resources.cell_task_color_empty
@@ -263,6 +264,32 @@ import dev.pnptracker.resources.table_view_all
 import dev.pnptracker.resources.table_view_completed
 import dev.pnptracker.resources.table_view_label
 import dev.pnptracker.resources.table_view_ongoing
+import dev.pnptracker.resources.task_convert_accept
+import dev.pnptracker.resources.task_convert_body
+import dev.pnptracker.resources.task_convert_cancel
+import dev.pnptracker.resources.task_convert_history_warning
+import dev.pnptracker.resources.task_convert_irreversible
+import dev.pnptracker.resources.task_convert_title
+import dev.pnptracker.resources.task_edit_error_color_gone
+import dev.pnptracker.resources.task_edit_error_could_not_save
+import dev.pnptracker.resources.task_edit_error_name_empty
+import dev.pnptracker.resources.task_edit_error_name_line_break
+import dev.pnptracker.resources.task_edit_error_quantity
+import dev.pnptracker.resources.task_edit_error_quantity_below_progress
+import dev.pnptracker.resources.task_edit_error_quantity_locked
+import dev.pnptracker.resources.task_edit_error_several_colors
+import dev.pnptracker.resources.task_edit_error_task_gone
+import dev.pnptracker.resources.task_edit_hint
+import dev.pnptracker.resources.task_edit_name_invalid
+import dev.pnptracker.resources.task_edit_name_label
+import dev.pnptracker.resources.task_edit_save
+import dev.pnptracker.resources.task_edit_saving
+import dev.pnptracker.resources.task_edit_several_colors
+import dev.pnptracker.resources.task_edit_title
+import dev.pnptracker.resources.task_menu_convert
+import dev.pnptracker.resources.task_menu_edit
+import dev.pnptracker.resources.task_menu_hint
+import dev.pnptracker.resources.task_menu_open
 import dev.pnptracker.resources.tasks_cell_label
 import dev.pnptracker.resources.tasks_cell_required
 import dev.pnptracker.resources.tasks_create
@@ -572,10 +599,10 @@ object Strings {
 
         val errorCouldNotSave = Res.string.cell_error_could_not_save
         val errorGameGone = Res.string.cell_error_game_gone
-        val errorContainsTasks = Res.string.cell_error_contains_tasks
+        val errorCellGone = Res.string.cell_error_cell_gone
+        val errorCrossesTask = Res.string.cell_error_crosses_task
+        val errorStaleDocument = Res.string.cell_error_stale_document
 
-        /** Said of a cell the whole-text editor may not touch. */
-        val lockedByTasks = Res.string.cell_locked_by_tasks
         val editorOpenElsewhere = Res.string.cell_editor_open_elsewhere
     }
 
@@ -633,6 +660,50 @@ object Strings {
         val errorColorGone = Res.string.cell_task_error_color_gone
         val errorQuantity = Res.string.cell_task_error_quantity
         val errorCouldNotSave = Res.string.cell_task_error_could_not_save
+    }
+
+    /** The menu that opens over one task in a cell. */
+    object TaskMenu {
+        /** Takes the task's name. */
+        val open = Res.string.task_menu_open
+        val edit = Res.string.task_menu_edit
+        val convertToText = Res.string.task_menu_convert
+        val hint = Res.string.task_menu_hint
+    }
+
+    /** Changing what a task already written down is. */
+    object TaskEdit {
+        val title = Res.string.task_edit_title
+        val nameLabel = Res.string.task_edit_name_label
+        val nameInvalid = Res.string.task_edit_name_invalid
+
+        /** Takes the colours the task carries, so the user can see what is kept. */
+        val severalColors = Res.string.task_edit_several_colors
+        val save = Res.string.task_edit_save
+        val saving = Res.string.task_edit_saving
+        val hint = Res.string.task_edit_hint
+
+        val errorTaskGone = Res.string.task_edit_error_task_gone
+        val errorNameEmpty = Res.string.task_edit_error_name_empty
+        val errorNameLineBreak = Res.string.task_edit_error_name_line_break
+        val errorColorGone = Res.string.task_edit_error_color_gone
+        val errorSeveralColors = Res.string.task_edit_error_several_colors
+        val errorQuantity = Res.string.task_edit_error_quantity
+        val errorQuantityBelowProgress = Res.string.task_edit_error_quantity_below_progress
+        val errorQuantityLocked = Res.string.task_edit_error_quantity_locked
+        val errorCouldNotSave = Res.string.task_edit_error_could_not_save
+    }
+
+    /** Turning a task back into the words it was made from. */
+    object TaskConvert {
+        val title = Res.string.task_convert_title
+
+        /** Takes the task's name. */
+        val body = Res.string.task_convert_body
+        val historyWarning = Res.string.task_convert_history_warning
+        val irreversible = Res.string.task_convert_irreversible
+        val accept = Res.string.task_convert_accept
+        val cancel = Res.string.task_convert_cancel
     }
 
     /** Turning a reviewed import into real tasks. */

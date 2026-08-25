@@ -3,6 +3,7 @@ package dev.pnptracker.ui
 import dev.pnptracker.domain.games.GameTableView
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.tasks.TaskEditFailure
 import dev.pnptracker.domain.tasks.TaskFromTextFailure
 import dev.pnptracker.ui.feature.importworkspace.labelOf
 import dev.pnptracker.ui.navigation.Screen
@@ -283,6 +284,95 @@ class GameTablePresentationTest {
             TaskFromTextFailure.COLOR_NOT_AVAILABLE -> Strings.CellTask.errorColorGone
             TaskFromTextFailure.INVALID_REQUIRED_QUANTITY -> Strings.CellTask.errorQuantity
             TaskFromTextFailure.COULD_NOT_SAVE -> Strings.CellTask.errorCouldNotSave
+        }
+
+    // ---------------------------------------- what the task surfaces say
+
+    @Test
+    fun `every word the task menu, the panel and the question say is there`() {
+        listOf(
+            Strings.TaskMenu.edit,
+            Strings.TaskMenu.convertToText,
+            Strings.TaskMenu.hint,
+            Strings.TaskEdit.title,
+            Strings.TaskEdit.nameLabel,
+            Strings.TaskEdit.nameInvalid,
+            Strings.TaskEdit.save,
+            Strings.TaskEdit.saving,
+            Strings.TaskEdit.hint,
+            Strings.TaskConvert.title,
+            Strings.TaskConvert.historyWarning,
+            Strings.TaskConvert.irreversible,
+            Strings.TaskConvert.accept,
+            Strings.TaskConvert.cancel,
+            Strings.Cell.errorCellGone,
+            Strings.Cell.errorCrossesTask,
+            Strings.Cell.errorStaleDocument,
+        ).forEach { resource ->
+            val text = textOf(resource)
+            assertTrue(text.isNotBlank(), "a task surface text is missing or empty")
+            assertTrue('\\' !in text, "an escape reached the user in: $text")
+            assertTrue('%' !in text, "an unfilled placeholder reached the user in: $text")
+        }
+    }
+
+    @Test
+    fun `every way a task can refuse to change has its own sentence`() {
+        val sentences =
+            TaskEditFailure.entries.map { failure ->
+                val text = textOf(messageOfEditFailure(failure))
+                assertTrue(text.isNotBlank(), "$failure has nothing to say")
+                assertTrue('%' !in text, "an unfilled placeholder reached the user in: $text")
+                text
+            }
+
+        assertEquals(sentences.size, sentences.toSet().size, "two refusals read the same: $sentences")
+    }
+
+    @Test
+    fun `the question about turning a task into text says what it costs`() {
+        // PLAN 12.8 takes the colour, the total and the pipeline away and leaves
+        // the word. PLAN 17 asks for that to be confirmed, so it has to be said.
+        val body = runBlocking { getString(Strings.TaskConvert.body, "Knight") }
+
+        assertTrue("Knight" in body, "the question does not name the task: $body")
+        assertTrue("düz metin" in body, "the question does not say the word stays: $body")
+        assertTrue(body.none { it == '%' }, "unformatted placeholder left in: $body")
+        assertTrue("geri alınamaz" in textOf(Strings.TaskConvert.irreversible), "nothing says it is final")
+        assertTrue("geçmiş" in textOf(Strings.TaskConvert.historyWarning), "the history warning does not mention it")
+    }
+
+    @Test
+    fun `a task says what it is when it is opened`() {
+        val label = runBlocking { getString(Strings.TaskMenu.open, "Knight") }
+
+        assertTrue("Knight" in label, "the action does not name the task: $label")
+        assertTrue(label.none { it == '%' }, "unformatted placeholder left in: $label")
+    }
+
+    @Test
+    fun `a several colour task is told which colours it keeps`() {
+        val note = runBlocking { getString(Strings.TaskEdit.severalColors, "Gri, Siyah") }
+
+        assertTrue("Gri, Siyah" in note, "the colours are not named: $note")
+        assertTrue(note.none { it == '%' }, "unformatted placeholder left in: $note")
+    }
+
+    /**
+     * The same mapping the screen uses, written as a `when` over the enum so a
+     * new failure cannot be added without a sentence.
+     */
+    private fun messageOfEditFailure(failure: TaskEditFailure) =
+        when (failure) {
+            TaskEditFailure.TASK_NOT_AVAILABLE -> Strings.TaskEdit.errorTaskGone
+            TaskEditFailure.TASK_NAME_EMPTY -> Strings.TaskEdit.errorNameEmpty
+            TaskEditFailure.NAME_CONTAINS_LINE_BREAK -> Strings.TaskEdit.errorNameLineBreak
+            TaskEditFailure.COLOR_NOT_AVAILABLE -> Strings.TaskEdit.errorColorGone
+            TaskEditFailure.MULTICOLOR_EDIT_NOT_AVAILABLE -> Strings.TaskEdit.errorSeveralColors
+            TaskEditFailure.INVALID_REQUIRED_QUANTITY -> Strings.TaskEdit.errorQuantity
+            TaskEditFailure.QUANTITY_BELOW_PROGRESS -> Strings.TaskEdit.errorQuantityBelowProgress
+            TaskEditFailure.QUANTITY_LOCKED_BY_COMPLETION -> Strings.TaskEdit.errorQuantityLocked
+            TaskEditFailure.COULD_NOT_SAVE -> Strings.TaskEdit.errorCouldNotSave
         }
 
     private fun userInterfaceSources(): List<Path> {

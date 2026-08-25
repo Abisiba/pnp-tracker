@@ -58,5 +58,78 @@ class ReadableInkTest {
         assertTrue(green > blue * 5, "green is not being weighted as the eye weights it")
     }
 
+    // ------------------------------------------- a colour matching the ground
+
+    /** The two grounds a cell is ever drawn on. */
+    private val surfaces = listOf("light" to opaqueColorOf("#FFFBFE"), "dark" to opaqueColorOf("#1C1B1F"))
+
+    @Test
+    fun `every colour in the catalogue can be seen against both themes`() {
+        // The case this exists for: white on a light surface, black on a dark
+        // one. Painted with no edge, such a task shows no colour at all.
+        seedColors.forEach { color ->
+            val fill = opaqueColorOf(color.hex)
+            surfaces.forEach { (theme, surface) ->
+                val visible =
+                    maxOf(contrastRatio(fill, surface), contrastRatio(visibleEdgeOn(fill), surface))
+                assertTrue(visible >= 3.0, "${color.canonicalName} is invisible on the $theme surface at $visible:1")
+            }
+        }
+    }
+
+    @Test
+    fun `no colour whatever disappears into either theme`() {
+        var worst = Double.MAX_VALUE
+        var worstAt = ""
+        val steps = (0..255 step 17).toList()
+        steps.forEach { red ->
+            steps.forEach { green ->
+                steps.forEach { blue ->
+                    val fill = opaqueColorOf("#" + byteOf(red) + byteOf(green) + byteOf(blue))
+                    surfaces.forEach { (theme, surface) ->
+                        val visible =
+                            maxOf(contrastRatio(fill, surface), contrastRatio(visibleEdgeOn(fill), surface))
+                        if (visible < worst) {
+                            worst = visible
+                            worstAt = "#${byteOf(red)}${byteOf(green)}${byteOf(blue)} on $theme"
+                        }
+                    }
+                }
+            }
+        }
+
+        assertTrue(worst >= 3.0, "a task is invisible: $worstAt at $worst:1")
+    }
+
+    @Test
+    fun `the edge always stands away from the colour it goes round`() {
+        // Which is what makes the boundary visible from the inside as well, and
+        // is why one rule covers both cases.
+        val steps = (0..255 step 17).toList()
+        steps.forEach { red ->
+            steps.forEach { green ->
+                steps.forEach { blue ->
+                    val fill = opaqueColorOf("#" + byteOf(red) + byteOf(green) + byteOf(blue))
+                    assertTrue(
+                        contrastRatio(visibleEdgeOn(fill), fill) >= 4.5,
+                        "the edge cannot be told from the colour it goes round",
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `the check asks the colour's value and not its name`() {
+        // A test that trusted the word "Beyaz" would pass while the square it
+        // stands for was invisible. Every assertion here is arithmetic on the
+        // stored value, which is the only thing the user actually sees.
+        val white = seedColors.first { it.canonicalName == "Beyaz" }
+        val light = opaqueColorOf("#FFFBFE")
+
+        assertTrue(contrastRatio(opaqueColorOf(white.hex), light) < 1.2, "white is not the case this is about")
+        assertTrue(contrastRatio(visibleEdgeOn(opaqueColorOf(white.hex)), light) >= 3.0, "white has no visible edge")
+    }
+
     private fun byteOf(value: Int): String = value.toString(16).padStart(2, '0')
 }

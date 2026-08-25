@@ -9,23 +9,31 @@ import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import kotlin.time.Clock
 
-/** Writing what a cell says. */
+/** Writing what a cell's document says. */
 interface CellTextEditing {
     /**
-     * Makes one cell of one game say exactly [exactText].
+     * Makes one cell of one game read as exactly [newDocumentText].
+     *
+     * The document is the cell's pieces laid end to end, tasks included as their
+     * names. Only the plain text in it is the caller's to change: a change that
+     * reaches into a task is refused, because PLAN 5.5 makes a task piece atomic
+     * and it keeps its colours, pipeline and history by keeping its identity.
      *
      * The text is stored character for character. A finished game is edited like
      * any other — PLAN 5.3 keeps a finished game editable and PLAN 12.4 lets the
      * user work in whichever view they are in — and a deleted one is not edited
      * at all.
      *
+     * @param expectedDocumentText what the cell said when the editor opened, so
+     *   a change someone else made in between is caught rather than overwritten.
      * @return true when this call changed something.
-     * @throws CellTextException if the game is gone or the cell holds a task.
+     * @throws CellTextException with the case that stopped it.
      */
-    suspend fun savePlainText(
+    suspend fun saveDocumentText(
         gameId: EntityId,
         columnType: CellColumnType,
-        exactText: String,
+        expectedDocumentText: String,
+        newDocumentText: String,
     ): Boolean
 }
 
@@ -42,16 +50,18 @@ class CellTextStore(
     private val idGenerator: IdGenerator = IdGenerator.Random,
     private val clock: Clock = Clock.System,
 ) : CellTextEditing {
-    override suspend fun savePlainText(
+    override suspend fun saveDocumentText(
         gameId: EntityId,
         columnType: CellColumnType,
-        exactText: String,
+        expectedDocumentText: String,
+        newDocumentText: String,
     ): Boolean =
         try {
-            cellSegmentDao.savePlainText(
+            cellSegmentDao.saveDocumentText(
                 gameId = gameId,
                 columnType = columnType,
-                exactText = exactText,
+                expectedDocumentText = expectedDocumentText,
+                newDocumentText = newDocumentText,
                 clock = clock,
                 idGenerator = idGenerator,
             )

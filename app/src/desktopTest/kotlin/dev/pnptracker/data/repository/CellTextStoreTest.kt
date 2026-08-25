@@ -18,6 +18,7 @@ import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.model.SegmentKind
 import dev.pnptracker.domain.model.TrackingMode
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
@@ -90,6 +91,34 @@ class CellTextStoreTest {
         directory.delete()
     }
 
+    /**
+     * Sets the cell's document, taking what it says now as the expectation.
+     *
+     * The production path is handed the text the editor was opened on, so a
+     * change somebody else made in between is caught. A test that only means to
+     * put text in a cell reads that value first rather than repeating it, which
+     * keeps these about the writing rather than about the staleness check —
+     * that has tests of its own.
+     */
+    private suspend fun CellTextStore.setText(
+        gameId: EntityId,
+        columnType: CellColumnType,
+        text: String,
+    ): Boolean = saveDocumentText(gameId, columnType, documentTextOf(gameId, columnType), text)
+
+    /** What the cell reads as now: its pieces end to end, tasks as their names. */
+    private suspend fun documentTextOf(
+        gameId: EntityId,
+        columnType: CellColumnType,
+    ): String {
+        val cell = database.cellSegmentDao().cellOfGame(gameId, columnType) ?: return ""
+        val pieces =
+            database.cellSegmentDao().runsOfCell(cell.id).map { run ->
+                if (run.kind == SegmentKind.TASK) run.taskName.orEmpty() else run.text.orEmpty()
+            }
+        return pieces.joinToString(separator = "")
+    }
+
     private suspend fun addGame(
         name: String = "Harmonies",
         isCompleted: Boolean = false,
@@ -155,7 +184,7 @@ class CellTextStoreTest {
         runBlocking<Unit> {
             val game = addGame()
 
-            assertTrue(store.savePlainText(game.id, CellColumnType.THREE_D, "40 gri token"))
+            assertTrue(store.setText(game.id, CellColumnType.THREE_D, "40 gri token"))
 
             val cell = assertNotNull(database.gameCellDao().cellOfGame(game.id, CellColumnType.THREE_D))
             val segment = database.cellSegmentDao().segmentsOfCell(cell.id).single()
@@ -170,7 +199,7 @@ class CellTextStoreTest {
             // empty save would be a row saying something nobody said.
             val game = addGame()
 
-            assertFalse(store.savePlainText(game.id, CellColumnType.THREE_D, ""))
+            assertFalse(store.setText(game.id, CellColumnType.THREE_D, ""))
 
             assertEquals(0, rows("game_cells"))
             assertEquals(0, rows("cell_segments"))
@@ -184,7 +213,7 @@ class CellTextStoreTest {
             val game = addGame()
 
             CellColumnType.entries.forEach { columnType ->
-                assertTrue(store.savePlainText(game.id, columnType, "metin ${columnType.ordinal}"))
+                assertTrue(store.setText(game.id, columnType, "metin ${columnType.ordinal}"))
                 assertEquals("metin ${columnType.ordinal}", textOf(game.id, columnType))
             }
             assertEquals(5, rows("game_cells"))
@@ -209,7 +238,7 @@ class CellTextStoreTest {
             val breaking = CellTextStore(database.cellSegmentDao(), idGenerator = failing, clock = clock)
 
             assertFailsWith<IllegalStateException> {
-                breaking.savePlainText(game.id, CellColumnType.THREE_D, "40 gri")
+                breaking.setText(game.id, CellColumnType.THREE_D, "40 gri")
             }
 
             assertEquals(0, rows("game_cells"), "a cell was left behind with nothing in it")
@@ -224,7 +253,7 @@ class CellTextStoreTest {
             val game = addGame()
             val exact = "   40  gri   token  "
 
-            store.savePlainText(game.id, CellColumnType.THREE_D, exact)
+            store.setText(game.id, CellColumnType.THREE_D, exact)
 
             assertEquals(exact, textOf(game.id))
         }
@@ -235,7 +264,7 @@ class CellTextStoreTest {
             val game = addGame()
             val exact = "Knight,token;kalkan:2×,bıçak."
 
-            store.savePlainText(game.id, CellColumnType.THREE_D, exact)
+            store.setText(game.id, CellColumnType.THREE_D, exact)
 
             assertEquals(exact, textOf(game.id))
         }
@@ -246,7 +275,7 @@ class CellTextStoreTest {
             val game = addGame()
             val exact = "Şığ ölçüsü: 30×30\nİkinci satır\n\nÜçüncü\tsekmeli\r\nWindows satırı"
 
-            store.savePlainText(game.id, CellColumnType.THREE_D, exact)
+            store.setText(game.id, CellColumnType.THREE_D, exact)
 
             assertEquals(exact, textOf(game.id), "the text was normalised on its way in")
         }
@@ -256,7 +285,7 @@ class CellTextStoreTest {
         runBlocking<Unit> {
             val game = addGame()
 
-            assertTrue(store.savePlainText(game.id, CellColumnType.NOTES, " "))
+            assertTrue(store.setText(game.id, CellColumnType.NOTES, " "))
 
             assertEquals(" ", textOf(game.id, CellColumnType.NOTES))
         }
@@ -267,13 +296,13 @@ class CellTextStoreTest {
     fun `saving what the cell already says does nothing at all`() =
         runBlocking<Unit> {
             val game = addGame()
-            store.savePlainText(game.id, CellColumnType.THREE_D, "40 gri")
+            store.setText(game.id, CellColumnType.THREE_D, "40 gri")
             val cell = assertNotNull(database.gameCellDao().cellOfGame(game.id, CellColumnType.THREE_D))
             val before = database.cellSegmentDao().segmentsOfCell(cell.id).single()
             val clockReads = clock.reads
             val idReads = ids.reads
 
-            assertFalse(store.savePlainText(game.id, CellColumnType.THREE_D, "40 gri"))
+            assertFalse(store.setText(game.id, CellColumnType.THREE_D, "40 gri"))
 
             assertEquals(clockReads, clock.reads, "a repeated save read the clock")
             assertEquals(idReads, ids.reads, "a repeated save took an identity")
@@ -285,11 +314,11 @@ class CellTextStoreTest {
     fun `a real change moves the update time and leaves the creation time alone`() =
         runBlocking<Unit> {
             val game = addGame()
-            store.savePlainText(game.id, CellColumnType.THREE_D, "40 gri")
+            store.setText(game.id, CellColumnType.THREE_D, "40 gri")
             val cell = assertNotNull(database.gameCellDao().cellOfGame(game.id, CellColumnType.THREE_D))
             val first = database.cellSegmentDao().segmentsOfCell(cell.id).single()
 
-            store.savePlainText(game.id, CellColumnType.THREE_D, "48 gri")
+            store.setText(game.id, CellColumnType.THREE_D, "48 gri")
 
             val after = database.cellSegmentDao().segmentsOfCell(cell.id).single()
             assertEquals("48 gri", after.text)
@@ -308,10 +337,10 @@ class CellTextStoreTest {
             // PLAN 11.4.1 makes that identity the game's column rather than
             // whatever happens to be written in it.
             val game = addGame()
-            store.savePlainText(game.id, CellColumnType.THREE_D, "40 gri")
+            store.setText(game.id, CellColumnType.THREE_D, "40 gri")
             val cell = assertNotNull(database.gameCellDao().cellOfGame(game.id, CellColumnType.THREE_D))
 
-            assertTrue(store.savePlainText(game.id, CellColumnType.THREE_D, ""))
+            assertTrue(store.setText(game.id, CellColumnType.THREE_D, ""))
 
             assertEquals(0, rows("cell_segments"), "a piece survived the cell being cleared")
             assertNotNull(database.gameCellDao().cellById(cell.id), "the cell itself was deleted")
@@ -329,7 +358,7 @@ class CellTextStoreTest {
             addText(cellId, "sağ", orderIndex = 1)
             assertEquals("solsağ", textOf(game.id))
 
-            assertTrue(store.savePlainText(game.id, CellColumnType.THREE_D, "solsağ ve daha fazlası"))
+            assertTrue(store.setText(game.id, CellColumnType.THREE_D, "solsağ ve daha fazlası"))
 
             val segment = database.cellSegmentDao().segmentsOfCell(cellId).single()
             assertEquals("solsağ ve daha fazlası", segment.text)
@@ -352,7 +381,7 @@ class CellTextStoreTest {
                     .id
             assertEquals("A\nBC", textOf(game.id))
 
-            store.savePlainText(game.id, CellColumnType.THREE_D, "A\nBCD")
+            store.setText(game.id, CellColumnType.THREE_D, "A\nBCD")
 
             val segment = database.cellSegmentDao().segmentsOfCell(cellId).single()
             assertEquals(firstId, segment.id)
@@ -362,29 +391,24 @@ class CellTextStoreTest {
     // ------------------------------------------------------- what is refused
 
     @Test
-    fun `a cell holding a task cannot be flattened into text`() =
+    fun `a change that reaches into a task is refused`() =
         runBlocking<Unit> {
+            // PLAN 5.5 makes a task piece atomic. Typing over its characters
+            // would cost it the colours, pipeline and history that hang off its
+            // identity, so the whole change is refused rather than half taken.
             val game = addGame()
             val cellId = addCell(game.id)
             addText(cellId, "Basılacak: ", orderIndex = 0)
-            val taskId = addTask(cellId)
+            addTask(cellId)
+            val before = documentTextOf(game.id, CellColumnType.THREE_D)
 
             val refusal =
                 assertFailsWith<CellTextException> {
-                    store.savePlainText(game.id, CellColumnType.THREE_D, "Basılacak: Gri token")
+                    store.setText(game.id, CellColumnType.THREE_D, "Basılacak: düz metin")
                 }
 
-            assertEquals(CellTextFailure.CELL_CONTAINS_TASKS, refusal.failure)
-            assertNotNull(database.taskDao().activeTaskById(taskId), "a refused save touched the task")
-            assertEquals(2, database.cellSegmentDao().segmentsOfCell(cellId).size)
-            assertEquals(
-                "Basılacak: ",
-                database
-                    .cellSegmentDao()
-                    .segmentsOfCell(cellId)
-                    .first()
-                    .text,
-            )
+            assertEquals(CellTextFailure.CHANGE_CROSSES_A_TASK, refusal.failure)
+            assertEquals(before, documentTextOf(game.id, CellColumnType.THREE_D))
         }
 
     @Test
@@ -408,7 +432,7 @@ class CellTextStoreTest {
             val taskBefore = assertNotNull(database.taskProgressDao().taskById(task.id))
 
             assertFailsWith<CellTextException> {
-                store.savePlainText(game.id, CellColumnType.CARD, "hepsi düz metin")
+                store.setText(game.id, CellColumnType.CARD, "hepsi düz metin")
             }
 
             assertEquals(taskBefore, database.taskProgressDao().taskById(task.id))
@@ -417,22 +441,25 @@ class CellTextStoreTest {
         }
 
     @Test
-    fun `a cell whose only piece names a deleted task is still not plain text`() =
+    fun `a cell whose only piece names a deleted task can still be written in`() =
         runBlocking<Unit> {
-            // The task is gone from every active view, but its piece is still in
-            // the document, and rewriting the cell would write over it.
+            // The task is gone from every active view, so as far as the user is
+            // concerned the cell is empty and they may type in it. Its piece is
+            // still there and is left exactly alone: nothing writes over a task
+            // piece, not even one nobody can see.
             val game = addGame()
             val cellId = addCell(game.id)
             val taskId = addTask(cellId)
             database.taskDao().softDelete(taskId, deletedAt)
+            val before = assertNotNull(database.cellSegmentDao().segmentOfTaskIncludingDeleted(taskId))
 
-            val refusal =
-                assertFailsWith<CellTextException> {
-                    store.savePlainText(game.id, CellColumnType.THREE_D, "artık düz metin")
-                }
+            assertTrue(store.setText(game.id, CellColumnType.THREE_D, "artık düz metin"))
 
-            assertEquals(CellTextFailure.CELL_CONTAINS_TASKS, refusal.failure)
-            assertEquals(1, database.cellSegmentDao().segmentsOfCell(cellId).size)
+            assertEquals("artık düz metin", documentTextOf(game.id, CellColumnType.THREE_D))
+            val after = assertNotNull(database.cellSegmentDao().segmentOfTaskIncludingDeleted(taskId))
+            assertEquals(before.taskId, after.taskId, "the deleted task's piece lost its task")
+            assertEquals(before.kind, after.kind, "the deleted task's piece was turned into text")
+            assertNull(after.text, "text was written into a task piece")
         }
 
     @Test
@@ -442,7 +469,7 @@ class CellTextStoreTest {
 
             val refusal =
                 assertFailsWith<CellTextException> {
-                    store.savePlainText(game.id, CellColumnType.THREE_D, "40 gri")
+                    store.setText(game.id, CellColumnType.THREE_D, "40 gri")
                 }
 
             assertEquals(CellTextFailure.GAME_NOT_AVAILABLE, refusal.failure)
@@ -455,7 +482,7 @@ class CellTextStoreTest {
         runBlocking<Unit> {
             val refusal =
                 assertFailsWith<CellTextException> {
-                    store.savePlainText(IdGenerator.Random.newId(), CellColumnType.THREE_D, "40 gri")
+                    store.setText(IdGenerator.Random.newId(), CellColumnType.THREE_D, "40 gri")
                 }
 
             assertEquals(CellTextFailure.GAME_NOT_AVAILABLE, refusal.failure)
@@ -468,7 +495,7 @@ class CellTextStoreTest {
             // user work in whichever view they are looking at.
             val game = addGame(isCompleted = true)
 
-            assertTrue(store.savePlainText(game.id, CellColumnType.NOTES, "sonradan eklenen not"))
+            assertTrue(store.setText(game.id, CellColumnType.NOTES, "sonradan eklenen not"))
 
             assertEquals("sonradan eklenen not", textOf(game.id, CellColumnType.NOTES))
             assertTrue(assertNotNull(database.gameDao().activeGameById(game.id)).isManuallyCompleted)
@@ -480,7 +507,7 @@ class CellTextStoreTest {
             val first = addGame("Harmonies")
             val second = addGame("Wingspan")
 
-            store.savePlainText(first.id, CellColumnType.THREE_D, "gri")
+            store.setText(first.id, CellColumnType.THREE_D, "gri")
 
             assertEquals("gri", textOf(first.id))
             assertNull(textOf(second.id))
@@ -490,10 +517,10 @@ class CellTextStoreTest {
     fun `no zero length piece is ever left in a cell`() =
         runBlocking<Unit> {
             val game = addGame()
-            store.savePlainText(game.id, CellColumnType.THREE_D, "bir şey")
-            store.savePlainText(game.id, CellColumnType.THREE_D, "")
-            store.savePlainText(game.id, CellColumnType.THREE_D, "yine bir şey")
-            store.savePlainText(game.id, CellColumnType.THREE_D, "")
+            store.setText(game.id, CellColumnType.THREE_D, "bir şey")
+            store.setText(game.id, CellColumnType.THREE_D, "")
+            store.setText(game.id, CellColumnType.THREE_D, "yine bir şey")
+            store.setText(game.id, CellColumnType.THREE_D, "")
 
             val cell = assertNotNull(database.gameCellDao().cellOfGame(game.id, CellColumnType.THREE_D))
             assertTrue(

@@ -127,6 +127,9 @@ class GameTableStore(
                             isCompletedTask = row.taskIsCompleted == true,
                             requiredQuantity = row.taskRequiredQuantity,
                             colors = colorsByTask[taskId].orEmpty(),
+                            notes = row.taskNotes,
+                            trackingMode = row.taskTrackingMode,
+                            hasProgress = row.taskHasProgress == true,
                         )
                     }
             }

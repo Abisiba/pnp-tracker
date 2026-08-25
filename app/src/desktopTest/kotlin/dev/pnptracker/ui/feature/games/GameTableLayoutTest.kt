@@ -107,20 +107,16 @@ class GameTableLayoutTest {
     }
 
     @Test
-    fun `a cell holding a task offers no editor and says why`() {
-        // Flattening it would cost the task its colours, its stages and its
-        // history, so the cell refuses the click rather than doing the damage.
-        // The whole gesture is disabled, not merely ignored when pressed.
-        val cellSlot = source.substringAfter("private fun CellSlot(").substringBefore("private fun CellEditorSlot(")
-        assertTrue("val editable = cell.editableText != null" in cellSlot, "a cell does not ask whether it may be edited")
-        assertTrue("enabled = editable" in cellSlot, "a cell holding a task can still be double clicked")
-        assertTrue("if (!editable)" in cellSlot, "a cell holding a task does not say so")
-        assertTrue("Strings.Cell.lockedByTasks" in cellSlot, "the reason is not taken from the text catalogue")
-        // The editor itself is a separate composable; a read only cell has none.
-        assertTrue("TextField" !in cellSlot, "the read only cell carries a text field")
+    fun `a cell holding a task is opened like any other`() {
+        // PLAN 12.5 and 5.5 make the task atomic, not the cell. The whole-cell
+        // lock of the previous step is gone: the text around a task is the
+        // user's to edit, and the task itself is protected by the change rule
+        // rather than by refusing to open the cell at all.
+        val cellSlot = source.substringAfter("private fun CellSlot(").substringBefore("private fun TaskHandle(")
+        assertTrue("cell.editableText != null" !in cellSlot, "a cell still asks whether it may be opened")
+        assertTrue("Strings.Cell.lockedByTasks" !in source, "a cell still says it is locked by its tasks")
+        assertTrue("onDoubleClick = onEdit" in cellSlot, "a cell can no longer be opened by double click")
     }
-
-    // -------------------------------------------------- writing in a cell
 
     @Test
     fun `a cell is opened by double click and from the keyboard`() {
@@ -154,14 +150,16 @@ class GameTableLayoutTest {
     }
 
     @Test
-    fun `the editor is drawn in the cell and not over the window`() {
-        // PLAN 12.5 keeps editing where the content is; a panel over the middle
-        // of the window would hide the very row being worked on.
-        val editor = source.substringAfter("private fun CellEditorSlot(").substringBefore("private fun messageOf(")
-        assertTrue("width(CellColumnWidth)" in editor, "the editor is not the width of its own column")
-        listOf("Dialog", "AlertDialog", "Popup", "ModalBottomSheet").forEach { overlay ->
+    fun `nothing opens over the middle of the window`() {
+        // PLAN 12.5 and 12.6 rule out a full screen modal or a panel covering
+        // the window. A popover anchored to the word it belongs to is what PLAN
+        // asks for and is not one of these.
+        listOf("Dialog", "AlertDialog", "ModalBottomSheet").forEach { overlay ->
             assertTrue(overlay !in source, "the table opens a $overlay over the window")
         }
+        val editor = source.substringAfter("private fun CellEditorSlot(").substringBefore("private class TaskPainting(")
+        assertTrue("width(CellColumnWidth)" in editor, "the cell being worked in is not the width of its own column")
+        assertTrue("Popup" !in editor, "the cell editor opens a popup of its own")
     }
 
     @Test
@@ -224,14 +222,16 @@ class GameTableLayoutTest {
     // ------------------------------------------- a task standing in a cell
 
     @Test
-    fun `a task is painted in its own colour with ink chosen against it`() {
+    fun `a task is painted in its own colour, with ink and an edge chosen against it`() {
         // The colour is the user's, picked for filament rather than for reading
-        // text on. PLAN 17 asks for text that can still be read, so the ink is
-        // worked out from the ground instead of being fixed.
-        val drawn = source.substringAfter("private fun cellContentOf(").substringBefore("private fun spokenContentOf(")
-        assertTrue("opaqueColorOf(it.hex)" in drawn, "a task's colour is not taken from its colour record")
-        assertTrue("readableInkOn" in drawn, "the ink on a task is not chosen against the colour behind it")
-        assertTrue("background = ground" in drawn, "a task is not painted at all")
+        // text on. PLAN 17 asks for text that can still be read and PLAN 12.7
+        // for a contrast frame where the colour alone would not show — which is
+        // exactly the white-on-white and black-on-black case.
+        val paint = source.substringAfter("private fun paintOf(").substringBefore("/** Where one task's word sits")
+        assertTrue("opaqueColorOf(it.hex)" in paint, "a task's colour is not taken from its colour record")
+        assertTrue("readableInkOn(fill)" in paint, "the ink on a task is not chosen against the colour behind it")
+        assertTrue("visibleEdgeOn(fill)" in paint, "a task has no edge, so a colour matching the theme vanishes")
+        assertTrue("drawTaskEdges(" in source, "the edge is worked out and never drawn")
         // No value copied into the screen: whatever a colour is, it is its own.
         assertTrue(
             Regex("""["']#[0-9A-Fa-f]{6}["']""").find(source) == null,
@@ -257,13 +257,19 @@ class GameTableLayoutTest {
     }
 
     @Test
-    fun `a task is not drawn as something that can be clicked`() {
-        // Its popover belongs to a later step. Anything that looked pressable
-        // would promise something that is not there.
-        val drawn = source.substringAfter("private fun cellContentOf(").substringBefore("private fun spokenContentOf(")
-        listOf("clickable", "onClick", "pointerHoverIcon", "Button").forEach { interactive ->
-            assertTrue(interactive !in drawn, "a task in a cell is drawn as a $interactive")
-        }
+    fun `a task is something the user can press, by pointer and by keyboard`() {
+        // PLAN 12.5: hovering a task makes it clear it can be pressed, and PLAN
+        // 17 wants the same reachable from the keyboard with a visible focus.
+        val handle = source.substringAfter("private fun TaskHandle(").substringBefore("private fun CellEditorSlot(")
+        assertTrue("PointerIcon.Hand" in handle, "a task does not take the hand cursor")
+        assertTrue("hoverable(" in handle, "a task does not respond to being hovered")
+        assertTrue(".focusable()" in handle, "a task cannot take the keyboard")
+        assertTrue("Key.Spacebar" in handle, "Space does not open a task's menu")
+        assertTrue("Key.Enter" in handle, "Enter does not open a task's menu")
+        assertTrue("role = Role.Button" in handle, "a task does not say it is something to press")
+        assertTrue("controller.openTaskMenu(" in handle, "pressing a task does nothing")
+        // A ring rather than a wash: the colour underneath is the information.
+        assertTrue("style = Stroke(" in handle, "hovering a task covers the colour it is telling the user about")
     }
 
     @Test
@@ -299,8 +305,8 @@ class GameTableLayoutTest {
 
     @Test
     fun `unsaved words are not offered as a task`() {
-        val actions = source.substringAfter("private fun CellEditorActions(").substringBefore("private fun TaskComposerPanel(")
-        assertTrue("enabled = !editor.hasChanges" in actions, "a draft can be cut at offsets into stored text")
+        val actions = source.substringAfter("private fun CellEditorActions(").substringBefore("/**\n * Naming the colour")
+        assertTrue("enabled = !editor.hasUnsavedChanges" in actions, "a draft can be cut at offsets into stored text")
         assertTrue("Strings.CellTask.saveTextFirst" in actions, "nothing says why the offer is unavailable")
     }
 
@@ -380,5 +386,109 @@ class GameTableLayoutTest {
         listOf("Çoklu", "multiTask", "multiColor", "creationMode").forEach { later ->
             assertTrue(later !in source, "the table draws a $later control that does nothing")
         }
+    }
+
+    // ------------------------------------- the menu anchored to a task
+
+    @Test
+    fun `the popover hangs off the task's own position`() {
+        // PLAN 12.5 opens it over the word. Anything remembering a coordinate
+        // would be pointing at whatever was there after a scroll.
+        val handle = source.substringAfter("private fun TaskHandle(").substringBefore("private fun CellEditorSlot(")
+        assertTrue("TaskPopover(" in handle, "the popover is not hung off the task")
+        val popover = source.substringAfter("private fun TaskPopover(").substringBefore("private fun TaskMenuActions(")
+        assertTrue("AnchoredAboveWord(" in popover, "the popover does not place itself against the word")
+        assertTrue("Popup(" in popover, "the popover is not a popup at all")
+        assertTrue("Key.Escape" in popover, "Escape does not close the popover")
+        assertTrue("controller.closeInnermost()" in popover, "Escape closes more than the innermost surface")
+        // Handled for the whole popover, not for one field in it: handling it
+        // deeper left Ctrl+Enter dead in exactly the field the user ends in.
+        assertTrue("event.isCtrlPressed" in popover, "Ctrl+Enter does nothing in the popover")
+        assertTrue("controller.saveTaskEdit()" in popover, "Ctrl+Enter does not save an open panel")
+        assertTrue("controller.confirmConvertToText()" in popover, "Ctrl+Enter does not answer an open question")
+    }
+
+    @Test
+    fun `the bounds a popover is placed against come from the real layout`() {
+        val cellSlot = source.substringAfter("private fun CellSlot(").substringBefore("private fun TaskHandle(")
+        assertTrue("onTextLayout = { layout = it }" in cellSlot, "the cell never learns where it laid its text")
+        assertTrue("boxOfRange(" in cellSlot, "a task's box is not taken from the layout")
+        assertTrue(
+            Regex("""IntOffset\(\s*\d+\s*,""").find(source) == null,
+            "a fixed screen coordinate is used to place something",
+        )
+    }
+
+    @Test
+    fun `clicking away does not throw away something typed`() {
+        val popover = source.substringAfter("private fun TaskPopover(").substringBefore("private fun TaskMenuActions(")
+        assertTrue("hasUnsavedChanges != true" in popover, "clicking away can lose what was typed")
+    }
+
+    @Test
+    fun `the menu offers what this step really has and nothing dead`() {
+        // PLAN 12.5 also lists a shortage action; PLAN 18 gives shortages to a
+        // later slice, so it is absent rather than present and dead.
+        val menu = source.substringAfter("private fun TaskMenuActions(").substringBefore("private fun TaskEditPanel(")
+        assertTrue("Strings.TaskMenu.edit" in menu, "there is no way to edit a task")
+        assertTrue("Strings.TaskMenu.convertToText" in menu, "there is no way to turn a task back into text")
+        assertTrue("enabled = false" !in menu, "the menu carries a button that cannot do anything")
+        listOf("eksik", "Eksik", "shortage", "Shortage", "missingPart").forEach { later ->
+            assertTrue(later !in menu, "the menu offers a $later action this step does not have")
+        }
+    }
+
+    @Test
+    fun `there is no completion tick on a task yet`() {
+        // PLAN 12.5 gives a task one; PLAN 18 gives finishing to a later slice.
+        listOf("Checkbox", "TriStateCheckbox", "onComplete(", "markCompleted(", "completeTask").forEach { later ->
+            assertTrue(later !in source, "the table draws a $later that this step does not have")
+        }
+    }
+
+    // ------------------------------------------------- changing a task
+
+    @Test
+    fun `the edit panel asks for everything the task is, together`() {
+        val panel = source.substringAfter("private fun TaskEditPanel(").substringBefore("/**\n * Asking whether a task")
+        assertTrue("Strings.TaskEdit.nameLabel" in panel, "the name cannot be changed")
+        assertTrue("ColorList(" in panel, "the colour cannot be changed")
+        assertTrue("Strings.CellTask.quantityLabel" in panel, "the total cannot be changed")
+        assertTrue("Strings.CellTask.notesLabel" in panel, "the note cannot be changed")
+        assertTrue("controller.saveTaskEdit()" in panel, "nothing saves the panel")
+    }
+
+    @Test
+    fun `a task with several colours is shown rather than reduced to one`() {
+        val panel = source.substringAfter("private fun TaskEditPanel(").substringBefore("/**\n * Asking whether a task")
+        assertTrue("editor.holdsSeveralColors" in panel, "a several-colour task is offered one colour box")
+        assertTrue("Strings.TaskEdit.severalColors" in panel, "nothing says why the colours cannot be changed")
+    }
+
+    @Test
+    fun `turning a task into text is asked about first, in words`() {
+        val confirm = source.substringAfter("private fun ConvertConfirmation(").substringBefore("/** The tracking modes")
+        assertTrue("Strings.TaskConvert.body" in confirm, "the question does not say what happens to the word")
+        assertTrue("work.hasProgress" in confirm, "the question does not say when there is a history to lose")
+        assertTrue("Strings.TaskConvert.historyWarning" in confirm, "the history is not mentioned")
+        assertTrue("Strings.TaskConvert.irreversible" in confirm, "the question does not say it is final")
+        assertTrue("controller.confirmConvertToText()" in confirm, "agreeing does nothing")
+    }
+
+    // ------------------------------------------- the editor and its tasks
+
+    @Test
+    fun `the editor paints the tasks without changing a character`() {
+        val painting = source.substringAfter("private class TaskPainting(").substringBefore("/**\n * The two things")
+        assertTrue("OffsetMapping.Identity" in painting, "the editor's offsets can drift from the document")
+        val editor = source.substringAfter("private fun CellEditorSlot(").substringBefore("private class TaskPainting(")
+        assertTrue("visualTransformation = painted" in editor, "the tasks are not painted while the cell is written in")
+        assertTrue("withCounts = false" in editor, "the count is drawn into the text being edited")
+    }
+
+    @Test
+    fun `a refused keystroke is said in words rather than by nothing happening`() {
+        val actions = source.substringAfter("private fun CellEditorActions(").substringBefore("/**\n * Naming the colour")
+        assertTrue("editor.refusal" in actions, "a refused change says nothing at all")
     }
 }

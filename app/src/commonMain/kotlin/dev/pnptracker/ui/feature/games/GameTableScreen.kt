@@ -1,10 +1,15 @@
 package dev.pnptracker.ui.feature.games
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -24,6 +30,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -32,6 +39,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -44,30 +52,50 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusEvent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import dev.pnptracker.domain.colors.ColorSummary
 import dev.pnptracker.domain.games.CellPreview
 import dev.pnptracker.domain.games.CellSegmentPreview
@@ -76,6 +104,10 @@ import dev.pnptracker.domain.games.GameSetupFailure
 import dev.pnptracker.domain.games.GameTableRow
 import dev.pnptracker.domain.games.GameTableView
 import dev.pnptracker.domain.model.CellColumnType
+import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.tasks.TaskEditFailure
 import dev.pnptracker.domain.tasks.TaskFromTextFailure
 import dev.pnptracker.domain.tasks.trackingModesOf
 import dev.pnptracker.ui.Strings
@@ -84,6 +116,7 @@ import dev.pnptracker.ui.feature.importworkspace.labelOf
 import dev.pnptracker.ui.theme.PnpStatus
 import dev.pnptracker.ui.theme.opaqueColorOf
 import dev.pnptracker.ui.theme.readableInkOn
+import dev.pnptracker.ui.theme.visibleEdgeOn
 import dev.pnptracker.ui.viewNameOf
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -425,17 +458,20 @@ private fun TableRow(
         GameNameCell(row = row, stateText = stateText)
         CellColumnType.entries.forEach { columnType ->
             val cell = row.cell(columnType)
-            val openHere = state.editor?.takeIf { it.isOn(row.gameId, columnType) }
-            if (openHere == null) {
+            val writing = state.writingIn(row.gameId, columnType)
+            if (writing == null) {
                 CellSlot(
                     cell = cell,
+                    gameId = row.gameId,
+                    state = state,
+                    controller = controller,
                     onEdit = { controller.beginEditing(row.gameId, columnType) },
                 )
             } else {
                 CellEditorSlot(
                     cell = cell,
-                    editor = openHere,
-                    composer = state.taskComposer,
+                    editor = writing,
+                    composer = (state.work as? CellWork.MakingTask)?.composer,
                     colors = controller.colorsOffered(),
                     focusRecall = state.focusRecall,
                     controller = controller,
@@ -484,26 +520,158 @@ private fun GameNameCell(
 }
 
 /**
+ * How a task is drawn wherever it appears: its own colour, with an edge.
+ *
+ * The edge is what makes the colour visible at all when it happens to match the
+ * theme's ground — white on a light surface, black on a dark one. Without it
+ * such a task shows no colour, so the one thing meant to tell the user which
+ * filament it is tells them nothing. PLAN 12.7 asks for an automatic contrast
+ * frame in exactly this case; drawing one is honest where repainting the colour
+ * would not be.
+ */
+private data class TaskPaint(
+    val fill: Color,
+    val ink: Color,
+    val edge: Color,
+)
+
+@Composable
+private fun paintOf(segment: CellSegmentPreview): TaskPaint {
+    val fill = segment.colors.firstOrNull()?.let { opaqueColorOf(it.hex) }
+    return if (fill == null) {
+        // PLAN 5.10 allows a task no colour at all; it is drawn as the theme's
+        // own ground so it still reads as a task rather than as plain words.
+        TaskPaint(
+            fill = MaterialTheme.colorScheme.surfaceVariant,
+            ink = MaterialTheme.colorScheme.onSurfaceVariant,
+            edge = MaterialTheme.colorScheme.outline,
+        )
+    } else {
+        TaskPaint(fill = fill, ink = readableInkOn(fill), edge = visibleEdgeOn(fill))
+    }
+}
+
+/** Where one task's word sits in the string that is actually drawn. */
+private data class DrawnTask(
+    val segment: CellSegmentPreview,
+    val start: Int,
+    val end: Int,
+)
+
+/** The document as it is drawn, and where each task's word ended up in it. */
+private data class DrawnDocument(
+    val text: AnnotatedString,
+    val tasks: List<DrawnTask>,
+)
+
+/**
+ * Lays out a cell's document for drawing.
+ *
+ * The characters are the document's own, in order, with nothing between them:
+ * PLAN 5.5 makes the document the pieces themselves, so a separator invented
+ * here would be a character the user never typed. What is added is only ever
+ * around a task and never inside it — the count beside it, and the space before
+ * that count — and [withCounts] is off wherever the drawn string has to line up
+ * with the document character for character, as it does in an editor.
+ */
+@Composable
+private fun drawnDocumentOf(
+    cell: CellPreview,
+    withCounts: Boolean,
+): DrawnDocument {
+    val metadata = MaterialTheme.colorScheme.onSurfaceVariant
+    val paints = cell.segments.map { if (it.isTask) paintOf(it) else null }
+    val marks =
+        cell.segments.map { segment ->
+            segment.requiredQuantity
+                ?.takeIf { segment.isTask && withCounts }
+                ?.let { stringResource(Strings.CellTask.quantityMark, it) }
+        }
+    val tasks = mutableListOf<DrawnTask>()
+    val text =
+        buildAnnotatedString {
+            cell.segments.forEachIndexed { index, segment ->
+                if (!segment.isTask) {
+                    append(segment.text)
+                    return@forEachIndexed
+                }
+                // Two tasks with nothing written between them would otherwise
+                // run into one another. This gap sits between two things that
+                // are drawn, never between two pieces of the document, so it
+                // says nothing about the text — and it is left out entirely
+                // where the drawn string has to match the document exactly.
+                if (withCounts && cell.segments.getOrNull(index - 1)?.isTask == true) {
+                    withStyle(SpanStyle(color = metadata)) { append(QUANTITY_GAP) }
+                }
+                val paint = requireNotNull(paints[index])
+                val start = length
+                withStyle(
+                    SpanStyle(
+                        background = paint.fill,
+                        color = paint.ink,
+                        fontWeight = FontWeight.Medium,
+                        // PLAN 5.6 leaves a finished task in its cell, struck through.
+                        textDecoration = if (segment.isCompletedTask) TextDecoration.LineThrough else null,
+                    ),
+                ) {
+                    append(segment.text)
+                }
+                tasks += DrawnTask(segment = segment, start = start, end = length)
+                marks[index]?.let { mark ->
+                    withStyle(SpanStyle(color = metadata)) {
+                        append(QUANTITY_GAP)
+                        append(mark)
+                    }
+                }
+            }
+        }
+    return DrawnDocument(text = text, tasks = tasks)
+}
+
+/** Draws the contrast edge around every task the layout actually placed. */
+private fun DrawScope.drawTaskEdges(
+    layout: TextLayoutResult,
+    tasks: List<DrawnTask>,
+    paints: List<TaskPaint>,
+    corner: Float,
+    stroke: Float,
+) {
+    tasks.forEachIndexed { index, task ->
+        val box = layout.boxOfRange(task.start, task.end) ?: return@forEachIndexed
+        drawRoundRect(
+            color = paints[index].edge,
+            topLeft = Offset(box.left, box.top),
+            size = Size(box.width, box.height),
+            cornerRadius = CornerRadius(corner, corner),
+            style = Stroke(width = stroke),
+        )
+    }
+}
+
+/**
  * One cell of one row, as it reads when nobody is writing in it.
  *
- * The pieces are laid end to end in the order they sit in the cell, with
- * nothing between them: PLAN 5.5 makes the document the pieces themselves, so a
- * separator added here would be a character the user never typed. A task is
- * painted in the colour it will be made in and carries its count beside it,
- * which is what PLAN 12.5 shows of one.
+ * The pieces are laid end to end in the order they sit in the cell, with nothing
+ * between them. A task is painted in the colour it will be made in, edged so the
+ * colour is visible whatever it is, and carries its count beside it — which is
+ * what PLAN 12.5 shows of one.
  *
- * One click takes the keyboard, a double click opens the editor, and Enter or F2
- * open it from the keyboard. A cell holding a task opens nothing and says why —
- * flattening it would cost the task its colours, its stages and its history.
+ * A task is a thing to press: it takes the pointer's hand cursor, it takes the
+ * keyboard, and Enter or Space opens its menu over the word. The plain text
+ * around it is not — a double click there opens the editor, and Enter or F2 open
+ * it from the keyboard.
  */
 @Composable
 private fun CellSlot(
     cell: CellPreview,
+    gameId: EntityId,
+    state: GameTableScreenState,
+    controller: GameTableController,
     onEdit: () -> Unit,
 ) {
     val columnName = stringResource(columnNameOf(cell.columnType))
-    val content = cellContentOf(cell)
-    val editable = cell.editableText != null
+    val drawn = drawnDocumentOf(cell, withCounts = true)
+    val paints = drawn.tasks.map { paintOf(it.segment) }
     val editLabel = stringResource(Strings.Cell.editAction, columnName)
     val description =
         if (cell.isEmpty) {
@@ -512,6 +680,10 @@ private fun CellSlot(
             stringResource(Strings.Table.cellDescription, columnName, spokenContentOf(cell))
         }
     var focused by remember { mutableStateOf(false) }
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val edgeCorner = with(LocalDensity.current) { 3.dp.toPx() }
+    val edgeStroke = with(LocalDensity.current) { 1.dp.toPx() }
+
     Column(
         modifier =
             Modifier
@@ -521,7 +693,6 @@ private fun CellSlot(
                 .onFocusEvent { focused = it.isFocused }
                 .focusable()
                 .combinedClickable(
-                    enabled = editable,
                     onClickLabel = editLabel,
                     // A single click only takes the focus; the double click is
                     // what opens the editor, so passing over a cell on the way
@@ -529,7 +700,7 @@ private fun CellSlot(
                     onClick = {},
                     onDoubleClick = onEdit,
                 ).onPreviewKeyEvent { event ->
-                    if (!editable || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when (event.key) {
                         Key.Enter, Key.NumPadEnter, Key.F2 -> {
                             onEdit()
@@ -549,19 +720,44 @@ private fun CellSlot(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
-            // Long content is cut with an ellipsis rather than allowed to make
-            // one row as tall as a screen; the cut itself is what tells the user
-            // there is more in the cell than the table is showing.
-            Text(
-                text = content,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = CELL_PREVIEW_LINES,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Box {
+                Text(
+                    text = drawn.text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = CELL_PREVIEW_LINES,
+                    overflow = TextOverflow.Ellipsis,
+                    onTextLayout = { layout = it },
+                    modifier =
+                        Modifier.drawBehind {
+                            layout?.let { drawTaskEdges(it, drawn.tasks, paints, edgeCorner, edgeStroke) }
+                        },
+                )
+                // One handle per task, sitting exactly where its word was laid
+                // out. The bounds are the layout's own, so a handle follows its
+                // word when the column scrolls, the window resizes or the text
+                // around it changes — nothing here remembers a coordinate.
+                layout?.let { placed ->
+                    drawn.tasks.forEach { task ->
+                        placed.boxOfRange(task.start, task.end)?.let { box ->
+                            TaskHandle(
+                                task = task.segment,
+                                bounds = box,
+                                gameId = gameId,
+                                columnType = cell.columnType,
+                                state = state,
+                                controller = controller,
+                            )
+                        }
+                    }
+                }
+            }
             // A note broken into lines is cut at a line ending, where an
             // ellipsis has nowhere to appear, so the cut is said in words
             // instead. Without it a five line cell looks like a three line one.
-            if (content.text.lineSequence().count() > CELL_PREVIEW_LINES) {
+            if (drawn.text.text
+                    .lineSequence()
+                    .count() > CELL_PREVIEW_LINES
+            ) {
                 Text(
                     text = stringResource(Strings.Table.cellMore),
                     style = MaterialTheme.typography.labelSmall,
@@ -569,79 +765,645 @@ private fun CellSlot(
                 )
             }
         }
-        if (!editable) {
-            // Said in words, in the cell, and on a line of its own: drawn over
-            // the content it would make both of them unreadable.
-            Text(
-                text = stringResource(Strings.Cell.lockedByTasks),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+    }
+}
+
+/**
+ * The part of a cell that is one task: what it responds to, and what opens on it.
+ *
+ * Laid over the word rather than replacing it, so the text keeps flowing and
+ * wrapping as text and the row does not grow. What it adds is everything a task
+ * needs to be a control — the hand cursor, a focus ring, Enter and Space, an
+ * accessible name and role — and the popover, which hangs off this and therefore
+ * off the word's own position.
+ */
+@Composable
+private fun TaskHandle(
+    task: CellSegmentPreview,
+    bounds: Rect,
+    gameId: EntityId,
+    columnType: CellColumnType,
+    state: GameTableScreenState,
+    controller: GameTableController,
+) {
+    val taskId = task.taskId ?: return
+    val density = LocalDensity.current
+    val menu = state.menuIn(gameId, columnType)?.takeIf { it.taskId == taskId }
+    val spoken = spokenTaskOf(task)
+    val openLabel = stringResource(Strings.TaskMenu.open, task.text)
+    var focused by remember { mutableStateOf(false) }
+    val interactions = remember { MutableInteractionSource() }
+    val hovered by interactions.collectIsHoveredAsState()
+    // Both rings are the theme's own accent rather than something derived from
+    // the task: it has to stand out from the colour underneath, and that colour
+    // is anything at all — including the outline colour itself.
+    val focusRing = MaterialTheme.colorScheme.primary
+    val hoverRing = MaterialTheme.colorScheme.primary
+
+    Box(
+        modifier =
+            with(density) {
+                Modifier
+                    .offset { IntOffset(bounds.left.toInt(), bounds.top.toInt()) }
+                    .size(bounds.width.toDp(), bounds.height.toDp())
+            }.hoverable(interactions)
+                .pointerHoverIcon(PointerIcon.Hand)
+                .onFocusEvent { focused = it.isFocused }
+                .focusable()
+                .clickable(onClickLabel = openLabel) { controller.openTaskMenu(gameId, columnType, taskId) }
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (event.key) {
+                        Key.Enter, Key.NumPadEnter, Key.Spacebar -> {
+                            controller.openTaskMenu(gameId, columnType, taskId)
+                            true
+                        }
+
+                        else -> false
+                    }
+                }.drawBehind {
+                    // A ring rather than a wash: the colour underneath is the
+                    // information, and covering it to say "you are over this"
+                    // would trade the answer for the pointer.
+                    if (focused || hovered) {
+                        drawRoundRect(
+                            color = if (focused) focusRing else hoverRing,
+                            cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()),
+                            style = Stroke(width = if (focused) 2.dp.toPx() else 1.5.dp.toPx()),
+                        )
+                    }
+                }.semantics {
+                    contentDescription = spoken
+                    role = Role.Button
+                },
+    ) {
+        if (menu != null) {
+            TaskPopover(menu = menu, state = state, controller = controller)
+        }
+    }
+}
+
+/**
+ * The cell being written in, in its own place in the table.
+ *
+ * Inside the cell's own bounds rather than in a dialog: PLAN 12.5 keeps editing
+ * where the content is, and a panel over the middle of the window would hide the
+ * row being worked on. Enter puts in a line break because the text is a note and
+ * notes have lines; Ctrl+Enter saves and Escape gives up.
+ *
+ * The tasks are in the text and are not the user's to type over. Every change is
+ * planned before it is taken: a backspace at the edge of a task, a selection
+ * that swallowed one, a paste over the top of one are all refused, and the draft
+ * is left exactly as it was — so a task never appears to be eaten and put back.
+ * The refusal is said in words rather than by nothing happening.
+ *
+ * A refused save leaves everything standing — the editor, the words, and a line
+ * saying what happened — because the alternative is discarding writing the user
+ * has not agreed to lose.
+ */
+@Composable
+private fun CellEditorSlot(
+    cell: CellPreview,
+    editor: CellWork.WritingText,
+    composer: TaskComposer?,
+    colors: List<ColorSummary>,
+    focusRecall: Int,
+    controller: GameTableController,
+) {
+    val scope = rememberCoroutineScope()
+    val focus = remember { FocusRequester() }
+    // The selection is the field's own, so double clicking a word and dragging
+    // across several both work the way they do in any other text box.
+    var field by
+        remember(editor.gameId, editor.columnType) {
+            mutableStateOf(TextFieldValue(editor.draft, TextRange(editor.draft.length)))
+        }
+    // A refused keystroke never reaches the draft, so the field is put back to
+    // what the draft still says rather than being left showing a change that
+    // was not taken.
+    if (field.text != editor.draft) {
+        field = field.copy(text = editor.draft, selection = TextRange(editor.draft.length.coerceAtMost(field.selection.end)))
+    }
+    // The keyboard comes back here whenever a panel closes or an action was
+    // refused, so Escape reaches this cell rather than whatever was clicked.
+    LaunchedEffect(editor.gameId, editor.columnType, focusRecall, composer == null) {
+        if (composer == null) focus.requestFocus()
+    }
+    val columnName = stringResource(columnNameOf(cell.columnType))
+    val save = { if (!editor.isSaving) scope.launch { controller.saveEditing() } }
+    val saveTask = { if (composer?.canSave == true) scope.launch { controller.saveTask() } }
+    val drawn = drawnDocumentOf(cell, withCounts = false)
+    val paints = drawn.tasks.map { paintOf(it.segment) }
+    val painted = remember(drawn.text) { TaskPainting(drawn.text) }
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val edgeCorner = with(LocalDensity.current) { 3.dp.toPx() }
+    val edgeStroke = with(LocalDensity.current) { 1.dp.toPx() }
+
+    Column(
+        modifier =
+            Modifier
+                .width(CellColumnWidth)
+                .heightIn(min = 64.dp)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .cellBorder(focused = true)
+                .padding(horizontal = 6.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = columnName,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        // A basic field rather than an outlined one, because this is the only
+        // kind that reports where it laid its text out — and that is what the
+        // edges around the tasks, and everything anchored to a task, are drawn
+        // from. The frame it would have brought is drawn here instead.
+        BasicTextField(
+            value = field,
+            onValueChange = {
+                field = it
+                controller.editCellText(it.text)
+            },
+            enabled = !editor.isSaving,
+            // Held still while a task panel is open: the panel carries offsets
+            // into the text as it stands, and a keystroke would move the words
+            // out from under the selection the user made.
+            readOnly = composer != null,
+            // A note has lines, so Enter makes one. Nothing here parses what is
+            // typed or pasted: the text is stored as the user left it.
+            singleLine = false,
+            minLines = 2,
+            maxLines = EDITOR_LINES,
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            // The tasks keep their colours while the text around them is typed,
+            // so the user can see what they may not touch. The transformation
+            // adds no characters, so every offset still means what it meant.
+            visualTransformation = painted,
+            onTextLayout = { layout = it },
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface, ComposerShape)
+                    .border(1.dp, MaterialTheme.colorScheme.outline, ComposerShape)
+                    .padding(horizontal = 6.dp, vertical = 4.dp)
+                    .focusRequester(focus)
+                    .drawBehind {
+                        layout?.let { drawTaskEdges(it, drawn.tasks, paints, edgeCorner, edgeStroke) }
+                    }.onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        when {
+                            event.key == Key.Escape -> {
+                                // With a panel open, giving up means giving up on
+                                // the task; the cell and its words stay.
+                                if (composer != null) controller.cancelTaskComposer() else controller.cancelEditing()
+                                true
+                            }
+
+                            event.isCtrlPressed && (event.key == Key.Enter || event.key == Key.NumPadEnter) -> {
+                                if (composer != null) saveTask() else save()
+                                true
+                            }
+
+                            else -> false
+                        }
+                    },
+        )
+
+        if (composer == null) {
+            CellEditorActions(editor = editor, field = field, controller = controller, onSave = { save() })
+        } else {
+            TaskComposerPanel(
+                composer = composer,
+                colors = colors,
+                focusRecall = focusRecall,
+                controller = controller,
+                onSave = { saveTask() },
             )
         }
     }
 }
 
 /**
- * What a cell reads as, with its tasks painted.
+ * Keeps the tasks painted inside a text field without changing a character.
  *
- * The text of the cell is exactly its pieces in order, with nothing added
- * between them. What *is* added is around a task and never inside the document:
- * the ground it is painted on comes from the colour the user chose for it, and
- * the count beside it comes from the task's own required quantity. Neither is a
- * character anybody typed, and neither is ever written back — PLAN 12.5 shows
- * `×15` beside a task, and PLAN 5.5 keeps the document to the pieces themselves.
+ * The styles are the ones the document was drawn with and the offsets are left
+ * alone, so the caret, the selection and every offset the editor reasons about
+ * still mean exactly what they meant. A transformation that added or removed
+ * characters would put all three quietly out of step.
+ */
+private class TaskPainting(
+    private val painted: AnnotatedString,
+) : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText =
+        if (text.text == painted.text) {
+            TransformedText(painted, OffsetMapping.Identity)
+        } else {
+            // Mid-keystroke the field can be a character ahead of the document
+            // the styles were built from. Plain text for one frame is right;
+            // painting at stale offsets would colour the wrong letters.
+            TransformedText(text, OffsetMapping.Identity)
+        }
+}
+
+/**
+ * The two things a cell editor can do, and the offer to make a task.
  *
- * The ink is chosen against the ground rather than fixed, because the ground is
- * a colour the user picked for filament and not for legibility; PLAN 17 asks for
- * text that can still be read.
- *
- * A task with no colour is drawn on the theme's own ground rather than on
- * nothing. That is a state PLAN 5.10 allows and this step never creates, but a
- * later colour deletion can put a task into it.
+ * The offer appears only once there is really something selected, and only when
+ * that selection is a stretch of plain text: PLAN 12.6 has the user pick a word
+ * and convert it, and a selection that swallowed a task is not a name.
  */
 @Composable
-private fun cellContentOf(cell: CellPreview): AnnotatedString {
-    val metadata = MaterialTheme.colorScheme.onSurfaceVariant
-    val colourlessGround = MaterialTheme.colorScheme.surfaceVariant
-    val colourlessInk = MaterialTheme.colorScheme.onSurfaceVariant
-    val marks =
-        cell.segments.map { segment ->
-            segment.requiredQuantity
-                ?.takeIf { segment.isTask }
-                ?.let { stringResource(Strings.CellTask.quantityMark, it) }
+private fun CellEditorActions(
+    editor: CellWork.WritingText,
+    field: TextFieldValue,
+    controller: GameTableController,
+    onSave: () -> Unit,
+) {
+    val hasSelection = !field.selection.collapsed
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        val saveLabel = stringResource(Strings.Cell.save)
+        val discardLabel = stringResource(Strings.Cell.discard)
+        Button(
+            onClick = onSave,
+            enabled = !editor.isSaving,
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+            modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = saveLabel },
+        ) {
+            Text(text = saveLabel, style = MaterialTheme.typography.labelMedium)
         }
-    return buildAnnotatedString {
-        cell.segments.forEachIndexed { index, segment ->
-            if (!segment.isTask) {
-                append(segment.text)
-                return@forEachIndexed
-            }
-            // Two tasks with nothing written between them would otherwise run
-            // into one another, the count of the first touching the name of the
-            // second. This gap sits between two things that are drawn rather
-            // than between two pieces of the document, so it says nothing about
-            // the text and is never stored.
-            if (cell.segments.getOrNull(index - 1)?.isTask == true) {
-                withStyle(SpanStyle(color = metadata)) { append(QUANTITY_GAP) }
-            }
-            val ground = segment.colors.firstOrNull()?.let { opaqueColorOf(it.hex) }
-            withStyle(
-                SpanStyle(
-                    background = ground ?: colourlessGround,
-                    color = ground?.let(::readableInkOn) ?: colourlessInk,
-                    fontWeight = FontWeight.Medium,
-                    // PLAN 5.6 leaves a finished task in its cell, struck through.
-                    textDecoration = if (segment.isCompletedTask) TextDecoration.LineThrough else null,
-                ),
+        TextButton(
+            onClick = controller::cancelEditing,
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+            modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = discardLabel },
+        ) {
+            Text(text = discardLabel, style = MaterialTheme.typography.labelMedium)
+        }
+    }
+    if (hasSelection && !editor.isSaving) {
+        val createLabel = stringResource(Strings.CellTask.create)
+        TextButton(
+            onClick = { controller.beginTaskComposer(field.selection.min, field.selection.max) },
+            enabled = !editor.hasUnsavedChanges,
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+            modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = createLabel },
+        ) {
+            Text(text = createLabel, style = MaterialTheme.typography.labelMedium)
+        }
+    }
+    val note =
+        when {
+            editor.isSaving -> Strings.Cell.saving
+            editor.failure != null -> messageOf(editor.failure)
+            editor.refusal != null -> messageOf(editor.refusal)
+            editor.selectionFailure != null -> messageOf(editor.selectionFailure)
+            hasSelection && editor.hasUnsavedChanges -> Strings.CellTask.saveTextFirst
+            hasSelection -> Strings.CellTask.selectHint
+            else -> Strings.Cell.editorHint
+        }
+    val isProblem =
+        editor.failure != null ||
+            editor.refusal != null ||
+            editor.selectionFailure != null ||
+            (hasSelection && editor.hasUnsavedChanges)
+    NoteLine(text = stringResource(note), isProblem = isProblem)
+}
+
+/** How far a popover sits from the word it belongs to. */
+private val PopoverGap = 4.dp
+
+/** How wide a popover is allowed to be; narrow enough to stay a popover. */
+private val PopoverWidth = 260.dp
+
+/**
+ * The small panel over one task's word.
+ *
+ * PLAN 12.5 opens it immediately above the word and PLAN 17 will not have it
+ * cover the screen. It hangs off the handle laid over the word, so its anchor is
+ * the word's real position: scrolling the table sideways or down moves both
+ * together, and there is no remembered coordinate to go stale.
+ *
+ * What is inside it depends on how far in the user has gone — the menu, the
+ * panel that changes the task, or the question that has to be answered before a
+ * task becomes text again. Escape closes one of those at a time.
+ */
+@Composable
+private fun TaskPopover(
+    menu: CellWork.TaskMenu,
+    state: GameTableScreenState,
+    controller: GameTableController,
+) {
+    val gap = with(LocalDensity.current) { PopoverGap.roundToPx() }
+    val provider = remember(gap) { AnchoredAboveWord(gap) }
+    val focus = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(state.work, state.focusRecall) { focus.requestFocus() }
+    // Caught for the whole popover rather than for one field in it: the user may
+    // be anywhere inside when they finish, and handling it deeper left Ctrl+Enter
+    // dead in exactly the field they end up in.
+    val confirm = {
+        when (val work = state.work) {
+            is CellWork.EditingTask -> if (work.editor.canSave) scope.launch { controller.saveTaskEdit() } else Unit
+            is CellWork.ConfirmingConvert -> if (!work.isSaving) scope.launch { controller.confirmConvertToText() } else Unit
+            else -> Unit
+        }
+    }
+
+    Popup(
+        popupPositionProvider = provider,
+        onDismissRequest = {
+            // Clicking away closes the menu, which holds nothing; it will not
+            // close a panel with something typed in it.
+            if (state.work?.hasUnsavedChanges != true) controller.closeInnermost()
+        },
+        properties = PopupProperties(focusable = true),
+    ) {
+        Surface(
+            shape = ComposerShape,
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            modifier =
+                Modifier
+                    .widthIn(max = PopoverWidth)
+                    .focusRequester(focus)
+                    .focusable()
+                    .onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        when {
+                            event.key == Key.Escape -> {
+                                controller.closeInnermost()
+                                true
+                            }
+
+                            event.isCtrlPressed && (event.key == Key.Enter || event.key == Key.NumPadEnter) -> {
+                                confirm()
+                                true
+                            }
+
+                            else -> false
+                        }
+                    },
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                append(segment.text)
-            }
-            marks[index]?.let { mark ->
-                withStyle(SpanStyle(color = metadata)) {
-                    append(QUANTITY_GAP)
-                    append(mark)
+                when (val work = state.work) {
+                    is CellWork.EditingTask -> TaskEditPanel(work.editor, controller.colorsOffered(), controller)
+                    is CellWork.ConfirmingConvert -> ConvertConfirmation(work, controller)
+                    else -> TaskMenuActions(menu, controller)
                 }
             }
+        }
+    }
+}
+
+/**
+ * What can be done to a task, in the menu over its own word.
+ *
+ * Only the actions this step really has. PLAN 12.5 also lists `Eksik parça`, and
+ * PLAN 18 gives shortages to a later slice — so it is absent rather than present
+ * and dead. A button that looks like it works and does not is worse than one
+ * that is not there yet.
+ */
+@Composable
+private fun TaskMenuActions(
+    menu: CellWork.TaskMenu,
+    controller: GameTableController,
+) {
+    Text(
+        text = menu.name,
+        style = MaterialTheme.typography.labelLarge,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+    val edit = stringResource(Strings.TaskMenu.edit)
+    val convert = stringResource(Strings.TaskMenu.convertToText)
+    TextButton(
+        onClick = controller::beginTaskEdit,
+        modifier = Modifier.fillMaxWidth().focusOutline(ComposerShape).semantics { contentDescription = edit },
+    ) {
+        Text(text = edit, style = MaterialTheme.typography.labelMedium)
+    }
+    TextButton(
+        onClick = controller::beginConvertToText,
+        modifier = Modifier.fillMaxWidth().focusOutline(ComposerShape).semantics { contentDescription = convert },
+    ) {
+        Text(text = convert, style = MaterialTheme.typography.labelMedium)
+    }
+    NoteLine(text = stringResource(Strings.TaskMenu.hint), isProblem = false)
+}
+
+/**
+ * Changing what a task is, in the panel over its own word.
+ *
+ * Everything is saved together, because a name, a colour, a total and a note are
+ * one answer to what the task is. A task carrying more than one colour is shown
+ * and left alone: PLAN 5.10 orders those colours and PLAN 12.7 splits the name
+ * across them, and one colour box has nowhere to put that order.
+ */
+@Composable
+private fun TaskEditPanel(
+    editor: TaskEditor,
+    colors: List<ColorSummary>,
+    controller: GameTableController,
+) {
+    val scope = rememberCoroutineScope()
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(editor.taskId) { focus.requestFocus() }
+    val save = { if (editor.canSave) scope.launch { controller.saveTaskEdit() } }
+
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(text = stringResource(Strings.TaskEdit.title), style = MaterialTheme.typography.labelLarge)
+        OutlinedTextField(
+            value = editor.name,
+            onValueChange = controller::editTaskName,
+            enabled = !editor.isSaving,
+            singleLine = true,
+            isError = editor.name.isNotEmpty() && !editor.isNameUsable,
+            textStyle = MaterialTheme.typography.bodySmall,
+            label = { Text(stringResource(Strings.TaskEdit.nameLabel)) },
+            modifier = Modifier.fillMaxWidth().focusRequester(focus),
+        )
+        if (editor.name.isNotEmpty() && !editor.isNameUsable) {
+            NoteLine(text = stringResource(Strings.TaskEdit.nameInvalid), isProblem = true)
+        }
+
+        if (editor.holdsSeveralColors) {
+            // Shown rather than edited: PLAN 12.7 orders these and draws the name
+            // split across them, and this panel cannot say that.
+            NoteLine(
+                text = stringResource(Strings.TaskEdit.severalColors, editor.colorNames.joinToString(separator = ", ")),
+                isProblem = false,
+            )
+        } else {
+            OutlinedTextField(
+                value = editor.colorQuery,
+                onValueChange = controller::editTaskEditColorQuery,
+                enabled = !editor.isSaving,
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodySmall,
+                label = { Text(stringResource(Strings.CellTask.colorSearch)) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            ColorList(
+                colors = colors,
+                chosen = editor.colorId,
+                enabled = !editor.isSaving,
+                emptyQuery = editor.colorQuery.isBlank(),
+                onChoose = controller::chooseTaskEditColor,
+            )
+        }
+
+        OutlinedTextField(
+            value = editor.quantityText,
+            onValueChange = controller::editTaskEditQuantity,
+            enabled = !editor.isSaving,
+            singleLine = true,
+            isError = !editor.isQuantityUsable,
+            textStyle = MaterialTheme.typography.bodySmall,
+            label = { Text(stringResource(Strings.CellTask.quantityLabel)) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (!editor.isQuantityUsable) {
+            NoteLine(text = stringResource(Strings.CellTask.quantityInvalid), isProblem = true)
+        }
+
+        val trackingChoices = trackingChoicesFor(editor)
+        if (trackingChoices.size > 1) {
+            TrackingChoice(
+                choices = trackingChoices,
+                chosen = editor.trackingMode,
+                onChoose = controller::chooseTaskEditTracking,
+            )
+        }
+
+        OutlinedTextField(
+            value = editor.notes,
+            onValueChange = controller::editTaskEditNotes,
+            enabled = !editor.isSaving,
+            singleLine = false,
+            minLines = 1,
+            maxLines = 3,
+            textStyle = MaterialTheme.typography.bodySmall,
+            label = { Text(stringResource(Strings.CellTask.notesLabel)) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            val saveLabel = stringResource(Strings.TaskEdit.save)
+            val discardLabel = stringResource(Strings.CellTask.discard)
+            Button(
+                onClick = { save() },
+                enabled = editor.canSave,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = saveLabel },
+            ) {
+                Text(text = saveLabel, style = MaterialTheme.typography.labelMedium)
+            }
+            TextButton(
+                onClick = controller::closeInnermost,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = discardLabel },
+            ) {
+                Text(text = discardLabel, style = MaterialTheme.typography.labelMedium)
+            }
+        }
+        val note =
+            when {
+                editor.isSaving -> stringResource(Strings.TaskEdit.saving)
+                editor.failure != null -> stringResource(messageOf(editor.failure))
+                else -> stringResource(Strings.TaskEdit.hint)
+            }
+        NoteLine(text = note, isProblem = editor.failure != null)
+    }
+}
+
+/**
+ * Asking whether a task really should go back to being words.
+ *
+ * PLAN 12.8 keeps the word exactly where it is and takes everything else away,
+ * and PLAN 17 asks for that to be confirmed. So the question says all three
+ * things it costs — the colour and total stop being tracked, the history goes,
+ * and none of it comes back — and says the history part only when there is a
+ * history to lose.
+ */
+@Composable
+private fun ConvertConfirmation(
+    work: CellWork.ConfirmingConvert,
+    controller: GameTableController,
+) {
+    val scope = rememberCoroutineScope()
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(work.taskId) { focus.requestFocus() }
+
+    Text(text = stringResource(Strings.TaskConvert.title), style = MaterialTheme.typography.labelLarge)
+    Text(
+        text = stringResource(Strings.TaskConvert.body, work.name),
+        style = MaterialTheme.typography.bodySmall,
+    )
+    if (work.hasProgress) {
+        NoteLine(text = stringResource(Strings.TaskConvert.historyWarning), isProblem = true)
+    }
+    NoteLine(text = stringResource(Strings.TaskConvert.irreversible), isProblem = false)
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        val acceptLabel = stringResource(Strings.TaskConvert.accept)
+        val cancelLabel = stringResource(Strings.TaskConvert.cancel)
+        Button(
+            onClick = { if (!work.isSaving) scope.launch { controller.confirmConvertToText() } },
+            enabled = !work.isSaving,
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+            modifier =
+                Modifier
+                    .focusRequester(focus)
+                    .focusOutline(ComposerShape)
+                    .semantics { contentDescription = acceptLabel },
+        ) {
+            Text(text = acceptLabel, style = MaterialTheme.typography.labelMedium)
+        }
+        TextButton(
+            onClick = controller::closeInnermost,
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+            modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = cancelLabel },
+        ) {
+            Text(text = cancelLabel, style = MaterialTheme.typography.labelMedium)
+        }
+    }
+    work.failure?.let { NoteLine(text = stringResource(messageOf(it)), isProblem = true) }
+}
+
+/** The tracking modes this task's pool allows, in the order it lists them. */
+@Composable
+private fun trackingChoicesFor(editor: TaskEditor): List<TrackingMode> =
+    remember(editor.trackingMode) {
+        PoolType.entries
+            .firstOrNull { editor.trackingMode in trackingModesOf(it) }
+            ?.let { trackingModesOf(it) }
+            .orEmpty()
+    }
+
+@Composable
+private fun TrackingChoice(
+    choices: List<TrackingMode>,
+    chosen: TrackingMode,
+    onChoose: (TrackingMode) -> Unit,
+) {
+    Text(
+        text = stringResource(Strings.Tasks.trackingLabel),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.selectableGroup()) {
+        choices.forEach { mode ->
+            val isChosen = chosen == mode
+            val stateText =
+                stringResource(if (isChosen) Strings.Accessibility.selected else Strings.Accessibility.notSelected)
+            FilterChip(
+                selected = isChosen,
+                onClick = { onChoose(mode) },
+                label = { Text(stringResource(labelOf(mode)), style = MaterialTheme.typography.labelSmall) },
+                modifier = Modifier.focusOutline(ComposerShape).semantics { stateDescription = stateText },
+            )
         }
     }
 }
@@ -676,175 +1438,6 @@ private fun spokenTaskOf(segment: CellSegmentPreview): String {
             stringResource(Strings.CellTask.description, segment.text, colors, quantity)
         } ?: stringResource(Strings.CellTask.descriptionUnknownQuantity, segment.text, colors)
     return if (segment.isCompletedTask) said + ", " + stringResource(Strings.CellTask.completed) else said
-}
-
-/**
- * The cell being written in, in its own place in the table.
- *
- * Inside the cell's own bounds rather than in a dialog: PLAN 12.5 keeps editing
- * where the content is, and a panel over the middle of the window would hide the
- * row being worked on. Enter puts in a line break because the text is a note and
- * notes have lines; Ctrl+Enter saves and Escape gives up.
- *
- * Selecting words in the field offers to turn them into a task. The offer is
- * only made against text that is already stored: the cut is made in the
- * database, at offsets counted over what is stored, so a draft that has moved
- * ahead of it would point somewhere else entirely. Saving on the user's behalf
- * to close that gap would be an automatic save PLAN does not describe, so they
- * are asked to save first instead.
- *
- * A refused save leaves everything standing — the editor, the words, and a line
- * saying what happened — because the alternative is discarding writing the user
- * has not agreed to lose.
- */
-@Composable
-private fun CellEditorSlot(
-    cell: CellPreview,
-    editor: CellEditor,
-    composer: TaskComposer?,
-    colors: List<ColorSummary>,
-    focusRecall: Int,
-    controller: GameTableController,
-) {
-    val scope = rememberCoroutineScope()
-    val focus = remember { FocusRequester() }
-    // The selection is the field's own, so double clicking a word and dragging
-    // across several both work the way they do in any other text box.
-    var field by
-        remember(editor.gameId, editor.columnType) {
-            mutableStateOf(TextFieldValue(editor.draft, TextRange(editor.draft.length)))
-        }
-    // The keyboard comes back here whenever the panel closes or an action was
-    // refused, so Escape reaches this cell rather than whatever was clicked.
-    LaunchedEffect(editor.gameId, editor.columnType, focusRecall, composer == null) {
-        if (composer == null) focus.requestFocus()
-    }
-    val columnName = stringResource(columnNameOf(cell.columnType))
-    val save = { if (!editor.isSaving) scope.launch { controller.saveEditing() } }
-    val saveTask = { if (composer?.canSave == true) scope.launch { controller.saveTask() } }
-
-    Column(
-        modifier =
-            Modifier
-                .width(CellColumnWidth)
-                .heightIn(min = 64.dp)
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .cellBorder(focused = true)
-                .padding(horizontal = 6.dp, vertical = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        OutlinedTextField(
-            value = field,
-            onValueChange = {
-                field = it
-                controller.editCellText(it.text)
-            },
-            enabled = !editor.isSaving,
-            // Held still while the panel is open: the panel carries offsets into
-            // the text as it stands, and a keystroke would move the words out
-            // from under the selection the user made.
-            readOnly = composer != null,
-            // A note has lines, so Enter makes one. Nothing here parses what is
-            // typed or pasted: the text is stored as the user left it.
-            singleLine = false,
-            minLines = 2,
-            maxLines = EDITOR_LINES,
-            textStyle = MaterialTheme.typography.bodyMedium,
-            label = { Text(columnName) },
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focus)
-                    .onPreviewKeyEvent { event ->
-                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                        when {
-                            event.key == Key.Escape -> {
-                                // With the panel open, giving up means giving up
-                                // on the task; the cell and its words stay.
-                                if (composer != null) controller.cancelTaskComposer() else controller.cancelEditing()
-                                true
-                            }
-
-                            event.isCtrlPressed && (event.key == Key.Enter || event.key == Key.NumPadEnter) -> {
-                                if (composer != null) saveTask() else save()
-                                true
-                            }
-
-                            else -> false
-                        }
-                    },
-        )
-
-        if (composer == null) {
-            CellEditorActions(editor = editor, field = field, controller = controller, onSave = { save() })
-        } else {
-            TaskComposerPanel(
-                composer = composer,
-                colors = colors,
-                focusRecall = focusRecall,
-                controller = controller,
-                onSave = { saveTask() },
-            )
-        }
-    }
-}
-
-/**
- * The two things a cell editor can do, and the offer to make a task.
- *
- * The offer appears only once there is really something selected. PLAN 12.6 has
- * the user pick a word and then convert it, so an action standing there with
- * nothing chosen would be a button that cannot do what it says.
- */
-@Composable
-private fun CellEditorActions(
-    editor: CellEditor,
-    field: TextFieldValue,
-    controller: GameTableController,
-    onSave: () -> Unit,
-) {
-    val hasSelection = !field.selection.collapsed
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-        val saveLabel = stringResource(Strings.Cell.save)
-        val discardLabel = stringResource(Strings.Cell.discard)
-        Button(
-            onClick = onSave,
-            enabled = !editor.isSaving,
-            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-            modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = saveLabel },
-        ) {
-            Text(text = saveLabel, style = MaterialTheme.typography.labelMedium)
-        }
-        TextButton(
-            onClick = controller::cancelEditing,
-            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-            modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = discardLabel },
-        ) {
-            Text(text = discardLabel, style = MaterialTheme.typography.labelMedium)
-        }
-    }
-    if (hasSelection && !editor.isSaving) {
-        val createLabel = stringResource(Strings.CellTask.create)
-        TextButton(
-            onClick = { controller.beginTaskComposer(field.selection.min, field.selection.max) },
-            enabled = !editor.hasChanges,
-            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-            modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = createLabel },
-        ) {
-            Text(text = createLabel, style = MaterialTheme.typography.labelMedium)
-        }
-    }
-    val note =
-        when {
-            editor.isSaving -> Strings.Cell.saving
-            editor.failure != null -> messageOf(editor.failure)
-            editor.selectionFailure != null -> messageOf(editor.selectionFailure)
-            hasSelection && editor.hasChanges -> Strings.CellTask.saveTextFirst
-            hasSelection -> Strings.CellTask.selectHint
-            else -> Strings.Cell.editorHint
-        }
-    val isProblem = editor.failure != null || editor.selectionFailure != null || (hasSelection && editor.hasChanges)
-    NoteLine(text = stringResource(note), isProblem = isProblem)
 }
 
 /**
@@ -928,7 +1521,13 @@ private fun TaskComposerPanel(
             label = { Text(stringResource(Strings.CellTask.colorSearch)) },
             modifier = Modifier.fillMaxWidth().focusRequester(panelFocus),
         )
-        ColorChoices(composer = composer, colors = colors, controller = controller)
+        ColorList(
+            colors = colors,
+            chosen = composer.colorId,
+            enabled = !composer.isSaving,
+            emptyQuery = composer.colorQuery.isBlank(),
+            onChoose = controller::chooseTaskColor,
+        )
 
         OutlinedTextField(
             value = composer.quantityText,
@@ -1027,20 +1626,21 @@ private fun TaskComposerPanel(
  *
  * Every entry carries the colour's written name beside its swatch, because PLAN
  * 17 does not let a colour be the only thing carrying a meaning, and which one
- * is chosen is said in words as well as by the fill.
+ * is chosen is said in words as well as by the fill. The swatch is edged for the
+ * same reason a task is: white on a light list, or black on a dark one, would
+ * otherwise be a square nobody can see.
  */
 @Composable
-private fun ColorChoices(
-    composer: TaskComposer,
+private fun ColorList(
     colors: List<ColorSummary>,
-    controller: GameTableController,
+    chosen: EntityId?,
+    enabled: Boolean,
+    emptyQuery: Boolean,
+    onChoose: (EntityId) -> Unit,
 ) {
     if (colors.isEmpty()) {
         NoteLine(
-            text =
-                stringResource(
-                    if (composer.colorQuery.isBlank()) Strings.CellTask.colorEmpty else Strings.CellTask.colorNone,
-                ),
+            text = stringResource(if (emptyQuery) Strings.CellTask.colorEmpty else Strings.CellTask.colorNone),
             isProblem = false,
         )
         return
@@ -1054,22 +1654,19 @@ private fun ColorChoices(
                 .selectableGroup(),
     ) {
         colors.forEach { color ->
-            val chosen = composer.colorId == color.id
+            val isChosen = chosen == color.id
             val stateText =
-                stringResource(if (chosen) Strings.Accessibility.selected else Strings.Accessibility.notSelected)
+                stringResource(if (isChosen) Strings.Accessibility.selected else Strings.Accessibility.notSelected)
+            val swatch = opaqueColorOf(color.hex)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .selectable(
-                            selected = chosen,
-                            enabled = !composer.isSaving,
-                            onClick = { controller.chooseTaskColor(color.id) },
-                        ).background(
-                            if (chosen) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
-                        ).padding(horizontal = 4.dp, vertical = 3.dp)
+                        .selectable(selected = isChosen, enabled = enabled, onClick = { onChoose(color.id) })
+                        .background(if (isChosen) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                        .padding(horizontal = 4.dp, vertical = 3.dp)
                         .semantics { stateDescription = stateText },
             ) {
                 Box(
@@ -1077,8 +1674,8 @@ private fun ColorChoices(
                         Modifier
                             .size(14.dp)
                             .clip(RoundedCornerShape(3.dp))
-                            .background(opaqueColorOf(color.hex))
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(3.dp)),
+                            .background(swatch)
+                            .border(1.dp, visibleEdgeOn(swatch), RoundedCornerShape(3.dp)),
                 )
                 Text(
                     text = color.canonicalName,
@@ -1125,8 +1722,24 @@ private fun messageOf(failure: TaskFromTextFailure) =
 private fun messageOf(failure: CellTextFailure) =
     when (failure) {
         CellTextFailure.GAME_NOT_AVAILABLE -> Strings.Cell.errorGameGone
-        CellTextFailure.CELL_CONTAINS_TASKS -> Strings.Cell.errorContainsTasks
+        CellTextFailure.CELL_NOT_AVAILABLE -> Strings.Cell.errorCellGone
+        CellTextFailure.CHANGE_CROSSES_A_TASK -> Strings.Cell.errorCrossesTask
+        CellTextFailure.STALE_DOCUMENT -> Strings.Cell.errorStaleDocument
         CellTextFailure.COULD_NOT_SAVE -> Strings.Cell.errorCouldNotSave
+    }
+
+/** What to tell the user about a task that did not change. */
+private fun messageOf(failure: TaskEditFailure) =
+    when (failure) {
+        TaskEditFailure.TASK_NOT_AVAILABLE -> Strings.TaskEdit.errorTaskGone
+        TaskEditFailure.TASK_NAME_EMPTY -> Strings.TaskEdit.errorNameEmpty
+        TaskEditFailure.NAME_CONTAINS_LINE_BREAK -> Strings.TaskEdit.errorNameLineBreak
+        TaskEditFailure.COLOR_NOT_AVAILABLE -> Strings.TaskEdit.errorColorGone
+        TaskEditFailure.MULTICOLOR_EDIT_NOT_AVAILABLE -> Strings.TaskEdit.errorSeveralColors
+        TaskEditFailure.INVALID_REQUIRED_QUANTITY -> Strings.TaskEdit.errorQuantity
+        TaskEditFailure.QUANTITY_BELOW_PROGRESS -> Strings.TaskEdit.errorQuantityBelowProgress
+        TaskEditFailure.QUANTITY_LOCKED_BY_COMPLETION -> Strings.TaskEdit.errorQuantityLocked
+        TaskEditFailure.COULD_NOT_SAVE -> Strings.TaskEdit.errorCouldNotSave
     }
 
 /**

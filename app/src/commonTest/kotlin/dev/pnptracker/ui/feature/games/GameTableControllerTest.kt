@@ -5,6 +5,7 @@ import dev.pnptracker.data.repository.ColorCatalogue
 import dev.pnptracker.data.repository.GameSetup
 import dev.pnptracker.data.repository.GameTableSource
 import dev.pnptracker.data.repository.TaskCreationFromText
+import dev.pnptracker.data.repository.TaskEditing
 import dev.pnptracker.domain.colors.ColorSummary
 import dev.pnptracker.domain.games.CellPreview
 import dev.pnptracker.domain.games.CellSegmentPreview
@@ -16,11 +17,14 @@ import dev.pnptracker.domain.games.GameSetupFailure
 import dev.pnptracker.domain.games.GameSummary
 import dev.pnptracker.domain.games.GameTableRow
 import dev.pnptracker.domain.games.GameTableView
+import dev.pnptracker.domain.games.TaskColorPreview
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.tasks.CellTextSelection
+import dev.pnptracker.domain.tasks.TaskEditException
+import dev.pnptracker.domain.tasks.TaskEditFailure
 import dev.pnptracker.domain.tasks.TaskFromTextException
 import dev.pnptracker.domain.tasks.TaskFromTextFailure
 import kotlinx.coroutines.CoroutineScope
@@ -131,17 +135,68 @@ class GameTableControllerTest {
         private val failure: CellTextFailure? = null,
     ) : CellTextEditing {
         val saved = mutableListOf<Triple<EntityId, CellColumnType, String>>()
+        val expectations = mutableListOf<String>()
 
-        override suspend fun savePlainText(
+        override suspend fun saveDocumentText(
             gameId: EntityId,
             columnType: CellColumnType,
-            exactText: String,
+            expectedDocumentText: String,
+            newDocumentText: String,
         ): Boolean {
             failure?.let { throw CellTextException(it) }
-            saved += Triple(gameId, columnType, exactText)
+            expectations += expectedDocumentText
+            saved += Triple(gameId, columnType, newDocumentText)
             return true
         }
     }
+
+    /** Records how tasks were changed, and can be told to refuse. */
+    private class FakeTaskEditing(
+        private val failure: TaskEditFailure? = null,
+    ) : TaskEditing {
+        val edits = mutableListOf<EditedTask>()
+        val converted = mutableListOf<EntityId>()
+
+        override suspend fun editTask(
+            taskId: EntityId,
+            name: String,
+            colorId: EntityId?,
+            requiredQuantity: Int?,
+            notes: String?,
+            trackingMode: TrackingMode,
+        ): Boolean {
+            failure?.let { throw TaskEditException(it) }
+            edits += EditedTask(taskId, name, colorId, requiredQuantity, notes, trackingMode)
+            return true
+        }
+
+        override suspend fun convertTaskToText(taskId: EntityId): Boolean {
+            failure?.let { throw TaskEditException(it) }
+            converted += taskId
+            return true
+        }
+    }
+
+    private data class EditedTask(
+        val taskId: EntityId,
+        val name: String,
+        val colorId: EntityId?,
+        val requiredQuantity: Int?,
+        val notes: String?,
+        val trackingMode: TrackingMode,
+    )
+
+    /** The text editor open in whatever cell, whatever is layered over it. */
+    private fun GameTableController.editorState(): CellWork.WritingText? =
+        when (val open = state.work) {
+            is CellWork.WritingText -> open
+            is CellWork.MakingTask -> open.from
+            else -> null
+        }
+
+    private fun GameTableController.composerState(): TaskComposer? = (state.work as? CellWork.MakingTask)?.composer
+
+    private fun GameTableController.taskEditorState(): TaskEditor? = (state.work as? CellWork.EditingTask)?.editor
 
     /** Hands out whatever catalogue a test gives it. */
     private class FakeColors(
@@ -216,7 +271,8 @@ class GameTableControllerTest {
         cells: FakeCells = FakeCells(),
         colors: FakeColors = FakeColors(),
         taskCreation: FakeTaskCreation = FakeTaskCreation(),
-    ) = GameTableController(table, setup, cells, colors, taskCreation)
+        taskEditing: FakeTaskEditing = FakeTaskEditing(),
+    ) = GameTableController(table, setup, cells, colors, taskCreation, taskEditing)
 
     private fun visibleNames(controller: GameTableController): List<String> =
         assertIs<GameTableRowsState.Content>(controller.state.rows).rows.map { it.gameName }
@@ -505,16 +561,19 @@ class GameTableControllerTest {
 
             controller.beginEditing(row.gameId, CellColumnType.THREE_D)
 
-            val editor = assertNotNull(controller.state.editor)
+            val editor = assertNotNull(controller.editorState())
             assertEquals("40 gri", editor.draft)
             assertEquals("40 gri", editor.originalText)
-            assertFalse(editor.hasChanges)
+            assertFalse(editor.hasUnsavedChanges)
             collecting.cancelAndJoin()
         }
 
     @Test
-    fun `a cell holding a task cannot be opened as whole text`() =
+    fun `a cell holding a task opens on the whole document, tasks and all`() =
         runBlocking<Unit> {
+            // The whole-cell lock of the previous step is gone. PLAN 5.5 makes
+            // the task atomic, not the cell: the editor opens on everything and
+            // the task is protected by the change rule instead.
             val row =
                 GameTableRow(
                     gameId = IdGenerator.Random.newId(),
@@ -527,7 +586,7 @@ class GameTableControllerTest {
                                 cellId = IdGenerator.Random.newId(),
                                 segments =
                                     if (columnType == CellColumnType.THREE_D) {
-                                        listOf(taskPiece("Gri token"))
+                                        listOf(plain("Basılacak: "), taskPiece("Knight"), plain(", token"))
                                     } else {
                                         emptyList()
                                     },
@@ -540,7 +599,10 @@ class GameTableControllerTest {
 
             controller.beginEditing(row.gameId, CellColumnType.THREE_D)
 
-            assertNull(controller.state.editor, "a cell holding a task was opened for whole text editing")
+            val editor = assertNotNull(controller.editorState(), "a cell holding a task would not open")
+            assertEquals("Basılacak: Knight, token", editor.draft)
+            assertEquals("Basılacak: Knight, token", editor.originalText)
+            assertFalse(editor.hasUnsavedChanges)
             collecting.cancelAndJoin()
         }
 
@@ -555,7 +617,7 @@ class GameTableControllerTest {
 
             controller.beginEditing(row.gameId, CellColumnType.CARD)
 
-            val editor = assertNotNull(controller.state.editor)
+            val editor = assertNotNull(controller.editorState())
             assertEquals(CellColumnType.THREE_D, editor.columnType, "the open cell was swapped out")
             assertEquals("yarım kalmış", editor.draft, "a half typed note was thrown away")
             assertTrue(controller.state.blockedByEditor, "the user was not told why nothing happened")
@@ -574,7 +636,7 @@ class GameTableControllerTest {
 
             controller.cancelEditing()
 
-            assertNull(controller.state.editor)
+            assertNull(controller.editorState())
             assertEquals(emptyList(), cells.saved, "giving up reached the database")
             collecting.cancelAndJoin()
         }
@@ -593,7 +655,7 @@ class GameTableControllerTest {
             controller.saveEditing()
 
             assertEquals(listOf(Triple(row.gameId, CellColumnType.THREE_D, exact)), cells.saved)
-            assertNull(controller.state.editor, "the editor stayed open after a good save")
+            assertNull(controller.editorState(), "the editor stayed open after a good save")
             collecting.cancelAndJoin()
         }
 
@@ -609,7 +671,7 @@ class GameTableControllerTest {
 
             controller.saveEditing()
 
-            val editor = assertNotNull(controller.state.editor, "a failed save closed the editor")
+            val editor = assertNotNull(controller.editorState(), "a failed save closed the editor")
             assertEquals("kaybolmaması gereken metin", editor.draft, "a failed save lost the typing")
             assertEquals(CellTextFailure.COULD_NOT_SAVE, editor.failure)
             assertFalse(editor.isSaving)
@@ -630,7 +692,7 @@ class GameTableControllerTest {
             table.rows.value = listOf(first, second, row("Azul"))
             settle()
 
-            val editor = assertNotNull(controller.state.editor, "another game's change closed the editor")
+            val editor = assertNotNull(controller.editorState(), "another game's change closed the editor")
             assertEquals("yazmakta olduğum metin", editor.draft, "another game's change wiped the draft")
             collecting.cancelAndJoin()
         }
@@ -648,7 +710,7 @@ class GameTableControllerTest {
             table.rows.value = listOf(row)
             settle()
 
-            assertEquals("yeni hâli", assertNotNull(controller.state.editor).draft)
+            assertEquals("yeni hâli", assertNotNull(controller.editorState()).draft)
             collecting.cancelAndJoin()
         }
 
@@ -668,7 +730,7 @@ class GameTableControllerTest {
             controller.showView(GameTableView.COMPLETED)
 
             assertEquals(GameTableView.ONGOING, controller.state.view, "the view moved out from under the editor")
-            assertEquals("yarım kalmış", assertNotNull(controller.state.editor).draft)
+            assertEquals("yarım kalmış", assertNotNull(controller.editorState()).draft)
             assertTrue(controller.state.blockedByEditor)
             assertEquals(emptyList(), cells.saved, "the view change saved the draft behind the user")
 
@@ -733,11 +795,11 @@ class GameTableControllerTest {
 
             controller.beginTaskComposer(11, 17)
 
-            val composer = assertNotNull(controller.state.taskComposer)
+            val composer = assertNotNull(controller.composerState())
             assertEquals("Knight", composer.name)
             assertEquals(CellColumnType.THREE_D, composer.columnType)
             assertEquals("Basılacak: Knight, token", composer.selection.expectedText)
-            assertNotNull(controller.state.editor, "the cell was closed by opening the panel")
+            assertNotNull(controller.editorState(), "the cell was closed by opening the panel")
             collecting.cancelAndJoin()
         }
 
@@ -750,7 +812,7 @@ class GameTableControllerTest {
 
             controller.beginTaskComposer(0, 6)
 
-            assertEquals(TrackingMode.THREE_D_BATCH, assertNotNull(controller.state.taskComposer).trackingMode)
+            assertEquals(TrackingMode.THREE_D_BATCH, assertNotNull(controller.composerState()).trackingMode)
             collecting.cancelAndJoin()
         }
 
@@ -763,7 +825,7 @@ class GameTableControllerTest {
 
             controller.beginTaskComposer(0, 4)
 
-            val composer = assertNotNull(controller.state.taskComposer)
+            val composer = assertNotNull(controller.composerState())
             assertNull(composer.trackingMode, "a tracking mode nobody chose was written into the task")
             assertFalse(composer.canSave, "the task could be saved without a tracking mode")
             collecting.cancelAndJoin()
@@ -778,10 +840,10 @@ class GameTableControllerTest {
 
             controller.beginTaskComposer(2, 5)
 
-            assertNull(controller.state.taskComposer)
+            assertNull(controller.composerState())
             assertEquals(
                 TaskFromTextFailure.TASK_NAME_EMPTY,
-                assertNotNull(controller.state.editor).selectionFailure,
+                assertNotNull(controller.editorState()).selectionFailure,
             )
             collecting.cancelAndJoin()
         }
@@ -795,10 +857,10 @@ class GameTableControllerTest {
 
             controller.beginTaskComposer(3, 20)
 
-            assertNull(controller.state.taskComposer)
+            assertNull(controller.composerState())
             assertEquals(
                 TaskFromTextFailure.SELECTION_CONTAINS_LINE_BREAK,
-                assertNotNull(controller.state.editor).selectionFailure,
+                assertNotNull(controller.editorState()).selectionFailure,
             )
             collecting.cancelAndJoin()
         }
@@ -816,8 +878,8 @@ class GameTableControllerTest {
 
             controller.beginTaskComposer(7, 12)
 
-            assertNull(controller.state.taskComposer, "a draft was cut at offsets into stored text")
-            assertEquals("40 gri token", assertNotNull(controller.state.editor).draft, "the draft was lost")
+            assertNull(controller.composerState(), "a draft was cut at offsets into stored text")
+            assertEquals("40 gri token", assertNotNull(controller.editorState()).draft, "the draft was lost")
             collecting.cancelAndJoin()
         }
 
@@ -830,10 +892,10 @@ class GameTableControllerTest {
 
             controller.beginTaskComposer(0, 4)
 
-            assertNull(controller.state.taskComposer)
+            assertNull(controller.composerState())
             assertEquals(
                 TaskFromTextFailure.CELL_DOES_NOT_HOLD_TASKS,
-                assertNotNull(controller.state.editor).selectionFailure,
+                assertNotNull(controller.editorState()).selectionFailure,
             )
             collecting.cancelAndJoin()
         }
@@ -859,7 +921,7 @@ class GameTableControllerTest {
 
             listOf("0", "-3", "1.5", "12a", "99999999999", " ", "").forEach { typed ->
                 controller.editTaskQuantity(typed)
-                val composer = assertNotNull(controller.state.taskComposer)
+                val composer = assertNotNull(controller.composerState())
                 assertNull(composer.quantity, "'$typed' was taken as a quantity")
                 assertFalse(composer.canSave, "'$typed' let the task be saved")
                 // What was typed stays visible rather than being swallowed.
@@ -867,7 +929,7 @@ class GameTableControllerTest {
             }
 
             controller.editTaskQuantity("14")
-            val ready = assertNotNull(controller.state.taskComposer)
+            val ready = assertNotNull(controller.composerState())
             assertEquals(14, ready.quantity)
             assertTrue(ready.canSave)
             catalogue.cancelAndJoin()
@@ -957,8 +1019,8 @@ class GameTableControllerTest {
             assertEquals(TrackingMode.THREE_D_BATCH, created.trackingMode)
             // Kept exactly: a note is the user's own words.
             assertEquals("  ikisi yedek  ", created.notes)
-            assertNull(controller.state.taskComposer, "the panel stayed open after a task was made")
-            assertNull(controller.state.editor, "the cell stayed open for whole text editing")
+            assertNull(controller.composerState(), "the panel stayed open after a task was made")
+            assertNull(controller.editorState(), "the cell stayed open for whole text editing")
             catalogue.cancelAndJoin()
             collecting.cancelAndJoin()
         }
@@ -991,13 +1053,13 @@ class GameTableControllerTest {
 
             controller.saveTask()
 
-            val composer = assertNotNull(controller.state.taskComposer, "the panel was closed by a refusal")
+            val composer = assertNotNull(controller.composerState(), "the panel was closed by a refusal")
             assertEquals(TaskFromTextFailure.COLOR_NOT_AVAILABLE, composer.failure)
             assertEquals("15", composer.quantityText)
             assertEquals("iki yedek", composer.notes)
             assertNotNull(composer.colorId)
             assertFalse(composer.isSaving)
-            assertNotNull(controller.state.editor, "the cell was closed by a refusal")
+            assertNotNull(controller.editorState(), "the cell was closed by a refusal")
             catalogue.cancelAndJoin()
             collecting.cancelAndJoin()
         }
@@ -1013,8 +1075,8 @@ class GameTableControllerTest {
 
             controller.cancelTaskComposer()
 
-            assertNull(controller.state.taskComposer)
-            val editor = assertNotNull(controller.state.editor, "giving up on the task closed the cell")
+            assertNull(controller.composerState())
+            val editor = assertNotNull(controller.editorState(), "giving up on the task closed the cell")
             assertEquals("Knight", editor.draft)
             assertTrue(creation.created.isEmpty(), "giving up wrote a task anyway")
             catalogue.cancelAndJoin()
@@ -1033,12 +1095,12 @@ class GameTableControllerTest {
             val controller = controllerOf(table, colors = colors)
             val (collecting, catalogue) = readyComposer(controller, row, colors)
             controller.editTaskNotes("iki yedek")
-            val before = assertNotNull(controller.state.taskComposer)
+            val before = assertNotNull(controller.composerState())
 
             table.rows.value = listOf(row, other.copy(gameName = "Wingspan Avrupa"))
             settle()
 
-            assertEquals(before, controller.state.taskComposer, "a change to another game disturbed the panel")
+            assertEquals(before, controller.composerState(), "a change to another game disturbed the panel")
             catalogue.cancelAndJoin()
             collecting.cancelAndJoin()
         }
@@ -1050,13 +1112,13 @@ class GameTableControllerTest {
             val colors = FakeColors(listOf(color("Siyah")))
             val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
             val (collecting, catalogue) = readyComposer(controller, row, colors)
-            val before = assertNotNull(controller.state.taskComposer)
+            val before = assertNotNull(controller.composerState())
 
             controller.showView(GameTableView.COMPLETED)
 
             assertEquals(GameTableView.ONGOING, controller.state.view)
             assertTrue(controller.state.blockedByEditor)
-            assertEquals(before, controller.state.taskComposer, "the panel lost what had been chosen")
+            assertEquals(before, controller.composerState(), "the panel lost what had been chosen")
             catalogue.cancelAndJoin()
             collecting.cancelAndJoin()
         }
@@ -1081,7 +1143,7 @@ class GameTableControllerTest {
 
             // And Escape still reaches the cell it was always meant to.
             controller.cancelEditing()
-            assertNull(controller.state.editor)
+            assertNull(controller.editorState())
             collecting.cancelAndJoin()
         }
 
@@ -1115,9 +1177,473 @@ class GameTableControllerTest {
             controller.editCellText("Knight değişti")
             controller.saveEditing()
 
-            assertEquals("Knight", assertNotNull(controller.state.editor).draft)
+            assertEquals("Knight", assertNotNull(controller.editorState()).draft)
             assertTrue(cells.saved.isEmpty(), "the cell was written while a task was being made from it")
             catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    // ------------------------------------------- working on a task in a cell
+
+    private fun rowWithTask(
+        name: String = "Harmonies",
+        taskName: String = "Knight",
+        quantity: Int? = 15,
+        colors: List<TaskColorPreview> = listOf(TaskColorPreview(IdGenerator.Random.newId(), "Siyah", "#111111")),
+        notes: String? = null,
+        hasProgress: Boolean = false,
+    ): Pair<GameTableRow, EntityId> {
+        val task =
+            CellSegmentPreview(
+                segmentId = IdGenerator.Random.newId(),
+                taskId = IdGenerator.Random.newId(),
+                text = taskName,
+                requiredQuantity = quantity,
+                colors = colors,
+                notes = notes,
+                trackingMode = TrackingMode.THREE_D_BATCH,
+                hasProgress = hasProgress,
+            )
+        val row =
+            GameTableRow(
+                gameId = IdGenerator.Random.newId(),
+                gameName = name,
+                isCompleted = false,
+                cells =
+                    CellColumnType.entries.map { columnType ->
+                        CellPreview(
+                            columnType = columnType,
+                            cellId = if (columnType == CellColumnType.THREE_D) IdGenerator.Random.newId() else null,
+                            segments =
+                                if (columnType == CellColumnType.THREE_D) {
+                                    listOf(plain("Basılacak: "), task, plain(", token"))
+                                } else {
+                                    emptyList()
+                                },
+                            holdsTasks = columnType == CellColumnType.THREE_D,
+                        )
+                    },
+            )
+        return row to task.taskId!!
+    }
+
+    @Test
+    fun `pressing a task opens its menu over that task`() =
+        runBlocking<Unit> {
+            val (row, taskId) = rowWithTask()
+            val controller = controllerOf(FakeTable(listOf(row)))
+            val collecting = collect(controller)
+
+            controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, taskId)
+
+            val menu = assertIs<CellWork.TaskMenu>(controller.state.work)
+            assertEquals(taskId, menu.taskId)
+            assertEquals("Knight", menu.name)
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a menu cannot be opened while a cell is being written in`() =
+        runBlocking<Unit> {
+            val (row, taskId) = rowWithTask()
+            val controller = controllerOf(FakeTable(listOf(row)))
+            val collecting = collect(controller)
+            controller.beginEditing(row.gameId, CellColumnType.THREE_D)
+
+            controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, taskId)
+
+            assertIs<CellWork.WritingText>(controller.state.work, "the editor was replaced by a menu")
+            assertTrue(controller.state.blockedByEditor)
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `the edit panel opens on what the task already says`() =
+        runBlocking<Unit> {
+            val (row, taskId) = rowWithTask(quantity = 14, notes = "iki yedek")
+            val controller = controllerOf(FakeTable(listOf(row)))
+            val collecting = collect(controller)
+            controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, taskId)
+
+            controller.beginTaskEdit()
+
+            val editor = assertNotNull(controller.taskEditorState())
+            assertEquals("Knight", editor.name)
+            assertEquals("14", editor.quantityText)
+            assertEquals("iki yedek", editor.notes)
+            assertEquals(listOf("Siyah"), editor.colorNames)
+            assertFalse(editor.hasChanges)
+            assertFalse(editor.canSave, "a panel with nothing changed offers to save")
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a task carrying several colours says so rather than offering to pick one`() =
+        runBlocking<Unit> {
+            val (row, taskId) =
+                rowWithTask(
+                    colors =
+                        listOf(
+                            TaskColorPreview(IdGenerator.Random.newId(), "Gri", "#808080"),
+                            TaskColorPreview(IdGenerator.Random.newId(), "Siyah", "#111111"),
+                        ),
+                )
+            val controller = controllerOf(FakeTable(listOf(row)))
+            val collecting = collect(controller)
+            controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, taskId)
+
+            controller.beginTaskEdit()
+
+            val editor = assertNotNull(controller.taskEditorState())
+            assertTrue(editor.holdsSeveralColors)
+            assertEquals(listOf("Gri", "Siyah"), editor.colorNames)
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `saving the panel hands everything over at once and goes back to the menu`() =
+        runBlocking<Unit> {
+            val (row, taskId) = rowWithTask()
+            val editing = FakeTaskEditing()
+            val controller = controllerOf(FakeTable(listOf(row)), taskEditing = editing)
+            val collecting = collect(controller)
+            controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, taskId)
+            controller.beginTaskEdit()
+            controller.editTaskName("Şövalye")
+            controller.editTaskEditQuantity("20")
+            controller.editTaskEditNotes("  iki yedek  ")
+
+            controller.saveTaskEdit()
+
+            val edit = editing.edits.single()
+            assertEquals(taskId, edit.taskId)
+            assertEquals("Şövalye", edit.name)
+            assertEquals(20, edit.requiredQuantity)
+            assertEquals("  iki yedek  ", edit.notes, "the note was not kept as typed")
+            assertIs<CellWork.TaskMenu>(controller.state.work, "saving did not go back to the menu")
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a refused save keeps the panel and everything typed in it`() =
+        runBlocking<Unit> {
+            val (row, taskId) = rowWithTask()
+            val editing = FakeTaskEditing(TaskEditFailure.QUANTITY_BELOW_PROGRESS)
+            val controller = controllerOf(FakeTable(listOf(row)), taskEditing = editing)
+            val collecting = collect(controller)
+            controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, taskId)
+            controller.beginTaskEdit()
+            controller.editTaskEditQuantity("2")
+            controller.editTaskEditNotes("not")
+
+            controller.saveTaskEdit()
+
+            val editor = assertNotNull(controller.taskEditorState(), "the panel was closed by a refusal")
+            assertEquals(TaskEditFailure.QUANTITY_BELOW_PROGRESS, editor.failure)
+            assertEquals("2", editor.quantityText)
+            assertEquals("not", editor.notes)
+            assertFalse(editor.isSaving)
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `only a whole number greater than zero counts as a total`() =
+        runBlocking<Unit> {
+            val (row, taskId) = rowWithTask()
+            val controller = controllerOf(FakeTable(listOf(row)))
+            val collecting = collect(controller)
+            controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, taskId)
+            controller.beginTaskEdit()
+
+            listOf("0", "-3", "1.5", "12a", "99999999999").forEach { typed ->
+                controller.editTaskEditQuantity(typed)
+                val editor = assertNotNull(controller.taskEditorState())
+                assertNull(editor.quantity, "'$typed' was taken as a total")
+                assertFalse(editor.canSave, "'$typed' let the task be saved")
+                assertEquals(typed, editor.quantityText)
+            }
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a blank name or one with a line ending cannot be saved`() =
+        runBlocking<Unit> {
+            val (row, taskId) = rowWithTask()
+            val controller = controllerOf(FakeTable(listOf(row)))
+            val collecting = collect(controller)
+            controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, taskId)
+            controller.beginTaskEdit()
+
+            listOf("   ", "gri\ntoken").forEach { typed ->
+                controller.editTaskName(typed)
+                assertFalse(assertNotNull(controller.taskEditorState()).canSave, "'$typed' could be saved as a name")
+            }
+            collecting.cancelAndJoin()
+        }
+
+    // ----------------------------------------- turning a task back into text
+
+    @Test
+    fun `converting asks first and writes nothing until it is answered`() =
+        runBlocking<Unit> {
+            val (row, taskId) = rowWithTask()
+            val editing = FakeTaskEditing()
+            val controller = controllerOf(FakeTable(listOf(row)), taskEditing = editing)
+            val collecting = collect(controller)
+            controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, taskId)
+
+            controller.beginConvertToText()
+
+            assertIs<CellWork.ConfirmingConvert>(controller.state.work)
+            assertTrue(editing.converted.isEmpty(), "the task was converted before anyone agreed to it")
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `the question says whether there is a history to lose`() =
+        runBlocking<Unit> {
+            listOf(false, true).forEach { hasProgress ->
+                val (row, taskId) = rowWithTask(hasProgress = hasProgress)
+                val controller = controllerOf(FakeTable(listOf(row)))
+                val collecting = collect(controller)
+                controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, taskId)
+
+                controller.beginConvertToText()
+
+                assertEquals(hasProgress, assertIs<CellWork.ConfirmingConvert>(controller.state.work).hasProgress)
+                collecting.cancelAndJoin()
+            }
+        }
+
+    @Test
+    fun `answering yes converts the task and closes everything`() =
+        runBlocking<Unit> {
+            val (row, taskId) = rowWithTask()
+            val editing = FakeTaskEditing()
+            val controller = controllerOf(FakeTable(listOf(row)), taskEditing = editing)
+            val collecting = collect(controller)
+            controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, taskId)
+            controller.beginConvertToText()
+
+            controller.confirmConvertToText()
+
+            assertEquals(listOf(taskId), editing.converted)
+            assertNull(controller.state.work, "something stayed open over a task that is gone")
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `saying no leaves the task exactly as it was`() =
+        runBlocking<Unit> {
+            val (row, taskId) = rowWithTask()
+            val editing = FakeTaskEditing()
+            val controller = controllerOf(FakeTable(listOf(row)), taskEditing = editing)
+            val collecting = collect(controller)
+            controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, taskId)
+            controller.beginConvertToText()
+
+            controller.closeInnermost()
+
+            assertTrue(editing.converted.isEmpty(), "saying no converted the task anyway")
+            assertIs<CellWork.TaskMenu>(controller.state.work, "saying no closed more than the question")
+            collecting.cancelAndJoin()
+        }
+
+    // ------------------------------------------------- one layer at a time
+
+    @Test
+    fun `escape closes the innermost surface and no more`() =
+        runBlocking<Unit> {
+            val (row, taskId) = rowWithTask()
+            val controller = controllerOf(FakeTable(listOf(row)))
+            val collecting = collect(controller)
+            controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, taskId)
+            controller.beginTaskEdit()
+
+            controller.closeInnermost()
+            assertIs<CellWork.TaskMenu>(controller.state.work, "closing the panel closed the menu too")
+
+            controller.closeInnermost()
+            assertNull(controller.state.work, "closing the menu left something open")
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `the confirmation unwinds to the menu and then to nothing`() =
+        runBlocking<Unit> {
+            val (row, taskId) = rowWithTask()
+            val controller = controllerOf(FakeTable(listOf(row)))
+            val collecting = collect(controller)
+            controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, taskId)
+            controller.beginConvertToText()
+
+            controller.closeInnermost()
+            assertIs<CellWork.TaskMenu>(controller.state.work)
+            controller.closeInnermost()
+            assertNull(controller.state.work)
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `giving up on a new task goes back to the cell rather than closing it`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val controller = controllerOf(FakeTable(listOf(row)))
+            val collecting = collect(controller)
+            controller.beginEditing(row.gameId, CellColumnType.THREE_D)
+            controller.beginTaskComposer(0, 6)
+            assertIs<CellWork.MakingTask>(controller.state.work)
+
+            controller.closeInnermost()
+
+            assertIs<CellWork.WritingText>(controller.state.work, "giving up on the task closed the cell")
+            collecting.cancelAndJoin()
+        }
+
+    // ------------------------------------------ what a fresh list may disturb
+
+    @Test
+    fun `a fresh list leaves an open edit panel exactly where it was`() =
+        runBlocking<Unit> {
+            val (row, taskId) = rowWithTask()
+            val other = row("Wingspan")
+            val table = FakeTable(listOf(row, other))
+            val controller = controllerOf(table)
+            val collecting = collect(controller)
+            controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, taskId)
+            controller.beginTaskEdit()
+            controller.editTaskName("Şövalye")
+            controller.editTaskEditNotes("iki yedek")
+            val before = assertNotNull(controller.taskEditorState())
+
+            table.rows.value = listOf(row, other.copy(gameName = "Wingspan Avrupa"))
+            settle()
+
+            assertEquals(before, controller.taskEditorState(), "a change to another game disturbed the panel")
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a menu over a task that has gone closes itself`() =
+        runBlocking<Unit> {
+            // Converted somewhere else, or its game deleted: there is nothing
+            // left for the menu to act on, so it does not sit over a gap.
+            val (row, taskId) = rowWithTask()
+            val table = FakeTable(listOf(row))
+            val controller = controllerOf(table)
+            val collecting = collect(controller)
+            controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, taskId)
+            controller.beginTaskEdit()
+
+            table.rows.value = listOf(row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight")))
+            settle()
+
+            assertNull(controller.state.work, "a panel stayed open over a task that is gone")
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `changing the view is refused while a task panel is open`() =
+        runBlocking<Unit> {
+            val (row, taskId) = rowWithTask()
+            val controller = controllerOf(FakeTable(listOf(row)))
+            val collecting = collect(controller)
+            controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, taskId)
+            controller.beginTaskEdit()
+            controller.editTaskName("Şövalye")
+            val before = assertNotNull(controller.taskEditorState())
+
+            controller.showView(GameTableView.COMPLETED)
+
+            assertEquals(GameTableView.ONGOING, controller.state.view)
+            assertTrue(controller.state.blockedByEditor)
+            assertEquals(before, controller.taskEditorState(), "the panel lost what had been typed")
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a refused action hands the keyboard back to the open panel`() =
+        runBlocking<Unit> {
+            val (row, taskId) = rowWithTask()
+            val controller = controllerOf(FakeTable(listOf(row)))
+            val collecting = collect(controller)
+            controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, taskId)
+            controller.beginTaskEdit()
+            val start = controller.state.focusRecall
+
+            controller.showView(GameTableView.ALL)
+
+            assertEquals(start + 1, controller.state.focusRecall)
+            collecting.cancelAndJoin()
+        }
+
+    // ------------------------------------------ what a change may reach
+
+    @Test
+    fun `text before and after a task can be typed`() =
+        runBlocking<Unit> {
+            val (row, _) = rowWithTask()
+            val controller = controllerOf(FakeTable(listOf(row)))
+            val collecting = collect(controller)
+            controller.beginEditing(row.gameId, CellColumnType.THREE_D)
+
+            controller.editCellText("Kesilecek: Knight, token")
+            assertEquals("Kesilecek: Knight, token", assertNotNull(controller.editorState()).draft)
+
+            controller.editCellText("Kesilecek: Knight, token ×14")
+            assertEquals("Kesilecek: Knight, token ×14", assertNotNull(controller.editorState()).draft)
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a change that reaches into a task never becomes the draft`() =
+        runBlocking<Unit> {
+            val (row, _) = rowWithTask()
+            val controller = controllerOf(FakeTable(listOf(row)))
+            val collecting = collect(controller)
+            controller.beginEditing(row.gameId, CellColumnType.THREE_D)
+
+            controller.editCellText("Basılacak: Knigh, token")
+
+            val editor = assertNotNull(controller.editorState())
+            assertEquals("Basılacak: Knight, token", editor.draft, "a task was eaten by the caret")
+            assertEquals(CellTextFailure.CHANGE_CROSSES_A_TASK, editor.refusal)
+            assertFalse(editor.hasUnsavedChanges)
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a selection swallowing a task is never offered as a name`() =
+        runBlocking<Unit> {
+            val (row, _) = rowWithTask()
+            val controller = controllerOf(FakeTable(listOf(row)))
+            val collecting = collect(controller)
+            controller.beginEditing(row.gameId, CellColumnType.THREE_D)
+
+            controller.beginTaskComposer(5, 20)
+
+            assertNull(controller.composerState(), "a selection covering a task opened the task panel")
+            assertEquals(
+                TaskFromTextFailure.INVALID_SELECTION,
+                assertNotNull(controller.editorState()).selectionFailure,
+            )
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `saving a cell is checked against what it said when it opened`() =
+        runBlocking<Unit> {
+            val (row, _) = rowWithTask()
+            val cells = FakeCells()
+            val controller = controllerOf(FakeTable(listOf(row)), cells = cells)
+            val collecting = collect(controller)
+            controller.beginEditing(row.gameId, CellColumnType.THREE_D)
+            controller.editCellText("Kesilecek: Knight, token")
+
+            controller.saveEditing()
+
+            assertEquals(listOf("Basılacak: Knight, token"), cells.expectations)
+            assertEquals("Kesilecek: Knight, token", cells.saved.single().third)
             collecting.cancelAndJoin()
         }
 }

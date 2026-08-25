@@ -181,6 +181,41 @@
     <string name="cell_error_contains_tasks">Bu hücrede görev var; görevli hücre tek parça metin olarak düzenlenemez.</string>
     <string name="cell_locked_by_tasks">Görev içeriyor</string>
     <string name="cell_editor_open_elsewhere">Önce açık hücreyi kaydedin veya vazgeçin.</string>
+    <string name="cell_error_cell_gone">Bu hücre artık kayıtlı değil.</string>
+    <string name="cell_error_crosses_task">Görev kelimesi metin gibi değiştirilemez; görev menüsünden düzenleyin.</string>
+    <string name="cell_error_stale_document">Hücre bu arada değişti. Düzenlemeyi kapatıp yeniden açın.</string>
+
+    <!-- Game table: the menu anchored to a task -->
+    <string name="task_menu_open">%1$s görevini aç</string>
+    <string name="task_menu_edit">Düzenle</string>
+    <string name="task_menu_convert">Görevi metne dönüştür</string>
+    <string name="task_menu_hint">Esc menüyü kapatır.</string>
+
+    <!-- Game table: changing a task -->
+    <string name="task_edit_title">Görevi düzenle</string>
+    <string name="task_edit_name_label">Görev adı</string>
+    <string name="task_edit_name_invalid">Görev adı boş olamaz ve satır sonu içeremez.</string>
+    <string name="task_edit_several_colors">Bu görev birden fazla renk taşıyor: %1$s. Renkleri buradan değiştiremezsiniz.</string>
+    <string name="task_edit_save">Değişiklikleri kaydet</string>
+    <string name="task_edit_saving">Görev kaydediliyor…</string>
+    <string name="task_edit_hint">Ctrl+Enter kaydeder, Esc paneli kapatır.</string>
+    <string name="task_edit_error_task_gone">Bu görev artık kayıtlı değil.</string>
+    <string name="task_edit_error_name_empty">Görev adı boş olamaz.</string>
+    <string name="task_edit_error_name_line_break">Görev adı satır sonu içeremez.</string>
+    <string name="task_edit_error_color_gone">Seçtiğiniz renk artık kayıtlı değil.</string>
+    <string name="task_edit_error_several_colors">Bu görev birden fazla renk taşıyor; rengi buradan değiştirilemez.</string>
+    <string name="task_edit_error_quantity">Adet sıfırdan büyük bir tam sayı olmalı.</string>
+    <string name="task_edit_error_quantity_below_progress">Adet, kaydedilmiş üretimin altına indirilemez.</string>
+    <string name="task_edit_error_quantity_locked">Tamamlanmış görevin adedi değiştirilemez; önce görevi yeniden açın.</string>
+    <string name="task_edit_error_could_not_save">Görev kaydedilemedi. Girdikleriniz duruyor; yeniden deneyebilirsiniz.</string>
+
+    <!-- Game table: turning a task back into text -->
+    <string name="task_convert_title">Görevi metne dönüştür</string>
+    <string name="task_convert_body">%1$s kelimesi hücrede düz metin olarak kalacak; rengi, adedi ve aşamaları artık görev olarak izlenmeyecek.</string>
+    <string name="task_convert_history_warning">Bu görevin kaydedilmiş üretim geçmişi var; geçmiş de silinecek.</string>
+    <string name="task_convert_irreversible">Bu işlem geri alınamaz.</string>
+    <string name="task_convert_accept">Metne dönüştür</string>
+    <string name="task_convert_cancel">Vazgeç</string>
 
     <!-- Game table: turning selected words into a task -->
     <string name="cell_task_create">Görev oluştur</string>

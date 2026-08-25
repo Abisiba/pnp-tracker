@@ -3,6 +3,7 @@ package dev.pnptracker.data.database.projection
 import androidx.room3.ColumnInfo
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.SegmentKind
+import dev.pnptracker.domain.model.TrackingMode
 
 /**
  * One piece of one cell, with the task it names already resolved.
@@ -37,4 +38,18 @@ data class CellContentRow(
     /** How many the task needs, or null when the piece is text or the count is unknown. */
     @ColumnInfo(name = "task_required_quantity")
     val taskRequiredQuantity: Int?,
+    @ColumnInfo(name = "task_notes")
+    val taskNotes: String?,
+    @ColumnInfo(name = "task_tracking_mode")
+    val taskTrackingMode: TrackingMode?,
+    /**
+     * Whether any work has been recorded against the task.
+     *
+     * Carried with the row rather than asked for when a panel opens, because a
+     * panel that had to ask would be a query per task. It is what decides whether
+     * changing the total is safe, and what the user is warned about before
+     * turning a task back into text.
+     */
+    @ColumnInfo(name = "task_has_progress")
+    val taskHasProgress: Boolean?,
 )

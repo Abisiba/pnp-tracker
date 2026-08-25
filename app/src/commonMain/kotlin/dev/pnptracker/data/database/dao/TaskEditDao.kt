@@ -1,0 +1,357 @@
+package dev.pnptracker.data.database.dao
+
+import androidx.room3.Dao
+import androidx.room3.Insert
+import androidx.room3.OnConflictStrategy
+import androidx.room3.Query
+import androidx.room3.Transaction
+import dev.pnptracker.data.database.entity.CellSegmentEntity
+import dev.pnptracker.data.database.entity.TaskColorEntity
+import dev.pnptracker.data.database.entity.TaskEntity
+import dev.pnptracker.data.database.projection.CellRunRow
+import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.IdGenerator
+import dev.pnptracker.domain.model.SegmentKind
+import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.rules.requireAllowedTrackingMode
+import dev.pnptracker.domain.tasks.TaskEditException
+import dev.pnptracker.domain.tasks.TaskEditFailure
+import kotlin.time.Clock
+import kotlin.time.Instant
+
+/**
+ * Changing a task that already exists, and turning one back into text.
+ *
+ * Both are whole-task acts rather than field-by-field ones: a name, a colour, a
+ * total and a note are saved together or not at all, because a screen shows them
+ * together and a half-applied change is a state the user never asked for.
+ *
+ * Nothing here touches progress. Stages and events are read to find out whether
+ * a change is allowed and are never written by an edit — PLAN 6.4 has the
+ * counters and the finished mark move together, in the transactions that own
+ * them, and an edit that quietly adjusted a stage would be inventing progress.
+ */
+@Dao
+abstract class TaskEditDao {
+    // ------------------------------------------------------------- reading
+
+    /** The task, if it can still be worked on: not deleted, and its game alive. */
+    @Query(
+        """
+        SELECT tasks.* FROM tasks
+        INNER JOIN cell_segments ON cell_segments.task_id = tasks.id
+        INNER JOIN game_cells ON game_cells.id = cell_segments.cell_id
+        INNER JOIN games ON games.id = game_cells.game_id
+        WHERE tasks.id = :taskId
+          AND tasks.deleted_at IS NULL AND games.deleted_at IS NULL
+        """,
+    )
+    abstract suspend fun workableTaskById(taskId: EntityId): TaskEntity?
+
+    @Query("SELECT * FROM cell_segments WHERE task_id = :taskId")
+    abstract suspend fun segmentOfTask(taskId: EntityId): CellSegmentEntity?
+
+    @Query("SELECT * FROM task_colors WHERE task_id = :taskId ORDER BY slot_index")
+    abstract suspend fun colorsOfTask(taskId: EntityId): List<TaskColorEntity>
+
+    @Query("SELECT COUNT(*) FROM colors WHERE id = :colorId")
+    abstract suspend fun colorCount(colorId: EntityId): Int
+
+    @Query("SELECT COALESCE(MAX(completed_quantity), 0) FROM task_stages WHERE task_id = :taskId")
+    abstract suspend fun furthestStageOf(taskId: EntityId): Int
+
+    @Query("SELECT COUNT(*) FROM task_stages WHERE task_id = :taskId")
+    abstract suspend fun stageCountOf(taskId: EntityId): Int
+
+    @Query(
+        """
+        SELECT cell_segments.id AS segment_id,
+               cell_segments.order_index AS order_index,
+               cell_segments.kind AS kind,
+               cell_segments.text AS text,
+               cell_segments.task_id AS task_id,
+               tasks.name AS task_name
+        FROM cell_segments
+        LEFT JOIN tasks ON tasks.id = cell_segments.task_id AND tasks.deleted_at IS NULL
+        WHERE cell_segments.cell_id = :cellId
+        ORDER BY cell_segments.order_index
+        """,
+    )
+    abstract suspend fun runsOfCell(cellId: EntityId): List<CellRunRow>
+
+    // ------------------------------------------------------------- writing
+
+    @Query(
+        """
+        UPDATE tasks SET name = :name, required_quantity = :requiredQuantity,
+                         notes = :notes, tracking_mode = :trackingMode, updated_at = :updatedAt
+        WHERE id = :taskId
+        """,
+    )
+    protected abstract suspend fun writeTask(
+        taskId: EntityId,
+        name: String,
+        requiredQuantity: Int?,
+        notes: String?,
+        trackingMode: TrackingMode,
+        updatedAt: Instant,
+    ): Int
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    protected abstract suspend fun insertTaskColor(taskColor: TaskColorEntity)
+
+    @Query("DELETE FROM task_colors WHERE task_id = :taskId")
+    protected abstract suspend fun removeColorsOfTask(taskId: EntityId): Int
+
+    @Query("DELETE FROM task_stages WHERE task_id = :taskId")
+    protected abstract suspend fun removeStagesOfTask(taskId: EntityId): Int
+
+    @Query("DELETE FROM progress_events WHERE task_id = :taskId")
+    protected abstract suspend fun removeEventsOfTask(taskId: EntityId): Int
+
+    @Query("DELETE FROM tasks WHERE id = :taskId")
+    protected abstract suspend fun deleteTaskRow(taskId: EntityId): Int
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    protected abstract suspend fun insertSegment(segment: CellSegmentEntity)
+
+    @Query("DELETE FROM cell_segments WHERE id = :segmentId")
+    protected abstract suspend fun deleteSegment(segmentId: EntityId): Int
+
+    @Query(
+        "UPDATE cell_segments SET text = :text, order_index = :orderIndex, updated_at = :updatedAt WHERE id = :segmentId",
+    )
+    protected abstract suspend fun writeSegment(
+        segmentId: EntityId,
+        text: String,
+        orderIndex: Int,
+        updatedAt: Instant,
+    ): Int
+
+    @Query("UPDATE cell_segments SET order_index = :orderIndex WHERE id = :segmentId")
+    protected abstract suspend fun moveSegment(
+        segmentId: EntityId,
+        orderIndex: Int,
+    ): Int
+
+    @Query("UPDATE game_cells SET updated_at = :updatedAt WHERE id = :cellId")
+    protected abstract suspend fun touchCell(
+        cellId: EntityId,
+        updatedAt: Instant,
+    ): Int
+
+    // -------------------------------------------------------- transactions
+
+    /**
+     * Saves what the user changed about a task, all of it together.
+     *
+     * The name is the task's part of the cell's document, so changing it changes
+     * what the cell reads as — deliberately, and by exactly the name. Nothing
+     * around it moves: the punctuation and spacing on either side belong to their
+     * own pieces and are not touched here.
+     *
+     * The name is trimmed at both ends, because a space either side of a word is
+     * a slip rather than a decision, and everything inside it is left alone. The
+     * note is not trimmed: PLAN 5.6 keeps a note the user's own words, and this
+     * path is where they are written by hand.
+     *
+     * A total may not fall below work already recorded. PLAN 6.4 and 7.2 keep
+     * what is owed and what each stage has done within it, so a smaller total
+     * would leave counters the history could not account for. A finished card or
+     * board task whose pipeline is counted up to its old total is refused
+     * outright: PLAN describes no reopening on a change of total, so inventing
+     * one — or quietly moving the stage counts — would be writing a rule nobody
+     * agreed to.
+     *
+     * @return true when something actually changed.
+     * @throws TaskEditException with the case that stopped it; nothing written.
+     * @throws IllegalArgumentException if the pool does not allow [trackingMode],
+     *   which is a programming mistake rather than the user's.
+     */
+    @Transaction
+    open suspend fun editTask(
+        taskId: EntityId,
+        name: String,
+        colorId: EntityId?,
+        requiredQuantity: Int?,
+        notes: String?,
+        trackingMode: TrackingMode,
+        clock: Clock,
+    ): Boolean {
+        val task = workableTaskById(taskId) ?: refuse(TaskEditFailure.TASK_NOT_AVAILABLE)
+        requireAllowedTrackingMode(task.poolType, trackingMode)
+
+        val cleanName = name.trim()
+        if (cleanName.isEmpty()) refuse(TaskEditFailure.TASK_NAME_EMPTY)
+        if (cleanName.any { it == '\n' || it == '\r' }) refuse(TaskEditFailure.NAME_CONTAINS_LINE_BREAK)
+
+        val colors = colorsOfTask(taskId)
+        val holdsSeveralColors = colors.size > 1
+        // One colour box cannot say what a several-colour task is; PLAN 12.7
+        // splits such a name across them in order, and that order has nowhere to
+        // go here. So the list is left exactly as it is, and an attempt to
+        // change it is refused rather than quietly flattening it to one.
+        if (holdsSeveralColors && colorId != colors.first().colorId) {
+            refuse(TaskEditFailure.MULTICOLOR_EDIT_NOT_AVAILABLE)
+        }
+        if (colorId != null && colorCount(colorId) != 1) refuse(TaskEditFailure.COLOR_NOT_AVAILABLE)
+        val colorChanges = !holdsSeveralColors && colors.singleOrNull()?.colorId != colorId
+
+        if (requiredQuantity != null && requiredQuantity <= 0) refuse(TaskEditFailure.INVALID_REQUIRED_QUANTITY)
+        if (requiredQuantity != null) {
+            if (requiredQuantity < task.currentMissingQuantity) refuse(TaskEditFailure.QUANTITY_BELOW_PROGRESS)
+            if (requiredQuantity < furthestStageOf(taskId)) refuse(TaskEditFailure.QUANTITY_BELOW_PROGRESS)
+        }
+        val changesTotal = requiredQuantity != task.requiredQuantity
+        if (changesTotal && task.isCompleted && stageCountOf(taskId) > 0) {
+            refuse(TaskEditFailure.QUANTITY_LOCKED_BY_COMPLETION)
+        }
+        // A finished task owes nothing, so a total it could no longer cover would
+        // put the two out of step; PLAN 6.4 forbids exactly that.
+        if (requiredQuantity == null && task.currentMissingQuantity > 0) {
+            refuse(TaskEditFailure.QUANTITY_BELOW_PROGRESS)
+        }
+
+        val unchanged =
+            task.name == cleanName &&
+                task.requiredQuantity == requiredQuantity &&
+                task.notes == notes &&
+                task.trackingMode == trackingMode &&
+                !colorChanges
+        if (unchanged) return false
+
+        val moment = clock.now()
+        writeTask(
+            taskId = taskId,
+            name = cleanName,
+            requiredQuantity = requiredQuantity,
+            notes = notes,
+            trackingMode = trackingMode,
+            updatedAt = moment,
+        )
+        if (colorChanges) {
+            removeColorsOfTask(taskId)
+            colorId?.let { insertTaskColor(TaskColorEntity(taskId = taskId, colorId = it, slotIndex = 0)) }
+        }
+        segmentOfTask(taskId)?.let { touchCell(it.cellId, moment) }
+        return true
+    }
+
+    /**
+     * Turns a task back into the words it was made from.
+     *
+     * PLAN 12.8 and 5.2 are explicit that this is not a deletion: the task record
+     * goes, and its name stays exactly where it was as ordinary text. So the cell
+     * reads the same afterwards as it did before, to the character — the only
+     * thing that changes is that those words are no longer a piece of work.
+     *
+     * Everything that hung off the task goes with it, in the order the foreign
+     * keys allow: its history, its pipeline, its colours, the piece that named
+     * it, and then the task itself. PLAN 12.8 asks for those relations to be
+     * cleaned up, and leaving any of them behind would be history belonging to
+     * nothing. PLAN 5.12 keeps a task's history from being edited underneath it —
+     * that is a rule about a task that still exists, and this one does not.
+     *
+     * The cell is left canonical: the freed name joins the text on either side of
+     * it into one piece, and the reading order closes up behind it.
+     *
+     * No other task is touched.
+     *
+     * @return true when there was a task here to convert.
+     * @throws TaskEditException if the task is gone; nothing is written.
+     */
+    @Transaction
+    open suspend fun convertTaskToText(
+        taskId: EntityId,
+        clock: Clock,
+        idGenerator: IdGenerator,
+    ): Boolean {
+        val task = workableTaskById(taskId) ?: refuse(TaskEditFailure.TASK_NOT_AVAILABLE)
+        val segment = segmentOfTask(taskId) ?: refuse(TaskEditFailure.TASK_NOT_AVAILABLE)
+        val moment = clock.now()
+
+        val rows = runsOfCell(segment.cellId)
+        // What the cell will say afterwards: the same string, with this task's
+        // name now ordinary text among the words around it.
+        val pieces =
+            rows.map { row ->
+                if (row.segmentId == segment.id) {
+                    // Its own row goes with the task, so the freed words need a
+                    // home: a neighbour's row, or a new one of their own.
+                    Piece(existingId = null, text = task.name, isTask = false)
+                } else if (row.kind == SegmentKind.TASK) {
+                    Piece(row.segmentId, row.taskName.orEmpty(), isTask = true)
+                } else {
+                    Piece(row.segmentId, row.text.orEmpty(), isTask = false)
+                }
+            }
+        val merged = mergeText(pieces)
+
+        rows.forEachIndexed { index, row -> moveSegment(row.segmentId, -(index + 1)) }
+
+        // The piece that named the task goes before the task does; its foreign
+        // key is what would otherwise refuse the delete.
+        deleteSegment(segment.id)
+        removeEventsOfTask(taskId)
+        removeStagesOfTask(taskId)
+        removeColorsOfTask(taskId)
+        deleteTaskRow(taskId)
+
+        val kept = merged.mapNotNull { it.existingId }.toSet()
+        rows
+            .filterNot { it.segmentId in kept || it.segmentId == segment.id }
+            .forEach { deleteSegment(it.segmentId) }
+
+        merged.forEachIndexed { orderIndex, piece ->
+            when {
+                piece.isTask -> moveSegment(requireNotNull(piece.existingId), orderIndex)
+                piece.existingId != null -> writeSegment(piece.existingId, piece.text, orderIndex, moment)
+                else ->
+                    insertSegment(
+                        CellSegmentEntity.plainText(
+                            id = idGenerator.newId(),
+                            cellId = segment.cellId,
+                            orderIndex = orderIndex,
+                            text = piece.text,
+                            moment = moment,
+                        ),
+                    )
+            }
+        }
+        touchCell(segment.cellId, moment)
+        return true
+    }
+
+    /**
+     * One piece of the cell as it will stand, before identities are settled.
+     *
+     * [existingId] is null once a piece has been merged out of an existing row —
+     * the row it came from is gone and the text needs a home. The freed name is
+     * such a piece: its own row is deleted along with the task, so the words go
+     * into a neighbour's row or into a new one.
+     */
+    private data class Piece(
+        val existingId: EntityId?,
+        val text: String,
+        val isTask: Boolean,
+    )
+
+    /** Joins neighbouring stretches of text, keeping the first row that can hold them. */
+    private fun mergeText(pieces: List<Piece>): List<Piece> =
+        pieces.fold(mutableListOf()) { merged, piece ->
+            val previous = merged.lastOrNull()
+            if (!piece.isTask && previous != null && !previous.isTask) {
+                merged[merged.lastIndex] =
+                    Piece(
+                        existingId = previous.existingId ?: piece.existingId,
+                        text = previous.text + piece.text,
+                        isTask = false,
+                    )
+            } else {
+                merged += piece
+            }
+            merged
+        }
+
+    private fun refuse(failure: TaskEditFailure): Nothing = throw TaskEditException(failure)
+}

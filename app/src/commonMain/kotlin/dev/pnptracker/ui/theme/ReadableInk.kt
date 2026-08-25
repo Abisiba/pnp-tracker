@@ -50,3 +50,24 @@ fun readableInkOn(background: Color): Color =
     } else {
         Color.White
     }
+
+/**
+ * A line that shows where a task's colour ends, whatever colour it is.
+ *
+ * The problem this answers is the one colour that matches the theme's own
+ * ground: white on a light surface, black on a dark one. Painted with no edge,
+ * such a task shows no colour at all — the fill is there and invisible, so the
+ * user is told nothing by the very thing meant to tell them.
+ *
+ * The edge is [readableInkOn] the fill, which makes the guarantee fall out of a
+ * rule that is already proven: the ink stands at least 4.58:1 from the fill, so
+ * the boundary is always visible from the inside; and when the fill matches the
+ * surface, standing away from the fill is the same as standing away from the
+ * surface, so it is visible from the outside too. One rule covers both, and no
+ * colour has to be special-cased.
+ *
+ * PLAN 12.7 asks for exactly this where readability is not enough on its own —
+ * an automatic contrast frame rather than a repainted colour, because repainting
+ * would tell the user their filament is a colour it is not.
+ */
+fun visibleEdgeOn(fill: Color): Color = readableInkOn(fill)
