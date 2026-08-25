@@ -25,9 +25,9 @@ interface GameTableDao {
      * Every piece of every cell of every game the user still has.
      *
      * A piece naming a task is given the task's name here rather than by a second
-     * read, and a task the user deleted drops out of the join while its piece
-     * stays in the result with nothing attached — which is how the fold knows to
-     * leave it out of the preview without losing the pieces around it.
+     * read. The task is joined by identity alone: a piece that is in the cell is
+     * part of what the cell says, so nothing about the task's state can take it
+     * out of the document the user is shown (PLAN 5.5).
      *
      * The order is by cell and then by position in it, so the fold can group
      * without sorting and two reads never disagree about the order.
@@ -54,7 +54,7 @@ interface GameTableDao {
         FROM cell_segments
         INNER JOIN game_cells ON game_cells.id = cell_segments.cell_id
         INNER JOIN games ON games.id = game_cells.game_id
-        LEFT JOIN tasks ON tasks.id = cell_segments.task_id AND tasks.deleted_at IS NULL
+        LEFT JOIN tasks ON tasks.id = cell_segments.task_id
         WHERE games.deleted_at IS NULL
         ORDER BY cell_segments.cell_id, cell_segments.order_index
         """,

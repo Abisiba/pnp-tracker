@@ -237,18 +237,22 @@ class GameTableStoreTest {
         }
 
     @Test
-    fun `a deleted task leaves the preview and the pieces around it stay`() =
+    fun `a piece of a cell is shown whatever state its task is in`() =
         runBlocking<Unit> {
+            // A piece the cell holds is part of what the cell says. Leaving one
+            // out would draw a document shorter than the stored one, and the
+            // editor would then be working around a boundary nobody was shown —
+            // a task's atomic edges have to be edges the reader can see.
             val game = addGame("Harmonies")
             val cellId = addCell(game.id, CellColumnType.THREE_D)
             addText(cellId, "önce", orderIndex = 0)
-            addTask(cellId, "Gri token").also { database.taskDao().softDelete(it, deletedAt) }
+            val taskId = addTask(cellId, "Gri token").also { database.taskDao().softDelete(it, deletedAt) }
             addText(cellId, "sonra", orderIndex = 2)
 
             val segments = rowNamed("Harmonies").cell(CellColumnType.THREE_D).segments
 
-            assertEquals(listOf("önce", "sonra"), segments.map { it.text })
-            assertTrue(segments.none { it.isTask }, "a deleted task was previewed anyway")
+            assertEquals(listOf("önce", "Gri token", "sonra"), segments.map { it.text })
+            assertEquals(listOf(taskId), segments.mapNotNull { it.taskId }, "the piece lost the task it names")
         }
 
     @Test

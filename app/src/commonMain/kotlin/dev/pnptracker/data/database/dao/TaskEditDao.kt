@@ -72,7 +72,7 @@ abstract class TaskEditDao {
                cell_segments.task_id AS task_id,
                tasks.name AS task_name
         FROM cell_segments
-        LEFT JOIN tasks ON tasks.id = cell_segments.task_id AND tasks.deleted_at IS NULL
+        LEFT JOIN tasks ON tasks.id = cell_segments.task_id
         WHERE cell_segments.cell_id = :cellId
         ORDER BY cell_segments.order_index
         """,

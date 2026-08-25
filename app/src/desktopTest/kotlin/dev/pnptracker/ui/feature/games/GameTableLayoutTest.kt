@@ -3,6 +3,7 @@ package dev.pnptracker.ui.feature.games
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -412,11 +413,23 @@ class GameTableLayoutTest {
     fun `the bounds a popover is placed against come from the real layout`() {
         val cellSlot = source.substringAfter("private fun CellSlot(").substringBefore("private fun TaskHandle(")
         assertTrue("onTextLayout = { layout = it }" in cellSlot, "the cell never learns where it laid its text")
-        assertTrue("boxOfRange(" in cellSlot, "a task's box is not taken from the layout")
+        assertTrue("boxesOfRange(" in cellSlot, "a task's boxes are not taken from the layout")
         assertTrue(
             Regex("""IntOffset\(\s*\d+\s*,""").find(source) == null,
             "a fixed screen coordinate is used to place something",
         )
+    }
+
+    @Test
+    fun `a name that wrapped is pressable on every line it reaches`() {
+        val handle = source.substringAfter("private fun TaskHandle(").substringBefore("private fun CellEditorSlot(")
+        assertTrue("boxes.forEachIndexed" in handle, "only part of a wrapped name is a control")
+        // One control, several shapes: the keyboard stops at a task once, a
+        // reader is told about it once, and the popover hangs off the line the
+        // word starts on rather than off each piece of it.
+        assertEquals(1, Regex("""\.focusable\(\)""").findAll(handle).count(), "a wrapped name takes the keyboard twice")
+        assertTrue("leading && menu != null" in handle, "a wrapped name would open two popovers")
+        assertTrue("clearAndSetSemantics" in handle, "a wrapped name is announced once for each line")
     }
 
     @Test

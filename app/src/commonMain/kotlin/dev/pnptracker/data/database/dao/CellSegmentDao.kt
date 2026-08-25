@@ -38,31 +38,12 @@ abstract class CellSegmentDao {
     /**
      * One cell's pieces, in reading order.
      *
-     * Everything in the cell, including a piece naming a task the user deleted:
-     * this is what is *stored*, and the guards below have to see all of it. What
-     * the table shows is a different question, answered by the table's own read.
+     * Everything in the cell, as rows rather than as a document. [runsOfCell] is
+     * the one to read a cell's text from; this is for callers that want the
+     * pieces themselves.
      */
     @Query("SELECT * FROM cell_segments WHERE cell_id = :cellId ORDER BY order_index")
     abstract suspend fun segmentsOfCell(cellId: EntityId): List<CellSegmentEntity>
-
-    /**
-     * One cell's pieces, with any naming a deleted task left out.
-     *
-     * Named for what it leaves out rather than left to be assumed. A piece whose
-     * task has been deleted must never become editable text: the task is gone
-     * from every active view, and turning its piece into words would put a
-     * deleted task's name back into the document as something the user typed.
-     */
-    @Query(
-        """
-        SELECT cell_segments.* FROM cell_segments
-        LEFT JOIN tasks ON tasks.id = cell_segments.task_id
-        WHERE cell_segments.cell_id = :cellId
-          AND (cell_segments.task_id IS NULL OR tasks.deleted_at IS NULL)
-        ORDER BY cell_segments.order_index
-        """,
-    )
-    abstract suspend fun segmentsOfCellWithoutDeletedTasks(cellId: EntityId): List<CellSegmentEntity>
 
     /** One cell's pieces as they change, in reading order. */
     @Query("SELECT * FROM cell_segments WHERE cell_id = :cellId ORDER BY order_index")
@@ -90,10 +71,18 @@ abstract class CellSegmentDao {
     /**
      * One cell's pieces with the name of any task they stand for, in order.
      *
-     * This is what the document is built from on the writing side. A piece
-     * naming a task the user deleted comes back with no name, which is right:
-     * nobody can see it, so it is not part of what the document says — but the
-     * piece is still here, still a task piece, and still keeps its place.
+     * This is what the document is built from, and it holds every piece the cell
+     * holds. A task is joined by identity alone: whether it has been deleted is
+     * not asked here, because a task piece that stayed in the cell is part of
+     * what the cell says whatever state the task is in. Hiding one would leave a
+     * boundary the user cannot see but every edit still has to get past — the
+     * document on screen and the document this transaction works on have to be
+     * the same document (PLAN 5.5).
+     *
+     * A cell of a live game cannot legitimately hold a deleted task's piece at
+     * all: PLAN 5.4 lets a task go only with its cell, and a deleted game's
+     * cells are not shown or edited. Reading the piece plainly is what keeps a
+     * database that somehow has one honest rather than quietly wrong.
      */
     @Query(
         """
@@ -104,7 +93,7 @@ abstract class CellSegmentDao {
                cell_segments.task_id AS task_id,
                tasks.name AS task_name
         FROM cell_segments
-        LEFT JOIN tasks ON tasks.id = cell_segments.task_id AND tasks.deleted_at IS NULL
+        LEFT JOIN tasks ON tasks.id = cell_segments.task_id
         WHERE cell_segments.cell_id = :cellId
         ORDER BY cell_segments.order_index
         """,
@@ -324,7 +313,7 @@ abstract class CellSegmentDao {
         writes.forEachIndexed { order, write -> write(order) }
     }
 
-    /** The document as runs, with a deleted task's piece taking up no room. */
+    /** The document as runs: every piece of the cell, each taking its own room. */
     private fun runsOf(rows: List<CellRunRow>): List<DocumentRun> {
         var at = 0
         return rows.map { row ->

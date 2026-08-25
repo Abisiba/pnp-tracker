@@ -99,10 +99,11 @@ class GameTableStore(
     /**
      * Turns the pieces of one cell into what the table shows of them.
      *
-     * A piece naming a task the user deleted is left out — the task is gone from
-     * every active view, and its piece has nothing to show — while the pieces
-     * around it keep their places. The read is ordered by position already, so
-     * nothing is sorted here.
+     * Every piece the cell holds comes through. A task piece is drawn as the task
+     * it names whatever state that task is in: leaving one out would show a
+     * document shorter than the one stored, and the editor would then be working
+     * around a boundary the reader was never shown. The read is ordered by
+     * position already, so nothing is sorted here.
      */
     private fun previewsOf(
         rows: List<CellContentRow>,

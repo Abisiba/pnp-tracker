@@ -441,25 +441,163 @@ class CellTextStoreTest {
         }
 
     @Test
-    fun `a cell whose only piece names a deleted task can still be written in`() =
+    fun `a cell whose only piece is a task reads as that task, not as empty`() =
         runBlocking<Unit> {
-            // The task is gone from every active view, so as far as the user is
-            // concerned the cell is empty and they may type in it. Its piece is
-            // still there and is left exactly alone: nothing writes over a task
-            // piece, not even one nobody can see.
+            // The cell is not empty and must not look it: writing over it would
+            // be typing over a task, which is the one thing a document change
+            // may not do (PLAN 5.5).
             val game = addGame()
             val cellId = addCell(game.id)
             val taskId = addTask(cellId)
             database.taskDao().softDelete(taskId, deletedAt)
             val before = assertNotNull(database.cellSegmentDao().segmentOfTaskIncludingDeleted(taskId))
 
-            assertTrue(store.setText(game.id, CellColumnType.THREE_D, "artık düz metin"))
+            assertEquals("Gri token", documentTextOf(game.id, CellColumnType.THREE_D))
+            val refusal =
+                assertFailsWith<CellTextException> {
+                    store.setText(game.id, CellColumnType.THREE_D, "artık düz metin")
+                }
 
-            assertEquals("artık düz metin", documentTextOf(game.id, CellColumnType.THREE_D))
-            val after = assertNotNull(database.cellSegmentDao().segmentOfTaskIncludingDeleted(taskId))
-            assertEquals(before.taskId, after.taskId, "the deleted task's piece lost its task")
-            assertEquals(before.kind, after.kind, "the deleted task's piece was turned into text")
-            assertNull(after.text, "text was written into a task piece")
+            assertEquals(CellTextFailure.CHANGE_CROSSES_A_TASK, refusal.failure)
+            assertEquals(before, assertNotNull(database.cellSegmentDao().segmentOfTaskIncludingDeleted(taskId)))
+        }
+
+    @Test
+    fun `every task piece of a cell is in the document the editor works on`() =
+        runBlocking<Unit> {
+            // The document the user reads and the document the transaction plans
+            // against have to be the same one. A piece kept out of the reading
+            // but left in the cell is a task boundary nobody can see: the text
+            // around it looks like one stretch, and an edit across it is refused
+            // for a reason there is nothing on screen to explain.
+            val game = addGame()
+            val cellId = addCell(game.id)
+            addText(cellId, "abc", 0)
+            val taskId = addTask(cellId, "Gri token")
+            addText(cellId, "def", 2)
+            database.taskDao().softDelete(taskId, deletedAt)
+
+            assertEquals("abcGri tokendef", documentTextOf(game.id, CellColumnType.THREE_D))
+        }
+
+    @Test
+    fun `text on both sides of a task piece is edited without the piece moving`() =
+        runBlocking<Unit> {
+            val game = addGame()
+            val cellId = addCell(game.id)
+            addText(cellId, "abc", 0)
+            val taskId = addTask(cellId, "Gri token")
+            addText(cellId, "def", 2)
+            database.taskDao().softDelete(taskId, deletedAt)
+            val piece = assertNotNull(database.cellSegmentDao().segmentOfTaskIncludingDeleted(taskId))
+
+            assertTrue(store.setText(game.id, CellColumnType.THREE_D, "abXcGri tokendef"))
+
+            assertEquals("abXcGri tokendef", documentTextOf(game.id, CellColumnType.THREE_D))
+            assertEquals(piece, assertNotNull(database.cellSegmentDao().segmentOfTaskIncludingDeleted(taskId)))
+            assertEquals(
+                listOf(0, 1, 2),
+                database.cellSegmentDao().segmentsOfCell(cellId).map { it.orderIndex },
+                "the reading order lost or repeated a place",
+            )
+        }
+
+    @Test
+    fun `a change reaching into a task piece is refused whatever state the task is in`() =
+        runBlocking<Unit> {
+            val game = addGame()
+            val cellId = addCell(game.id)
+            addText(cellId, "abc", 0)
+            val taskId = addTask(cellId, "Gri token")
+            addText(cellId, "def", 2)
+            database.taskDao().softDelete(taskId, deletedAt)
+            val before = database.cellSegmentDao().segmentsOfCell(cellId)
+
+            val refusal =
+                assertFailsWith<CellTextException> {
+                    store.setText(game.id, CellColumnType.THREE_D, "abcGri tokedef")
+                }
+
+            assertEquals(CellTextFailure.CHANGE_CROSSES_A_TASK, refusal.failure)
+            assertEquals(before, database.cellSegmentDao().segmentsOfCell(cellId))
+        }
+
+    @Test
+    fun `a task piece at the start of a cell keeps its place and its text`() =
+        runBlocking<Unit> {
+            val game = addGame()
+            val cellId = addCell(game.id)
+            val taskId = addTask(cellId, "Gri token")
+            addText(cellId, " kalanı", 1)
+            database.taskDao().softDelete(taskId, deletedAt)
+
+            assertEquals("Gri token kalanı", documentTextOf(game.id, CellColumnType.THREE_D))
+            assertTrue(store.setText(game.id, CellColumnType.THREE_D, "Gri token kalanı hazır"))
+
+            assertEquals("Gri token kalanı hazır", documentTextOf(game.id, CellColumnType.THREE_D))
+            assertEquals(listOf(0, 1), database.cellSegmentDao().segmentsOfCell(cellId).map { it.orderIndex })
+        }
+
+    @Test
+    fun `a task piece at the end of a cell keeps its place and its text`() =
+        runBlocking<Unit> {
+            val game = addGame()
+            val cellId = addCell(game.id)
+            addText(cellId, "önce ", 0)
+            val taskId = addTask(cellId, "Gri token")
+            database.taskDao().softDelete(taskId, deletedAt)
+
+            assertEquals("önce Gri token", documentTextOf(game.id, CellColumnType.THREE_D))
+            assertTrue(store.setText(game.id, CellColumnType.THREE_D, "daha önce Gri token"))
+
+            assertEquals("daha önce Gri token", documentTextOf(game.id, CellColumnType.THREE_D))
+            assertEquals(listOf(0, 1), database.cellSegmentDao().segmentsOfCell(cellId).map { it.orderIndex })
+        }
+
+    @Test
+    fun `a deleted task between two live ones is a boundary like any other`() =
+        runBlocking<Unit> {
+            val game = addGame()
+            val cellId = addCell(game.id)
+            addTask(cellId, "Knight")
+            addText(cellId, " ve ", 1)
+            val gone = addTask(cellId, "Gri token")
+            addText(cellId, " ve ", 3)
+            addTask(cellId, "Meeple")
+            database.taskDao().softDelete(gone, deletedAt)
+
+            val document = "Knight ve Gri token ve Meeple"
+            assertEquals(document, documentTextOf(game.id, CellColumnType.THREE_D))
+
+            // The gap between the first two is the user's; the tasks are not.
+            assertTrue(store.setText(game.id, CellColumnType.THREE_D, "Knight, ve Gri token ve Meeple"))
+            val refusal =
+                assertFailsWith<CellTextException> {
+                    store.setText(game.id, CellColumnType.THREE_D, "Knight, ve Gri toke ve Meeple")
+                }
+            assertEquals(CellTextFailure.CHANGE_CROSSES_A_TASK, refusal.failure)
+            assertEquals(listOf(0, 1, 2, 3, 4), database.cellSegmentDao().segmentsOfCell(cellId).map { it.orderIndex })
+        }
+
+    @Test
+    fun `a stale expectation is caught even when the change is only around a task`() =
+        runBlocking<Unit> {
+            val game = addGame()
+            val cellId = addCell(game.id)
+            addText(cellId, "abc", 0)
+            val taskId = addTask(cellId, "Gri token")
+            database.taskDao().softDelete(taskId, deletedAt)
+            val before = database.cellSegmentDao().segmentsOfCell(cellId)
+
+            val refusal =
+                assertFailsWith<CellTextException> {
+                    // What the caller thinks is there leaves the task out; the
+                    // cell says otherwise and is not written over.
+                    store.saveDocumentText(game.id, CellColumnType.THREE_D, "abc", "abcd")
+                }
+
+            assertEquals(CellTextFailure.STALE_DOCUMENT, refusal.failure)
+            assertEquals(before, database.cellSegmentDao().segmentsOfCell(cellId))
         }
 
     @Test

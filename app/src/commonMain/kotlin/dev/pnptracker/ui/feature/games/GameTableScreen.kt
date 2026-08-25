@@ -75,6 +75,7 @@ import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -628,7 +629,13 @@ private fun drawnDocumentOf(
     return DrawnDocument(text = text, tasks = tasks)
 }
 
-/** Draws the contrast edge around every task the layout actually placed. */
+/**
+ * Draws the contrast edge around every task the layout actually placed.
+ *
+ * A task whose name wrapped is edged on each line it reaches rather than by one
+ * rectangle spanning both: the edge is what makes a white task visible on white,
+ * so the half on the second line needs its own as much as the first does.
+ */
 private fun DrawScope.drawTaskEdges(
     layout: TextLayoutResult,
     tasks: List<DrawnTask>,
@@ -637,14 +644,15 @@ private fun DrawScope.drawTaskEdges(
     stroke: Float,
 ) {
     tasks.forEachIndexed { index, task ->
-        val box = layout.boxOfRange(task.start, task.end) ?: return@forEachIndexed
-        drawRoundRect(
-            color = paints[index].edge,
-            topLeft = Offset(box.left, box.top),
-            size = Size(box.width, box.height),
-            cornerRadius = CornerRadius(corner, corner),
-            style = Stroke(width = stroke),
-        )
+        layout.boxesOfRange(task.start, task.end).forEach { box ->
+            drawRoundRect(
+                color = paints[index].edge,
+                topLeft = Offset(box.left, box.top),
+                size = Size(box.width, box.height),
+                cornerRadius = CornerRadius(corner, corner),
+                style = Stroke(width = stroke),
+            )
+        }
     }
 }
 
@@ -738,10 +746,11 @@ private fun CellSlot(
                 // around it changes — nothing here remembers a coordinate.
                 layout?.let { placed ->
                     drawn.tasks.forEach { task ->
-                        placed.boxOfRange(task.start, task.end)?.let { box ->
+                        val boxes = placed.boxesOfRange(task.start, task.end)
+                        if (boxes.isNotEmpty()) {
                             TaskHandle(
                                 task = task.segment,
-                                bounds = box,
+                                boxes = boxes,
                                 gameId = gameId,
                                 columnType = cell.columnType,
                                 state = state,
@@ -780,7 +789,7 @@ private fun CellSlot(
 @Composable
 private fun TaskHandle(
     task: CellSegmentPreview,
-    bounds: Rect,
+    boxes: List<Rect>,
     gameId: EntityId,
     columnType: CellColumnType,
     state: GameTableScreenState,
@@ -800,45 +809,66 @@ private fun TaskHandle(
     val focusRing = MaterialTheme.colorScheme.primary
     val hoverRing = MaterialTheme.colorScheme.primary
 
-    Box(
-        modifier =
-            with(density) {
-                Modifier
-                    .offset { IntOffset(bounds.left.toInt(), bounds.top.toInt()) }
-                    .size(bounds.width.toDp(), bounds.height.toDp())
-            }.hoverable(interactions)
-                .pointerHoverIcon(PointerIcon.Hand)
-                .onFocusEvent { focused = it.isFocused }
-                .focusable()
-                .clickable(onClickLabel = openLabel) { controller.openTaskMenu(gameId, columnType, taskId) }
-                .onPreviewKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    when (event.key) {
-                        Key.Enter, Key.NumPadEnter, Key.Spacebar -> {
-                            controller.openTaskMenu(gameId, columnType, taskId)
-                            true
-                        }
+    // A wrapped name is several boxes and one control. They share the hover and
+    // the focus, so pressing either half does the same thing and lighting up is
+    // about the task rather than about the piece of it under the pointer. Only
+    // the first takes the keyboard and carries the name, so Tab stops at a task
+    // once and a reader is told about it once; only the first hangs the popover,
+    // because PLAN 12.5 opens it above the word and the word starts there.
+    boxes.forEachIndexed { index, bounds ->
+        val leading = index == 0
+        Box(
+            modifier =
+                with(density) {
+                    Modifier
+                        .offset { IntOffset(bounds.left.toInt(), bounds.top.toInt()) }
+                        .size(bounds.width.toDp(), bounds.height.toDp())
+                }.hoverable(interactions)
+                    .pointerHoverIcon(PointerIcon.Hand)
+                    .then(
+                        if (leading) {
+                            Modifier
+                                .onFocusEvent { focused = it.isFocused }
+                                .focusable()
+                        } else {
+                            Modifier
+                        },
+                    ).clickable(onClickLabel = openLabel) { controller.openTaskMenu(gameId, columnType, taskId) }
+                    .onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        when (event.key) {
+                            Key.Enter, Key.NumPadEnter, Key.Spacebar -> {
+                                controller.openTaskMenu(gameId, columnType, taskId)
+                                true
+                            }
 
-                        else -> false
-                    }
-                }.drawBehind {
-                    // A ring rather than a wash: the colour underneath is the
-                    // information, and covering it to say "you are over this"
-                    // would trade the answer for the pointer.
-                    if (focused || hovered) {
-                        drawRoundRect(
-                            color = if (focused) focusRing else hoverRing,
-                            cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()),
-                            style = Stroke(width = if (focused) 2.dp.toPx() else 1.5.dp.toPx()),
-                        )
-                    }
-                }.semantics {
-                    contentDescription = spoken
-                    role = Role.Button
-                },
-    ) {
-        if (menu != null) {
-            TaskPopover(menu = menu, state = state, controller = controller)
+                            else -> false
+                        }
+                    }.drawBehind {
+                        // A ring rather than a wash: the colour underneath is the
+                        // information, and covering it to say "you are over this"
+                        // would trade the answer for the pointer.
+                        if (focused || hovered) {
+                            drawRoundRect(
+                                color = if (focused) focusRing else hoverRing,
+                                cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()),
+                                style = Stroke(width = if (focused) 2.dp.toPx() else 1.5.dp.toPx()),
+                            )
+                        }
+                    }.then(
+                        if (leading) {
+                            Modifier.semantics {
+                                contentDescription = spoken
+                                role = Role.Button
+                            }
+                        } else {
+                            Modifier.clearAndSetSemantics { }
+                        },
+                    ),
+        ) {
+            if (leading && menu != null) {
+                TaskPopover(menu = menu, state = state, controller = controller)
+            }
         }
     }
 }

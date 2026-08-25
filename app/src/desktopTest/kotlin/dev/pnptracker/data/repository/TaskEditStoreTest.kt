@@ -496,4 +496,68 @@ class TaskEditStoreTest {
             assertEquals(TaskEditFailure.TASK_NOT_AVAILABLE, refusal.failure)
             assertTrue(database.taskDao().allTasksIncludingDeleted().isEmpty())
         }
+
+    // ------------------------------------------------------------- rollback
+
+    /** Hands out identities until it is asked once too often. */
+    private class LimitedIds(
+        private val limit: Int,
+    ) : IdGenerator {
+        private var reads = 0
+
+        override fun newId(): EntityId {
+            reads++
+            check(reads <= limit) { "no more identities" }
+            return IdGenerator.Random.newId()
+        }
+    }
+
+    @Test
+    fun `a conversion that runs out of identities leaves the cell exactly as it was`() =
+        runBlocking<Unit> {
+            val game = addGame()
+            val cell = addCell(game.id)
+            addText(cell.id, "Knight")
+            // The whole cell is the task, so the freed word has no neighbour's
+            // row to join and needs one of its own — and there is none to give.
+            val knight = makeTask(game, cell, "Knight")
+            val document = documentTextOf(cell.id)
+            val segmentsBefore = database.cellSegmentDao().segmentsOfCell(cell.id)
+            val tasksBefore = database.taskDao().allTasksIncludingDeleted()
+            val colorsBefore = database.taskEditDao().colorsOfTask(knight)
+            val starved = TaskEditStore(database.taskEditDao(), LimitedIds(limit = 0), StoppedClock(updatedAt))
+
+            assertFailsWith<IllegalStateException> { starved.convertTaskToText(knight) }
+
+            assertEquals(document, documentTextOf(cell.id), "the cell did not come back")
+            assertEquals(segmentsBefore, database.cellSegmentDao().segmentsOfCell(cell.id))
+            assertEquals(tasksBefore, database.taskDao().allTasksIncludingDeleted())
+            assertEquals(colorsBefore, database.taskEditDao().colorsOfTask(knight))
+        }
+
+    @Test
+    fun `converting a task leaves another task's piece alone whatever state it is in`() =
+        runBlocking<Unit> {
+            val game = addGame()
+            val cell = addCell(game.id)
+            addText(cell.id, "Basılacak Knight ve token")
+            val knight = makeTask(game, cell, "Knight")
+            val token = makeTask(game, cell, "token")
+            database.taskDao().softDelete(token, createdAt)
+            val document = documentTextOf(cell.id)
+            val piece = assertNotNull(database.cellSegmentDao().segmentOfTaskIncludingDeleted(token))
+
+            assertTrue(store.convertTaskToText(knight))
+
+            assertEquals(document, documentTextOf(cell.id), "the cell stopped saying what it said")
+            // The row is the same row and still the same task's; the pieces
+            // before it merged, so its place moved up with them.
+            val after = assertNotNull(database.cellSegmentDao().segmentOfTaskIncludingDeleted(token))
+            assertEquals(piece.id, after.id, "the piece was rewritten as a new row")
+            assertEquals(piece.taskId, after.taskId, "the piece lost the task it names")
+            assertEquals(piece.kind, after.kind, "the piece stopped being a task piece")
+            assertNull(after.text, "text was written into a task piece")
+            assertEquals(listOf(0, 1), ordersOf(cell.id))
+            assertEquals(listOf(SegmentKind.PLAIN_TEXT, SegmentKind.TASK), kindsOf(cell.id))
+        }
 }

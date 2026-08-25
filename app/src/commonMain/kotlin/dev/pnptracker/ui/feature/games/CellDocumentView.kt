@@ -23,30 +23,52 @@ data class TaskAnchor(
 )
 
 /**
- * The box a stretch of laid-out text occupies.
+ * The boxes a stretch of laid-out text occupies: one for each line it covers.
  *
- * A run that wrapped is anchored on the line it begins on, which is where the
- * word starts and where a reader's eye is. Taking the union across lines would
- * give a box covering text that is not the task's at all.
+ * A run that wrapped is two shapes on screen, not one. A single rectangle around
+ * both would cover the whole width between them — the end of the line above and
+ * the start of the line below — and make text that is not the task's part of it,
+ * to look at and to press. So each line the run reaches gets its own box, and
+ * the space between them belongs to whatever is really there.
+ *
+ * Empty when the run is not on screen at all: a cell shows a few lines and says
+ * so, and a task past the cut has no box to give.
+ */
+fun TextLayoutResult.boxesOfRange(
+    start: Int,
+    end: Int,
+): List<Rect> {
+    if (start >= end || start < 0 || end > layoutInput.text.length) return emptyList()
+    val lastVisible = getLineEnd(lineCount - 1, visibleEnd = true)
+    val stop = minOf(end, lastVisible)
+    if (stop <= start) return emptyList()
+    val boxes = mutableListOf<Rect>()
+    var at = start
+    while (at < stop) {
+        // Where the line really ends, trailing space and all: asked for the
+        // visible end instead, a line that wrapped after a space would come back
+        // short and the space would be measured as a second box on the same
+        // line. One character on when a line ends where it began, so a line
+        // break of its own cannot leave this going nowhere.
+        val until = minOf(stop, maxOf(getLineEnd(getLineForOffset(at), visibleEnd = false), at + 1))
+        val first = getBoundingBox(at)
+        val last = getBoundingBox(until - 1)
+        boxes += Rect(first.left, first.top, last.right, last.bottom)
+        at = until
+    }
+    return boxes
+}
+
+/**
+ * Where a stretch of laid-out text begins: the box on the line it starts on.
+ *
+ * What a popover hangs from. A wrapped run is anchored where the word starts and
+ * where a reader's eye is, rather than at some point averaged across its lines.
  */
 fun TextLayoutResult.boxOfRange(
     start: Int,
     end: Int,
-): Rect? {
-    if (start >= end || start < 0 || end > layoutInput.text.length) return null
-    val lastVisible = getLineEnd(lineCount - 1, visibleEnd = true)
-    if (start >= lastVisible) return null
-    val stop = minOf(end, lastVisible)
-    if (stop <= start) return null
-    val first = getBoundingBox(start)
-    val firstLine = getLineForOffset(start)
-    return if (firstLine == getLineForOffset(stop - 1)) {
-        val last = getBoundingBox(stop - 1)
-        Rect(first.left, first.top, last.right, last.bottom)
-    } else {
-        Rect(first.left, first.top, getLineRight(firstLine), first.bottom)
-    }
-}
+): Rect? = boxesOfRange(start, end).firstOrNull()
 
 /**
  * Puts a small panel over the word it belongs to.
