@@ -1005,7 +1005,6 @@ private fun CellEditorSlot(
         } else {
             TaskComposerPanel(
                 composer = composer,
-                colors = colors,
                 focusRecall = focusRecall,
                 controller = controller,
                 onSave = { saveTask() },
@@ -1485,17 +1484,16 @@ private fun spokenTaskOf(segment: CellSegmentPreview): String {
 @Composable
 private fun TaskComposerPanel(
     composer: TaskComposer,
-    colors: List<ColorSummary>,
     focusRecall: Int,
     controller: GameTableController,
     onSave: () -> Unit,
 ) {
     val panelFocus = remember { FocusRequester() }
     LaunchedEffect(focusRecall) { panelFocus.requestFocus() }
-    val trackingChoices =
-        composer.columnType.poolType
-            ?.let { trackingModesOf(it) }
-            .orEmpty()
+    // Where the keyboard goes when a save is refused: the first row that is not
+    // ready, so the user is put in front of the thing to fix rather than at the
+    // top of a panel they have to search.
+    val landing = composer.firstUnusableRow ?: 0
 
     Column(
         verticalArrangement = Arrangement.spacedBy(3.dp),
@@ -1520,7 +1518,7 @@ private fun TaskComposerPanel(
                 }
             },
     ) {
-        // The title and the words being turned into a task share a line: the
+        // The title and the words being turned into tasks share a line: the
         // panel is inside a table cell, and a line spent on a label of its own
         // is a line the row grows by.
         val nameLabel = stringResource(Strings.CellTask.nameLabel)
@@ -1542,87 +1540,57 @@ private fun TaskComposerPanel(
             )
         }
 
-        OutlinedTextField(
-            value = composer.colorQuery,
-            onValueChange = controller::editTaskColorQuery,
-            enabled = !composer.isSaving,
-            singleLine = true,
-            textStyle = MaterialTheme.typography.bodySmall,
-            label = { Text(stringResource(Strings.CellTask.colorSearch)) },
-            modifier = Modifier.fillMaxWidth().focusRequester(panelFocus),
-        )
-        ColorList(
-            colors = colors,
-            chosen = composer.colorId,
-            enabled = !composer.isSaving,
-            emptyQuery = composer.colorQuery.isBlank(),
-            onChoose = controller::chooseTaskColor,
-        )
+        CreationModeChoice(composer = composer, controller = controller)
 
-        OutlinedTextField(
-            value = composer.quantityText,
-            onValueChange = controller::editTaskQuantity,
-            enabled = !composer.isSaving,
-            singleLine = true,
-            isError = !composer.isQuantityUsable,
-            textStyle = MaterialTheme.typography.bodySmall,
-            label = { Text(stringResource(Strings.CellTask.quantityLabel)) },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        NoteLine(
-            text =
-                if (composer.isQuantityUsable) {
-                    stringResource(Strings.CellTask.quantityHint)
-                } else {
-                    stringResource(Strings.CellTask.quantityInvalid)
-                },
-            isProblem = !composer.isQuantityUsable,
-        )
-
-        if (trackingChoices.size > 1) {
-            // Asked for only where the pool really leaves a choice. Everywhere
-            // else the mode follows from the column and nothing is put to the
-            // user that has only one answer.
-            Text(
-                text = stringResource(Strings.Tasks.trackingLabel),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+        if (composer.mode == TaskCreationMode.SINGLE_COLOR) {
+            // One task: no numbering, no remove button, nothing about a list.
+            // The mode is a form convenience, and a form for one thing should
+            // not look like a form for several.
+            TaskRowFields(
+                row = 0,
+                draft = composer.rows.first(),
+                composer = composer,
+                colors = controller.colorsOffered(0),
+                isRepeatedColor = false,
+                focus = panelFocus.takeIf { landing == 0 },
+                controller = controller,
             )
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.selectableGroup(),
+        } else {
+            NoteLine(text = stringResource(Strings.CellTask.modeManyHint), isProblem = false)
+            composer.rows.forEachIndexed { index, draft ->
+                BatchTaskRow(
+                    row = index,
+                    draft = draft,
+                    composer = composer,
+                    colors = controller.colorsOffered(index),
+                    focus = panelFocus.takeIf { landing == index },
+                    controller = controller,
+                )
+            }
+            val addLabel = stringResource(Strings.CellTask.rowAdd)
+            TextButton(
+                onClick = controller::addTaskRow,
+                enabled = !composer.isSaving,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = addLabel },
             ) {
-                trackingChoices.forEach { mode ->
-                    val chosen = composer.trackingMode == mode
-                    val stateText =
-                        stringResource(
-                            if (chosen) Strings.Accessibility.selected else Strings.Accessibility.notSelected,
-                        )
-                    FilterChip(
-                        selected = chosen,
-                        onClick = { controller.chooseTaskTracking(mode) },
-                        label = { Text(stringResource(labelOf(mode)), style = MaterialTheme.typography.labelSmall) },
-                        modifier = Modifier.focusOutline(ComposerShape).semantics { stateDescription = stateText },
-                    )
-                }
+                Text(text = addLabel, style = MaterialTheme.typography.labelMedium)
+            }
+            if (!composer.canRemoveRow) {
+                // Said once, where the rows end, rather than under each of them:
+                // it is a fact about the batch, and repeating it on every row
+                // made a two row panel say it twice.
+                NoteLine(text = stringResource(Strings.CellTask.rowFloor), isProblem = false)
             }
         }
 
-        OutlinedTextField(
-            value = composer.notes,
-            onValueChange = controller::editTaskNotes,
-            enabled = !composer.isSaving,
-            // A note has lines like any other note, and Enter makes one here too.
-            singleLine = false,
-            minLines = 1,
-            maxLines = 3,
-            textStyle = MaterialTheme.typography.bodySmall,
-            label = { Text(stringResource(Strings.CellTask.notesLabel)) },
-            modifier = Modifier.fillMaxWidth(),
-        )
-
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            val saveLabel = stringResource(Strings.CellTask.save)
+            val saveLabel =
+                if (composer.mode == TaskCreationMode.SINGLE_COLOR) {
+                    stringResource(Strings.CellTask.save)
+                } else {
+                    stringResource(Strings.CellTask.saveMany, composer.usedRows.size)
+                }
             val discardLabel = stringResource(Strings.CellTask.discard)
             Button(
                 onClick = onSave,
@@ -1642,13 +1610,217 @@ private fun TaskComposerPanel(
         }
         val note =
             when {
+                composer.isSaving && composer.usedRows.size > 1 -> stringResource(Strings.CellTask.savingMany)
                 composer.isSaving -> stringResource(Strings.CellTask.saving)
                 composer.failure != null -> stringResource(messageOf(composer.failure))
-                composer.colorId == null -> stringResource(Strings.CellTask.colorRequired)
+                composer.repeatedColorRows.isNotEmpty() -> stringResource(Strings.CellTask.errorDuplicateColor)
+                composer.usedRows.any { it.colorId == null } -> stringResource(Strings.CellTask.colorRequired)
                 else -> stringResource(Strings.CellTask.hint)
             }
-        NoteLine(text = note, isProblem = composer.failure != null)
+        NoteLine(
+            text = note,
+            isProblem = composer.failure != null || composer.repeatedColorRows.isNotEmpty(),
+        )
     }
+}
+
+/**
+ * Choosing between one task and several independent ones.
+ *
+ * Two chips, both of which do something. PLAN 12.7 describes a third way — one
+ * task drawn in several colours — and it is not offered here: the step that can
+ * create one has not come yet, and a chip that switched to a mode nothing could
+ * save would be worse than its absence.
+ *
+ * Switching loses nothing. Every row the user typed stays in the panel either
+ * way, so this needs no warning and asks no question.
+ */
+@Composable
+private fun CreationModeChoice(
+    composer: TaskComposer,
+    controller: GameTableController,
+) {
+    Text(
+        text = stringResource(Strings.CellTask.modeLabel),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.selectableGroup(),
+    ) {
+        listOf(
+            TaskCreationMode.SINGLE_COLOR to Strings.CellTask.modeSingle,
+            TaskCreationMode.INDEPENDENT_TASKS to Strings.CellTask.modeMany,
+        ).forEach { (mode, label) ->
+            val chosen = composer.mode == mode
+            val stateText =
+                stringResource(if (chosen) Strings.Accessibility.selected else Strings.Accessibility.notSelected)
+            FilterChip(
+                selected = chosen,
+                enabled = !composer.isSaving,
+                onClick = { controller.chooseCreationMode(mode) },
+                label = { Text(stringResource(label), style = MaterialTheme.typography.labelSmall) },
+                modifier = Modifier.focusOutline(ComposerShape).semantics { stateDescription = stateText },
+            )
+        }
+    }
+}
+
+/**
+ * One task of a batch, with its place in the panel and a way to take it away.
+ *
+ * Numbered because the order is the order the tasks will sit in the cell, and
+ * separated by a line rather than boxed in: the panel lives inside a table cell,
+ * and a bordered card for every row would spend width the row does not have.
+ */
+@Composable
+private fun BatchTaskRow(
+    row: Int,
+    draft: TaskDraftRow,
+    composer: TaskComposer,
+    colors: List<ColorSummary>,
+    focus: FocusRequester?,
+    controller: GameTableController,
+) {
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(Strings.CellTask.rowTitle, row + 1),
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.weight(1f),
+        )
+        val removeLabel = stringResource(Strings.CellTask.rowRemove, row + 1)
+        TextButton(
+            onClick = { controller.removeTaskRow(row) },
+            enabled = composer.canRemoveRow && !composer.isSaving,
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+            modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = removeLabel },
+        ) {
+            Text(text = stringResource(Strings.CellTask.rowRemoveShort), style = MaterialTheme.typography.labelSmall)
+        }
+    }
+    TaskRowFields(
+        row = row,
+        draft = draft,
+        composer = composer,
+        colors = colors,
+        isRepeatedColor = row in composer.repeatedColorRows,
+        focus = focus,
+        controller = controller,
+    )
+}
+
+/**
+ * The colour, count, tracking and note of one task being described.
+ *
+ * The same fields in both modes, because they describe the same thing: a task
+ * made alone and one made beside two others are the same record afterwards.
+ */
+@Composable
+private fun TaskRowFields(
+    row: Int,
+    draft: TaskDraftRow,
+    composer: TaskComposer,
+    colors: List<ColorSummary>,
+    isRepeatedColor: Boolean,
+    focus: FocusRequester?,
+    controller: GameTableController,
+) {
+    val trackingChoices =
+        composer.columnType.poolType
+            ?.let { trackingModesOf(it) }
+            .orEmpty()
+
+    OutlinedTextField(
+        value = draft.colorQuery,
+        onValueChange = { controller.editTaskColorQuery(row, it) },
+        enabled = !composer.isSaving,
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodySmall,
+        label = { Text(stringResource(Strings.CellTask.colorSearch)) },
+        modifier = Modifier.fillMaxWidth().then(focus?.let { Modifier.focusRequester(it) } ?: Modifier),
+    )
+    ColorList(
+        colors = colors,
+        chosen = draft.colorId,
+        enabled = !composer.isSaving,
+        emptyQuery = draft.colorQuery.isBlank(),
+        onChoose = { controller.chooseTaskColor(row, it) },
+    )
+    if (isRepeatedColor) {
+        // Said on the row that repeats rather than only at the foot of the
+        // panel: with several rows open, a message at the bottom does not say
+        // which colour to change.
+        NoteLine(text = stringResource(Strings.CellTask.rowDuplicate), isProblem = true)
+    }
+
+    OutlinedTextField(
+        value = draft.quantityText,
+        onValueChange = { controller.editTaskQuantity(row, it) },
+        enabled = !composer.isSaving,
+        singleLine = true,
+        isError = !draft.isQuantityUsable,
+        textStyle = MaterialTheme.typography.bodySmall,
+        label = { Text(stringResource(Strings.CellTask.quantityLabel)) },
+        modifier = Modifier.fillMaxWidth(),
+    )
+    NoteLine(
+        text =
+            if (draft.isQuantityUsable) {
+                stringResource(Strings.CellTask.quantityHint)
+            } else {
+                stringResource(Strings.CellTask.quantityInvalid)
+            },
+        isProblem = !draft.isQuantityUsable,
+    )
+
+    if (trackingChoices.size > 1) {
+        // Asked for only where the pool really leaves a choice. Everywhere else
+        // the mode follows from the column and nothing is put to the user that
+        // has only one answer. Asked per task, because two tasks made together
+        // are two tasks and may be tracked differently.
+        Text(
+            text = stringResource(Strings.Tasks.trackingLabel),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.selectableGroup(),
+        ) {
+            trackingChoices.forEach { mode ->
+                val chosen = draft.trackingMode == mode
+                val stateText =
+                    stringResource(
+                        if (chosen) Strings.Accessibility.selected else Strings.Accessibility.notSelected,
+                    )
+                FilterChip(
+                    selected = chosen,
+                    enabled = !composer.isSaving,
+                    onClick = { controller.chooseTaskTracking(row, mode) },
+                    label = { Text(stringResource(labelOf(mode)), style = MaterialTheme.typography.labelSmall) },
+                    modifier = Modifier.focusOutline(ComposerShape).semantics { stateDescription = stateText },
+                )
+            }
+        }
+    }
+
+    OutlinedTextField(
+        value = draft.notes,
+        onValueChange = { controller.editTaskNotes(row, it) },
+        enabled = !composer.isSaving,
+        // A note has lines like any other note, and Enter makes one here too.
+        singleLine = false,
+        minLines = 1,
+        maxLines = 3,
+        textStyle = MaterialTheme.typography.bodySmall,
+        label = { Text(stringResource(Strings.CellTask.notesLabel)) },
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 /**
@@ -1745,6 +1917,8 @@ private fun messageOf(failure: TaskFromTextFailure) =
         TaskFromTextFailure.TASK_NAME_EMPTY -> Strings.CellTask.errorNameEmpty
         TaskFromTextFailure.COLOR_NOT_AVAILABLE -> Strings.CellTask.errorColorGone
         TaskFromTextFailure.INVALID_REQUIRED_QUANTITY -> Strings.CellTask.errorQuantity
+        TaskFromTextFailure.DUPLICATE_COLOR -> Strings.CellTask.errorDuplicateColor
+        TaskFromTextFailure.NO_TASK_DESCRIBED -> Strings.CellTask.errorNoTask
         TaskFromTextFailure.COULD_NOT_SAVE -> Strings.CellTask.errorCouldNotSave
     }
 

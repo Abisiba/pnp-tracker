@@ -14,9 +14,9 @@ import dev.pnptracker.data.database.entity.stageRowsFor
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.SegmentKind
-import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.tasks.CellTextSelection
 import dev.pnptracker.domain.tasks.SplitPlainText
+import dev.pnptracker.domain.tasks.TaskDraft
 import dev.pnptracker.domain.tasks.TaskFromTextException
 import dev.pnptracker.domain.tasks.TaskFromTextFailure
 import dev.pnptracker.domain.tasks.splitForTaskName
@@ -57,8 +57,8 @@ private data class PlannedTask(
  * the write that relies on it.
  *
  * The reads are public and the writes are not. The only way to change a cell
- * from here is [createSingleColorTaskFromSelection], which is the one place that
- * knows what a cell is allowed to look like afterwards.
+ * from here is [createTasksFromSelection], which is the one place that knows what
+ * a cell is allowed to look like afterwards.
  */
 @Dao
 abstract class TaskFromTextDao {
@@ -123,15 +123,30 @@ abstract class TaskFromTextDao {
     // -------------------------------------------------------- the transaction
 
     /**
-     * Cuts the selected words out of a cell and puts a task in their place.
+     * Cuts the selected words out of a cell and puts tasks in their place.
+     *
+     * One draft or several: the same act either way, and deliberately one
+     * transaction rather than two code paths that could drift apart on what a
+     * cell is allowed to look like afterwards.
      *
      * The document is not changed by this, only its shape. What the cell reads as
      * before and after is the same string to the character: PLAN 5.5 splits the
-     * piece into the text before the selection, the task, and the text after it,
+     * piece into the text before the selection, the tasks, and the text after it,
      * and writes no empty piece on either side. Nothing is trimmed into nowhere,
-     * no space is invented between the parts, and the `×14` the cell will show
-     * beside the task is drawn from [TaskEntity.requiredQuantity] rather than
-     * written into anybody's words.
+     * no space is invented between the parts — not even between two tasks, whose
+     * names sit end to end in the document exactly as one name would — and the
+     * `×14` the cell will show beside each task is drawn from its own
+     * [TaskEntity.requiredQuantity] rather than written into anybody's words.
+     *
+     * Several drafts make several **independent** tasks (PLAN 12.7): one identity,
+     * one colour, one quantity, one note, one pipeline and one place in the cell
+     * each, in the order the drafts were given. Nothing is written that ties them
+     * together — no group, no parent, no shared counter — so afterwards the
+     * database cannot tell they were made in the same breath, and nothing about
+     * one of them can reach another.
+     *
+     * Two drafts may not name the same colour. Folding them into one would make
+     * fewer tasks than the user described and throw away a quantity they typed.
      *
      * A finished game is worked in like any other. PLAN 5.3 keeps it visible and
      * editable, and reopening it on a new task is not something this decides —
@@ -140,22 +155,20 @@ abstract class TaskFromTextDao {
      * Everything is written at one [Instant], read once, so a task and the piece
      * standing for it cannot be created at two different moments of one act.
      *
-     * @return the identity of the task that was created.
+     * @return the identities of the tasks that were created, in the order of
+     *   [drafts].
      * @throws TaskFromTextException for any of the recognised refusals; nothing
      *   is written in those cases.
-     * @throws IllegalArgumentException if [trackingMode] is not one the cell's
-     *   pool allows, which is a programming mistake rather than a user's.
+     * @throws IllegalArgumentException if a draft's tracking mode is not one the
+     *   cell's pool allows, which is a programming mistake rather than a user's.
      */
     @Transaction
-    open suspend fun createSingleColorTaskFromSelection(
+    open suspend fun createTasksFromSelection(
         selection: CellTextSelection,
-        colorId: EntityId,
-        requiredQuantity: Int,
-        trackingMode: TrackingMode,
-        notes: String?,
+        drafts: List<TaskDraft>,
         clock: Clock,
         idGenerator: IdGenerator,
-    ): EntityId {
+    ): List<EntityId> {
         if (activeGameCount(selection.gameId) != 1) refuse(TaskFromTextFailure.GAME_NOT_AVAILABLE)
 
         val cell = cellById(selection.cellId) ?: refuse(TaskFromTextFailure.CELL_NOT_AVAILABLE)
@@ -173,32 +186,40 @@ abstract class TaskFromTextDao {
         if (storedText != selection.expectedText) refuse(TaskFromTextFailure.STALE_TEXT_SELECTION)
 
         val split = splitForTaskName(storedText, selection.startOffset, selection.endOffset)
-        if (colorCount(colorId) != 1) refuse(TaskFromTextFailure.COLOR_NOT_AVAILABLE)
-        if (requiredQuantity <= 0) refuse(TaskFromTextFailure.INVALID_REQUIRED_QUANTITY)
+        if (drafts.isEmpty()) refuse(TaskFromTextFailure.NO_TASK_DESCRIBED)
+        if (drafts.distinctBy { it.colorId }.size != drafts.size) refuse(TaskFromTextFailure.DUPLICATE_COLOR)
+        // Every draft is checked before any of them is written: a batch that
+        // failed on its third row after writing the first two would leave the
+        // user with tasks they did not finish describing.
+        drafts.forEach { draft ->
+            if (colorCount(draft.colorId) != 1) refuse(TaskFromTextFailure.COLOR_NOT_AVAILABLE)
+            if (draft.requiredQuantity <= 0) refuse(TaskFromTextFailure.INVALID_REQUIRED_QUANTITY)
+        }
 
         val moment = clock.now()
-        val taskId = idGenerator.newId()
         // Built before anything is written: the entity refuses a tracking mode
         // this pool does not allow, and that must reach the caller as the
         // programming mistake it is rather than as a saving problem.
-        val task =
-            TaskEntity(
-                id = taskId,
-                poolType = poolType,
-                trackingMode = trackingMode,
-                name = split.name,
-                requiredQuantity = requiredQuantity,
-                // Stored as the user left it. A note is their own words, and the
-                // spaces in it are theirs too.
-                notes = notes,
-                createdAt = moment,
-                updatedAt = moment,
-                // Chosen out of the user's own text, so no imported cell is behind it.
-                sourceRawImportBlockId = null,
-            )
+        val tasks =
+            drafts.map { draft ->
+                TaskEntity(
+                    id = idGenerator.newId(),
+                    poolType = poolType,
+                    trackingMode = draft.trackingMode,
+                    name = split.name,
+                    requiredQuantity = draft.requiredQuantity,
+                    // Stored as the user left it. A note is their own words, and
+                    // the spaces in it are theirs too.
+                    notes = draft.notes,
+                    createdAt = moment,
+                    updatedAt = moment,
+                    // Chosen out of the user's own text, so no imported cell is behind it.
+                    sourceRawImportBlockId = null,
+                )
+            }
 
         val ordered = segmentsOfCell(cell.id)
-        val plan = planOf(ordered, segment.id, split, taskId)
+        val plan = planOf(ordered, segment.id, split, tasks.map { it.id })
 
         // Every existing row is lifted out of the way first. Renumbering in place
         // would collide with the unique index the moment one piece moved onto a
@@ -211,11 +232,14 @@ abstract class TaskFromTextDao {
 
         // The task before the piece that names it: the segment's foreign key
         // would have nothing to point at the other way round.
-        insertTask(task)
-        insertTaskColor(TaskColorEntity(taskId = taskId, colorId = colorId, slotIndex = 0))
-        // PLAN 7.2 and 8 fix the stages by pool, so a card or board task gets its
-        // whole pipeline here; a pool without one gets no rows and needs no case.
-        stageRowsFor(taskId, poolType, moment).forEach { insertStage(it) }
+        tasks.forEachIndexed { index, task ->
+            insertTask(task)
+            insertTaskColor(TaskColorEntity(taskId = task.id, colorId = drafts[index].colorId, slotIndex = 0))
+            // PLAN 7.2 and 8 fix the stages by pool, so a card or board task gets
+            // its whole pipeline here — its own rows, counting only its own work.
+            // A pool without a pipeline gets no rows and needs no case.
+            stageRowsFor(task.id, poolType, moment).forEach { insertStage(it) }
+        }
 
         plan.forEachIndexed { orderIndex, piece ->
             when (piece) {
@@ -251,16 +275,22 @@ abstract class TaskFromTextDao {
             }
         }
         touchCell(cell.id, moment)
-        return taskId
+        return tasks.map { it.id }
     }
 
     /**
      * What the cell will be made of once the cut is made.
      *
-     * The piece being cut becomes up to three: the words before the selection,
-     * the task, and the words after it. An empty side is not written at all —
-     * PLAN 5.5 — and the existing row is reused for whichever side there is, so
-     * a piece of writing keeps its identity through being split.
+     * The piece being cut becomes up to three parts: the words before the
+     * selection, the tasks, and the words after it. An empty side is not written
+     * at all — PLAN 5.5 — and the existing row is reused for whichever side there
+     * is, so a piece of writing keeps its identity through being split.
+     *
+     * The tasks go in one after another with nothing between them. PLAN 5.5
+     * writes no empty piece, and a space invented to separate two of them would
+     * be a character the user never typed appearing in their own note; the room
+     * the cell shows between them is drawn beside their counts (PLAN 12.7) and is
+     * no part of the document.
      *
      * Afterwards adjacent stretches of text are merged, which is PLAN 5.5 and 16
      * both: a cell never accumulates needless pieces. That can only reduce the
@@ -271,7 +301,7 @@ abstract class TaskFromTextDao {
         ordered: List<CellSegmentEntity>,
         targetId: EntityId,
         split: SplitPlainText,
-        taskId: EntityId,
+        taskIds: List<EntityId>,
     ): List<PlannedPiece> {
         val cut =
             ordered.flatMap { row ->
@@ -280,7 +310,7 @@ abstract class TaskFromTextDao {
                 } else {
                     buildList {
                         if (split.prefix.isNotEmpty()) add(PlannedText(row.id, split.prefix))
-                        add(PlannedTask(existingId = null, taskId = taskId))
+                        taskIds.forEach { add(PlannedTask(existingId = null, taskId = it)) }
                         if (split.suffix.isNotEmpty()) {
                             // The row goes to whichever side is there; when both
                             // are, the second side is a new piece of writing.

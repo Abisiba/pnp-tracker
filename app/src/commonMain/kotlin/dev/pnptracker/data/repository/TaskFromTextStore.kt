@@ -6,25 +6,46 @@ import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.tasks.CellTextSelection
+import dev.pnptracker.domain.tasks.TaskDraft
 import dev.pnptracker.domain.tasks.TaskFromTextException
 import dev.pnptracker.domain.tasks.TaskFromTextFailure
 import kotlin.time.Clock
 
-/** Turning words the user selected in a cell into a task. */
+/** Turning words the user selected in a cell into tasks. */
 interface TaskCreationFromText {
     /**
-     * Makes the selected words a task of one colour, in the cell they were
-     * written in.
+     * Makes the selected words into tasks, in the cell they were written in.
      *
      * The cell's text is not changed by this, only its shape: what it reads as
      * before and after is the same string, character for character.
+     *
+     * One draft makes one task. Several make several **independent** tasks (PLAN
+     * 12.7) — one identity, colour, quantity, note, pipeline and place in the
+     * cell each, in the order given — with nothing written that ties them
+     * together and nothing about one of them able to reach another. They start
+     * out sharing a name, which is where the resemblance ends: renaming one is a
+     * rename of one.
+     *
+     * @return the identities of the tasks that were created, in the order of
+     *   [drafts].
+     * @throws TaskFromTextException for a refusal the user can act on; which one
+     *   it was is on the exception, and nothing is written in any of those cases.
+     */
+    suspend fun createTasks(
+        selection: CellTextSelection,
+        drafts: List<TaskDraft>,
+    ): List<EntityId>
+
+    /**
+     * Makes the selected words a task of one colour.
+     *
+     * The single-draft case of [createTasks], named for what the panel's first
+     * mode does.
      *
      * @param requiredQuantity how many are needed; has to be greater than zero.
      * @param notes the user's own words, stored exactly as they typed them, or
      *   null when they wrote none.
      * @return the identity of the task that was created.
-     * @throws TaskFromTextException for a refusal the user can act on; which one
-     *   it was is on the exception, and nothing is written in any of those cases.
      */
     suspend fun createSingleColorTask(
         selection: CellTextSelection,
@@ -32,7 +53,19 @@ interface TaskCreationFromText {
         requiredQuantity: Int,
         trackingMode: TrackingMode,
         notes: String?,
-    ): EntityId
+    ): EntityId =
+        createTasks(
+            selection = selection,
+            drafts =
+                listOf(
+                    TaskDraft(
+                        colorId = colorId,
+                        requiredQuantity = requiredQuantity,
+                        trackingMode = trackingMode,
+                        notes = notes,
+                    ),
+                ),
+        ).single()
 }
 
 /**
@@ -48,20 +81,14 @@ class TaskFromTextStore(
     private val idGenerator: IdGenerator = IdGenerator.Random,
     private val clock: Clock = Clock.System,
 ) : TaskCreationFromText {
-    override suspend fun createSingleColorTask(
+    override suspend fun createTasks(
         selection: CellTextSelection,
-        colorId: EntityId,
-        requiredQuantity: Int,
-        trackingMode: TrackingMode,
-        notes: String?,
-    ): EntityId =
+        drafts: List<TaskDraft>,
+    ): List<EntityId> =
         try {
-            taskFromTextDao.createSingleColorTaskFromSelection(
+            taskFromTextDao.createTasksFromSelection(
                 selection = selection,
-                colorId = colorId,
-                requiredQuantity = requiredQuantity,
-                trackingMode = trackingMode,
-                notes = notes,
+                drafts = drafts,
                 clock = clock,
                 idGenerator = idGenerator,
             )

@@ -52,6 +52,18 @@ enum class TaskFromTextFailure {
     /** The quantity is not a whole number greater than zero. */
     INVALID_REQUIRED_QUANTITY,
 
+    /**
+     * Two of the tasks being made together were given the same colour.
+     *
+     * Refused rather than quietly folded into one. PLAN 12.7 makes a batch N
+     * independent tasks, so merging two rows would silently create fewer tasks
+     * than the user described and lose one of the quantities they typed.
+     */
+    DUPLICATE_COLOR,
+
+    /** No task was described at all, so there is nothing to create. */
+    NO_TASK_DESCRIBED,
+
     /** The storage refused the change, so nothing was written. */
     COULD_NOT_SAVE,
 }

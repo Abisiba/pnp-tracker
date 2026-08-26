@@ -173,12 +173,24 @@ sealed interface CellWork {
 }
 
 /**
- * The task being made out of words the user selected.
+ * Which of the panel's ways of creating tasks the user is working in.
  *
- * The selection is fixed when the panel opens and never moves again: it carries
- * the piece it was made in and what that piece said, so a save either lands
- * exactly where the user pointed or is refused. Nothing in here is stored until
- * they save, and closing the panel leaves the cell and its text as they were.
+ * A convenience of the form and nothing more (PLAN 12.6): the mode is never
+ * stored, and once tasks exist nothing in the database says which way they were
+ * made. [INDEPENDENT_TASKS] in particular is not a kind of task, a group or a
+ * parent — PLAN 12.7 is explicit — it is a way of typing one name once.
+ *
+ * The third mode PLAN describes, a single task drawn in several colours, is not
+ * here: it belongs to the step that can create it, and an option that did
+ * nothing would be a promise the panel cannot keep.
+ */
+enum class TaskCreationMode {
+    SINGLE_COLOR,
+    INDEPENDENT_TASKS,
+}
+
+/**
+ * One task the user is describing in the panel, before anything is written.
  *
  * The quantity is held as the user's own text rather than as a number. A field
  * that silently swallowed `1.5` or `-3` and showed something else would be
@@ -189,19 +201,13 @@ sealed interface CellWork {
  * the task, so a value nobody chose would be a decision made on the user's
  * behalf and written to their database.
  */
-data class TaskComposer(
-    val selection: CellTextSelection,
-    val columnType: CellColumnType,
-    /** The selected words, with the whitespace at their edges already left behind. */
-    val name: String,
+data class TaskDraftRow(
     val colorQuery: String = "",
     val colorId: EntityId? = null,
     val quantityText: String = "",
     /** The user's own words, kept exactly; PLAN 5.6 stores a note as written. */
     val notes: String = "",
     val trackingMode: TrackingMode? = null,
-    val isSaving: Boolean = false,
-    val failure: TaskFromTextFailure? = null,
 ) {
     /** The quantity if it is a whole number greater than zero, and null otherwise. */
     val quantity: Int? get() = quantityText.toIntOrNull()?.takeIf { it > 0 }
@@ -209,8 +215,96 @@ data class TaskComposer(
     /** False once there is something in the field that is not a usable quantity. */
     val isQuantityUsable: Boolean get() = quantityText.isEmpty() || quantity != null
 
+    /** True once this row describes a task that could actually be created. */
+    val isComplete: Boolean get() = colorId != null && quantity != null && trackingMode != null
+
+    /** True while nothing has been typed or chosen here at all. */
+    val isUntouched: Boolean
+        get() = colorId == null && quantityText.isEmpty() && notes.isEmpty() && colorQuery.isEmpty()
+}
+
+/**
+ * The tasks being made out of words the user selected.
+ *
+ * The selection is fixed when the panel opens and never moves again: it carries
+ * the piece it was made in and what that piece said, so a save either lands
+ * exactly where the user pointed or is refused. Nothing in here is stored until
+ * they save, and closing the panel leaves the cell and its text as they were.
+ *
+ * [rows] is the list in both modes rather than a list in one and a set of loose
+ * fields in the other. That is what lets the mode be switched without losing
+ * anything: single-colour mode simply works on the first row and leaves the rest
+ * where they are, so going back to several tasks finds them still typed. The
+ * name is not in the rows because it is not a row's to differ in — every task in
+ * a batch starts from the same selected words (PLAN 12.7), and telling them
+ * apart afterwards is a rename.
+ */
+data class TaskComposer(
+    val selection: CellTextSelection,
+    val columnType: CellColumnType,
+    /** The selected words, with the whitespace at their edges already left behind. */
+    val name: String,
+    val mode: TaskCreationMode = TaskCreationMode.SINGLE_COLOR,
+    val rows: List<TaskDraftRow>,
+    val isSaving: Boolean = false,
+    val failure: TaskFromTextFailure? = null,
+) {
+    init {
+        require(rows.isNotEmpty()) { "A task panel always has a row to type in." }
+    }
+
+    /** The rows this mode will actually create tasks from. */
+    val usedRows: List<TaskDraftRow>
+        get() = if (mode == TaskCreationMode.SINGLE_COLOR) rows.take(1) else rows
+
+    /**
+     * The rows whose colour an earlier used row already took.
+     *
+     * By place rather than by colour, so the panel can mark the second one and
+     * leave the first alone: the user chose that one first and it is not the one
+     * they need to change.
+     */
+    val repeatedColorRows: Set<Int>
+        get() {
+            val seen = mutableSetOf<EntityId>()
+            val repeated = mutableSetOf<Int>()
+            usedRows.forEachIndexed { index, row ->
+                val colorId = row.colorId ?: return@forEachIndexed
+                if (!seen.add(colorId)) repeated += index
+            }
+            return repeated
+        }
+
+    /** True while a row could be taken away and the mode still have enough. */
+    val canRemoveRow: Boolean
+        get() = mode == TaskCreationMode.INDEPENDENT_TASKS && rows.size > LEAST_INDEPENDENT_TASKS
+
+    /** The first row that is not ready, so the keyboard can be sent to it. */
+    val firstUnusableRow: Int?
+        get() = usedRows.indexOfFirst { !it.isComplete }.takeIf { it >= 0 }
+
+    /** How many tasks this mode will not save fewer than. */
+    val leastRows: Int
+        get() = if (mode == TaskCreationMode.SINGLE_COLOR) 1 else LEAST_INDEPENDENT_TASKS
+
     val canSave: Boolean
-        get() = !isSaving && colorId != null && quantity != null && trackingMode != null
+        get() =
+            !isSaving &&
+                usedRows.size >= leastRows &&
+                usedRows.all { it.isComplete } &&
+                repeatedColorRows.isEmpty()
+
+    companion object {
+        /**
+         * How many tasks the batch mode is for.
+         *
+         * Two, because one task made through a form built for several is the
+         * single-colour mode with more work. There is no ceiling to match it:
+         * PLAN puts no limit on how many colours a thing comes in, and inventing
+         * one would refuse a real note somebody wrote.
+         */
+        const val LEAST_INDEPENDENT_TASKS = 2
+    }
 }
 
 /**

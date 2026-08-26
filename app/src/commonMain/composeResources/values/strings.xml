@@ -245,6 +245,20 @@
     <string name="cell_task_completed">tamamlandı</string>
 
     <!-- Game table: why selected words did not become a task -->
+    <string name="cell_task_mode_label">Oluşturma biçimi</string>
+    <string name="cell_task_mode_single">Tek renk</string>
+    <string name="cell_task_mode_many">Çoklu görev</string>
+    <string name="cell_task_mode_many_hint">Her satır kendi başına bir görev olur; aralarında hiçbir bağ kurulmaz.</string>
+    <string name="cell_task_row_title">%1$d. görev</string>
+    <string name="cell_task_row_add">Görev satırı ekle</string>
+    <string name="cell_task_row_remove">%1$d. görev satırını sil</string>
+    <string name="cell_task_row_remove_short">Sil</string>
+    <string name="cell_task_row_floor">En az iki görev satırı gerekir.</string>
+    <string name="cell_task_row_duplicate">Bu renk yukarıdaki bir satırda seçildi. Başka bir renk seçin.</string>
+    <string name="cell_task_save_many">%1$d görevi kaydet</string>
+    <string name="cell_task_saving_many">Görevler kaydediliyor…</string>
+    <string name="cell_task_error_duplicate_color">Aynı renk iki satırda seçilemez.</string>
+    <string name="cell_task_error_no_task">Kaydedilecek görev satırı yok.</string>
     <string name="cell_task_error_game_gone">Bu oyun artık kayıtlı değil.</string>
     <string name="cell_task_error_cell_gone">Bu hücre artık kayıtlı değil.</string>
     <string name="cell_task_error_cell_no_tasks">Notlar sütununda görev oluşturulamaz.</string>

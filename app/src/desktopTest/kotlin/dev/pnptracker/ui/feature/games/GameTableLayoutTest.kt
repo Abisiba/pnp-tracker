@@ -433,6 +433,64 @@ class GameTableLayoutTest {
     }
 
     @Test
+    fun `the creation panel offers the two modes it can actually save`() {
+        val panel = source.substringAfter("private fun CreationModeChoice(").substringBefore("private fun BatchTaskRow(")
+        assertTrue("TaskCreationMode.SINGLE_COLOR" in panel, "one task cannot be made")
+        assertTrue("TaskCreationMode.INDEPENDENT_TASKS" in panel, "several tasks cannot be made")
+        // PLAN 12.7 describes a third mode. The step that can create one has not
+        // come yet, so it is absent rather than shown greyed out: a control that
+        // switched to a mode nothing could save is worse than no control.
+        assertTrue("MULTI_COLOR" !in source, "a mode nothing can save is offered")
+        assertTrue(
+            Regex("""enabled\s*=\s*false""").find(source) == null,
+            "a control is drawn permanently disabled",
+        )
+    }
+
+    @Test
+    fun `a batch row is a row of the panel rather than a card of its own`() {
+        // The panel lives inside a table cell. Every border it draws is width
+        // the row does not have, so the rows are separated by a line.
+        val row = source.substringAfter("private fun BatchTaskRow(").substringBefore("private fun TaskRowFields(")
+        assertTrue("HorizontalDivider(" in row, "the rows of a batch run into one another")
+        assertTrue("Strings.CellTask.rowTitle" in row, "a row does not say which task it is")
+        assertTrue("controller.removeTaskRow(row)" in row, "a row cannot be taken away")
+        assertTrue("composer.canRemoveRow" in row, "the last rows of a batch can be taken away")
+    }
+
+    @Test
+    fun `the batch floor is said once rather than under every row`() {
+        // It is a fact about the batch, not about a row. Drawn inside the row it
+        // appeared once per row, so a two row panel said it twice.
+        val row = source.substringAfter("private fun BatchTaskRow(").substringBefore("private fun TaskRowFields(")
+        assertTrue("Strings.CellTask.rowFloor" !in row, "the floor is said once for every row")
+        assertEquals(
+            1,
+            Regex("""Strings\.CellTask\.rowFloor""").findAll(source).count(),
+            "the floor is drawn in more than one place",
+        )
+    }
+
+    @Test
+    fun `the panel says which row repeats a colour rather than only that one does`() {
+        val fields = source.substringAfter("private fun TaskRowFields(").substringBefore("private fun ColorList(")
+        assertTrue("isRepeatedColor" in fields, "a repeated colour is not marked on its own row")
+        assertTrue("Strings.CellTask.rowDuplicate" in fields, "a repeated colour is not said in words")
+    }
+
+    @Test
+    fun `every field of the panel belongs to the row it is drawn in`() {
+        // The one thing that would quietly ruin a batch: a field wired to the
+        // composer rather than to its row, so typing in the third task changed
+        // the first. Every call carries the row it came from.
+        val fields = source.substringAfter("private fun TaskRowFields(").substringBefore("private fun ColorList(")
+        listOf("editTaskColorQuery", "chooseTaskColor", "editTaskQuantity", "editTaskNotes", "chooseTaskTracking")
+            .forEach { call ->
+                assertTrue("controller.$call(row, " in fields, "$call does not say which row it is for")
+            }
+    }
+
+    @Test
     fun `clicking away does not throw away something typed`() {
         val popover = source.substringAfter("private fun TaskPopover(").substringBefore("private fun TaskMenuActions(")
         assertTrue("hasUnsavedChanges != true" in popover, "clicking away can lose what was typed")

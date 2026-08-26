@@ -23,6 +23,7 @@ import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.tasks.CellTextSelection
+import dev.pnptracker.domain.tasks.TaskDraft
 import dev.pnptracker.domain.tasks.TaskEditException
 import dev.pnptracker.domain.tasks.TaskEditFailure
 import dev.pnptracker.domain.tasks.TaskFromTextException
@@ -220,16 +221,21 @@ class GameTableControllerTest {
     ) : TaskCreationFromText {
         val created = mutableListOf<CreatedTask>()
 
-        override suspend fun createSingleColorTask(
+        /** How many times a save was asked for, refusals included. */
+        var calls: Int = 0
+            private set
+
+        override suspend fun createTasks(
             selection: CellTextSelection,
-            colorId: EntityId,
-            requiredQuantity: Int,
-            trackingMode: TrackingMode,
-            notes: String?,
-        ): EntityId {
+            drafts: List<TaskDraft>,
+        ): List<EntityId> {
+            calls++
             failure?.let { throw TaskFromTextException(it) }
-            created += CreatedTask(selection, colorId, requiredQuantity, trackingMode, notes)
-            return IdGenerator.Random.newId()
+            created +=
+                drafts.map {
+                    CreatedTask(selection, it.colorId, it.requiredQuantity, it.trackingMode, it.notes)
+                }
+            return drafts.map { IdGenerator.Random.newId() }
         }
     }
 
@@ -812,7 +818,7 @@ class GameTableControllerTest {
 
             controller.beginTaskComposer(0, 6)
 
-            assertEquals(TrackingMode.THREE_D_BATCH, assertNotNull(controller.composerState()).trackingMode)
+            assertEquals(TrackingMode.THREE_D_BATCH, assertNotNull(controller.composerState()).rows.first().trackingMode)
             collecting.cancelAndJoin()
         }
 
@@ -826,7 +832,7 @@ class GameTableControllerTest {
             controller.beginTaskComposer(0, 4)
 
             val composer = assertNotNull(controller.composerState())
-            assertNull(composer.trackingMode, "a tracking mode nobody chose was written into the task")
+            assertNull(composer.rows.first().trackingMode, "a tracking mode nobody chose was written into the task")
             assertFalse(composer.canSave, "the task could be saved without a tracking mode")
             collecting.cancelAndJoin()
         }
@@ -914,23 +920,24 @@ class GameTableControllerTest {
             controller.beginEditing(row.gameId, CellColumnType.THREE_D)
             controller.beginTaskComposer(0, 6)
             controller.chooseTaskColor(
+                0,
                 controller.state.colors
                     .single()
                     .id,
             )
 
             listOf("0", "-3", "1.5", "12a", "99999999999", " ", "").forEach { typed ->
-                controller.editTaskQuantity(typed)
+                controller.editTaskQuantity(0, typed)
                 val composer = assertNotNull(controller.composerState())
-                assertNull(composer.quantity, "'$typed' was taken as a quantity")
+                assertNull(composer.rows.first().quantity, "'$typed' was taken as a quantity")
                 assertFalse(composer.canSave, "'$typed' let the task be saved")
                 // What was typed stays visible rather than being swallowed.
-                assertEquals(typed, composer.quantityText)
+                assertEquals(typed, composer.rows.first().quantityText)
             }
 
-            controller.editTaskQuantity("14")
+            controller.editTaskQuantity(0, "14")
             val ready = assertNotNull(controller.composerState())
-            assertEquals(14, ready.quantity)
+            assertEquals(14, ready.rows.first().quantity)
             assertTrue(ready.canSave)
             catalogue.cancelAndJoin()
             collecting.cancelAndJoin()
@@ -967,13 +974,13 @@ class GameTableControllerTest {
             controller.beginEditing(row.gameId, CellColumnType.THREE_D)
             controller.beginTaskComposer(0, 6)
 
-            controller.editTaskColorQuery("GRİ")
+            controller.editTaskColorQuery(0, "GRİ")
             assertEquals(listOf("Gri"), controller.colorsOffered().map { it.canonicalName })
 
-            controller.editTaskColorQuery("mavi")
+            controller.editTaskColorQuery(0, "mavi")
             assertEquals(listOf("Açık Mavi"), controller.colorsOffered().map { it.canonicalName })
 
-            controller.editTaskColorQuery("yeşil")
+            controller.editTaskColorQuery(0, "yeşil")
             assertTrue(controller.colorsOffered().isEmpty())
 
             catalogue.cancelAndJoin()
@@ -986,18 +993,20 @@ class GameTableControllerTest {
         controller: GameTableController,
         row: GameTableRow,
         colors: FakeColors,
+        word: String = "Knight",
     ): Pair<Job, Job> {
         val collecting = collect(controller)
         val catalogue = launch { controller.observeColorCatalogue() }
         settle()
         controller.beginEditing(row.gameId, CellColumnType.THREE_D)
-        controller.beginTaskComposer(0, 6)
+        controller.beginTaskComposer(0, word.length)
         controller.chooseTaskColor(
+            0,
             controller.state.colors
                 .first()
                 .id,
         )
-        controller.editTaskQuantity("15")
+        controller.editTaskQuantity(0, "15")
         return collecting to catalogue
     }
 
@@ -1009,7 +1018,7 @@ class GameTableControllerTest {
             val creation = FakeTaskCreation()
             val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
             val (collecting, catalogue) = readyComposer(controller, row, colors)
-            controller.editTaskNotes("  ikisi yedek  ")
+            controller.editTaskNotes(0, "  ikisi yedek  ")
 
             controller.saveTask()
 
@@ -1049,17 +1058,315 @@ class GameTableControllerTest {
             val creation = FakeTaskCreation(TaskFromTextFailure.COLOR_NOT_AVAILABLE)
             val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
             val (collecting, catalogue) = readyComposer(controller, row, colors)
-            controller.editTaskNotes("iki yedek")
+            controller.editTaskNotes(0, "iki yedek")
 
             controller.saveTask()
 
             val composer = assertNotNull(controller.composerState(), "the panel was closed by a refusal")
             assertEquals(TaskFromTextFailure.COLOR_NOT_AVAILABLE, composer.failure)
-            assertEquals("15", composer.quantityText)
-            assertEquals("iki yedek", composer.notes)
-            assertNotNull(composer.colorId)
+            assertEquals("15", composer.rows.first().quantityText)
+            assertEquals("iki yedek", composer.rows.first().notes)
+            assertNotNull(composer.rows.first().colorId)
             assertFalse(composer.isSaving)
             assertNotNull(controller.editorState(), "the cell was closed by a refusal")
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    // ------------------------------------------ several tasks at one go
+
+    @Test
+    fun `the panel starts on one task and offers the other way`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Token"))
+            val colors = FakeColors(listOf(color("Siyah"), color("Beyaz")))
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val collecting = collect(controller)
+            val catalogue = launch { controller.observeColorCatalogue() }
+            settle()
+            controller.beginEditing(row.gameId, CellColumnType.THREE_D)
+            controller.beginTaskComposer(0, 5)
+
+            val composer = assertNotNull(controller.composerState())
+            assertEquals(TaskCreationMode.SINGLE_COLOR, composer.mode)
+            assertEquals(1, composer.rows.size)
+            assertEquals(1, composer.usedRows.size)
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `switching to several tasks opens a second row and keeps the first`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Token"))
+            val colors = FakeColors(listOf(color("Siyah"), color("Beyaz")))
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors, word = "Token")
+            controller.editTaskNotes(0, "ilkinin notu")
+
+            controller.chooseCreationMode(TaskCreationMode.INDEPENDENT_TASKS)
+
+            val composer = assertNotNull(controller.composerState())
+            assertEquals(2, composer.rows.size)
+            assertEquals("15", composer.rows.first().quantityText, "the first row lost its quantity")
+            assertEquals("ilkinin notu", composer.rows.first().notes, "the first row lost its note")
+            assertNotNull(composer.rows.first().colorId, "the first row lost its colour")
+            assertEquals(TaskDraftRow(trackingMode = TrackingMode.THREE_D_BATCH), composer.rows[1])
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `switching back and forth loses nothing that was typed`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Token"))
+            val colors = FakeColors(listOf(color("Siyah"), color("Beyaz")))
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors, word = "Token")
+            controller.chooseCreationMode(TaskCreationMode.INDEPENDENT_TASKS)
+            controller.chooseTaskColor(1, controller.state.colors[1].id)
+            controller.editTaskQuantity(1, "8")
+            controller.editTaskNotes(1, "ikincinin notu")
+            val filled = assertNotNull(controller.composerState()).rows
+
+            controller.chooseCreationMode(TaskCreationMode.SINGLE_COLOR)
+            val narrowed = assertNotNull(controller.composerState())
+            controller.chooseCreationMode(TaskCreationMode.INDEPENDENT_TASKS)
+
+            // Nothing is asked and nothing is dropped: the second row is simply
+            // not used while one task is being made, and is there again after.
+            assertEquals(filled, narrowed.rows, "switching away threw a row's answers away")
+            assertEquals(1, narrowed.usedRows.size)
+            assertEquals(filled, assertNotNull(controller.composerState()).rows)
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `three rows become three drafts in the order they were typed`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Token"))
+            val colors = FakeColors(listOf(color("Siyah"), color("Beyaz"), color("Sarı")))
+            val creation = FakeTaskCreation()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
+            val (collecting, catalogue) = readyComposer(controller, row, colors, word = "Token")
+            controller.chooseCreationMode(TaskCreationMode.INDEPENDENT_TASKS)
+            controller.editTaskQuantity(0, "14")
+            controller.chooseTaskColor(1, controller.state.colors[1].id)
+            controller.editTaskQuantity(1, "15")
+            controller.addTaskRow()
+            controller.chooseTaskColor(2, controller.state.colors[2].id)
+            controller.editTaskQuantity(2, "8")
+
+            controller.saveTask()
+
+            assertEquals(listOf(14, 15, 8), creation.created.map { it.requiredQuantity })
+            assertEquals(controller.state.colors.map { it.id }, creation.created.map { it.colorId })
+            assertEquals(
+                1,
+                creation.created
+                    .map { it.selection }
+                    .toSet()
+                    .size,
+                "the batch used more than one selection",
+            )
+            assertNull(controller.composerState(), "the panel stayed open after the tasks were made")
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a batch of one row cannot be saved`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Token"))
+            val colors = FakeColors(listOf(color("Siyah"), color("Beyaz")))
+            val creation = FakeTaskCreation()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
+            val (collecting, catalogue) = readyComposer(controller, row, colors, word = "Token")
+            controller.chooseCreationMode(TaskCreationMode.INDEPENDENT_TASKS)
+            // Removing the second row is refused at the floor, so the only way to
+            // one row is to start there — and the batch mode will not take it.
+            controller.removeTaskRow(1)
+
+            val composer = assertNotNull(controller.composerState())
+            assertEquals(2, composer.rows.size, "the last row of a batch was taken away")
+            assertFalse(composer.canRemoveRow)
+            assertFalse(composer.canSave, "a batch missing an answer could be saved")
+            controller.saveTask()
+            assertEquals(0, creation.calls, "an unfinished batch was written")
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a row can be added and taken away again`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Token"))
+            val colors = FakeColors(listOf(color("Siyah"), color("Beyaz"), color("Sarı")))
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors, word = "Token")
+            controller.chooseCreationMode(TaskCreationMode.INDEPENDENT_TASKS)
+            controller.addTaskRow()
+            controller.chooseTaskColor(2, controller.state.colors[2].id)
+            controller.editTaskQuantity(2, "8")
+
+            assertEquals(3, assertNotNull(controller.composerState()).rows.size)
+            controller.removeTaskRow(1)
+
+            val composer = assertNotNull(controller.composerState())
+            assertEquals(2, composer.rows.size)
+            // The one that was taken away is the one that was pointed at, and the
+            // rows after it move up rather than being renumbered into the wrong
+            // answers.
+            assertEquals("8", composer.rows[1].quantityText)
+            assertEquals(controller.state.colors[2].id, composer.rows[1].colorId)
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `the same colour twice is marked and stops the save`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Token"))
+            val colors = FakeColors(listOf(color("Siyah"), color("Beyaz")))
+            val creation = FakeTaskCreation()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
+            val (collecting, catalogue) = readyComposer(controller, row, colors, word = "Token")
+            controller.chooseCreationMode(TaskCreationMode.INDEPENDENT_TASKS)
+            controller.chooseTaskColor(
+                1,
+                controller.state.colors
+                    .first()
+                    .id,
+            )
+            controller.editTaskQuantity(1, "8")
+
+            val composer = assertNotNull(controller.composerState())
+            // The second one is marked, not the first: the user chose that one
+            // first and it is not the one they need to change.
+            assertEquals(setOf(1), composer.repeatedColorRows)
+            assertFalse(composer.canSave)
+            controller.saveTask()
+            assertEquals(0, creation.calls, "two rows of one colour were written")
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a row with no colour or no quantity stops the save and is where the keyboard goes`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Token"))
+            val colors = FakeColors(listOf(color("Siyah"), color("Beyaz")))
+            val creation = FakeTaskCreation()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
+            val (collecting, catalogue) = readyComposer(controller, row, colors, word = "Token")
+            controller.chooseCreationMode(TaskCreationMode.INDEPENDENT_TASKS)
+
+            val missingColor = assertNotNull(controller.composerState())
+            assertFalse(missingColor.canSave)
+            assertEquals(1, missingColor.firstUnusableRow, "the keyboard would go to a row that is ready")
+
+            controller.chooseTaskColor(1, controller.state.colors[1].id)
+            controller.editTaskQuantity(1, "0")
+            val badQuantity = assertNotNull(controller.composerState())
+            assertFalse(badQuantity.canSave, "a quantity of zero let the batch be saved")
+            assertEquals("0", badQuantity.rows[1].quantityText, "what was typed stopped being visible")
+            assertEquals(1, badQuantity.firstUnusableRow)
+
+            controller.saveTask()
+            assertEquals(0, creation.calls, "an unfinished batch was written")
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `asking to save twice writes one batch`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Token"))
+            val colors = FakeColors(listOf(color("Siyah"), color("Beyaz")))
+            val creation = FakeTaskCreation()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
+            val (collecting, catalogue) = readyComposer(controller, row, colors, word = "Token")
+            controller.chooseCreationMode(TaskCreationMode.INDEPENDENT_TASKS)
+            controller.chooseTaskColor(1, controller.state.colors[1].id)
+            controller.editTaskQuantity(1, "8")
+
+            controller.saveTask()
+            // A double click, or Ctrl+Enter arriving twice. The panel is gone
+            // after the first, so the second has nothing to save.
+            controller.saveTask()
+
+            assertEquals(1, creation.calls, "the same words became tasks twice")
+            assertEquals(2, creation.created.size)
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a refused batch keeps every row exactly as it was typed`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Token"))
+            val colors = FakeColors(listOf(color("Siyah"), color("Beyaz")))
+            val creation = FakeTaskCreation(TaskFromTextFailure.COLOR_NOT_AVAILABLE)
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
+            val (collecting, catalogue) = readyComposer(controller, row, colors, word = "Token")
+            controller.chooseCreationMode(TaskCreationMode.INDEPENDENT_TASKS)
+            controller.chooseTaskColor(1, controller.state.colors[1].id)
+            controller.editTaskQuantity(1, "8")
+            controller.editTaskNotes(1, "ikincinin notu")
+            val before = assertNotNull(controller.composerState()).rows
+            val recallBefore = controller.state.focusRecall
+
+            controller.saveTask()
+
+            val composer = assertNotNull(controller.composerState(), "the panel was closed by a refusal")
+            assertEquals(TaskFromTextFailure.COLOR_NOT_AVAILABLE, composer.failure)
+            assertEquals(before, composer.rows, "a refusal changed what had been typed")
+            assertFalse(composer.isSaving)
+            assertTrue(controller.state.focusRecall > recallBefore, "the keyboard was left on whatever refused")
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `Escape closes the batch panel and leaves the cell open`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Token"))
+            val colors = FakeColors(listOf(color("Siyah"), color("Beyaz")))
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors, word = "Token")
+            controller.chooseCreationMode(TaskCreationMode.INDEPENDENT_TASKS)
+            val text = assertNotNull(controller.editorState()).draft
+
+            controller.closeInnermost()
+
+            assertNull(controller.composerState(), "the panel stayed open")
+            val editor = assertNotNull(controller.editorState(), "closing the panel closed the cell as well")
+            assertEquals(text, editor.draft, "the cell lost what was written in it")
+
+            controller.closeInnermost()
+            assertNull(controller.editorState(), "one Escape closed both layers")
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a fresh table leaves a half typed batch exactly where it is`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Token"))
+            val colors = FakeColors(listOf(color("Siyah"), color("Beyaz")))
+            val table = FakeTable(listOf(row))
+            val controller = controllerOf(table, colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors, word = "Token")
+            controller.chooseCreationMode(TaskCreationMode.INDEPENDENT_TASKS)
+            controller.chooseTaskColor(1, controller.state.colors[1].id)
+            controller.editTaskQuantity(1, "8")
+            val before = assertNotNull(controller.composerState())
+
+            table.rows.value = listOf(row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Token")))
+            settle()
+
+            assertEquals(before, controller.composerState(), "a change to the table disturbed the panel")
             catalogue.cancelAndJoin()
             collecting.cancelAndJoin()
         }
@@ -1094,7 +1401,7 @@ class GameTableControllerTest {
             val colors = FakeColors(listOf(color("Siyah")))
             val controller = controllerOf(table, colors = colors)
             val (collecting, catalogue) = readyComposer(controller, row, colors)
-            controller.editTaskNotes("iki yedek")
+            controller.editTaskNotes(0, "iki yedek")
             val before = assertNotNull(controller.composerState())
 
             table.rows.value = listOf(row, other.copy(gameName = "Wingspan Avrupa"))

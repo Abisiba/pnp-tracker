@@ -27,6 +27,11 @@ import kotlin.test.assertTrue
 class GameTablePresentationTest {
     private fun textOf(resource: StringResource): String = runBlocking { getString(resource) }
 
+    private fun textOf(
+        resource: StringResource,
+        vararg formatArgs: Any,
+    ): String = runBlocking { getString(resource, *formatArgs) }
+
     @Test
     fun `the columns read left to right the way the plan lists them`() {
         // PLAN 12.3 fixes the order, and the enum is what decides it — not the
@@ -283,6 +288,8 @@ class GameTablePresentationTest {
             TaskFromTextFailure.TASK_NAME_EMPTY -> Strings.CellTask.errorNameEmpty
             TaskFromTextFailure.COLOR_NOT_AVAILABLE -> Strings.CellTask.errorColorGone
             TaskFromTextFailure.INVALID_REQUIRED_QUANTITY -> Strings.CellTask.errorQuantity
+            TaskFromTextFailure.DUPLICATE_COLOR -> Strings.CellTask.errorDuplicateColor
+            TaskFromTextFailure.NO_TASK_DESCRIBED -> Strings.CellTask.errorNoTask
             TaskFromTextFailure.COULD_NOT_SAVE -> Strings.CellTask.errorCouldNotSave
         }
 
@@ -312,6 +319,55 @@ class GameTablePresentationTest {
             val text = textOf(resource)
             assertTrue(text.isNotBlank(), "a task surface text is missing or empty")
             assertTrue('\\' !in text, "an escape reached the user in: $text")
+            assertTrue('%' !in text, "an unfilled placeholder reached the user in: $text")
+        }
+    }
+
+    @Test
+    fun `every word the two creation modes say is there`() {
+        listOf(
+            Strings.CellTask.modeLabel,
+            Strings.CellTask.modeSingle,
+            Strings.CellTask.modeMany,
+            Strings.CellTask.modeManyHint,
+            Strings.CellTask.rowAdd,
+            Strings.CellTask.rowRemoveShort,
+            Strings.CellTask.rowFloor,
+            Strings.CellTask.rowDuplicate,
+            Strings.CellTask.savingMany,
+        ).forEach { resource ->
+            val text = textOf(resource)
+            assertTrue(text.isNotBlank(), "a creation mode text is missing or empty")
+            assertTrue('\\' !in text, "an escape reached the user in: $text")
+            assertTrue('%' !in text, "an unfilled placeholder reached the user in: $text")
+        }
+    }
+
+    @Test
+    fun `the words about a batch never call it a group or a main task`() {
+        // PLAN 12.7 makes a batch N independent tasks. A panel that spoke of a
+        // main task, a group or a variant would be teaching the user a
+        // relationship the database deliberately does not have.
+        val said =
+            listOf(
+                Strings.CellTask.modeMany,
+                Strings.CellTask.modeManyHint,
+                Strings.CellTask.rowAdd,
+                Strings.CellTask.rowFloor,
+                Strings.CellTask.rowDuplicate,
+                Strings.CellTask.errorDuplicateColor,
+            ).joinToString(" ") { textOf(it).lowercase() }
+
+        listOf("ana görev", "üst görev", "alt görev", "varyant", "grup").forEach { word ->
+            assertTrue(word !in said, "the panel calls a batch a '$word'")
+        }
+    }
+
+    @Test
+    fun `the counted texts of a batch take the number they are given`() {
+        listOf(Strings.CellTask.rowTitle, Strings.CellTask.rowRemove, Strings.CellTask.saveMany).forEach { resource ->
+            val text = textOf(resource, 3)
+            assertTrue("3" in text, "a counted text left its number out: $text")
             assertTrue('%' !in text, "an unfilled placeholder reached the user in: $text")
         }
     }

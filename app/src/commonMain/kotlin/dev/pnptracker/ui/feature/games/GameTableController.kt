@@ -22,8 +22,10 @@ import dev.pnptracker.domain.games.planDocumentChange
 import dev.pnptracker.domain.games.runsFrom
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.rules.normalizeColorTerm
+import dev.pnptracker.domain.tasks.TaskDraft
 import dev.pnptracker.domain.tasks.TaskEditException
 import dev.pnptracker.domain.tasks.TaskFromTextException
 import dev.pnptracker.domain.tasks.TaskFromTextFailure
@@ -314,9 +316,7 @@ class GameTableController(
                                 selection = selection,
                                 columnType = editor.columnType,
                                 name = name,
-                                // Settled where the pool leaves no choice, asked
-                                // for where it does; never invented either way.
-                                trackingMode = onlyTrackingModeOf(poolType),
+                                rows = listOf(emptyRowFor(poolType)),
                             ),
                     ),
                 blockedByEditor = false,
@@ -325,23 +325,109 @@ class GameTableController(
 
     private fun composing(): CellWork.MakingTask? = state.work as? CellWork.MakingTask
 
+    /** A row with only what the pool settles already filled in. */
+    private fun emptyRowFor(poolType: PoolType) =
+        TaskDraftRow(
+            // Settled where the pool leaves no choice, asked for where it does;
+            // never invented either way.
+            trackingMode = onlyTrackingModeOf(poolType),
+        )
+
     private fun onComposer(change: (TaskComposer) -> TaskComposer) {
         val making = composing() ?: return
         if (making.composer.isSaving) return
         state = state.copy(work = making.copy(composer = change(making.composer)))
     }
 
-    fun editTaskColorQuery(query: String) = onComposer { it.copy(colorQuery = query) }
+    /** Changes one row and leaves every other row of the panel alone. */
+    private fun onRow(
+        row: Int,
+        change: (TaskDraftRow) -> TaskDraftRow,
+    ) = onComposer { composer ->
+        if (row !in composer.rows.indices) {
+            composer
+        } else {
+            composer.copy(
+                rows = composer.rows.mapIndexed { index, existing -> if (index == row) change(existing) else existing },
+                failure = null,
+            )
+        }
+    }
 
-    fun chooseTaskColor(colorId: EntityId) = onComposer { it.copy(colorId = colorId, failure = null) }
+    /**
+     * Switches which way tasks are being made, keeping everything typed.
+     *
+     * Nothing is thrown away and nothing is asked: single-colour mode works on
+     * the first row and leaves the rest standing, so a user who tries it and
+     * comes back finds their other rows exactly as they left them. Going the
+     * other way opens a second row when there is only one, because a batch of one
+     * is the mode they just left.
+     */
+    fun chooseCreationMode(mode: TaskCreationMode) =
+        onComposer { composer ->
+            if (composer.mode == mode) {
+                composer
+            } else {
+                val poolType = composer.columnType.poolType
+                val rows =
+                    if (mode == TaskCreationMode.INDEPENDENT_TASKS && poolType != null) {
+                        composer.rows +
+                            List(TaskComposer.LEAST_INDEPENDENT_TASKS - composer.rows.size) { emptyRowFor(poolType) }
+                    } else {
+                        composer.rows
+                    }
+                composer.copy(mode = mode, rows = rows, failure = null)
+            }
+        }
+
+    /** Adds a row at the end, which is where the next task goes. */
+    fun addTaskRow() =
+        onComposer { composer ->
+            val poolType = composer.columnType.poolType ?: return@onComposer composer
+            composer.copy(rows = composer.rows + emptyRowFor(poolType), failure = null)
+        }
+
+    /**
+     * Takes one row away, down to what the mode needs.
+     *
+     * Refused rather than silently ignored at the floor: the button is disabled
+     * there and says why, so nothing disappears without the user asking twice.
+     */
+    fun removeTaskRow(row: Int) =
+        onComposer { composer ->
+            if (!composer.canRemoveRow || row !in composer.rows.indices) {
+                composer
+            } else {
+                composer.copy(rows = composer.rows.filterIndexed { index, _ -> index != row }, failure = null)
+            }
+        }
+
+    fun editTaskColorQuery(
+        row: Int,
+        query: String,
+    ) = onRow(row) { it.copy(colorQuery = query) }
+
+    fun chooseTaskColor(
+        row: Int,
+        colorId: EntityId,
+    ) = onRow(row) { it.copy(colorId = colorId) }
 
     /** Takes the quantity as typed; what is not a usable number stays visible. */
-    fun editTaskQuantity(text: String) = onComposer { it.copy(quantityText = text, failure = null) }
+    fun editTaskQuantity(
+        row: Int,
+        text: String,
+    ) = onRow(row) { it.copy(quantityText = text) }
 
     /** Takes the note exactly as typed, spaces and all. */
-    fun editTaskNotes(text: String) = onComposer { it.copy(notes = text) }
+    fun editTaskNotes(
+        row: Int,
+        text: String,
+    ) = onRow(row) { it.copy(notes = text) }
 
-    fun chooseTaskTracking(trackingMode: TrackingMode) = onComposer { it.copy(trackingMode = trackingMode, failure = null) }
+    fun chooseTaskTracking(
+        row: Int,
+        trackingMode: TrackingMode,
+    ) = onRow(row) { it.copy(trackingMode = trackingMode) }
 
     /**
      * Closes the panel and nothing else.
@@ -364,21 +450,24 @@ class GameTableController(
     suspend fun saveTask() {
         val making = composing() ?: return
         val composer = making.composer
-        if (composer.isSaving) return
-        val colorId = composer.colorId ?: return
-        val quantity = composer.quantity ?: return
-        val trackingMode = composer.trackingMode ?: return
+        if (composer.isSaving || !composer.canSave) return
+        // Read once, here, so a second Enter arriving while the first save is in
+        // flight finds isSaving already set and does nothing: the same words
+        // cannot become two sets of tasks.
+        val drafts =
+            composer.usedRows.map { row ->
+                TaskDraft(
+                    colorId = row.colorId ?: return,
+                    requiredQuantity = row.quantity ?: return,
+                    trackingMode = row.trackingMode ?: return,
+                    // An empty note is no note; anything else is kept as typed.
+                    notes = row.notes.takeIf { it.isNotEmpty() },
+                )
+            }
 
         state = state.copy(work = making.copy(composer = composer.copy(isSaving = true, failure = null)))
         try {
-            taskCreation.createSingleColorTask(
-                selection = composer.selection,
-                colorId = colorId,
-                requiredQuantity = quantity,
-                trackingMode = trackingMode,
-                // An empty note is no note; anything else is kept as typed.
-                notes = composer.notes.takeIf { it.isNotEmpty() },
-            )
+            taskCreation.createTasks(selection = composer.selection, drafts = drafts)
             // The cell has changed underneath the editor, so it closes rather
             // than going on with offsets into a document that has moved. The
             // user opens it again to write more, or picks the next word.
@@ -390,6 +479,9 @@ class GameTableController(
                         (state.work as? CellWork.MakingTask)?.let {
                             it.copy(composer = it.composer.copy(isSaving = false, failure = refusal.failure))
                         },
+                    // Whatever the panel is showing has the keyboard put back on
+                    // it, so the user can read what went wrong and fix it there.
+                    focusRecall = state.focusRecall + 1,
                 )
         }
     }
@@ -402,10 +494,14 @@ class GameTableController(
      * ever right for colour names — it merges the two Turkish i's — which is why
      * it is used here and nowhere near general search.
      */
-    fun colorsOffered(): List<ColorSummary> {
+    fun colorsOffered(row: Int = 0): List<ColorSummary> {
         val query =
             when (val open = state.work) {
-                is CellWork.MakingTask -> open.composer.colorQuery
+                is CellWork.MakingTask ->
+                    open.composer.rows
+                        .getOrNull(row)
+                        ?.colorQuery
+                        .orEmpty()
                 is CellWork.EditingTask -> open.editor.colorQuery
                 else -> ""
             }

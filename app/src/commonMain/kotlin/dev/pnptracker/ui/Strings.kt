@@ -39,15 +39,21 @@ import dev.pnptracker.resources.cell_task_error_cell_gone
 import dev.pnptracker.resources.cell_task_error_cell_no_tasks
 import dev.pnptracker.resources.cell_task_error_color_gone
 import dev.pnptracker.resources.cell_task_error_could_not_save
+import dev.pnptracker.resources.cell_task_error_duplicate_color
 import dev.pnptracker.resources.cell_task_error_game_gone
 import dev.pnptracker.resources.cell_task_error_invalid_selection
 import dev.pnptracker.resources.cell_task_error_line_break
 import dev.pnptracker.resources.cell_task_error_name_empty
+import dev.pnptracker.resources.cell_task_error_no_task
 import dev.pnptracker.resources.cell_task_error_quantity
 import dev.pnptracker.resources.cell_task_error_segment_gone
 import dev.pnptracker.resources.cell_task_error_segment_not_text
 import dev.pnptracker.resources.cell_task_error_stale
 import dev.pnptracker.resources.cell_task_hint
+import dev.pnptracker.resources.cell_task_mode_label
+import dev.pnptracker.resources.cell_task_mode_many
+import dev.pnptracker.resources.cell_task_mode_many_hint
+import dev.pnptracker.resources.cell_task_mode_single
 import dev.pnptracker.resources.cell_task_name_label
 import dev.pnptracker.resources.cell_task_no_color
 import dev.pnptracker.resources.cell_task_notes_label
@@ -56,9 +62,17 @@ import dev.pnptracker.resources.cell_task_quantity_hint
 import dev.pnptracker.resources.cell_task_quantity_invalid
 import dev.pnptracker.resources.cell_task_quantity_label
 import dev.pnptracker.resources.cell_task_quantity_mark
+import dev.pnptracker.resources.cell_task_row_add
+import dev.pnptracker.resources.cell_task_row_duplicate
+import dev.pnptracker.resources.cell_task_row_floor
+import dev.pnptracker.resources.cell_task_row_remove
+import dev.pnptracker.resources.cell_task_row_remove_short
+import dev.pnptracker.resources.cell_task_row_title
 import dev.pnptracker.resources.cell_task_save
+import dev.pnptracker.resources.cell_task_save_many
 import dev.pnptracker.resources.cell_task_save_text_first
 import dev.pnptracker.resources.cell_task_saving
+import dev.pnptracker.resources.cell_task_saving_many
 import dev.pnptracker.resources.cell_task_select_hint
 import dev.pnptracker.resources.colors_count
 import dev.pnptracker.resources.colors_create
@@ -648,6 +662,25 @@ object Strings {
         val noColor = Res.string.cell_task_no_color
         val completed = Res.string.cell_task_completed
 
+        val modeLabel = Res.string.cell_task_mode_label
+        val modeSingle = Res.string.cell_task_mode_single
+        val modeMany = Res.string.cell_task_mode_many
+        val modeManyHint = Res.string.cell_task_mode_many_hint
+
+        /** Takes the row's place in the panel, counting from one. */
+        val rowTitle = Res.string.cell_task_row_title
+        val rowAdd = Res.string.cell_task_row_add
+
+        /** Takes the row's place in the panel, counting from one. */
+        val rowRemove = Res.string.cell_task_row_remove
+        val rowRemoveShort = Res.string.cell_task_row_remove_short
+        val rowFloor = Res.string.cell_task_row_floor
+        val rowDuplicate = Res.string.cell_task_row_duplicate
+
+        /** Takes how many tasks the batch will create. */
+        val saveMany = Res.string.cell_task_save_many
+        val savingMany = Res.string.cell_task_saving_many
+
         val errorGameGone = Res.string.cell_task_error_game_gone
         val errorCellGone = Res.string.cell_task_error_cell_gone
         val errorCellHoldsNoTasks = Res.string.cell_task_error_cell_no_tasks
@@ -659,6 +692,8 @@ object Strings {
         val errorNameEmpty = Res.string.cell_task_error_name_empty
         val errorColorGone = Res.string.cell_task_error_color_gone
         val errorQuantity = Res.string.cell_task_error_quantity
+        val errorDuplicateColor = Res.string.cell_task_error_duplicate_color
+        val errorNoTask = Res.string.cell_task_error_no_task
         val errorCouldNotSave = Res.string.cell_task_error_could_not_save
     }
 
