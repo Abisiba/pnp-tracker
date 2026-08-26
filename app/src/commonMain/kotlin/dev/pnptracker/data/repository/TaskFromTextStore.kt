@@ -97,6 +97,6 @@ class TaskFromTextStore(
             // told about. A broken invariant travels out untouched: catching it
             // here would file a programming mistake under a problem they are
             // asked to fix.
-            throw TaskFromTextException(TaskFromTextFailure.COULD_NOT_SAVE, cause)
+            throw TaskFromTextException(TaskFromTextFailure.COULD_NOT_SAVE, cause = cause)
         }
 }

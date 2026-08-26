@@ -248,6 +248,14 @@ data class TaskComposer(
     val rows: List<TaskDraftRow>,
     val isSaving: Boolean = false,
     val failure: TaskFromTextFailure? = null,
+    /**
+     * Which row the refusal was about, or null when it was about the whole panel.
+     *
+     * A batch is several tasks described at once, so "a colour is gone" is only
+     * half an answer: the user has rows in front of them and needs to be told
+     * which one to change.
+     */
+    val failureRow: Int? = null,
 ) {
     init {
         require(rows.isNotEmpty()) { "A task panel always has a row to type in." }
@@ -279,9 +287,17 @@ data class TaskComposer(
     val canRemoveRow: Boolean
         get() = mode == TaskCreationMode.INDEPENDENT_TASKS && rows.size > LEAST_INDEPENDENT_TASKS
 
-    /** The first row that is not ready, so the keyboard can be sent to it. */
+    /**
+     * The first row that needs attention, so the keyboard can be sent to it.
+     *
+     * A row the storage refused comes first: the user filled it in and was told
+     * it will not do, which is more urgent than one they have not reached yet.
+     */
     val firstUnusableRow: Int?
-        get() = usedRows.indexOfFirst { !it.isComplete }.takeIf { it >= 0 }
+        get() =
+            failureRow?.takeIf { it in usedRows.indices }
+                ?: usedRows.indexOfFirst { !it.isComplete }.takeIf { it >= 0 }
+                ?: repeatedColorRows.minOrNull()
 
     /** How many tasks this mode will not save fewer than. */
     val leastRows: Int

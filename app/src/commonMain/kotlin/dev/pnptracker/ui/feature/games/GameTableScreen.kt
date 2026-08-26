@@ -1757,6 +1757,12 @@ private fun TaskRowFields(
         // which colour to change.
         NoteLine(text = stringResource(Strings.CellTask.rowDuplicate), isProblem = true)
     }
+    if (composer.failureRow == row && composer.failure != null) {
+        // The same reason. A batch is refused about one of its rows, and the
+        // storage says which; showing it only at the foot would leave the user
+        // to guess which colour went away.
+        NoteLine(text = stringResource(messageOf(composer.failure)), isProblem = true)
+    }
 
     OutlinedTextField(
         value = draft.quantityText,

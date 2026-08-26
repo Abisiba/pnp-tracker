@@ -350,6 +350,7 @@ class GameTableController(
             composer.copy(
                 rows = composer.rows.mapIndexed { index, existing -> if (index == row) change(existing) else existing },
                 failure = null,
+                failureRow = null,
             )
         }
     }
@@ -376,7 +377,7 @@ class GameTableController(
                     } else {
                         composer.rows
                     }
-                composer.copy(mode = mode, rows = rows, failure = null)
+                composer.copy(mode = mode, rows = rows, failure = null, failureRow = null)
             }
         }
 
@@ -384,7 +385,7 @@ class GameTableController(
     fun addTaskRow() =
         onComposer { composer ->
             val poolType = composer.columnType.poolType ?: return@onComposer composer
-            composer.copy(rows = composer.rows + emptyRowFor(poolType), failure = null)
+            composer.copy(rows = composer.rows + emptyRowFor(poolType), failure = null, failureRow = null)
         }
 
     /**
@@ -398,7 +399,11 @@ class GameTableController(
             if (!composer.canRemoveRow || row !in composer.rows.indices) {
                 composer
             } else {
-                composer.copy(rows = composer.rows.filterIndexed { index, _ -> index != row }, failure = null)
+                composer.copy(
+                    rows = composer.rows.filterIndexed { index, _ -> index != row },
+                    failure = null,
+                    failureRow = null,
+                )
             }
         }
 
@@ -465,7 +470,7 @@ class GameTableController(
                 )
             }
 
-        state = state.copy(work = making.copy(composer = composer.copy(isSaving = true, failure = null)))
+        state = state.copy(work = making.copy(composer = composer.copy(isSaving = true, failure = null, failureRow = null)))
         try {
             taskCreation.createTasks(selection = composer.selection, drafts = drafts)
             // The cell has changed underneath the editor, so it closes rather
@@ -477,7 +482,14 @@ class GameTableController(
                 state.copy(
                     work =
                         (state.work as? CellWork.MakingTask)?.let {
-                            it.copy(composer = it.composer.copy(isSaving = false, failure = refusal.failure))
+                            it.copy(
+                                composer =
+                                    it.composer.copy(
+                                        isSaving = false,
+                                        failure = refusal.failure,
+                                        failureRow = refusal.row,
+                                    ),
+                            )
                         },
                     // Whatever the panel is showing has the keyboard put back on
                     // it, so the user can read what went wrong and fix it there.

@@ -77,9 +77,24 @@ abstract class TaskFromTextDao {
     @Query("SELECT * FROM cell_segments WHERE cell_id = :cellId ORDER BY order_index")
     abstract suspend fun segmentsOfCell(cellId: EntityId): List<CellSegmentEntity>
 
-    /** 1 while the colour is still in the catalogue; colour deletion is physical. */
-    @Query("SELECT COUNT(*) FROM colors WHERE id = :colorId")
-    abstract suspend fun colorCount(colorId: EntityId): Int
+    /**
+     * Every colour the catalogue holds, as identities and nothing else.
+     *
+     * The whole catalogue rather than the ones a batch names. Asking about each
+     * named colour would be a read per task, and PLAN puts no ceiling on how
+     * many colours a thing comes in — a check made once per row is a cost that
+     * grows with somebody's real note. An `IN (...)` over the named ones would
+     * fix the count but not the shape: the statement itself would then grow with
+     * the batch, up to SQLite's limit on parameters.
+     *
+     * There is no filter to apply. PLAN 5.2 makes colour the one exception to
+     * the tombstone rule — a deleted colour is physically gone — so every row
+     * here is a colour that still exists, and the catalogue is a list of named
+     * records a person maintains by hand rather than a table that grows on its
+     * own.
+     */
+    @Query("SELECT id FROM colors")
+    abstract suspend fun allColorIds(): List<EntityId>
 
     // ------------------------------------------------------------- writing
 
@@ -148,6 +163,12 @@ abstract class TaskFromTextDao {
      * Two drafts may not name the same colour. Folding them into one would make
      * fewer tasks than the user described and throw away a quantity they typed.
      *
+     * What it costs to *check* a batch does not depend on how big the batch is:
+     * the reads are made once and compared in memory. What it costs to write one
+     * does, and rightly — N tasks are N rows, N colour relations, N pipelines
+     * and N pieces of a cell, and folding those together would be folding the
+     * tasks together.
+     *
      * A finished game is worked in like any other. PLAN 5.3 keeps it visible and
      * editable, and reopening it on a new task is not something this decides —
      * PLAN 12.9 gives the game's own state its own transaction.
@@ -188,12 +209,15 @@ abstract class TaskFromTextDao {
         val split = splitForTaskName(storedText, selection.startOffset, selection.endOffset)
         if (drafts.isEmpty()) refuse(TaskFromTextFailure.NO_TASK_DESCRIBED)
         if (drafts.distinctBy { it.colorId }.size != drafts.size) refuse(TaskFromTextFailure.DUPLICATE_COLOR)
-        // Every draft is checked before any of them is written: a batch that
-        // failed on its third row after writing the first two would leave the
-        // user with tasks they did not finish describing.
-        drafts.forEach { draft ->
-            if (colorCount(draft.colorId) != 1) refuse(TaskFromTextFailure.COLOR_NOT_AVAILABLE)
-            if (draft.requiredQuantity <= 0) refuse(TaskFromTextFailure.INVALID_REQUIRED_QUANTITY)
+        // Read once, compared in memory. Every draft is checked before any of
+        // them is written: a batch that failed on its third row after writing
+        // the first two would leave the user with tasks they did not finish
+        // describing. Which row it was travels with the refusal, because a form
+        // with rows in it needs to be told which row to change.
+        val catalogue = allColorIds().toSet()
+        drafts.forEachIndexed { row, draft ->
+            if (draft.colorId !in catalogue) refuse(TaskFromTextFailure.COLOR_NOT_AVAILABLE, row)
+            if (draft.requiredQuantity <= 0) refuse(TaskFromTextFailure.INVALID_REQUIRED_QUANTITY, row)
         }
 
         val moment = clock.now()
@@ -344,5 +368,8 @@ abstract class TaskFromTextDao {
             merged
         }
 
-    private fun refuse(failure: TaskFromTextFailure): Nothing = throw TaskFromTextException(failure)
+    private fun refuse(
+        failure: TaskFromTextFailure,
+        row: Int? = null,
+    ): Nothing = throw TaskFromTextException(failure, row)
 }

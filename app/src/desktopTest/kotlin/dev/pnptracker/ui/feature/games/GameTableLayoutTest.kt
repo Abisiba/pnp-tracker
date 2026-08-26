@@ -479,6 +479,12 @@ class GameTableLayoutTest {
     }
 
     @Test
+    fun `a refusal about one row is said on that row`() {
+        val fields = source.substringAfter("private fun TaskRowFields(").substringBefore("private fun ColorList(")
+        assertTrue("composer.failureRow == row" in fields, "a refused row is not told which one it was")
+    }
+
+    @Test
     fun `every field of the panel belongs to the row it is drawn in`() {
         // The one thing that would quietly ruin a batch: a field wired to the
         // composer rather than to its row, so typing in the third task changed

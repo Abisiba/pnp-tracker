@@ -76,5 +76,14 @@ enum class TaskFromTextFailure {
  */
 class TaskFromTextException(
     val failure: TaskFromTextFailure,
+    /**
+     * Which task of a batch the refusal is about, counting from zero.
+     *
+     * Null when it is about the whole attempt rather than one of its rows. A
+     * batch is several tasks described at once (PLAN 12.7), so "a colour is
+     * gone" is only half an answer: the user has a form with rows in it and
+     * needs to be told which row to change.
+     */
+    val row: Int? = null,
     cause: Throwable? = null,
 ) : Exception("The selected text could not become a task: $failure", cause)

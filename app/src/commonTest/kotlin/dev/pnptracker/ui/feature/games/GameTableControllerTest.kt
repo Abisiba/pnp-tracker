@@ -218,6 +218,7 @@ class GameTableControllerTest {
     /** Records the tasks that were asked for, and can be told to refuse. */
     private class FakeTaskCreation(
         private val failure: TaskFromTextFailure? = null,
+        private val failedRow: Int? = null,
     ) : TaskCreationFromText {
         val created = mutableListOf<CreatedTask>()
 
@@ -230,7 +231,7 @@ class GameTableControllerTest {
             drafts: List<TaskDraft>,
         ): List<EntityId> {
             calls++
-            failure?.let { throw TaskFromTextException(it) }
+            failure?.let { throw TaskFromTextException(it, failedRow) }
             created +=
                 drafts.map {
                     CreatedTask(selection, it.colorId, it.requiredQuantity, it.trackingMode, it.notes)
@@ -1324,6 +1325,56 @@ class GameTableControllerTest {
             assertEquals(before, composer.rows, "a refusal changed what had been typed")
             assertFalse(composer.isSaving)
             assertTrue(controller.state.focusRecall > recallBefore, "the keyboard was left on whatever refused")
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a refusal about one row is marked on that row and takes the keyboard`() =
+        runBlocking<Unit> {
+            // A batch is refused about one of its rows. Saying only "a colour is
+            // gone" would leave the user to work out which of three rows it was.
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Token"))
+            val colors = FakeColors(listOf(color("Siyah"), color("Beyaz")))
+            val creation = FakeTaskCreation(TaskFromTextFailure.COLOR_NOT_AVAILABLE, failedRow = 1)
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
+            val (collecting, catalogue) = readyComposer(controller, row, colors, word = "Token")
+            controller.chooseCreationMode(TaskCreationMode.INDEPENDENT_TASKS)
+            controller.chooseTaskColor(1, controller.state.colors[1].id)
+            controller.editTaskQuantity(1, "8")
+
+            controller.saveTask()
+
+            val composer = assertNotNull(controller.composerState())
+            assertEquals(1, composer.failureRow)
+            assertEquals(1, composer.firstUnusableRow, "the keyboard would go somewhere else than the refused row")
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `changing anything clears which row was refused`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Token"))
+            val colors = FakeColors(listOf(color("Siyah"), color("Beyaz")))
+            val creation = FakeTaskCreation(TaskFromTextFailure.COLOR_NOT_AVAILABLE, failedRow = 1)
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
+            val (collecting, catalogue) = readyComposer(controller, row, colors, word = "Token")
+            controller.chooseCreationMode(TaskCreationMode.INDEPENDENT_TASKS)
+            controller.chooseTaskColor(1, controller.state.colors[1].id)
+            controller.editTaskQuantity(1, "8")
+            controller.saveTask()
+
+            controller.chooseTaskColor(
+                1,
+                controller.state.colors
+                    .first()
+                    .id,
+            )
+
+            val composer = assertNotNull(controller.composerState())
+            assertNull(composer.failure, "the old refusal is still shown after it was answered")
+            assertNull(composer.failureRow)
             catalogue.cancelAndJoin()
             collecting.cancelAndJoin()
         }
