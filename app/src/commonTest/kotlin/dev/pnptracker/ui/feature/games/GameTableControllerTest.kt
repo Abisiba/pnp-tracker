@@ -154,6 +154,7 @@ class GameTableControllerTest {
     /** Records how tasks were changed, and can be told to refuse. */
     private class FakeTaskEditing(
         private val failure: TaskEditFailure? = null,
+        private val failedRow: Int? = null,
     ) : TaskEditing {
         val edits = mutableListOf<EditedTask>()
         val converted = mutableListOf<EntityId>()
@@ -161,13 +162,13 @@ class GameTableControllerTest {
         override suspend fun editTask(
             taskId: EntityId,
             name: String,
-            colorId: EntityId?,
+            colorIds: List<EntityId>,
             requiredQuantity: Int?,
             notes: String?,
             trackingMode: TrackingMode,
         ): Boolean {
-            failure?.let { throw TaskEditException(it) }
-            edits += EditedTask(taskId, name, colorId, requiredQuantity, notes, trackingMode)
+            failure?.let { throw TaskEditException(it, failedRow) }
+            edits += EditedTask(taskId, name, colorIds, requiredQuantity, notes, trackingMode)
             return true
         }
 
@@ -181,7 +182,7 @@ class GameTableControllerTest {
     private data class EditedTask(
         val taskId: EntityId,
         val name: String,
-        val colorId: EntityId?,
+        val colorIds: List<EntityId>,
         val requiredQuantity: Int?,
         val notes: String?,
         val trackingMode: TrackingMode,
@@ -234,7 +235,7 @@ class GameTableControllerTest {
             failure?.let { throw TaskFromTextException(it, failedRow) }
             created +=
                 drafts.map {
-                    CreatedTask(selection, it.colorId, it.requiredQuantity, it.trackingMode, it.notes)
+                    CreatedTask(selection, it.colorIds, it.requiredQuantity, it.trackingMode, it.notes)
                 }
             return drafts.map { IdGenerator.Random.newId() }
         }
@@ -242,7 +243,7 @@ class GameTableControllerTest {
 
     private data class CreatedTask(
         val selection: CellTextSelection,
-        val colorId: EntityId,
+        val colorIds: List<EntityId>,
         val requiredQuantity: Int,
         val trackingMode: TrackingMode,
         val notes: String?,
@@ -1162,7 +1163,7 @@ class GameTableControllerTest {
             controller.saveTask()
 
             assertEquals(listOf(14, 15, 8), creation.created.map { it.requiredQuantity })
-            assertEquals(controller.state.colors.map { it.id }, creation.created.map { it.colorId })
+            assertEquals(controller.state.colors.map { listOf(it.id) }, creation.created.map { it.colorIds })
             assertEquals(
                 1,
                 creation.created
@@ -1375,6 +1376,209 @@ class GameTableControllerTest {
             val composer = assertNotNull(controller.composerState())
             assertNull(composer.failure, "the old refusal is still shown after it was answered")
             assertNull(composer.failureRow)
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    // --------------------------------------- one task made in several colours
+
+    @Test
+    fun `the several colour mode starts empty and cannot be saved with one colour`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Yarasa"))
+            val colors = FakeColors(listOf(color("Kırmızı"), color("Sarı"), color("Siyah")))
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors, word = "Yarasa")
+
+            controller.chooseCreationMode(TaskCreationMode.SINGLE_ITEM_MULTICOLOR)
+            val empty = assertNotNull(controller.composerState())
+            assertTrue(empty.palette.colorIds.isEmpty(), "colours were chosen on the user's behalf")
+            assertFalse(empty.canSave, "a task in no colours can be saved")
+
+            controller.toggleMulticolorColor(
+                controller.state.colors
+                    .first()
+                    .id,
+            )
+            controller.editMulticolorQuantity("10")
+            assertFalse(assertNotNull(controller.composerState()).canSave, "one colour saves as a several-colour task")
+
+            controller.toggleMulticolorColor(controller.state.colors[1].id)
+            assertTrue(assertNotNull(controller.composerState()).canSave, "two colours and a quantity is not enough")
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `three colours become one task carrying all three, in order`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Yarasa"))
+            val colors = FakeColors(listOf(color("Kırmızı"), color("Sarı"), color("Siyah")))
+            val creation = FakeTaskCreation()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
+            val (collecting, catalogue) = readyComposer(controller, row, colors, word = "Yarasa")
+            controller.chooseCreationMode(TaskCreationMode.SINGLE_ITEM_MULTICOLOR)
+            controller.state.colors.forEach { controller.toggleMulticolorColor(it.id) }
+            controller.editMulticolorQuantity("10")
+            controller.editMulticolorNotes("tek kat")
+
+            controller.saveTask()
+
+            // One draft, not three: one task, one quantity, one note, three
+            // colours in the order they were chosen (PLAN 5.10).
+            val created = creation.created.single()
+            assertEquals(controller.state.colors.map { it.id }, created.colorIds)
+            assertEquals(10, created.requiredQuantity)
+            assertEquals("tek kat", created.notes)
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `choosing a colour already in the list takes it back out`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Yarasa"))
+            val colors = FakeColors(listOf(color("Kırmızı"), color("Sarı")))
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors, word = "Yarasa")
+            controller.chooseCreationMode(TaskCreationMode.SINGLE_ITEM_MULTICOLOR)
+            val red =
+                controller.state.colors
+                    .first()
+                    .id
+
+            controller.toggleMulticolorColor(red)
+            controller.toggleMulticolorColor(controller.state.colors[1].id)
+            controller.toggleMulticolorColor(red)
+
+            // The same colour twice is not a thing the panel can describe.
+            assertEquals(listOf(controller.state.colors[1].id), assertNotNull(controller.composerState()).palette.colorIds)
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `the colours can be moved up and down without losing any of them`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Yarasa"))
+            val colors = FakeColors(listOf(color("Kırmızı"), color("Sarı"), color("Siyah")))
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors, word = "Yarasa")
+            controller.chooseCreationMode(TaskCreationMode.SINGLE_ITEM_MULTICOLOR)
+            controller.state.colors.forEach { controller.toggleMulticolorColor(it.id) }
+            val (red, yellow, black) =
+                Triple(
+                    controller.state.colors[0].id,
+                    controller.state.colors[1].id,
+                    controller.state.colors[2].id,
+                )
+
+            controller.moveMulticolorColorUp(2)
+            assertEquals(listOf(red, black, yellow), assertNotNull(controller.composerState()).palette.colorIds)
+
+            controller.moveMulticolorColorDown(0)
+            assertEquals(listOf(black, red, yellow), assertNotNull(controller.composerState()).palette.colorIds)
+
+            // Nothing to move to is quietly nothing rather than a lost colour.
+            controller.moveMulticolorColorUp(0)
+            controller.moveMulticolorColorDown(2)
+            assertEquals(listOf(black, red, yellow), assertNotNull(controller.composerState()).palette.colorIds)
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `the three modes keep their own answers and never mix them`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Yarasa"))
+            val colors = FakeColors(listOf(color("Kırmızı"), color("Sarı"), color("Siyah")))
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors, word = "Yarasa")
+            controller.editTaskNotes(0, "tek rengin notu")
+            controller.chooseCreationMode(TaskCreationMode.INDEPENDENT_TASKS)
+            controller.chooseTaskColor(1, controller.state.colors[1].id)
+            controller.editTaskQuantity(1, "8")
+            val rowsTyped = assertNotNull(controller.composerState()).rows
+
+            controller.chooseCreationMode(TaskCreationMode.SINGLE_ITEM_MULTICOLOR)
+            controller.toggleMulticolorColor(controller.state.colors[2].id)
+            controller.editMulticolorQuantity("10")
+            controller.editMulticolorNotes("çok rengin notu")
+            val paletteTyped = assertNotNull(controller.composerState()).palette
+
+            controller.chooseCreationMode(TaskCreationMode.INDEPENDENT_TASKS)
+            val back = assertNotNull(controller.composerState())
+
+            assertEquals(rowsTyped, back.rows, "the rows were disturbed by the other mode")
+            assertEquals(paletteTyped, back.palette, "the several-colour draft was thrown away")
+            assertEquals("tek rengin notu", back.rows.first().notes)
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `asking to save one task in several colours twice writes it once`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Yarasa"))
+            val colors = FakeColors(listOf(color("Kırmızı"), color("Sarı")))
+            val creation = FakeTaskCreation()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
+            val (collecting, catalogue) = readyComposer(controller, row, colors, word = "Yarasa")
+            controller.chooseCreationMode(TaskCreationMode.SINGLE_ITEM_MULTICOLOR)
+            controller.state.colors.forEach { controller.toggleMulticolorColor(it.id) }
+            controller.editMulticolorQuantity("10")
+
+            controller.saveTask()
+            controller.saveTask()
+
+            assertEquals(1, creation.calls, "the same words became a task twice")
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a refused several colour save keeps the list and marks the colour`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Yarasa"))
+            val colors = FakeColors(listOf(color("Kırmızı"), color("Sarı"), color("Siyah")))
+            val creation = FakeTaskCreation(TaskFromTextFailure.COLOR_NOT_AVAILABLE, failedRow = 2)
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
+            val (collecting, catalogue) = readyComposer(controller, row, colors, word = "Yarasa")
+            controller.chooseCreationMode(TaskCreationMode.SINGLE_ITEM_MULTICOLOR)
+            controller.state.colors.forEach { controller.toggleMulticolorColor(it.id) }
+            controller.editMulticolorQuantity("10")
+            controller.editMulticolorNotes("tek kat")
+
+            controller.saveTask()
+
+            val composer = assertNotNull(controller.composerState(), "the panel closed on a refusal")
+            assertEquals(TaskFromTextFailure.COLOR_NOT_AVAILABLE, composer.failure)
+            assertEquals(2, composer.failedColorSlot, "the refusal is not shown on the colour it was about")
+            assertEquals(controller.state.colors.map { it.id }, composer.palette.colorIds, "the list was disturbed")
+            assertEquals("10", composer.palette.quantityText)
+            assertEquals("tek kat", composer.palette.notes)
+            catalogue.cancelAndJoin()
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `changing the colour list clears which colour was refused`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Yarasa"))
+            val colors = FakeColors(listOf(color("Kırmızı"), color("Sarı"), color("Siyah")))
+            val creation = FakeTaskCreation(TaskFromTextFailure.COLOR_NOT_AVAILABLE, failedRow = 2)
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
+            val (collecting, catalogue) = readyComposer(controller, row, colors, word = "Yarasa")
+            controller.chooseCreationMode(TaskCreationMode.SINGLE_ITEM_MULTICOLOR)
+            controller.state.colors.forEach { controller.toggleMulticolorColor(it.id) }
+            controller.editMulticolorQuantity("10")
+            controller.saveTask()
+
+            controller.toggleMulticolorColor(controller.state.colors[2].id)
+
+            val composer = assertNotNull(controller.composerState())
+            assertNull(composer.failure, "the panel still says something the user has dealt with")
+            assertNull(composer.failedColorSlot)
             catalogue.cancelAndJoin()
             collecting.cancelAndJoin()
         }
@@ -1629,7 +1833,7 @@ class GameTableControllerTest {
             assertEquals("Knight", editor.name)
             assertEquals("14", editor.quantityText)
             assertEquals("iki yedek", editor.notes)
-            assertEquals(listOf("Siyah"), editor.colorNames)
+            assertEquals(1, editor.colorIds.size)
             assertFalse(editor.hasChanges)
             assertFalse(editor.canSave, "a panel with nothing changed offers to save")
             collecting.cancelAndJoin()
@@ -1654,7 +1858,93 @@ class GameTableControllerTest {
 
             val editor = assertNotNull(controller.taskEditorState())
             assertTrue(editor.holdsSeveralColors)
-            assertEquals(listOf("Gri", "Siyah"), editor.colorNames)
+            assertEquals(2, editor.colorIds.size)
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a several colour task is edited as an ordered list`() =
+        runBlocking<Unit> {
+            val red = TaskColorPreview(IdGenerator.Random.newId(), "Kırmızı", "#DD2222")
+            val yellow = TaskColorPreview(IdGenerator.Random.newId(), "Sarı", "#EEDD22")
+            val black = TaskColorPreview(IdGenerator.Random.newId(), "Siyah", "#111111")
+            val (row, taskId) = rowWithTask(colors = listOf(red, yellow, black))
+            val editing = FakeTaskEditing()
+            val controller = controllerOf(FakeTable(listOf(row)), taskEditing = editing)
+            val collecting = collect(controller)
+            controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, taskId)
+            controller.beginTaskEdit()
+
+            controller.moveTaskEditColorUp(2)
+            controller.saveTaskEdit()
+
+            assertEquals(
+                listOf(red.colorId, black.colorId, yellow.colorId),
+                editing.edits.single().colorIds,
+                "the new order was not saved",
+            )
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a several colour task will not be emptied below two colours`() =
+        runBlocking<Unit> {
+            val red = TaskColorPreview(IdGenerator.Random.newId(), "Kırmızı", "#DD2222")
+            val yellow = TaskColorPreview(IdGenerator.Random.newId(), "Sarı", "#EEDD22")
+            val (row, taskId) = rowWithTask(colors = listOf(red, yellow))
+            val editing = FakeTaskEditing()
+            val controller = controllerOf(FakeTable(listOf(row)), taskEditing = editing)
+            val collecting = collect(controller)
+            controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, taskId)
+            controller.beginTaskEdit()
+
+            controller.chooseTaskEditColor(yellow.colorId)
+
+            val editor = assertNotNull(controller.taskEditorState())
+            assertEquals(listOf(red.colorId), editor.colorIds)
+            assertFalse(editor.canSave, "a several-colour task can be saved with one colour")
+            controller.saveTaskEdit()
+            assertTrue(editing.edits.isEmpty(), "a task was reduced to one colour")
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a single colour task has its one colour replaced rather than added to`() =
+        runBlocking<Unit> {
+            val black = TaskColorPreview(IdGenerator.Random.newId(), "Siyah", "#111111")
+            val (row, taskId) = rowWithTask(colors = listOf(black))
+            val editing = FakeTaskEditing()
+            val controller = controllerOf(FakeTable(listOf(row)), taskEditing = editing)
+            val collecting = collect(controller)
+            controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, taskId)
+            controller.beginTaskEdit()
+            val other = IdGenerator.Random.newId()
+
+            controller.chooseTaskEditColor(other)
+
+            assertEquals(listOf(other), assertNotNull(controller.taskEditorState()).colorIds)
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a refused edit says which colour it was about and keeps the list`() =
+        runBlocking<Unit> {
+            val red = TaskColorPreview(IdGenerator.Random.newId(), "Kırmızı", "#DD2222")
+            val yellow = TaskColorPreview(IdGenerator.Random.newId(), "Sarı", "#EEDD22")
+            val (row, taskId) = rowWithTask(colors = listOf(red, yellow))
+            val editing = FakeTaskEditing(TaskEditFailure.COLOR_NOT_AVAILABLE, failedRow = 1)
+            val controller = controllerOf(FakeTable(listOf(row)), taskEditing = editing)
+            val collecting = collect(controller)
+            controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, taskId)
+            controller.beginTaskEdit()
+            controller.moveTaskEditColorUp(1)
+
+            controller.saveTaskEdit()
+
+            val editor = assertNotNull(controller.taskEditorState(), "the panel closed on a refusal")
+            assertEquals(TaskEditFailure.COLOR_NOT_AVAILABLE, editor.failure)
+            assertEquals(1, editor.failureRow)
+            assertEquals(listOf(yellow.colorId, red.colorId), editor.colorIds, "the list was thrown away")
             collecting.cancelAndJoin()
         }
 

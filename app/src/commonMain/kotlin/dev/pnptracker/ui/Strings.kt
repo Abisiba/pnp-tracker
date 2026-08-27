@@ -25,11 +25,23 @@ import dev.pnptracker.resources.cell_error_game_gone
 import dev.pnptracker.resources.cell_error_stale_document
 import dev.pnptracker.resources.cell_save
 import dev.pnptracker.resources.cell_saving
+import dev.pnptracker.resources.cell_task_color_drop
+import dev.pnptracker.resources.cell_task_color_drop_short
 import dev.pnptracker.resources.cell_task_color_empty
+import dev.pnptracker.resources.cell_task_color_floor
 import dev.pnptracker.resources.cell_task_color_label
+import dev.pnptracker.resources.cell_task_color_move_down
+import dev.pnptracker.resources.cell_task_color_move_down_short
+import dev.pnptracker.resources.cell_task_color_move_up
+import dev.pnptracker.resources.cell_task_color_move_up_short
 import dev.pnptracker.resources.cell_task_color_none
+import dev.pnptracker.resources.cell_task_color_none_chosen
+import dev.pnptracker.resources.cell_task_color_order_label
+import dev.pnptracker.resources.cell_task_color_overflow
 import dev.pnptracker.resources.cell_task_color_required
 import dev.pnptracker.resources.cell_task_color_search
+import dev.pnptracker.resources.cell_task_color_slot
+import dev.pnptracker.resources.cell_task_color_unknown
 import dev.pnptracker.resources.cell_task_completed
 import dev.pnptracker.resources.cell_task_create
 import dev.pnptracker.resources.cell_task_description
@@ -53,6 +65,8 @@ import dev.pnptracker.resources.cell_task_hint
 import dev.pnptracker.resources.cell_task_mode_label
 import dev.pnptracker.resources.cell_task_mode_many
 import dev.pnptracker.resources.cell_task_mode_many_hint
+import dev.pnptracker.resources.cell_task_mode_multicolor
+import dev.pnptracker.resources.cell_task_mode_multicolor_hint
 import dev.pnptracker.resources.cell_task_mode_single
 import dev.pnptracker.resources.cell_task_name_label
 import dev.pnptracker.resources.cell_task_no_color
@@ -284,21 +298,23 @@ import dev.pnptracker.resources.task_convert_cancel
 import dev.pnptracker.resources.task_convert_history_warning
 import dev.pnptracker.resources.task_convert_irreversible
 import dev.pnptracker.resources.task_convert_title
+import dev.pnptracker.resources.task_edit_color_floor
+import dev.pnptracker.resources.task_edit_colors_label
+import dev.pnptracker.resources.task_edit_error_color_count
 import dev.pnptracker.resources.task_edit_error_color_gone
 import dev.pnptracker.resources.task_edit_error_could_not_save
+import dev.pnptracker.resources.task_edit_error_duplicate_color
 import dev.pnptracker.resources.task_edit_error_name_empty
 import dev.pnptracker.resources.task_edit_error_name_line_break
 import dev.pnptracker.resources.task_edit_error_quantity
 import dev.pnptracker.resources.task_edit_error_quantity_below_progress
 import dev.pnptracker.resources.task_edit_error_quantity_locked
-import dev.pnptracker.resources.task_edit_error_several_colors
 import dev.pnptracker.resources.task_edit_error_task_gone
 import dev.pnptracker.resources.task_edit_hint
 import dev.pnptracker.resources.task_edit_name_invalid
 import dev.pnptracker.resources.task_edit_name_label
 import dev.pnptracker.resources.task_edit_save
 import dev.pnptracker.resources.task_edit_saving
-import dev.pnptracker.resources.task_edit_several_colors
 import dev.pnptracker.resources.task_edit_title
 import dev.pnptracker.resources.task_menu_convert
 import dev.pnptracker.resources.task_menu_edit
@@ -653,7 +669,7 @@ object Strings {
         /** Takes the quantity; shown beside a task and never stored as text. */
         val quantityMark = Res.string.cell_task_quantity_mark
 
-        /** Takes the name, the colours and the quantity, in that order. */
+        /** Takes the name, the quantity and the colours, in that order. */
         val description = Res.string.cell_task_description
 
         /** Takes the name and the colours, for a task whose count is unknown. */
@@ -666,6 +682,29 @@ object Strings {
         val modeSingle = Res.string.cell_task_mode_single
         val modeMany = Res.string.cell_task_mode_many
         val modeManyHint = Res.string.cell_task_mode_many_hint
+        val modeMulticolor = Res.string.cell_task_mode_multicolor
+        val modeMulticolorHint = Res.string.cell_task_mode_multicolor_hint
+
+        val colorOrderLabel = Res.string.cell_task_color_order_label
+
+        /** Takes the colour's place in the list, counting from one, and its name. */
+        val colorSlot = Res.string.cell_task_color_slot
+
+        /** Takes the colour's name. */
+        val colorMoveUp = Res.string.cell_task_color_move_up
+
+        /** Takes the colour's name. */
+        val colorMoveDown = Res.string.cell_task_color_move_down
+        val colorMoveUpShort = Res.string.cell_task_color_move_up_short
+        val colorMoveDownShort = Res.string.cell_task_color_move_down_short
+
+        /** Takes the colour's name. */
+        val colorDrop = Res.string.cell_task_color_drop
+        val colorDropShort = Res.string.cell_task_color_drop_short
+        val colorFloor = Res.string.cell_task_color_floor
+        val colorUnknown = Res.string.cell_task_color_unknown
+        val colorNoneChosen = Res.string.cell_task_color_none_chosen
+        val colorOverflow = Res.string.cell_task_color_overflow
 
         /** Takes the row's place in the panel, counting from one. */
         val rowTitle = Res.string.cell_task_row_title
@@ -712,8 +751,8 @@ object Strings {
         val nameLabel = Res.string.task_edit_name_label
         val nameInvalid = Res.string.task_edit_name_invalid
 
-        /** Takes the colours the task carries, so the user can see what is kept. */
-        val severalColors = Res.string.task_edit_several_colors
+        val colorsLabel = Res.string.task_edit_colors_label
+        val colorFloor = Res.string.task_edit_color_floor
         val save = Res.string.task_edit_save
         val saving = Res.string.task_edit_saving
         val hint = Res.string.task_edit_hint
@@ -722,7 +761,8 @@ object Strings {
         val errorNameEmpty = Res.string.task_edit_error_name_empty
         val errorNameLineBreak = Res.string.task_edit_error_name_line_break
         val errorColorGone = Res.string.task_edit_error_color_gone
-        val errorSeveralColors = Res.string.task_edit_error_several_colors
+        val errorDuplicateColor = Res.string.task_edit_error_duplicate_color
+        val errorColorCount = Res.string.task_edit_error_color_count
         val errorQuantity = Res.string.task_edit_error_quantity
         val errorQuantityBelowProgress = Res.string.task_edit_error_quantity_below_progress
         val errorQuantityLocked = Res.string.task_edit_error_quantity_locked

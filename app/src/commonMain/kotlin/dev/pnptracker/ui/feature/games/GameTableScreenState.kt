@@ -180,13 +180,17 @@ sealed interface CellWork {
  * made. [INDEPENDENT_TASKS] in particular is not a kind of task, a group or a
  * parent — PLAN 12.7 is explicit — it is a way of typing one name once.
  *
- * The third mode PLAN describes, a single task drawn in several colours, is not
- * here: it belongs to the step that can create it, and an option that did
- * nothing would be a promise the panel cannot keep.
+ * What separates the last two is what they make, not what they are called.
+ * [INDEPENDENT_TASKS] makes N tasks that share nothing; [SINGLE_ITEM_MULTICOLOR]
+ * makes one task made in N colours, with one total, one counter and one place in
+ * the cell (PLAN 5.10 and 12.7). Neither writes anything that ties records
+ * together, because in the first there is nothing to tie and in the second there
+ * is only one record to begin with.
  */
 enum class TaskCreationMode {
     SINGLE_COLOR,
     INDEPENDENT_TASKS,
+    SINGLE_ITEM_MULTICOLOR,
 }
 
 /**
@@ -224,6 +228,58 @@ data class TaskDraftRow(
 }
 
 /**
+ * The one task being described in several colours, before anything is written.
+ *
+ * One quantity, one note, one tracking mode and an ordered list of colours,
+ * because that is exactly what PLAN 5.10 and 12.7 say such a task is: a single
+ * record whose colours are ordered, not several records that happen to agree.
+ * There is nowhere here to type a second quantity, which is the point — a form
+ * that offered one would be describing something the product does not have.
+ *
+ * The list cannot hold the same colour twice, because choosing a colour already
+ * in it takes it back out. A duplicate is therefore not a state the user can
+ * reach by typing, which is a better answer than a message about one; the
+ * transaction refuses one all the same, for anything that did not come from
+ * here.
+ */
+data class MulticolorDraft(
+    val colorQuery: String = "",
+    /** The colours the task will be made in, in the order they were chosen. */
+    val colorIds: List<EntityId> = emptyList(),
+    val quantityText: String = "",
+    /** The user's own words, kept exactly; PLAN 5.6 stores a note as written. */
+    val notes: String = "",
+    val trackingMode: TrackingMode? = null,
+) {
+    val quantity: Int? get() = quantityText.toIntOrNull()?.takeIf { it > 0 }
+
+    val isQuantityUsable: Boolean get() = quantityText.isEmpty() || quantity != null
+
+    /** True once there are enough colours for this to be that kind of task. */
+    val hasEnoughColors: Boolean get() = colorIds.size >= LEAST_COLORS
+
+    val isComplete: Boolean get() = hasEnoughColors && quantity != null && trackingMode != null
+
+    /** True while nothing has been typed or chosen here at all. */
+    val isUntouched: Boolean
+        get() = colorIds.isEmpty() && quantityText.isEmpty() && notes.isEmpty() && colorQuery.isEmpty()
+
+    companion object {
+        /**
+         * How many colours make a task of this kind.
+         *
+         * Two. One colour is the single-colour mode, and offering to save it
+         * from here would be two ways to make the same record. There is no
+         * ceiling to match it: PLAN puts no limit on how many colours a thing
+         * comes in, and a name shorter than its colour list is drawn rather than
+         * refused — the colours with no character of their own become swatches
+         * beside it (PLAN 12.7).
+         */
+        const val LEAST_COLORS = 2
+    }
+}
+
+/**
  * The tasks being made out of words the user selected.
  *
  * The selection is fixed when the panel opens and never moves again: it carries
@@ -246,6 +302,16 @@ data class TaskComposer(
     val name: String,
     val mode: TaskCreationMode = TaskCreationMode.SINGLE_COLOR,
     val rows: List<TaskDraftRow>,
+    /**
+     * The one several-colour task, kept apart from [rows].
+     *
+     * Its own state rather than a row pressed into service, because it is not
+     * one: a row is a task with a colour, and this is a task with a list of
+     * them. Keeping them separate is also what makes switching modes safe in
+     * both directions — neither can quietly consume or overwrite the other's
+     * answers, and coming back to a mode finds it exactly as it was left.
+     */
+    val palette: MulticolorDraft = MulticolorDraft(),
     val isSaving: Boolean = false,
     val failure: TaskFromTextFailure? = null,
     /**
@@ -261,9 +327,23 @@ data class TaskComposer(
         require(rows.isNotEmpty()) { "A task panel always has a row to type in." }
     }
 
-    /** The rows this mode will actually create tasks from. */
+    /**
+     * The rows this mode will actually create tasks from.
+     *
+     * Empty in the several-colour mode, which describes its one task in
+     * [palette] instead: there is no row of it to use.
+     */
     val usedRows: List<TaskDraftRow>
-        get() = if (mode == TaskCreationMode.SINGLE_COLOR) rows.take(1) else rows
+        get() =
+            when (mode) {
+                TaskCreationMode.SINGLE_COLOR -> rows.take(1)
+                TaskCreationMode.INDEPENDENT_TASKS -> rows
+                TaskCreationMode.SINGLE_ITEM_MULTICOLOR -> emptyList()
+            }
+
+    /** How many tasks saving this panel would create. */
+    val taskCount: Int
+        get() = if (mode == TaskCreationMode.SINGLE_ITEM_MULTICOLOR) 1 else usedRows.size
 
     /**
      * The rows whose colour an earlier used row already took.
@@ -303,12 +383,23 @@ data class TaskComposer(
     val leastRows: Int
         get() = if (mode == TaskCreationMode.SINGLE_COLOR) 1 else LEAST_INDEPENDENT_TASKS
 
+    /** Which colour of the several-colour list the storage refused, if any. */
+    val failedColorSlot: Int?
+        get() =
+            failureRow?.takeIf {
+                mode == TaskCreationMode.SINGLE_ITEM_MULTICOLOR && it in palette.colorIds.indices
+            }
+
     val canSave: Boolean
         get() =
             !isSaving &&
-                usedRows.size >= leastRows &&
-                usedRows.all { it.isComplete } &&
-                repeatedColorRows.isEmpty()
+                if (mode == TaskCreationMode.SINGLE_ITEM_MULTICOLOR) {
+                    palette.isComplete
+                } else {
+                    usedRows.size >= leastRows &&
+                        usedRows.all { it.isComplete } &&
+                        repeatedColorRows.isEmpty()
+                }
 
     companion object {
         /**
@@ -331,20 +422,24 @@ data class TaskComposer(
  * the same reason it is in [TaskComposer]: what was typed stays visible even
  * when it is not a number.
  *
- * A task carrying more than one colour is marked rather than edited. PLAN 5.10
- * gives it an ordered list and PLAN 12.7 draws its name split across them, and
- * one colour box has nowhere to put that order — so the list is shown and left
- * alone until the step that can edit it.
+ * The colours are an ordered list, whether the task has one or several. PLAN
+ * 5.10 numbers them from the user's own order and PLAN 12.7 draws the name split
+ * across them in it, so the order is part of what the task is and reordering it
+ * is a real change to save.
+ *
+ * What may not change is how many kinds of thing the task is. A task made in
+ * several colours stays made in several, and one made in one stays made in one:
+ * PLAN describes neither crossing, and the panel does not offer what the
+ * transaction would refuse.
  */
 data class TaskEditor(
     val taskId: EntityId,
     val originalName: String,
     val name: String,
     val colorQuery: String = "",
-    val colorId: EntityId?,
-    val originalColorId: EntityId?,
-    /** Every colour the task carries, in the user's own order. */
-    val colorNames: List<String> = emptyList(),
+    /** Every colour the task is to carry, in the user's own order. */
+    val colorIds: List<EntityId>,
+    val originalColorIds: List<EntityId>,
     val quantityText: String,
     val originalQuantityText: String,
     val notes: String,
@@ -353,8 +448,18 @@ data class TaskEditor(
     val originalTrackingMode: TrackingMode,
     val isSaving: Boolean = false,
     val failure: TaskEditFailure? = null,
+    /** Which colour of the list the refusal was about, if it was about one. */
+    val failureRow: Int? = null,
 ) {
-    val holdsSeveralColors: Boolean get() = colorNames.size > 1
+    /** True when this is a task made in several colours (PLAN 12.7). */
+    val holdsSeveralColors: Boolean get() = originalColorIds.size > 1
+
+    /** The one colour a single-colour task is made in, or null when it has none. */
+    val colorId: EntityId? get() = colorIds.firstOrNull()
+
+    /** False once a several-colour task has been emptied below what it is. */
+    val hasEnoughColors: Boolean
+        get() = !holdsSeveralColors || colorIds.size >= MulticolorDraft.LEAST_COLORS
 
     val quantity: Int? get() = quantityText.toIntOrNull()?.takeIf { it > 0 }
 
@@ -365,12 +470,13 @@ data class TaskEditor(
     val hasChanges: Boolean
         get() =
             name != originalName ||
-                colorId != originalColorId ||
+                colorIds != originalColorIds ||
                 quantityText != originalQuantityText ||
                 notes != originalNotes ||
                 trackingMode != originalTrackingMode
 
-    val canSave: Boolean get() = !isSaving && isNameUsable && isQuantityUsable && hasChanges
+    val canSave: Boolean
+        get() = !isSaving && isNameUsable && isQuantityUsable && hasEnoughColors && hasChanges
 }
 
 /**

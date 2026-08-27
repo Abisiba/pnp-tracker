@@ -50,6 +50,7 @@ class BatchColorValidationTest {
     private class Bench(
         val database: AppDatabase,
         val store: TaskFromTextStore,
+        val editing: TaskEditStore,
         val driver: CountingSqliteDriver,
     )
 
@@ -69,8 +70,9 @@ class BatchColorValidationTest {
         val database = DatabaseFactory(driver = driver).open(directory.databaseFile)
         try {
             val store = TaskFromTextStore(database.taskFromTextDao(), IdGenerator.Random, StoppedClock(updatedAt))
+            val editing = TaskEditStore(database.taskEditDao(), IdGenerator.Random, StoppedClock(updatedAt))
             return runBlocking {
-                Bench(database, store, driver).work()
+                Bench(database, store, editing, driver).work()
                 driver.stop()
             }
         } finally {
@@ -153,7 +155,7 @@ class BatchColorValidationTest {
     private fun draftsOf(colors: List<ColorEntity>) =
         colors.mapIndexed { index, color ->
             TaskDraft(
-                colorId = color.id,
+                colorIds = listOf(color.id),
                 requiredQuantity = index + 1,
                 trackingMode = TrackingMode.THREE_D_BATCH,
                 notes = null,
@@ -290,6 +292,71 @@ class BatchColorValidationTest {
         }
     }
 
+    // ------------------------- what one task in several colours costs to check
+
+    /** The statements one task made in [colorCount] colours prepared. */
+    private fun statementsOfMulticolor(colorCount: Int): List<String> =
+        statementsOf {
+            val game = database.addGame("Tek öge $colorCount")
+            val cell = database.addCell(game.id)
+            val segment = database.addText(cell.id, "Basılacak: Yarasa, kutu ayrı.")
+            val draft =
+                TaskDraft(
+                    colorIds = database.colors(colorCount).map { it.id },
+                    requiredQuantity = 10,
+                    trackingMode = TrackingMode.THREE_D_BATCH,
+                    notes = null,
+                )
+
+            driver.start()
+            store.createTasks(selectionOf(game, cell, segment, "Yarasa"), listOf(draft))
+        }
+
+    @Test
+    fun `one task in two colours asks the colours once`() {
+        val reads = statementsOfMulticolor(colorCount = 2).colorReads()
+
+        assertEquals(1, reads.size, "the colours were read more than once: $reads")
+    }
+
+    @Test
+    fun `one task in twenty five colours asks the colours once`() {
+        val reads = statementsOfMulticolor(colorCount = 25).colorReads()
+
+        assertEquals(1, reads.size, "the colours were read once per colour: $reads")
+    }
+
+    @Test
+    fun `checking a task costs the same however many colours it is made in`() {
+        // The one that matters: not that the number is small, but that it does
+        // not move. PLAN puts no ceiling on how many colours a thing comes in.
+        assertEquals(statementsOfMulticolor(2).reads(), statementsOfMulticolor(25).reads())
+    }
+
+    @Test
+    fun `editing a task reads the colours once however many it carries`() {
+        fun editReads(colorCount: Int): List<String> =
+            statementsOf {
+                val game = database.addGame("Düzenleme $colorCount")
+                val cell = database.addCell(game.id)
+                val segment = database.addText(cell.id, "Basılacak: Yarasa, kutu ayrı.")
+                val colors = database.colors(colorCount).map { it.id }
+                val taskId =
+                    store
+                        .createTasks(
+                            selectionOf(game, cell, segment, "Yarasa"),
+                            listOf(TaskDraft(colors, 10, TrackingMode.THREE_D_BATCH, null)),
+                        ).single()
+
+                driver.start()
+                editing.editTask(taskId, "Yarasa", colors.reversed(), 10, null, TrackingMode.THREE_D_BATCH)
+            }
+
+        assertEquals(1, editReads(2).colorReads().size, "the colours were read more than once")
+        assertEquals(1, editReads(25).colorReads().size, "the colours were read once per colour")
+        assertEquals(editReads(2).reads(), editReads(25).reads(), "checking an edit grows with the colour list")
+    }
+
     @Test
     fun `the same colour twice is refused without the database being written`() {
         val statements =
@@ -298,7 +365,7 @@ class BatchColorValidationTest {
                 val cell = database.addCell(game.id)
                 val segment = database.addText(cell.id, "Basılacak: Token, kutu ayrı.")
                 val color = database.colors(1).single()
-                val draft = TaskDraft(color.id, 14, TrackingMode.THREE_D_BATCH, null)
+                val draft = TaskDraft(listOf(color.id), 14, TrackingMode.THREE_D_BATCH, null)
                 val before = database.cellSegmentDao().segmentsOfCell(cell.id)
 
                 driver.start()

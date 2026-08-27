@@ -377,7 +377,18 @@ class GameTableController(
                     } else {
                         composer.rows
                     }
-                composer.copy(mode = mode, rows = rows, failure = null, failureRow = null)
+                // The several-colour draft keeps what it has and is only ever
+                // given the one thing the pool settles, so arriving there finds
+                // it as it was left with nothing chosen on the user's behalf.
+                val palette =
+                    if (mode == TaskCreationMode.SINGLE_ITEM_MULTICOLOR && poolType != null) {
+                        composer.palette.copy(
+                            trackingMode = composer.palette.trackingMode ?: onlyTrackingModeOf(poolType),
+                        )
+                    } else {
+                        composer.palette
+                    }
+                composer.copy(mode = mode, rows = rows, palette = palette, failure = null, failureRow = null)
             }
         }
 
@@ -434,6 +445,48 @@ class GameTableController(
         trackingMode: TrackingMode,
     ) = onRow(row) { it.copy(trackingMode = trackingMode) }
 
+    private fun onPalette(change: (MulticolorDraft) -> MulticolorDraft) =
+        onComposer { composer ->
+            composer.copy(palette = change(composer.palette), failure = null, failureRow = null)
+        }
+
+    fun editMulticolorColorQuery(query: String) = onPalette { it.copy(colorQuery = query) }
+
+    /**
+     * Puts a colour into the list, or takes it back out if it is already in it.
+     *
+     * Adding at the end, because the end is where the next colour goes and the
+     * order is the order the name will be drawn in (PLAN 12.7). Choosing one
+     * that is already there removes it rather than repeating it: PLAN 5.10
+     * numbers a task's colours uniquely, so the same colour twice is not a thing
+     * the user can be describing, and taking it out is the only reading of the
+     * click that means anything.
+     */
+    fun toggleMulticolorColor(colorId: EntityId) =
+        onPalette { palette ->
+            val colors =
+                if (colorId in palette.colorIds) {
+                    palette.colorIds - colorId
+                } else {
+                    palette.colorIds + colorId
+                }
+            palette.copy(colorIds = colors)
+        }
+
+    /** Moves one colour one place towards the front of the list. */
+    fun moveMulticolorColorUp(slot: Int) = onPalette { it.copy(colorIds = it.colorIds.movedUp(slot)) }
+
+    /** Moves one colour one place towards the back of the list. */
+    fun moveMulticolorColorDown(slot: Int) = onPalette { it.copy(colorIds = it.colorIds.movedUp(slot + 1)) }
+
+    /** Takes the quantity as typed; what is not a usable number stays visible. */
+    fun editMulticolorQuantity(text: String) = onPalette { it.copy(quantityText = text) }
+
+    /** Takes the note exactly as typed, spaces and all. */
+    fun editMulticolorNotes(text: String) = onPalette { it.copy(notes = text) }
+
+    fun chooseMulticolorTracking(trackingMode: TrackingMode) = onPalette { it.copy(trackingMode = trackingMode) }
+
     /**
      * Closes the panel and nothing else.
      *
@@ -460,14 +513,28 @@ class GameTableController(
         // flight finds isSaving already set and does nothing: the same words
         // cannot become two sets of tasks.
         val drafts =
-            composer.usedRows.map { row ->
-                TaskDraft(
-                    colorId = row.colorId ?: return,
-                    requiredQuantity = row.quantity ?: return,
-                    trackingMode = row.trackingMode ?: return,
-                    // An empty note is no note; anything else is kept as typed.
-                    notes = row.notes.takeIf { it.isNotEmpty() },
+            if (composer.mode == TaskCreationMode.SINGLE_ITEM_MULTICOLOR) {
+                val palette = composer.palette
+                // One draft carrying every colour: one task, one total, one
+                // counter, one place in the cell (PLAN 5.10).
+                listOf(
+                    TaskDraft(
+                        colorIds = palette.colorIds.takeIf { it.size >= MulticolorDraft.LEAST_COLORS } ?: return,
+                        requiredQuantity = palette.quantity ?: return,
+                        trackingMode = palette.trackingMode ?: return,
+                        notes = palette.notes.takeIf { it.isNotEmpty() },
+                    ),
                 )
+            } else {
+                composer.usedRows.map { row ->
+                    TaskDraft(
+                        colorIds = listOf(row.colorId ?: return),
+                        requiredQuantity = row.quantity ?: return,
+                        trackingMode = row.trackingMode ?: return,
+                        // An empty note is no note; anything else is kept as typed.
+                        notes = row.notes.takeIf { it.isNotEmpty() },
+                    )
+                }
             }
 
         state = state.copy(work = making.copy(composer = composer.copy(isSaving = true, failure = null, failureRow = null)))
@@ -510,10 +577,14 @@ class GameTableController(
         val query =
             when (val open = state.work) {
                 is CellWork.MakingTask ->
-                    open.composer.rows
-                        .getOrNull(row)
-                        ?.colorQuery
-                        .orEmpty()
+                    if (open.composer.mode == TaskCreationMode.SINGLE_ITEM_MULTICOLOR) {
+                        open.composer.palette.colorQuery
+                    } else {
+                        open.composer.rows
+                            .getOrNull(row)
+                            ?.colorQuery
+                            .orEmpty()
+                    }
                 is CellWork.EditingTask -> open.editor.colorQuery
                 else -> ""
             }
@@ -576,9 +647,8 @@ class GameTableController(
                                 taskId = menu.taskId,
                                 originalName = task.text,
                                 name = task.text,
-                                colorId = task.colors.firstOrNull()?.colorId,
-                                originalColorId = task.colors.firstOrNull()?.colorId,
-                                colorNames = task.colors.map { it.canonicalName },
+                                colorIds = task.colors.map { it.colorId },
+                                originalColorIds = task.colors.map { it.colorId },
                                 quantityText = task.requiredQuantity?.toString().orEmpty(),
                                 originalQuantityText = task.requiredQuantity?.toString().orEmpty(),
                                 notes = task.notes.orEmpty(),
@@ -608,7 +678,32 @@ class GameTableController(
 
     fun editTaskEditColorQuery(query: String) = onEditor { it.copy(colorQuery = query) }
 
-    fun chooseTaskEditColor(colorId: EntityId) = onEditor { it.copy(colorId = colorId, failure = null) }
+    /**
+     * Chooses what the task is made in.
+     *
+     * A task made in one colour has that colour replaced, because one is all it
+     * may have: PLAN describes no way of turning it into a task made in several,
+     * and adding a second here would be inventing one. A task made in several
+     * gains the colour at the end of its list, or loses it again if it is
+     * already in there — the list is ordered and its entries are unique (PLAN
+     * 5.10), so the same colour twice is not something to describe.
+     */
+    fun chooseTaskEditColor(colorId: EntityId) =
+        onEditor { editor ->
+            val colors =
+                when {
+                    !editor.holdsSeveralColors -> listOf(colorId)
+                    colorId in editor.colorIds -> editor.colorIds - colorId
+                    else -> editor.colorIds + colorId
+                }
+            editor.copy(colorIds = colors, failure = null, failureRow = null)
+        }
+
+    /** Moves one of a several-colour task's colours towards the front. */
+    fun moveTaskEditColorUp(slot: Int) = onEditor { it.copy(colorIds = it.colorIds.movedUp(slot), failure = null, failureRow = null) }
+
+    /** Moves one of a several-colour task's colours towards the back. */
+    fun moveTaskEditColorDown(slot: Int) = onEditor { it.copy(colorIds = it.colorIds.movedUp(slot + 1), failure = null, failureRow = null) }
 
     fun editTaskEditQuantity(text: String) = onEditor { it.copy(quantityText = text, failure = null) }
 
@@ -631,7 +726,7 @@ class GameTableController(
             taskEditing.editTask(
                 taskId = editor.taskId,
                 name = editor.name,
-                colorId = editor.colorId,
+                colorIds = editor.colorIds,
                 requiredQuantity = editor.quantity,
                 notes = editor.notes.takeIf { it.isNotEmpty() },
                 trackingMode = editor.trackingMode,
@@ -642,7 +737,14 @@ class GameTableController(
                 state.copy(
                     work =
                         (state.work as? CellWork.EditingTask)?.let {
-                            it.copy(editor = it.editor.copy(isSaving = false, failure = refusal.failure))
+                            it.copy(
+                                editor =
+                                    it.editor.copy(
+                                        isSaving = false,
+                                        failure = refusal.failure,
+                                        failureRow = refusal.row,
+                                    ),
+                            )
                         },
                 )
         }
@@ -742,3 +844,17 @@ class GameTableController(
         }
     }
 }
+
+/**
+ * The same list with one entry moved one place towards the front.
+ *
+ * Unchanged when there is nowhere to move to, so the first entry going up and
+ * the last going down are quietly nothing rather than an error: the buttons that
+ * would do it are disabled, and a list is not a place to throw from.
+ */
+private fun <T> List<T>.movedUp(at: Int): List<T> =
+    if (at <= 0 || at >= size) {
+        this
+    } else {
+        toMutableList().apply { add(at - 1, removeAt(at)) }
+    }

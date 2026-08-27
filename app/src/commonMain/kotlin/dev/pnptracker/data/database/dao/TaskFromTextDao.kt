@@ -160,8 +160,16 @@ abstract class TaskFromTextDao {
      * database cannot tell they were made in the same breath, and nothing about
      * one of them can reach another.
      *
-     * Two drafts may not name the same colour. Folding them into one would make
-     * fewer tasks than the user described and throw away a quantity they typed.
+     * One draft naming several colours is one task made in all of them (PLAN
+     * 5.10 and 12.7): one identity, one segment, one total, one counter, and a
+     * `TaskColor` per colour numbered `0…N-1` in the order they were chosen. The
+     * name is written into the cell **once** — the colours are how it is drawn,
+     * not something the document repeats.
+     *
+     * No colour may be named twice, in one draft or across two. Folding two rows
+     * would make fewer tasks than the user described and throw away a quantity
+     * they typed; folding two slots would take a colour out of a name they meant
+     * to see split across it.
      *
      * What it costs to *check* a batch does not depend on how big the batch is:
      * the reads are made once and compared in memory. What it costs to write one
@@ -208,16 +216,31 @@ abstract class TaskFromTextDao {
 
         val split = splitForTaskName(storedText, selection.startOffset, selection.endOffset)
         if (drafts.isEmpty()) refuse(TaskFromTextFailure.NO_TASK_DESCRIBED)
-        if (drafts.distinctBy { it.colorId }.size != drafts.size) refuse(TaskFromTextFailure.DUPLICATE_COLOR)
+        // Every colour named anywhere in this act, in the order it was named.
+        // One rule covers both shapes: two rows of a batch may not take the same
+        // colour, and neither may two slots of one task. Folding either would
+        // make less than the user described — one task fewer, or one colour
+        // fewer out of a name they meant to see split across it.
+        val named = drafts.flatMap { it.colorIds }
+        if (named.distinct().size != named.size) refuse(TaskFromTextFailure.DUPLICATE_COLOR)
         // Read once, compared in memory. Every draft is checked before any of
         // them is written: a batch that failed on its third row after writing
         // the first two would leave the user with tasks they did not finish
-        // describing. Which row it was travels with the refusal, because a form
-        // with rows in it needs to be told which row to change.
+        // describing. Where it went wrong travels with the refusal, because a
+        // form with rows in it needs to be told which row to change.
         val catalogue = allColorIds().toSet()
+        var slot = 0
         drafts.forEachIndexed { row, draft ->
-            if (draft.colorId !in catalogue) refuse(TaskFromTextFailure.COLOR_NOT_AVAILABLE, row)
-            if (draft.requiredQuantity <= 0) refuse(TaskFromTextFailure.INVALID_REQUIRED_QUANTITY, row)
+            draft.colorIds.forEach { colorId ->
+                if (colorId !in catalogue) refuse(TaskFromTextFailure.COLOR_NOT_AVAILABLE, slot)
+                slot++
+            }
+            // A quantity belongs to a task, and a task is a row of the panel
+            // only when there are several; one task in several colours has one
+            // quantity and no row for it to be about.
+            if (draft.requiredQuantity <= 0) {
+                refuse(TaskFromTextFailure.INVALID_REQUIRED_QUANTITY, row.takeIf { drafts.size > 1 })
+            }
         }
 
         val moment = clock.now()
@@ -258,7 +281,13 @@ abstract class TaskFromTextDao {
         // would have nothing to point at the other way round.
         tasks.forEachIndexed { index, task ->
             insertTask(task)
-            insertTaskColor(TaskColorEntity(taskId = task.id, colorId = drafts[index].colorId, slotIndex = 0))
+            // In the user's own order, numbered from zero without gaps: PLAN
+            // 5.10 makes the slot the order, and PLAN 12.7 draws the name across
+            // the colours in it. A list read back in any other order would paint
+            // the name in colours the user did not put there.
+            drafts[index].colorIds.forEachIndexed { slotIndex, colorId ->
+                insertTaskColor(TaskColorEntity(taskId = task.id, colorId = colorId, slotIndex = slotIndex))
+            }
             // PLAN 7.2 and 8 fix the stages by pool, so a card or board task gets
             // its whole pipeline here — its own rows, counting only its own work.
             // A pool without a pipeline gets no rows and needs no case.

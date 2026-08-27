@@ -13,6 +13,7 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -110,7 +111,9 @@ import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.tasks.TaskEditFailure
 import dev.pnptracker.domain.tasks.TaskFromTextFailure
+import dev.pnptracker.domain.tasks.taskColorLayoutOf
 import dev.pnptracker.domain.tasks.trackingModesOf
+import dev.pnptracker.domain.text.graphemeBoundariesOf
 import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.columnNameOf
 import dev.pnptracker.ui.feature.importworkspace.labelOf
@@ -152,6 +155,25 @@ private val ColorListHeight = 96.dp
  * and the cell reads back without either of them.
  */
 private const val QUANTITY_GAP = " "
+
+/**
+ * The swatch drawn for a colour the task's name was too short to reach.
+ *
+ * Two hard spaces filled with the colour rather than a glyph: it has to be a
+ * flat block of exactly that colour whatever font the machine has, and a
+ * character that could be missing would leave a colour the user chose showing
+ * nothing at all. Hard, so a swatch is never split across two lines.
+ */
+private const val MARKER_MARK = "\u00A0\u00A0"
+
+/**
+ * The gap before each swatch.
+ *
+ * An ordinary space, and breakable on purpose: a task in more colours than its
+ * name is long has to be able to wrap inside a narrow cell, and PLAN 12.7 will
+ * not have any of its colours hidden, folded into a `+3` or quietly cut off.
+ */
+private const val MARKER_GAP = " "
 
 private val ComposerShape = RoundedCornerShape(8.dp)
 
@@ -536,27 +558,53 @@ private data class TaskPaint(
     val edge: Color,
 )
 
+/**
+ * How each of a task's colours is painted, in the order the user chose them.
+ *
+ * One entry per colour, so a task made in several is several paints and never an
+ * average of them — PLAN 12.7 forbids a gradient and wants each part drawn in
+ * its own flat colour. A task with no colour at all gets the single fallback
+ * paint, which is the theme's own ground: PLAN 5.10 allows that state, and it
+ * still has to read as a task rather than as plain words.
+ */
 @Composable
-private fun paintOf(segment: CellSegmentPreview): TaskPaint {
-    val fill = segment.colors.firstOrNull()?.let { opaqueColorOf(it.hex) }
-    return if (fill == null) {
-        // PLAN 5.10 allows a task no colour at all; it is drawn as the theme's
-        // own ground so it still reads as a task rather than as plain words.
-        TaskPaint(
-            fill = MaterialTheme.colorScheme.surfaceVariant,
-            ink = MaterialTheme.colorScheme.onSurfaceVariant,
-            edge = MaterialTheme.colorScheme.outline,
+private fun paintsOf(segment: CellSegmentPreview): List<TaskPaint> =
+    if (segment.colors.isEmpty()) {
+        listOf(
+            TaskPaint(
+                fill = MaterialTheme.colorScheme.surfaceVariant,
+                ink = MaterialTheme.colorScheme.onSurfaceVariant,
+                edge = MaterialTheme.colorScheme.outline,
+            ),
         )
     } else {
-        TaskPaint(fill = fill, ink = readableInkOn(fill), edge = visibleEdgeOn(fill))
+        segment.colors.map { color ->
+            val fill = opaqueColorOf(color.hex)
+            TaskPaint(fill = fill, ink = readableInkOn(fill), edge = visibleEdgeOn(fill))
+        }
     }
-}
 
-/** Where one task's word sits in the string that is actually drawn. */
+/** One stretch of the drawn string painted in one of a task's colours. */
+private data class DrawnStripe(
+    val start: Int,
+    val end: Int,
+    val edge: Color,
+)
+
+/**
+ * Where one task sits in the string that is actually drawn.
+ *
+ * [start] and [end] cover the whole of it — the name and any swatches drawn for
+ * colours the name was too short to reach — because all of that is one task and
+ * one thing to press (PLAN 12.7). [stripes] are the coloured pieces inside it,
+ * each needing its own contrast edge, which is what makes a white piece visible
+ * on a light ground and a black one on a dark ground.
+ */
 private data class DrawnTask(
     val segment: CellSegmentPreview,
     val start: Int,
     val end: Int,
+    val stripes: List<DrawnStripe>,
 )
 
 /** The document as it is drawn, and where each task's word ended up in it. */
@@ -581,12 +629,21 @@ private fun drawnDocumentOf(
     withCounts: Boolean,
 ): DrawnDocument {
     val metadata = MaterialTheme.colorScheme.onSurfaceVariant
-    val paints = cell.segments.map { if (it.isTask) paintOf(it) else null }
+    val paints = cell.segments.map { if (it.isTask) paintsOf(it) else null }
     val marks =
         cell.segments.map { segment ->
             segment.requiredQuantity
                 ?.takeIf { segment.isTask && withCounts }
                 ?.let { stringResource(Strings.CellTask.quantityMark, it) }
+        }
+    // Worked out once per document rather than on every recomposition: finding
+    // where the user's own characters begin is real work, and the answer only
+    // changes when a name or a colour list does.
+    val layouts =
+        remember(cell.segments) {
+            cell.segments.map { segment ->
+                if (segment.isTask) taskColorLayoutOf(segment.text, segment.colors.size) else null
+            }
         }
     val tasks = mutableListOf<DrawnTask>()
     val text =
@@ -604,20 +661,43 @@ private fun drawnDocumentOf(
                 if (withCounts && cell.segments.getOrNull(index - 1)?.isTask == true) {
                     withStyle(SpanStyle(color = metadata)) { append(QUANTITY_GAP) }
                 }
-                val paint = requireNotNull(paints[index])
+                val taskPaints = requireNotNull(paints[index])
+                val layout = requireNotNull(layouts[index])
+                val stripes = mutableListOf<DrawnStripe>()
                 val start = length
-                withStyle(
-                    SpanStyle(
-                        background = paint.fill,
-                        color = paint.ink,
-                        fontWeight = FontWeight.Medium,
-                        // PLAN 5.6 leaves a finished task in its cell, struck through.
-                        textDecoration = if (segment.isCompletedTask) TextDecoration.LineThrough else null,
-                    ),
-                ) {
-                    append(segment.text)
+                // The name in the colours it is made in, in slot order. One
+                // colour is one piece covering the whole name, which is every
+                // task in the cell until somebody makes one of several.
+                if (layout.slices.isEmpty()) {
+                    stripes += paintedName(segment, segment.text, taskPaints.first())
+                } else {
+                    layout.slices.forEach { slice ->
+                        val paint = taskPaints[slice.slotIndex]
+                        stripes += paintedName(segment, segment.text.substring(slice.start, slice.end), paint)
+                    }
                 }
-                tasks += DrawnTask(segment = segment, start = start, end = length)
+                // A colour the name was too short to reach is drawn as its own
+                // swatch, right after the name and before the count. PLAN 12.7
+                // will not have a colour the user chose go unseen, and the
+                // swatch belongs to this task: it is inside the pressable run,
+                // takes no focus of its own and says nothing of its own.
+                //
+                // Left out where the drawn string has to line up with the
+                // document character for character, as it does in an editor —
+                // there the name is still painted in every colour that reaches
+                // it, and nothing is added around it.
+                if (withCounts) {
+                    layout.markerSlots.forEach { slot ->
+                        // An ordinary space, so a long row of swatches can wrap
+                        // inside the task rather than running off the cell.
+                        append(MARKER_GAP)
+                        val paint = taskPaints[slot]
+                        val at = length
+                        withStyle(SpanStyle(background = paint.fill, color = paint.ink)) { append(MARKER_MARK) }
+                        stripes += DrawnStripe(start = at, end = length, edge = paint.edge)
+                    }
+                }
+                tasks += DrawnTask(segment = segment, start = start, end = length, stripes = stripes)
                 marks[index]?.let { mark ->
                     withStyle(SpanStyle(color = metadata)) {
                         append(QUANTITY_GAP)
@@ -629,29 +709,54 @@ private fun drawnDocumentOf(
     return DrawnDocument(text = text, tasks = tasks)
 }
 
+/** Writes one piece of a task's name in one colour, and says where it landed. */
+private fun AnnotatedString.Builder.paintedName(
+    segment: CellSegmentPreview,
+    part: String,
+    paint: TaskPaint,
+): DrawnStripe {
+    val at = length
+    withStyle(
+        SpanStyle(
+            background = paint.fill,
+            color = paint.ink,
+            fontWeight = FontWeight.Medium,
+            // PLAN 5.6 leaves a finished task in its cell, struck through.
+            textDecoration = if (segment.isCompletedTask) TextDecoration.LineThrough else null,
+        ),
+    ) {
+        append(part)
+    }
+    return DrawnStripe(start = at, end = length, edge = paint.edge)
+}
+
 /**
- * Draws the contrast edge around every task the layout actually placed.
+ * Draws the contrast edge around every coloured piece the layout actually placed.
  *
- * A task whose name wrapped is edged on each line it reaches rather than by one
- * rectangle spanning both: the edge is what makes a white task visible on white,
- * so the half on the second line needs its own as much as the first does.
+ * Per piece rather than per task, because a task made in several colours is
+ * several colours: each needs the edge that makes it visible on the ground it
+ * happens to match, and one rectangle around the lot would put a single colour's
+ * edge around all of them. A piece whose name wrapped is edged on each line it
+ * reaches, for the same reason — the half on the second line needs one as much
+ * as the first does. PLAN 12.7 and 17 both ask for exactly this frame.
  */
 private fun DrawScope.drawTaskEdges(
     layout: TextLayoutResult,
     tasks: List<DrawnTask>,
-    paints: List<TaskPaint>,
     corner: Float,
     stroke: Float,
 ) {
-    tasks.forEachIndexed { index, task ->
-        layout.boxesOfRange(task.start, task.end).forEach { box ->
-            drawRoundRect(
-                color = paints[index].edge,
-                topLeft = Offset(box.left, box.top),
-                size = Size(box.width, box.height),
-                cornerRadius = CornerRadius(corner, corner),
-                style = Stroke(width = stroke),
-            )
+    tasks.forEach { task ->
+        task.stripes.forEach { stripe ->
+            layout.boxesOfRange(stripe.start, stripe.end).forEach { box ->
+                drawRoundRect(
+                    color = stripe.edge,
+                    topLeft = Offset(box.left, box.top),
+                    size = Size(box.width, box.height),
+                    cornerRadius = CornerRadius(corner, corner),
+                    style = Stroke(width = stroke),
+                )
+            }
         }
     }
 }
@@ -679,7 +784,6 @@ private fun CellSlot(
 ) {
     val columnName = stringResource(columnNameOf(cell.columnType))
     val drawn = drawnDocumentOf(cell, withCounts = true)
-    val paints = drawn.tasks.map { paintOf(it.segment) }
     val editLabel = stringResource(Strings.Cell.editAction, columnName)
     val description =
         if (cell.isEmpty) {
@@ -737,7 +841,7 @@ private fun CellSlot(
                     onTextLayout = { layout = it },
                     modifier =
                         Modifier.drawBehind {
-                            layout?.let { drawTaskEdges(it, drawn.tasks, paints, edgeCorner, edgeStroke) }
+                            layout?.let { drawTaskEdges(it, drawn.tasks, edgeCorner, edgeStroke) }
                         },
                 )
                 // One handle per task, sitting exactly where its word was laid
@@ -923,7 +1027,6 @@ private fun CellEditorSlot(
     val save = { if (!editor.isSaving) scope.launch { controller.saveEditing() } }
     val saveTask = { if (composer?.canSave == true) scope.launch { controller.saveTask() } }
     val drawn = drawnDocumentOf(cell, withCounts = false)
-    val paints = drawn.tasks.map { paintOf(it.segment) }
     val painted = remember(drawn.text) { TaskPainting(drawn.text) }
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
     val edgeCorner = with(LocalDensity.current) { 3.dp.toPx() }
@@ -979,7 +1082,7 @@ private fun CellEditorSlot(
                     .padding(horizontal = 6.dp, vertical = 4.dp)
                     .focusRequester(focus)
                     .drawBehind {
-                        layout?.let { drawTaskEdges(it, drawn.tasks, paints, edgeCorner, edgeStroke) }
+                        layout?.let { drawTaskEdges(it, drawn.tasks, edgeCorner, edgeStroke) }
                     }.onPreviewKeyEvent { event ->
                         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                         when {
@@ -1005,6 +1108,7 @@ private fun CellEditorSlot(
         } else {
             TaskComposerPanel(
                 composer = composer,
+                catalogue = colors,
                 focusRecall = focusRecall,
                 controller = controller,
                 onSave = { saveTask() },
@@ -1178,7 +1282,13 @@ private fun TaskPopover(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 when (val work = state.work) {
-                    is CellWork.EditingTask -> TaskEditPanel(work.editor, controller.colorsOffered(), controller)
+                    is CellWork.EditingTask ->
+                        TaskEditPanel(
+                            editor = work.editor,
+                            colors = controller.colorsOffered(),
+                            catalogue = state.colors,
+                            controller = controller,
+                        )
                     is CellWork.ConfirmingConvert -> ConvertConfirmation(work, controller)
                     else -> TaskMenuActions(menu, controller)
                 }
@@ -1226,15 +1336,21 @@ private fun TaskMenuActions(
 /**
  * Changing what a task is, in the panel over its own word.
  *
- * Everything is saved together, because a name, a colour, a total and a note are
- * one answer to what the task is. A task carrying more than one colour is shown
- * and left alone: PLAN 5.10 orders those colours and PLAN 12.7 splits the name
- * across them, and one colour box has nowhere to put that order.
+ * Everything is saved together, because a name, its colours, a total and a note
+ * are one answer to what the task is. A task made in one colour has that colour
+ * replaced; a task made in several has the whole ordered list to work in — add,
+ * take away, move — because PLAN 5.10 numbers those colours from the user's own
+ * order and PLAN 12.7 draws the name split across them in it.
+ *
+ * What is not offered is turning one kind into the other. PLAN describes neither
+ * crossing, so the panel does not put a control there that the transaction would
+ * refuse.
  */
 @Composable
 private fun TaskEditPanel(
     editor: TaskEditor,
     colors: List<ColorSummary>,
+    catalogue: List<ColorSummary>,
     controller: GameTableController,
 ) {
     val scope = rememberCoroutineScope()
@@ -1258,29 +1374,41 @@ private fun TaskEditPanel(
             NoteLine(text = stringResource(Strings.TaskEdit.nameInvalid), isProblem = true)
         }
 
+        OutlinedTextField(
+            value = editor.colorQuery,
+            onValueChange = controller::editTaskEditColorQuery,
+            enabled = !editor.isSaving,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodySmall,
+            label = { Text(stringResource(Strings.CellTask.colorSearch)) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        ColorList(
+            colors = colors,
+            chosen = editor.colorIds,
+            enabled = !editor.isSaving,
+            emptyQuery = editor.colorQuery.isBlank(),
+            onChoose = controller::chooseTaskEditColor,
+        )
         if (editor.holdsSeveralColors) {
-            // Shown rather than edited: PLAN 12.7 orders these and draws the name
-            // split across them, and this panel cannot say that.
-            NoteLine(
-                text = stringResource(Strings.TaskEdit.severalColors, editor.colorNames.joinToString(separator = ", ")),
-                isProblem = false,
-            )
-        } else {
-            OutlinedTextField(
-                value = editor.colorQuery,
-                onValueChange = controller::editTaskEditColorQuery,
+            // The whole ordered list, editable: PLAN 5.10 numbers these from the
+            // user's own order and PLAN 12.7 draws the name split across them in
+            // it, so the order is part of what the task is. A task made in
+            // several colours stays that way — it may not be emptied down to one
+            // here, because PLAN says nothing about what such a task would
+            // become.
+            ChosenColorList(
+                colorIds = editor.colorIds,
+                catalogue = catalogue,
+                name = editor.name,
                 enabled = !editor.isSaving,
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodySmall,
-                label = { Text(stringResource(Strings.CellTask.colorSearch)) },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            ColorList(
-                colors = colors,
-                chosen = editor.colorId,
-                enabled = !editor.isSaving,
-                emptyQuery = editor.colorQuery.isBlank(),
-                onChoose = controller::chooseTaskEditColor,
+                leastColors = MulticolorDraft.LEAST_COLORS,
+                floorText = stringResource(Strings.TaskEdit.colorFloor),
+                failedSlot = editor.failureRow?.takeIf { it in editor.colorIds.indices },
+                failureText = editor.failure?.let { stringResource(messageOf(it)) },
+                onMoveUp = controller::moveTaskEditColorUp,
+                onMoveDown = controller::moveTaskEditColorDown,
+                onDrop = controller::chooseTaskEditColor,
             )
         }
 
@@ -1414,7 +1542,7 @@ private fun trackingChoicesFor(editor: TaskEditor): List<TrackingMode> =
 @Composable
 private fun TrackingChoice(
     choices: List<TrackingMode>,
-    chosen: TrackingMode,
+    chosen: TrackingMode?,
     onChoose: (TrackingMode) -> Unit,
 ) {
     Text(
@@ -1422,7 +1550,11 @@ private fun TrackingChoice(
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.selectableGroup()) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+        modifier = Modifier.fillMaxWidth().selectableGroup(),
+    ) {
         choices.forEach { mode ->
             val isChosen = chosen == mode
             val stateText =
@@ -1442,9 +1574,10 @@ private fun TrackingChoice(
  *
  * A colour is never the only thing carrying a meaning — PLAN 17 — so what the
  * eye gets from a painted word and a count, a screen reader gets in words: the
- * task's name, the colours it is made in, and how many are needed. The pieces
- * are joined with nothing between them, exactly as they are drawn, because plain
- * text carries its own punctuation and spacing.
+ * task's name, how many are needed, and every colour it is made in, in that
+ * order and each said once. The pieces are joined with nothing between them,
+ * exactly as they are drawn, because plain text carries its own punctuation and
+ * spacing.
  */
 @Composable
 private fun spokenContentOf(cell: CellPreview): String {
@@ -1456,6 +1589,11 @@ private fun spokenContentOf(cell: CellPreview): String {
 
 @Composable
 private fun spokenTaskOf(segment: CellSegmentPreview): String {
+    // Every colour of the task, once each, in the order its slots put them —
+    // the same order the name is drawn split across, so what is heard and what
+    // is seen agree. A colour with no piece of the name is in here like any
+    // other: PLAN 17 will not have the swatch beside the word be the only place
+    // it exists.
     val colors =
         if (segment.colors.isEmpty()) {
             stringResource(Strings.CellTask.noColor)
@@ -1464,7 +1602,7 @@ private fun spokenTaskOf(segment: CellSegmentPreview): String {
         }
     val said =
         segment.requiredQuantity?.let { quantity ->
-            stringResource(Strings.CellTask.description, segment.text, colors, quantity)
+            stringResource(Strings.CellTask.description, segment.text, quantity, colors)
         } ?: stringResource(Strings.CellTask.descriptionUnknownQuantity, segment.text, colors)
     return if (segment.isCompletedTask) said + ", " + stringResource(Strings.CellTask.completed) else said
 }
@@ -1484,6 +1622,7 @@ private fun spokenTaskOf(segment: CellSegmentPreview): String {
 @Composable
 private fun TaskComposerPanel(
     composer: TaskComposer,
+    catalogue: List<ColorSummary>,
     focusRecall: Int,
     controller: GameTableController,
     onSave: () -> Unit,
@@ -1542,7 +1681,15 @@ private fun TaskComposerPanel(
 
         CreationModeChoice(composer = composer, controller = controller)
 
-        if (composer.mode == TaskCreationMode.SINGLE_COLOR) {
+        if (composer.mode == TaskCreationMode.SINGLE_ITEM_MULTICOLOR) {
+            MulticolorFields(
+                composer = composer,
+                colors = controller.colorsOffered(),
+                catalogue = catalogue,
+                focus = panelFocus,
+                controller = controller,
+            )
+        } else if (composer.mode == TaskCreationMode.SINGLE_COLOR) {
             // One task: no numbering, no remove button, nothing about a list.
             // The mode is a form convenience, and a form for one thing should
             // not look like a form for several.
@@ -1586,10 +1733,10 @@ private fun TaskComposerPanel(
 
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             val saveLabel =
-                if (composer.mode == TaskCreationMode.SINGLE_COLOR) {
+                if (composer.taskCount == 1) {
                     stringResource(Strings.CellTask.save)
                 } else {
-                    stringResource(Strings.CellTask.saveMany, composer.usedRows.size)
+                    stringResource(Strings.CellTask.saveMany, composer.taskCount)
                 }
             val discardLabel = stringResource(Strings.CellTask.discard)
             Button(
@@ -1610,7 +1757,7 @@ private fun TaskComposerPanel(
         }
         val note =
             when {
-                composer.isSaving && composer.usedRows.size > 1 -> stringResource(Strings.CellTask.savingMany)
+                composer.isSaving && composer.taskCount > 1 -> stringResource(Strings.CellTask.savingMany)
                 composer.isSaving -> stringResource(Strings.CellTask.saving)
                 composer.failure != null -> stringResource(messageOf(composer.failure))
                 composer.repeatedColorRows.isNotEmpty() -> stringResource(Strings.CellTask.errorDuplicateColor)
@@ -1625,15 +1772,18 @@ private fun TaskComposerPanel(
 }
 
 /**
- * Choosing between one task and several independent ones.
+ * Choosing what is being made: one task, several, or one made in several colours.
  *
- * Two chips, both of which do something. PLAN 12.7 describes a third way — one
- * task drawn in several colours — and it is not offered here: the step that can
- * create one has not come yet, and a chip that switched to a mode nothing could
- * save would be worse than its absence.
+ * All three of PLAN 12.7's modes, and all three really save. They are a
+ * convenience of the form and nothing else (PLAN 12.6) — nothing about which one
+ * was open is stored, and what tells the resulting tasks apart afterwards is
+ * what they are, not how they were typed.
  *
- * Switching loses nothing. Every row the user typed stays in the panel either
- * way, so this needs no warning and asks no question.
+ * Switching loses nothing in any direction. The rows and the several-colour
+ * draft are held separately and left where they are, so a user who looks at
+ * another mode and comes back finds their answers exactly as they left them,
+ * and neither draft can overwrite the other. That is why this needs no warning
+ * and asks no question.
  */
 @Composable
 private fun CreationModeChoice(
@@ -1645,13 +1795,19 @@ private fun CreationModeChoice(
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    Row(
+    // Wrapped rather than laid out in one line: the panel is as wide as one
+    // column of the table, and three names do not fit across it. In a plain row
+    // the third chip was pushed off the edge — unreachable — and its label wrapped
+    // to one word per line, which stretched the whole row's height.
+    FlowRow(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
-        modifier = Modifier.selectableGroup(),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+        modifier = Modifier.fillMaxWidth().selectableGroup(),
     ) {
         listOf(
             TaskCreationMode.SINGLE_COLOR to Strings.CellTask.modeSingle,
             TaskCreationMode.INDEPENDENT_TASKS to Strings.CellTask.modeMany,
+            TaskCreationMode.SINGLE_ITEM_MULTICOLOR to Strings.CellTask.modeMulticolor,
         ).forEach { (mode, label) ->
             val chosen = composer.mode == mode
             val stateText =
@@ -1746,7 +1902,7 @@ private fun TaskRowFields(
     )
     ColorList(
         colors = colors,
-        chosen = draft.colorId,
+        chosen = listOfNotNull(draft.colorId),
         enabled = !composer.isSaving,
         emptyQuery = draft.colorQuery.isBlank(),
         onChoose = { controller.chooseTaskColor(row, it) },
@@ -1794,9 +1950,10 @@ private fun TaskRowFields(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Row(
+        FlowRow(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.selectableGroup(),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            modifier = Modifier.fillMaxWidth().selectableGroup(),
         ) {
             trackingChoices.forEach { mode ->
                 val chosen = draft.trackingMode == mode
@@ -1830,6 +1987,238 @@ private fun TaskRowFields(
 }
 
 /**
+ * The one task being described in several colours.
+ *
+ * One quantity, one note and one tracking mode for the whole task — PLAN 12.7
+ * gives it one counter, so a second of any of them would be describing something
+ * the product does not have. What there are several of is colours, and they are
+ * an ordered list because the order is what the cell draws the name across.
+ *
+ * Reordering is two plain buttons rather than dragging. PLAN 17 wants every main
+ * action reachable from the keyboard, and `Yukarı`/`Aşağı` are that without a
+ * gesture nobody can perform with one.
+ */
+@Composable
+private fun MulticolorFields(
+    composer: TaskComposer,
+    colors: List<ColorSummary>,
+    catalogue: List<ColorSummary>,
+    focus: FocusRequester,
+    controller: GameTableController,
+) {
+    val palette = composer.palette
+    val trackingChoices =
+        composer.columnType.poolType
+            ?.let { trackingModesOf(it) }
+            .orEmpty()
+
+    NoteLine(text = stringResource(Strings.CellTask.modeMulticolorHint), isProblem = false)
+
+    OutlinedTextField(
+        value = palette.colorQuery,
+        onValueChange = controller::editMulticolorColorQuery,
+        enabled = !composer.isSaving,
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodySmall,
+        label = { Text(stringResource(Strings.CellTask.colorSearch)) },
+        modifier = Modifier.fillMaxWidth().focusRequester(focus),
+    )
+    ColorList(
+        colors = colors,
+        chosen = palette.colorIds,
+        enabled = !composer.isSaving,
+        emptyQuery = palette.colorQuery.isBlank(),
+        // Choosing one already in the list takes it back out, so the same colour
+        // can never be in it twice — PLAN 5.10 numbers a task's colours uniquely.
+        onChoose = controller::toggleMulticolorColor,
+    )
+
+    ChosenColorList(
+        colorIds = palette.colorIds,
+        catalogue = catalogue,
+        name = composer.name,
+        enabled = !composer.isSaving,
+        leastColors = MulticolorDraft.LEAST_COLORS,
+        floorText = stringResource(Strings.CellTask.colorFloor),
+        failedSlot = composer.failedColorSlot,
+        failureText = composer.failure?.let { stringResource(messageOf(it)) },
+        onMoveUp = controller::moveMulticolorColorUp,
+        onMoveDown = controller::moveMulticolorColorDown,
+        onDrop = controller::toggleMulticolorColor,
+    )
+
+    OutlinedTextField(
+        value = palette.quantityText,
+        onValueChange = controller::editMulticolorQuantity,
+        enabled = !composer.isSaving,
+        singleLine = true,
+        isError = !palette.isQuantityUsable,
+        textStyle = MaterialTheme.typography.bodySmall,
+        label = { Text(stringResource(Strings.CellTask.quantityLabel)) },
+        modifier = Modifier.fillMaxWidth(),
+    )
+    NoteLine(
+        text =
+            if (palette.isQuantityUsable) {
+                stringResource(Strings.CellTask.quantityHint)
+            } else {
+                stringResource(Strings.CellTask.quantityInvalid)
+            },
+        isProblem = !palette.isQuantityUsable,
+    )
+
+    if (trackingChoices.size > 1) {
+        TrackingChoice(
+            choices = trackingChoices,
+            chosen = palette.trackingMode,
+            onChoose = controller::chooseMulticolorTracking,
+        )
+    }
+
+    OutlinedTextField(
+        value = palette.notes,
+        onValueChange = controller::editMulticolorNotes,
+        enabled = !composer.isSaving,
+        singleLine = false,
+        minLines = 1,
+        maxLines = 3,
+        textStyle = MaterialTheme.typography.bodySmall,
+        label = { Text(stringResource(Strings.CellTask.notesLabel)) },
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+/**
+ * The colours a task is made in, in the order they will be drawn.
+ *
+ * Numbered from one for the reader and moved with two buttons, so the order —
+ * which is what PLAN 5.10 stores and PLAN 12.7 draws the name across — is both
+ * visible and changeable without a gesture. A colour that has gone from the
+ * catalogue while the panel was open is still listed and marked, because
+ * dropping it silently would take away something the user chose.
+ *
+ * The line about a name shorter than the list is a statement of what will
+ * happen, not a warning about a problem: those colours are drawn as swatches
+ * beside the word (PLAN 12.7), and nothing is refused because of it.
+ */
+@Composable
+private fun ChosenColorList(
+    colorIds: List<EntityId>,
+    catalogue: List<ColorSummary>,
+    name: String,
+    enabled: Boolean,
+    leastColors: Int,
+    floorText: String,
+    failedSlot: Int?,
+    failureText: String?,
+    onMoveUp: (Int) -> Unit,
+    onMoveDown: (Int) -> Unit,
+    onDrop: (EntityId) -> Unit,
+) {
+    Text(
+        text = stringResource(Strings.CellTask.colorOrderLabel),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    if (colorIds.isEmpty()) {
+        NoteLine(text = stringResource(Strings.CellTask.colorNoneChosen), isProblem = false)
+    }
+    val unknown = stringResource(Strings.CellTask.colorUnknown)
+    colorIds.forEachIndexed { slot, colorId ->
+        val color = catalogue.firstOrNull { it.id == colorId }
+        val colorName = color?.canonicalName ?: unknown
+        val swatch = color?.let { opaqueColorOf(it.hex) }
+        // Wrapped rather than one line: three actions and a name do not fit
+        // across a table column, and given a weight the name was squeezed to
+        // nothing — leaving a swatch as the only thing saying which colour it
+        // was, which PLAN 17 does not allow. Here the actions drop to a line of
+        // their own instead, and in a wider panel they stay beside the name.
+        FlowRow(
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            itemVerticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (swatch != null) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(14.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(swatch)
+                                .border(1.dp, visibleEdgeOn(swatch), RoundedCornerShape(3.dp)),
+                    )
+                }
+                Text(
+                    text = stringResource(Strings.CellTask.colorSlot, slot + 1, colorName),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (color == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            val upLabel = stringResource(Strings.CellTask.colorMoveUp, colorName)
+            val downLabel = stringResource(Strings.CellTask.colorMoveDown, colorName)
+            val dropLabel = stringResource(Strings.CellTask.colorDrop, colorName)
+            // The three actions travel together, as one thing to wrap. Left
+            // loose they broke apart mid-entry: one action beside the name and
+            // two on the line below, which reads as two entries.
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                TextButton(
+                    onClick = { onMoveUp(slot) },
+                    enabled = enabled && slot > 0,
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                    modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = upLabel },
+                ) {
+                    Text(
+                        text = stringResource(Strings.CellTask.colorMoveUpShort),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+                TextButton(
+                    onClick = { onMoveDown(slot) },
+                    enabled = enabled && slot < colorIds.lastIndex,
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                    modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = downLabel },
+                ) {
+                    Text(
+                        text = stringResource(Strings.CellTask.colorMoveDownShort),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+                TextButton(
+                    onClick = { onDrop(colorId) },
+                    enabled = enabled,
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                    modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = dropLabel },
+                ) {
+                    Text(
+                        text = stringResource(Strings.CellTask.colorDropShort),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
+        }
+        if (failedSlot == slot && failureText != null) {
+            // Said on the entry it is about: a list of colours with one message
+            // under all of them does not say which one went away.
+            NoteLine(text = failureText, isProblem = true)
+        }
+    }
+    if (colorIds.size < leastColors) {
+        NoteLine(text = floorText, isProblem = false)
+    }
+    // Worked out once for the name and the count rather than on every frame.
+    val characters = remember(name) { graphemeBoundariesOf(name).size - 1 }
+    if (colorIds.size > characters) {
+        NoteLine(text = stringResource(Strings.CellTask.colorOverflow), isProblem = false)
+    }
+}
+
+/**
  * The catalogue, narrowed by what has been typed, one entry per colour.
  *
  * Every entry carries the colour's written name beside its swatch, because PLAN
@@ -1841,7 +2230,7 @@ private fun TaskRowFields(
 @Composable
 private fun ColorList(
     colors: List<ColorSummary>,
-    chosen: EntityId?,
+    chosen: List<EntityId>,
     enabled: Boolean,
     emptyQuery: Boolean,
     onChoose: (EntityId) -> Unit,
@@ -1862,7 +2251,7 @@ private fun ColorList(
                 .selectableGroup(),
     ) {
         colors.forEach { color ->
-            val isChosen = chosen == color.id
+            val isChosen = color.id in chosen
             val stateText =
                 stringResource(if (isChosen) Strings.Accessibility.selected else Strings.Accessibility.notSelected)
             val swatch = opaqueColorOf(color.hex)
@@ -1945,7 +2334,8 @@ private fun messageOf(failure: TaskEditFailure) =
         TaskEditFailure.TASK_NAME_EMPTY -> Strings.TaskEdit.errorNameEmpty
         TaskEditFailure.NAME_CONTAINS_LINE_BREAK -> Strings.TaskEdit.errorNameLineBreak
         TaskEditFailure.COLOR_NOT_AVAILABLE -> Strings.TaskEdit.errorColorGone
-        TaskEditFailure.MULTICOLOR_EDIT_NOT_AVAILABLE -> Strings.TaskEdit.errorSeveralColors
+        TaskEditFailure.DUPLICATE_COLOR -> Strings.TaskEdit.errorDuplicateColor
+        TaskEditFailure.COLOR_COUNT_NOT_CHANGEABLE -> Strings.TaskEdit.errorColorCount
         TaskEditFailure.INVALID_REQUIRED_QUANTITY -> Strings.TaskEdit.errorQuantity
         TaskEditFailure.QUANTITY_BELOW_PROGRESS -> Strings.TaskEdit.errorQuantityBelowProgress
         TaskEditFailure.QUANTITY_LOCKED_BY_COMPLETION -> Strings.TaskEdit.errorQuantityLocked

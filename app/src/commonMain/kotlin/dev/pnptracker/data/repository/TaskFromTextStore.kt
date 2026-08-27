@@ -26,6 +26,13 @@ interface TaskCreationFromText {
      * out sharing a name, which is where the resemblance ends: renaming one is a
      * rename of one.
      *
+     * A draft naming several colours makes one task made in all of them (PLAN
+     * 5.10): one identity, one piece of the cell, one total and one counter,
+     * with a colour relation per colour in the order they were chosen. It is the
+     * opposite of a batch in every way but the panel it is typed in — which is
+     * why they are the same call, told apart by the shape of what is described
+     * rather than by a flag saying which mode was open.
+     *
      * @return the identities of the tasks that were created, in the order of
      *   [drafts].
      * @throws TaskFromTextException for a refusal the user can act on; which one
@@ -59,7 +66,7 @@ interface TaskCreationFromText {
             drafts =
                 listOf(
                     TaskDraft(
-                        colorId = colorId,
+                        colorIds = listOf(colorId),
                         requiredQuantity = requiredQuantity,
                         trackingMode = trackingMode,
                         notes = notes,

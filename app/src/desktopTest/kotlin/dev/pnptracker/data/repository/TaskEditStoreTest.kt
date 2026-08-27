@@ -233,8 +233,9 @@ class TaskEditStoreTest {
     @Test
     fun `a task carrying several colours is not quietly reduced to one`() =
         runBlocking<Unit> {
-            // PLAN 5.10 orders those colours and PLAN 12.7 splits the name across
-            // them; one colour box has nowhere to put that order.
+            // PLAN 5.10 has both kinds of task and says nothing about carrying
+            // one across to the other, so what a several-colour task would keep
+            // is not something to decide here.
             val game = addGame()
             val cell = addCell(game.id)
             addText(cell.id, "40 gri kılıç")
@@ -247,7 +248,7 @@ class TaskEditStoreTest {
                     store.editTask(taskId, "kılıç", colorNamed("Sarı").id, 15, null, TrackingMode.THREE_D_BATCH)
                 }
 
-            assertEquals(TaskEditFailure.MULTICOLOR_EDIT_NOT_AVAILABLE, refusal.failure)
+            assertEquals(TaskEditFailure.COLOR_COUNT_NOT_CHANGEABLE, refusal.failure)
             assertEquals(before, database.taskColorDao().colorsOfTask(taskId))
         }
 
@@ -261,7 +262,14 @@ class TaskEditStoreTest {
             database.taskColorDao().addColorToTask(taskId, colorNamed("Gri").id)
             val before = database.taskColorDao().colorsOfTask(taskId)
 
-            store.editTask(taskId, "kılıç", before.first().colorId, 20, "iki yedek", TrackingMode.THREE_D_BATCH)
+            store.editTask(
+                taskId,
+                "kılıç",
+                before.map { it.colorId },
+                20,
+                "iki yedek",
+                TrackingMode.THREE_D_BATCH,
+            )
 
             val task = assertNotNull(database.taskDao().activeTaskById(taskId))
             assertEquals(20, task.requiredQuantity)

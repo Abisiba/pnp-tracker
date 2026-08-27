@@ -17,11 +17,26 @@ import dev.pnptracker.domain.model.TrackingMode
  * quantities, notes, counters, completion and pool membership, with no group,
  * parent or shared record between them. Once they exist, nothing in the database
  * says they were made together, and nothing needs to.
+ *
+ * A draft carries a **list** of colours because PLAN 5.10 lets one task be made
+ * in several. That is one task with one total and one counter (PLAN 12.7), not
+ * several tasks sharing anything: the way to describe several is several drafts.
+ * So the shape of a draft is also the difference between the two — a list of
+ * colours in one draft is one task, and a colour each in three drafts is three.
  */
 data class TaskDraft(
-    val colorId: EntityId,
+    /** The colours the task is made in, in the order the user chose them. */
+    val colorIds: List<EntityId>,
     val requiredQuantity: Int,
     val trackingMode: TrackingMode,
     /** The user's own words, kept exactly, or null when they wrote none. */
     val notes: String?,
-)
+) {
+    init {
+        // A task with no colour at all is a real state (PLAN 5.10) but never one
+        // this describes: every way of creating a task asks for its colours, so
+        // an empty list here is a caller that lost them rather than a user who
+        // chose none.
+        require(colorIds.isNotEmpty()) { "A task is described with the colours it is made in." }
+    }
+}

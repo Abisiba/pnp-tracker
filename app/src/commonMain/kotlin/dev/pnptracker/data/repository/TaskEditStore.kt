@@ -17,8 +17,10 @@ interface TaskEditing {
      * The name is the task's part of the cell's document, so changing it changes
      * what the cell reads as, by exactly the name and nothing else.
      *
-     * @param colorId the one colour the task is made in, or null to leave it
-     *   with none; PLAN 5.10 allows a task no colour.
+     * @param colorIds every colour the task is to be made in, in the user's own
+     *   order; PLAN 5.10 numbers them from there. An empty list leaves the task
+     *   with none, which PLAN 5.10 allows. How many colours there are may not
+     *   cross between one and several — see [TaskEditFailure.COLOR_COUNT_NOT_CHANGEABLE].
      * @param requiredQuantity how many are needed, or null when unknown.
      * @param notes the user's own words, stored as typed, or null for no note.
      * @return true when something actually changed.
@@ -27,11 +29,34 @@ interface TaskEditing {
     suspend fun editTask(
         taskId: EntityId,
         name: String,
-        colorId: EntityId?,
+        colorIds: List<EntityId>,
         requiredQuantity: Int?,
         notes: String?,
         trackingMode: TrackingMode,
     ): Boolean
+
+    /**
+     * The same, for a task made in one colour or in none.
+     *
+     * Named for what most tasks are, the way [TaskCreationFromText.createSingleColorTask]
+     * is: a single colour is a list of one, and null is a list of none.
+     */
+    suspend fun editTask(
+        taskId: EntityId,
+        name: String,
+        colorId: EntityId?,
+        requiredQuantity: Int?,
+        notes: String?,
+        trackingMode: TrackingMode,
+    ): Boolean =
+        editTask(
+            taskId = taskId,
+            name = name,
+            colorIds = listOfNotNull(colorId),
+            requiredQuantity = requiredQuantity,
+            notes = notes,
+            trackingMode = trackingMode,
+        )
 
     /**
      * Turns a task back into the words it was made from.
@@ -62,7 +87,7 @@ class TaskEditStore(
     override suspend fun editTask(
         taskId: EntityId,
         name: String,
-        colorId: EntityId?,
+        colorIds: List<EntityId>,
         requiredQuantity: Int?,
         notes: String?,
         trackingMode: TrackingMode,
@@ -71,7 +96,7 @@ class TaskEditStore(
             taskEditDao.editTask(
                 taskId = taskId,
                 name = name,
-                colorId = colorId,
+                colorIds = colorIds,
                 requiredQuantity = requiredQuantity,
                 notes = notes,
                 trackingMode = trackingMode,
@@ -80,13 +105,13 @@ class TaskEditStore(
         } catch (cause: SQLiteException) {
             // Only a recognised storage refusal becomes something the user is
             // told about; a broken invariant travels out untouched.
-            throw TaskEditException(TaskEditFailure.COULD_NOT_SAVE, cause)
+            throw TaskEditException(TaskEditFailure.COULD_NOT_SAVE, cause = cause)
         }
 
     override suspend fun convertTaskToText(taskId: EntityId): Boolean =
         try {
             taskEditDao.convertTaskToText(taskId = taskId, clock = clock, idGenerator = idGenerator)
         } catch (cause: SQLiteException) {
-            throw TaskEditException(TaskEditFailure.COULD_NOT_SAVE, cause)
+            throw TaskEditException(TaskEditFailure.COULD_NOT_SAVE, cause = cause)
         }
 }

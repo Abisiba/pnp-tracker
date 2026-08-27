@@ -54,8 +54,17 @@ abstract class TaskEditDao {
     @Query("SELECT * FROM task_colors WHERE task_id = :taskId ORDER BY slot_index")
     abstract suspend fun colorsOfTask(taskId: EntityId): List<TaskColorEntity>
 
-    @Query("SELECT COUNT(*) FROM colors WHERE id = :colorId")
-    abstract suspend fun colorCount(colorId: EntityId): Int
+    /**
+     * Every colour the catalogue holds, as identities and nothing else.
+     *
+     * One read whatever the task carries. A task made in several colours would
+     * otherwise cost a query per colour on every save, and PLAN puts no ceiling
+     * on how many colours a thing comes in. There is no filter to apply either:
+     * PLAN 5.2 makes colour the one exception to the tombstone rule, so a
+     * deleted colour is physically gone and every row here still exists.
+     */
+    @Query("SELECT id FROM colors")
+    abstract suspend fun allColorIds(): List<EntityId>
 
     @Query("SELECT COALESCE(MAX(completed_quantity), 0) FROM task_stages WHERE task_id = :taskId")
     abstract suspend fun furthestStageOf(taskId: EntityId): Int
@@ -155,6 +164,28 @@ abstract class TaskEditDao {
      * note is not trimmed: PLAN 5.6 keeps a note the user's own words, and this
      * path is where they are written by hand.
      *
+     * The colours are given as the whole list the task is to carry, in the
+     * user's own order, and are written as that list: the old relations go and
+     * the new ones are numbered `0…N-1` without gaps, inside this transaction.
+     * PLAN 5.10 makes the slot the order and PLAN 12.7 draws the name split
+     * across the colours in it, so reordering the list is a real change with a
+     * visible result, and a list saved with gaps in its numbering would be a
+     * task whose name could not be shared out.
+     *
+     * How **many** colours a task has may not cross between one and several.
+     * PLAN 5.10 has both kinds and says nothing about carrying a task from one
+     * to the other, so the answer would have to be invented: which colour a
+     * several-colour task keeps, what happens to the counter of a single-colour
+     * one gaining a second. A task with no colour at all gaining its first, and
+     * a single-colour task losing its only one, are not that crossing — PLAN
+     * 5.10 calls a colourless task an ordinary state and 5.9 produces one by
+     * deleting a colour.
+     *
+     * Nothing about the task's work is touched. The identity, the piece of the
+     * cell that names it, its stages and its history all stay exactly as they
+     * were: a change of colour is a change of what is to be made, not of what
+     * has been done.
+     *
      * A total may not fall below work already recorded. PLAN 6.4 and 7.2 keep
      * what is owed and what each stage has done within it, so a smaller total
      * would leave counters the history could not account for. A finished card or
@@ -172,7 +203,7 @@ abstract class TaskEditDao {
     open suspend fun editTask(
         taskId: EntityId,
         name: String,
-        colorId: EntityId?,
+        colorIds: List<EntityId>,
         requiredQuantity: Int?,
         notes: String?,
         trackingMode: TrackingMode,
@@ -185,17 +216,22 @@ abstract class TaskEditDao {
         if (cleanName.isEmpty()) refuse(TaskEditFailure.TASK_NAME_EMPTY)
         if (cleanName.any { it == '\n' || it == '\r' }) refuse(TaskEditFailure.NAME_CONTAINS_LINE_BREAK)
 
-        val colors = colorsOfTask(taskId)
-        val holdsSeveralColors = colors.size > 1
-        // One colour box cannot say what a several-colour task is; PLAN 12.7
-        // splits such a name across them in order, and that order has nowhere to
-        // go here. So the list is left exactly as it is, and an attempt to
-        // change it is refused rather than quietly flattening it to one.
-        if (holdsSeveralColors && colorId != colors.first().colorId) {
-            refuse(TaskEditFailure.MULTICOLOR_EDIT_NOT_AVAILABLE)
+        // Read in slot order, so what is compared against is the list as the
+        // user last left it rather than whatever order the rows come back in.
+        val current = colorsOfTask(taskId).map { it.colorId }
+        if (colorIds.distinct().size != colorIds.size) refuse(TaskEditFailure.DUPLICATE_COLOR)
+        if ((current.size > 1) != (colorIds.size > 1)) refuse(TaskEditFailure.COLOR_COUNT_NOT_CHANGEABLE)
+        val colorChanges = current != colorIds
+        if (colorChanges && colorIds.isNotEmpty()) {
+            // One read for the whole list, compared in memory, and made before
+            // anything is written: a task whose second colour had been deleted
+            // must come out of this with the list it had, not with half of a new
+            // one. Which entry it was travels with the refusal.
+            val catalogue = allColorIds().toSet()
+            colorIds.forEachIndexed { slot, id ->
+                if (id !in catalogue) refuse(TaskEditFailure.COLOR_NOT_AVAILABLE, slot)
+            }
         }
-        if (colorId != null && colorCount(colorId) != 1) refuse(TaskEditFailure.COLOR_NOT_AVAILABLE)
-        val colorChanges = !holdsSeveralColors && colors.singleOrNull()?.colorId != colorId
 
         if (requiredQuantity != null && requiredQuantity <= 0) refuse(TaskEditFailure.INVALID_REQUIRED_QUANTITY)
         if (requiredQuantity != null) {
@@ -230,8 +266,14 @@ abstract class TaskEditDao {
             updatedAt = moment,
         )
         if (colorChanges) {
+            // The whole list at once: taken away and put back numbered from zero
+            // inside this transaction, so no reader ever sees a task halfway
+            // between two colour lists, and none of them is ever left with a
+            // gap in its slots.
             removeColorsOfTask(taskId)
-            colorId?.let { insertTaskColor(TaskColorEntity(taskId = taskId, colorId = it, slotIndex = 0)) }
+            colorIds.forEachIndexed { slotIndex, id ->
+                insertTaskColor(TaskColorEntity(taskId = taskId, colorId = id, slotIndex = slotIndex))
+            }
         }
         segmentOfTask(taskId)?.let { touchCell(it.cellId, moment) }
         return true
@@ -353,5 +395,8 @@ abstract class TaskEditDao {
             merged
         }
 
-    private fun refuse(failure: TaskEditFailure): Nothing = throw TaskEditException(failure)
+    private fun refuse(
+        failure: TaskEditFailure,
+        row: Int? = null,
+    ): Nothing = throw TaskEditException(failure, row)
 }

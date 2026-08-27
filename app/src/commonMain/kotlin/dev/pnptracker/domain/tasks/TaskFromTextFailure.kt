@@ -53,11 +53,14 @@ enum class TaskFromTextFailure {
     INVALID_REQUIRED_QUANTITY,
 
     /**
-     * Two of the tasks being made together were given the same colour.
+     * One colour was named twice in the same act.
      *
-     * Refused rather than quietly folded into one. PLAN 12.7 makes a batch N
-     * independent tasks, so merging two rows would silently create fewer tasks
-     * than the user described and lose one of the quantities they typed.
+     * Two rows of a batch, or two slots of one task made in several colours:
+     * either way it is refused rather than quietly folded into one. PLAN 12.7
+     * makes a batch N independent tasks, so merging two rows would create fewer
+     * tasks than the user described and lose a quantity they typed; and it draws
+     * a several-colour name split across its colours in order, so merging two
+     * slots would drop a colour out of a name they meant to see it in.
      */
     DUPLICATE_COLOR,
 
@@ -77,12 +80,17 @@ enum class TaskFromTextFailure {
 class TaskFromTextException(
     val failure: TaskFromTextFailure,
     /**
-     * Which task of a batch the refusal is about, counting from zero.
+     * Which line of the panel the refusal is about, counting from zero.
      *
-     * Null when it is about the whole attempt rather than one of its rows. A
-     * batch is several tasks described at once (PLAN 12.7), so "a colour is
-     * gone" is only half an answer: the user has a form with rows in it and
-     * needs to be told which row to change.
+     * Null when it is about the whole attempt rather than one line of it. A
+     * refusal like "a colour is gone" is only half an answer: the user has a
+     * form with lines in it and needs to be told which one to change.
+     *
+     * For a colour it counts the colours named, in the order they were named,
+     * which is the row in a batch of one-colour tasks and the slot in one task
+     * made in several colours — the two panels list exactly those things. For a
+     * quantity it counts the tasks, and is null when there is only one, because
+     * then the quantity is not about a row at all.
      */
     val row: Int? = null,
     cause: Throwable? = null,

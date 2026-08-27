@@ -195,7 +195,8 @@
     <string name="task_edit_title">Görevi düzenle</string>
     <string name="task_edit_name_label">Görev adı</string>
     <string name="task_edit_name_invalid">Görev adı boş olamaz ve satır sonu içeremez.</string>
-    <string name="task_edit_several_colors">Bu görev birden fazla renk taşıyor: %1$s. Renkleri buradan değiştiremezsiniz.</string>
+    <string name="task_edit_colors_label">Renkler, sırayla</string>
+    <string name="task_edit_color_floor">Çok renkli görev en az iki renk taşımalıdır.</string>
     <string name="task_edit_save">Değişiklikleri kaydet</string>
     <string name="task_edit_saving">Görev kaydediliyor…</string>
     <string name="task_edit_hint">Ctrl+Enter kaydeder, Esc paneli kapatır.</string>
@@ -203,7 +204,8 @@
     <string name="task_edit_error_name_empty">Görev adı boş olamaz.</string>
     <string name="task_edit_error_name_line_break">Görev adı satır sonu içeremez.</string>
     <string name="task_edit_error_color_gone">Seçtiğiniz renk artık kayıtlı değil.</string>
-    <string name="task_edit_error_several_colors">Bu görev birden fazla renk taşıyor; rengi buradan değiştirilemez.</string>
+    <string name="task_edit_error_duplicate_color">Aynı renk bir görevde iki kez kullanılamaz.</string>
+    <string name="task_edit_error_color_count">Bir görevin tek renkli mi çok renkli mi olduğu sonradan değiştirilemez.</string>
     <string name="task_edit_error_quantity">Adet sıfırdan büyük bir tam sayı olmalı.</string>
     <string name="task_edit_error_quantity_below_progress">Adet, kaydedilmiş üretimin altına indirilemez.</string>
     <string name="task_edit_error_quantity_locked">Tamamlanmış görevin adedi değiştirilemez; önce görevi yeniden açın.</string>
@@ -239,8 +241,8 @@
 
     <!-- Game table: a task standing in a cell -->
     <string name="cell_task_quantity_mark">×%1$d</string>
-    <string name="cell_task_description">%1$s, %2$s, %3$d adet</string>
-    <string name="cell_task_description_unknown_quantity">%1$s, %2$s, adet bilinmiyor</string>
+    <string name="cell_task_description">%1$s, %2$d adet, %3$s</string>
+    <string name="cell_task_description_unknown_quantity">%1$s, adet bilinmiyor, %2$s</string>
     <string name="cell_task_no_color">renk seçilecek</string>
     <string name="cell_task_completed">tamamlandı</string>
 
@@ -255,6 +257,20 @@
     <string name="cell_task_row_remove_short">Sil</string>
     <string name="cell_task_row_floor">En az iki görev satırı gerekir.</string>
     <string name="cell_task_row_duplicate">Bu renk yukarıdaki bir satırda seçildi. Başka bir renk seçin.</string>
+    <string name="cell_task_mode_multicolor">Tek öge çok renk</string>
+    <string name="cell_task_mode_multicolor_hint">Tek görev, tek adet ve tek sayaç; görev adı seçilen renklere sırayla bölünür.</string>
+    <string name="cell_task_color_order_label">Seçilen renkler, sırayla</string>
+    <string name="cell_task_color_slot">%1$d. renk: %2$s</string>
+    <string name="cell_task_color_move_up">%1$s rengini yukarı taşı</string>
+    <string name="cell_task_color_move_down">%1$s rengini aşağı taşı</string>
+    <string name="cell_task_color_move_up_short">Yukarı</string>
+    <string name="cell_task_color_move_down_short">Aşağı</string>
+    <string name="cell_task_color_drop">%1$s rengini çıkar</string>
+    <string name="cell_task_color_drop_short">Çıkar</string>
+    <string name="cell_task_color_floor">En az iki renk gerekir.</string>
+    <string name="cell_task_color_unknown">Bu renk artık listede yok.</string>
+    <string name="cell_task_color_none_chosen">Listeden renk seçin; seçtiğiniz sıra görevde kullanılır.</string>
+    <string name="cell_task_color_overflow">Ad seçilen renklerden kısa; harf düşmeyen renkler görevin yanında kendi göstergesiyle çizilir.</string>
     <string name="cell_task_save_many">%1$d görevi kaydet</string>
     <string name="cell_task_saving_many">Görevler kaydediliyor…</string>
     <string name="cell_task_error_duplicate_color">Aynı renk iki satırda seçilemez.</string>

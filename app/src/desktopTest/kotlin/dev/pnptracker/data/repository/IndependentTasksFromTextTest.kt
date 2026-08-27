@@ -144,7 +144,7 @@ class IndependentTasksFromTextTest {
         trackingMode: TrackingMode = TrackingMode.THREE_D_BATCH,
         notes: String? = null,
     ) = TaskDraft(
-        colorId = colorNamed(colorName).id,
+        colorIds = listOf(colorNamed(colorName).id),
         requiredQuantity = quantity,
         trackingMode = trackingMode,
         notes = notes,
@@ -562,7 +562,7 @@ class IndependentTasksFromTextTest {
                     drafts =
                         listOf(
                             draft("Siyah", 14),
-                            TaskDraft(IdGenerator.Random.newId(), 15, TrackingMode.THREE_D_BATCH, null),
+                            TaskDraft(listOf(IdGenerator.Random.newId()), 15, TrackingMode.THREE_D_BATCH, null),
                         ),
                 )
             }

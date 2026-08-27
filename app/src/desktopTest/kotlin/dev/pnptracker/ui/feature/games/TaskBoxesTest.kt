@@ -164,4 +164,104 @@ class TaskBoxesTest {
 
         assertEquals(emptyList(), layout.boxesOfRange(start, start + "Gri token".length))
     }
+
+    // ------------------------- a task with swatches for its extra colours
+
+    /**
+     * The drawn string of a task made in more colours than its name is long.
+     *
+     * Written the way the cell writes it: the name, then a gap and a swatch for
+     * each colour with no character of its own, then the count. What matters is
+     * that the whole of it is one run, so the boxes a handle is built from cover
+     * every swatch — a colour the user can see and cannot press would be a lie
+     * about what is clickable.
+     */
+    private fun drawnTaskOf(
+        name: String,
+        markers: Int,
+        before: String = "Basılacak: ",
+        after: String = ", kutu ayrı.",
+    ): Triple<String, Int, Int> {
+        val swatches = (1..markers).joinToString(separator = "") { " \u00A0\u00A0" }
+        val text = before + name + swatches + " ×10" + after
+        return Triple(text, before.length, before.length + name.length + swatches.length)
+    }
+
+    @Test
+    fun `the swatches of a task are inside the boxes its handle is built from`() {
+        val (text, start, end) = drawnTaskOf(name = "Ok", markers = 2)
+        val layout = layoutOf(text, width = 4000)
+
+        val boxes = layout.boxesOfRange(start, end)
+
+        assertEquals(1, boxes.size, "the run was cut up on one line")
+        val box = boxes.single()
+        // Every character of the run, swatches included, is under the handle.
+        (start until end).forEach { offset ->
+            val glyph = layout.getBoundingBox(offset)
+            assertTrue(
+                glyph.left >= box.left - 0.5f && glyph.right <= box.right + 0.5f,
+                "the character at $offset falls outside the task's box",
+            )
+        }
+        // And the count that follows is not.
+        val count = layout.getBoundingBox(text.indexOf("×10"))
+        assertTrue(count.left >= box.right - 0.5f, "the count was swallowed by the task's box")
+    }
+
+    @Test
+    fun `a swatch is never taken apart by a line ending`() {
+        val (text, _, _) = drawnTaskOf(name = "Ok", markers = 4)
+        val swatch = text.indexOf("\u00A0")
+
+        (40..600 step 2).forEach { width ->
+            val layout = layoutOf(text, width)
+            assertEquals(
+                layout.getLineForOffset(swatch),
+                layout.getLineForOffset(swatch + 1),
+                "a swatch was split across two lines at width $width",
+            )
+        }
+    }
+
+    @Test
+    fun `a task whose swatches wrapped is pressable on every line it reaches`() {
+        val (text, start, end) = drawnTaskOf(name = "Ok", markers = 6)
+        // Narrow enough that the swatches cannot all sit beside the name.
+        val layout =
+            (40..600 step 2)
+                .map { layoutOf(text, it) }
+                .first { layout ->
+                    layout.getLineForOffset(start) != layout.getLineForOffset(end - 1)
+                }
+
+        val boxes = layout.boxesOfRange(start, end)
+
+        assertTrue(boxes.size > 1, "a wrapped task gave a single box")
+        // Every line the run reaches has a box of its own, and each is a real
+        // shape rather than an empty one.
+        val lines = (start until end).map { layout.getLineForOffset(it) }.distinct()
+        assertEquals(lines.size, boxes.size, "a line the task reaches has no box")
+        boxes.forEach { assertTrue(it.width > 0f && it.height > 0f, "an empty box was handed to the handle") }
+    }
+
+    @Test
+    fun `a name split across colours covers exactly the name`() {
+        val text = "Basılacak: Yarasa ×10"
+        val name = "Yarasa"
+        val start = text.indexOf(name)
+        val layout = layoutOf(text, width = 4000)
+        // The three pieces `ya | ra | sa` are drawn as three stretches of the
+        // same word, so together they occupy what the whole name occupies.
+        val pieces = listOf(start to start + 2, start + 2 to start + 4, start + 4 to start + 6)
+
+        val whole = assertNotNull(layout.boxesOfRange(start, start + name.length).singleOrNull())
+        val painted = pieces.map { (from, to) -> assertNotNull(layout.boxesOfRange(from, to).singleOrNull()) }
+
+        assertEquals(whole.left, painted.first().left, "the first colour does not start where the name does")
+        assertEquals(whole.right, painted.last().right, "the last colour does not end where the name does")
+        painted.zipWithNext().forEach { (left, right) ->
+            assertEquals(left.right, right.left, "the colours leave a gap or overlap between them")
+        }
+    }
 }

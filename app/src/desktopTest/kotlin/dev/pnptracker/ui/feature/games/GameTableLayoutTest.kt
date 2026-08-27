@@ -24,6 +24,25 @@ class GameTableLayoutTest {
             .let { Files.readString(it) }
 
     @Test
+    fun `every place these tests read the screen at is really in it`() {
+        // Without this, renaming a composable turns a test into one that reads
+        // the whole file: `substringAfter` on a name that is not there hands
+        // back everything, and a check that was pinning one function quietly
+        // starts passing on some other one. Two of these had already gone stale
+        // that way.
+        val anchors =
+            Regex("""substring(?:After|Before)\("((?:[^"\\]|\\.)*)"\)""")
+                .findAll(
+                    Path.of("src/desktopTest/kotlin/dev/pnptracker/ui/feature/games/GameTableLayoutTest.kt").let { Files.readString(it) },
+                ).map { it.groupValues[1].replace("\\n", "\n") }
+                .toSet()
+
+        anchors.forEach { anchor ->
+            assertTrue(anchor in source, "these tests read the screen at a place it no longer has: $anchor")
+        }
+    }
+
+    @Test
     fun `the table scrolls both ways`() {
         // Six columns will not fit a narrow window, and a library does not fit a
         // tall one. Losing either would leave part of the table unreachable.
@@ -182,7 +201,7 @@ class GameTableLayoutTest {
             "SEGMENT_SEPARATOR" !in source,
             "the table still puts something between a cell's pieces",
         )
-        val drawn = source.substringAfter("private fun cellContentOf(").substringBefore("private fun spokenContentOf(")
+        val drawn = source.substringAfter("private fun drawnDocumentOf(").substringBefore("private fun spokenContentOf(")
         assertTrue("append(segment.text)" in drawn, "a piece is not drawn as the text it carries")
         val spoken = source.substringAfter("private fun spokenContentOf(").substringBefore("private fun spokenTaskOf(")
         assertTrue("""joinToString(separator = "")""" in spoken, "the spoken cell puts something between its pieces")
@@ -228,10 +247,14 @@ class GameTableLayoutTest {
         // text on. PLAN 17 asks for text that can still be read and PLAN 12.7
         // for a contrast frame where the colour alone would not show — which is
         // exactly the white-on-white and black-on-black case.
-        val paint = source.substringAfter("private fun paintOf(").substringBefore("/** Where one task's word sits")
-        assertTrue("opaqueColorOf(it.hex)" in paint, "a task's colour is not taken from its colour record")
+        val paint = source.substringAfter("private fun paintsOf(").substringBefore("private data class DrawnStripe(")
+        assertTrue("opaqueColorOf(color.hex)" in paint, "a task's colour is not taken from its colour record")
         assertTrue("readableInkOn(fill)" in paint, "the ink on a task is not chosen against the colour behind it")
         assertTrue("visibleEdgeOn(fill)" in paint, "a task has no edge, so a colour matching the theme vanishes")
+        // One paint per colour, so every piece of a several-colour task — the
+        // swatches included — gets its own ink and its own edge. White beside
+        // black has to be visible in either theme, and that is what the edge is.
+        assertTrue("segment.colors.map" in paint, "a several-colour task is painted from one colour")
         assertTrue("drawTaskEdges(" in source, "the edge is worked out and never drawn")
         // No value copied into the screen: whatever a colour is, it is its own.
         assertTrue(
@@ -242,7 +265,7 @@ class GameTableLayoutTest {
 
     @Test
     fun `the count beside a task comes from the task and not from anybody's text`() {
-        val drawn = source.substringAfter("private fun cellContentOf(").substringBefore("private fun spokenContentOf(")
+        val drawn = source.substringAfter("private fun drawnDocumentOf(").substringBefore("private fun spokenContentOf(")
         assertTrue("segment.requiredQuantity" in drawn, "the count is not read from the task")
         assertTrue("Strings.CellTask.quantityMark" in drawn, "the count mark is not taken from the text catalogue")
         // The mark is drawn around the document and never inside it.
@@ -252,7 +275,7 @@ class GameTableLayoutTest {
     @Test
     fun `a finished task is struck through where it stands`() {
         // PLAN 5.6 leaves a finished task in its cell rather than removing it.
-        val drawn = source.substringAfter("private fun cellContentOf(").substringBefore("private fun spokenContentOf(")
+        val drawn = source.substringAfter("private fun drawnDocumentOf(").substringBefore("private fun spokenContentOf(")
         assertTrue("segment.isCompletedTask" in drawn, "a finished task looks exactly like an unfinished one")
         assertTrue("TextDecoration.LineThrough" in drawn, "a finished task is not struck through")
     }
@@ -314,7 +337,7 @@ class GameTableLayoutTest {
     @Test
     fun `the task panel is drawn in the cell and not over the window`() {
         // PLAN 12.6 rules out a full screen modal or a panel covering the window.
-        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun ColorChoices(")
+        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun ColorList(")
         listOf("Dialog", "AlertDialog", "Popup", "ModalBottomSheet", "fillMaxSize").forEach { overlay ->
             assertTrue(overlay !in panel, "the task panel opens a $overlay")
         }
@@ -329,7 +352,7 @@ class GameTableLayoutTest {
         assertTrue("saveTask()" in editor, "Ctrl+Enter does not save the task")
         assertTrue("event.isCtrlPressed" in editor, "there is no Ctrl+Enter at all")
         // The note is a note, so a plain Enter still makes a line in it.
-        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun ColorChoices(")
+        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun ColorList(")
         assertTrue("singleLine = false" in panel, "the note is one line, so Enter cannot break a line in it")
     }
 
@@ -337,7 +360,7 @@ class GameTableLayoutTest {
     fun `the panel's own keys work wherever the keyboard is inside it`() {
         // Handling them on one field only left Ctrl+Enter dead as soon as the
         // user was typing a note, which is exactly where they finish.
-        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun ColorChoices(")
+        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun ColorList(")
         val onTheColumn = panel.substringAfter("Column(").substringBefore(") {")
         assertTrue("onPreviewKeyEvent" in onTheColumn, "the panel's keys are caught by one field rather than the panel")
         assertTrue("controller.cancelTaskComposer()" in onTheColumn, "Escape does not close the panel from inside it")
@@ -348,7 +371,7 @@ class GameTableLayoutTest {
     fun `two tasks side by side do not run into one another`() {
         // Their names and counts would otherwise touch. The gap goes between two
         // things that are drawn, never between two pieces of the document.
-        val drawn = source.substringAfter("private fun cellContentOf(").substringBefore("private fun spokenContentOf(")
+        val drawn = source.substringAfter("private fun drawnDocumentOf(").substringBefore("private fun spokenContentOf(")
         assertTrue("cell.segments.getOrNull(index - 1)?.isTask" in drawn, "two tasks are drawn touching one another")
     }
 
@@ -357,17 +380,17 @@ class GameTableLayoutTest {
         val editor = source.substringAfter("private fun CellEditorSlot(").substringBefore("private fun CellEditorActions(")
         assertTrue("focusRecall" in editor, "the cell never takes the keyboard back")
         assertTrue("focus.requestFocus()" in editor, "the cell does not ask for the keyboard")
-        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun ColorChoices(")
+        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun ColorList(")
         assertTrue("LaunchedEffect(focusRecall)" in panel, "the panel never takes the keyboard back")
     }
 
     @Test
     fun `a colour is chosen from the catalogue and never typed as a value`() {
         // PLAN 5.7 keeps every colour a named record; this step creates none.
-        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun ColorChoices(")
+        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun ColorList(")
         assertTrue("Strings.CellTask.colorSearch" in panel, "the catalogue cannot be searched by name")
         assertTrue("Strings.Colors.hexLabel" !in panel, "the panel asks for a colour value")
-        val choices = source.substringAfter("private fun ColorChoices(").substringBefore("/** One line of explanation")
+        val choices = source.substringAfter("private fun ColorList(").substringBefore("/** One line of explanation")
         assertTrue("color.canonicalName" in choices, "a swatch is offered without its written name")
         assertTrue("opaqueColorOf(color.hex)" in choices, "the swatch is not the colour it stands for")
         assertTrue("stateDescription = stateText" in choices, "which colour is chosen is carried by fill alone")
@@ -375,18 +398,64 @@ class GameTableLayoutTest {
 
     @Test
     fun `the panel asks how a task is tracked only where the pool leaves a choice`() {
-        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun ColorChoices(")
+        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun ColorList(")
         assertTrue("trackingModesOf(" in panel, "the tracking modes are not taken from the one place that decides them")
         assertTrue("trackingChoices.size > 1" in panel, "the user is asked a question that has only one answer")
     }
 
     @Test
-    fun `nothing about the three creation modes is drawn yet`() {
-        // PLAN 12.7 has three modes; this step is the first of them, and a
-        // switch that did nothing would promise the other two.
-        listOf("Çoklu", "multiTask", "multiColor", "creationMode").forEach { later ->
-            assertTrue(later !in source, "the table draws a $later control that does nothing")
-        }
+    fun `a task made in several colours is one word painted in each of them`() {
+        val document =
+            source
+                .substringAfter(
+                    "private fun drawnDocumentOf(",
+                ).substringBefore("private fun AnnotatedString.Builder.paintedName(")
+        // PLAN 12.7 splits the name over the user's own characters, in slot
+        // order, and derives the split rather than storing it.
+        assertTrue("taskColorLayoutOf(" in document, "the name is not shared out among the colours")
+        assertTrue("layout.slices.forEach" in document, "the colours after the first paint nothing")
+        assertTrue("substring(slice.start, slice.end)" in document, "the name is not painted piece by piece")
+        assertEquals(
+            1,
+            Regex("marks\\[index\\]").findAll(document).count(),
+            "the count is drawn more than once",
+        )
+    }
+
+    @Test
+    fun `a colour with no share of the name is drawn beside it rather than lost`() {
+        val document =
+            source
+                .substringAfter(
+                    "private fun drawnDocumentOf(",
+                ).substringBefore("private fun AnnotatedString.Builder.paintedName(")
+        assertTrue("layout.markerSlots.forEach" in document, "a colour the name does not reach is drawn nowhere")
+        assertTrue("MARKER_MARK" in document, "the swatch has nothing to paint")
+        // Before the count, which stays last, and inside the task's own run, so
+        // it is part of the same thing to press.
+        assertTrue(
+            document.indexOf("layout.markerSlots.forEach") < document.indexOf("marks[index]"),
+            "the swatches are drawn after the count rather than before it",
+        )
+        assertTrue(
+            "DrawnTask(segment = segment, start = start, end = length" in document,
+            "the swatches fall outside the task's own run",
+        )
+        // Never in the string the editor lines up with the document, because
+        // there every offset has to go on meaning what it meant.
+        assertTrue("if (withCounts) {" in document, "the swatches are drawn into the text being edited")
+    }
+
+    @Test
+    fun `every coloured piece gets its own contrast edge`() {
+        val edges =
+            source
+                .substringAfter("private fun DrawScope.drawTaskEdges(")
+                .substringBefore("private fun CellSlot(")
+        // One rectangle around a several-colour task would put one colour's edge
+        // around all of them, and PLAN 12.7 asks for the frame per piece.
+        assertTrue("task.stripes.forEach" in edges, "a several-colour task is edged as one block")
+        assertTrue("stripe.edge" in edges, "the edge does not come from the colour it surrounds")
     }
 
     // ------------------------------------- the menu anchored to a task
@@ -433,18 +502,65 @@ class GameTableLayoutTest {
     }
 
     @Test
-    fun `the creation panel offers the two modes it can actually save`() {
+    fun `the creation panel offers the three modes it can actually save`() {
         val panel = source.substringAfter("private fun CreationModeChoice(").substringBefore("private fun BatchTaskRow(")
         assertTrue("TaskCreationMode.SINGLE_COLOR" in panel, "one task cannot be made")
         assertTrue("TaskCreationMode.INDEPENDENT_TASKS" in panel, "several tasks cannot be made")
-        // PLAN 12.7 describes a third mode. The step that can create one has not
-        // come yet, so it is absent rather than shown greyed out: a control that
-        // switched to a mode nothing could save is worse than no control.
-        assertTrue("MULTI_COLOR" !in source, "a mode nothing can save is offered")
+        assertTrue("TaskCreationMode.SINGLE_ITEM_MULTICOLOR" in panel, "one task in several colours cannot be made")
+        // All three really save, so none of them is drawn dead.
         assertTrue(
             Regex("""enabled\s*=\s*false""").find(source) == null,
             "a control is drawn permanently disabled",
         )
+    }
+
+    @Test
+    fun `the choices in the panel wrap instead of running off the cell`() {
+        // The panel is one column of the table wide. In a plain row the third
+        // mode was pushed past the edge where nothing could reach it, and its
+        // label wrapped to one word per line and stretched the row.
+        val panel = source.substringAfter("private fun CreationModeChoice(").substringBefore("private fun BatchTaskRow(")
+        assertTrue("FlowRow(" in panel, "the modes are laid out in one line however narrow the cell is")
+        val tracking = source.substringAfter("private fun TrackingChoice(").substringBefore("private fun spokenContentOf(")
+        assertTrue("FlowRow(" in tracking, "the tracking choices are laid out in one line")
+    }
+
+    @Test
+    fun `the several colour panel describes one task and not several`() {
+        val fields =
+            source
+                .substringAfter("private fun MulticolorFields(")
+                .substringBefore("private fun ChosenColorList(")
+        // PLAN 12.7 gives such a task one total and one counter, so there is one
+        // of each field here and no row to repeat them in.
+        listOf("quantityLabel", "notesLabel").forEach { field ->
+            assertEquals(
+                1,
+                Regex("Strings\\.CellTask\\.$field").findAll(fields).count(),
+                "$field is asked for more than once for one task",
+            )
+        }
+        assertTrue("Strings.CellTask.rowTitle" !in fields, "one task is drawn as a numbered row of several")
+        assertTrue("controller::toggleMulticolorColor" in fields, "the colours cannot be chosen")
+    }
+
+    @Test
+    fun `the colours of a task are an ordered list that can be reordered by keyboard`() {
+        val list = source.substringAfter("private fun ChosenColorList(").substringBefore("private fun ColorList(")
+        // PLAN 5.10 makes the slot the user's own order and PLAN 17 wants every
+        // action reachable from the keyboard, so this is buttons and not a drag.
+        assertTrue("Strings.CellTask.colorSlot" in list, "an entry does not say which place it holds")
+        assertTrue("onMoveUp(slot)" in list && "onMoveDown(slot)" in list, "the order cannot be changed")
+        assertTrue("onDrop(colorId)" in list, "a colour cannot be taken out")
+        assertTrue("slot > 0" in list, "the first entry offers to move further up")
+        assertTrue("slot < colorIds.lastIndex" in list, "the last entry offers to move further down")
+        assertTrue("failedSlot == slot" in list, "a refused colour is not marked on its own entry")
+        // PLAN 17: the swatch is never the only thing saying which colour it is.
+        // Given a weight in a plain row the name was squeezed to nothing by the
+        // three actions, so the entry wraps instead.
+        assertTrue("Strings.CellTask.colorSlot" in list, "an entry does not name its colour in words")
+        assertTrue("FlowRow(" in list, "an entry cannot give the name a line of its own when it needs one")
+        assertTrue("weight(1f)" !in list, "the name is squeezed by whatever is beside it")
     }
 
     @Test
@@ -536,10 +652,12 @@ class GameTableLayoutTest {
     }
 
     @Test
-    fun `a task with several colours is shown rather than reduced to one`() {
+    fun `a task with several colours has its whole ordered list to work in`() {
         val panel = source.substringAfter("private fun TaskEditPanel(").substringBefore("/**\n * Asking whether a task")
         assertTrue("editor.holdsSeveralColors" in panel, "a several-colour task is offered one colour box")
-        assertTrue("Strings.TaskEdit.severalColors" in panel, "nothing says why the colours cannot be changed")
+        assertTrue("ChosenColorList(" in panel, "the ordered list cannot be edited")
+        assertTrue("controller::moveTaskEditColorUp" in panel, "the colours cannot be reordered from the panel")
+        assertTrue("Strings.TaskEdit.colorFloor" in panel, "nothing says a several-colour task keeps two colours")
     }
 
     @Test

@@ -407,11 +407,24 @@ class GameTablePresentationTest {
     }
 
     @Test
-    fun `a several colour task is told which colours it keeps`() {
-        val note = runBlocking { getString(Strings.TaskEdit.severalColors, "Gri, Siyah") }
+    fun `a colour of a several colour task is named by its place in the list`() {
+        val line = runBlocking { getString(Strings.CellTask.colorSlot, 2, "Siyah") }
 
-        assertTrue("Gri, Siyah" in note, "the colours are not named: $note")
-        assertTrue(note.none { it == '%' }, "unformatted placeholder left in: $note")
+        assertTrue("2" in line && "Siyah" in line, "the entry does not say which colour it is: $line")
+        assertTrue(line.none { it == '%' }, "unformatted placeholder left in: $line")
+    }
+
+    @Test
+    fun `moving a colour says which colour it moves`() {
+        val up = runBlocking { getString(Strings.CellTask.colorMoveUp, "Sarı") }
+        val down = runBlocking { getString(Strings.CellTask.colorMoveDown, "Sarı") }
+        val drop = runBlocking { getString(Strings.CellTask.colorDrop, "Sarı") }
+
+        listOf(up, down, drop).forEach { label ->
+            assertTrue("Sarı" in label, "the action does not name the colour: $label")
+            assertTrue(label.none { it == '%' }, "unformatted placeholder left in: $label")
+        }
+        assertTrue(up != down, "moving up and moving down are said the same way")
     }
 
     /**
@@ -424,7 +437,8 @@ class GameTablePresentationTest {
             TaskEditFailure.TASK_NAME_EMPTY -> Strings.TaskEdit.errorNameEmpty
             TaskEditFailure.NAME_CONTAINS_LINE_BREAK -> Strings.TaskEdit.errorNameLineBreak
             TaskEditFailure.COLOR_NOT_AVAILABLE -> Strings.TaskEdit.errorColorGone
-            TaskEditFailure.MULTICOLOR_EDIT_NOT_AVAILABLE -> Strings.TaskEdit.errorSeveralColors
+            TaskEditFailure.DUPLICATE_COLOR -> Strings.TaskEdit.errorDuplicateColor
+            TaskEditFailure.COLOR_COUNT_NOT_CHANGEABLE -> Strings.TaskEdit.errorColorCount
             TaskEditFailure.INVALID_REQUIRED_QUANTITY -> Strings.TaskEdit.errorQuantity
             TaskEditFailure.QUANTITY_BELOW_PROGRESS -> Strings.TaskEdit.errorQuantityBelowProgress
             TaskEditFailure.QUANTITY_LOCKED_BY_COMPLETION -> Strings.TaskEdit.errorQuantityLocked
