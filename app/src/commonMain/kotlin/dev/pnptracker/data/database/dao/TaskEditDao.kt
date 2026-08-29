@@ -219,7 +219,15 @@ abstract class TaskEditDao {
         // Read in slot order, so what is compared against is the list as the
         // user last left it rather than whatever order the rows come back in.
         val current = colorsOfTask(taskId).map { it.colorId }
-        if (colorIds.distinct().size != colorIds.size) refuse(TaskEditFailure.DUPLICATE_COLOR)
+        val earlier = colorIds.indexOfFirst { id -> colorIds.indexOf(id) != colorIds.lastIndexOf(id) }
+        if (earlier >= 0) {
+            // Both ends of the clash, so a panel can say which two entries.
+            refuse(
+                TaskEditFailure.DUPLICATE_COLOR,
+                row = colorIds.indexOfLast { it == colorIds[earlier] },
+                conflictsWith = earlier,
+            )
+        }
         if ((current.size > 1) != (colorIds.size > 1)) refuse(TaskEditFailure.COLOR_COUNT_NOT_CHANGEABLE)
         val colorChanges = current != colorIds
         if (colorChanges && colorIds.isNotEmpty()) {
@@ -398,5 +406,6 @@ abstract class TaskEditDao {
     private fun refuse(
         failure: TaskEditFailure,
         row: Int? = null,
-    ): Nothing = throw TaskEditException(failure, row)
+        conflictsWith: Int? = null,
+    ): Nothing = throw TaskEditException(failure, row, conflictsWith)
 }

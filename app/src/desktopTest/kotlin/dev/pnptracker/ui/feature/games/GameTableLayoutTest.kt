@@ -447,6 +447,23 @@ class GameTableLayoutTest {
     }
 
     @Test
+    fun `a task with one colour or none is drawn without any of the splitting`() {
+        val document =
+            source
+                .substringAfter(
+                    "private fun drawnDocumentOf(",
+                ).substringBefore("private fun AnnotatedString.Builder.paintedName(")
+        // One colour is one slice covering the whole name, so nothing about it
+        // goes near a swatch. None is the branch below: the whole name in the
+        // one fallback paint rather than an empty drawing.
+        assertTrue("layout.slices.isEmpty()" in document, "a task with no colour has nothing to draw it with")
+        assertTrue("segment.text, taskPaints.first()" in document, "a task with no colour loses its name")
+        val paint = source.substringAfter("private fun paintsOf(").substringBefore("private data class DrawnStripe(")
+        assertTrue("segment.colors.isEmpty()" in paint, "a task with no colour has no paint of its own")
+        assertTrue("surfaceVariant" in paint, "a task with no colour is not drawn as a task at all")
+    }
+
+    @Test
     fun `every coloured piece gets its own contrast edge`() {
         val edges =
             source

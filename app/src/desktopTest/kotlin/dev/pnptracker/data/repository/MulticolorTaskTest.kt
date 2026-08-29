@@ -369,7 +369,38 @@ class MulticolorTaskTest {
                 }
 
             assertEquals(TaskFromTextFailure.DUPLICATE_COLOR, refusal.failure)
+            // Both ends of the clash: the slot to change and the one it repeats.
+            assertEquals(2, refusal.row, "the refusal does not say which slot to change")
+            assertEquals(0, refusal.conflictsWith, "the refusal does not say what it clashes with")
             assertEquals(text, documentTextOf(cell.id))
+            assertTrue(database.taskDao().allTasksIncludingDeleted().isEmpty(), "a task was left behind")
+        }
+
+    @Test
+    fun `the same colour in two rows of a batch names both rows`() =
+        runBlocking<Unit> {
+            val game = addGame()
+            val cell = addCell(game.id)
+            val text = "Basılacak: Token"
+            val segment = addText(cell.id, text)
+            val red = colorNamed("Kırmızı").id
+
+            val refusal =
+                assertFailsWith<TaskFromTextException> {
+                    store.createTasks(
+                        selection = selectionOf(game, cell, segment, "Token", text),
+                        drafts =
+                            listOf(
+                                TaskDraft(listOf(red), 14, TrackingMode.THREE_D_BATCH, null),
+                                TaskDraft(listOf(colorNamed("Sarı").id), 15, TrackingMode.THREE_D_BATCH, null),
+                                TaskDraft(listOf(red), 8, TrackingMode.THREE_D_BATCH, null),
+                            ),
+                    )
+                }
+
+            assertEquals(TaskFromTextFailure.DUPLICATE_COLOR, refusal.failure)
+            assertEquals(2, refusal.row)
+            assertEquals(0, refusal.conflictsWith)
             assertTrue(database.taskDao().allTasksIncludingDeleted().isEmpty(), "a task was left behind")
         }
 
@@ -683,6 +714,8 @@ class MulticolorTaskTest {
                 }
 
             assertEquals(TaskEditFailure.DUPLICATE_COLOR, refusal.failure)
+            assertEquals(1, refusal.row, "the refusal does not say which colour to change")
+            assertEquals(0, refusal.conflictsWith, "the refusal does not say what it clashes with")
             assertEquals(before, database.taskColorDao().colorsOfTask(taskId))
         }
 

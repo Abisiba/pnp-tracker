@@ -204,7 +204,7 @@
     <string name="task_edit_error_name_empty">Görev adı boş olamaz.</string>
     <string name="task_edit_error_name_line_break">Görev adı satır sonu içeremez.</string>
     <string name="task_edit_error_color_gone">Seçtiğiniz renk artık kayıtlı değil.</string>
-    <string name="task_edit_error_duplicate_color">Aynı renk bir görevde iki kez kullanılamaz.</string>
+    <string name="task_edit_error_duplicate_color">Aynı renk bir görevde iki kez kullanılamaz: %1$d. ve %2$d. renk aynı.</string>
     <string name="task_edit_error_color_count">Bir görevin tek renkli mi çok renkli mi olduğu sonradan değiştirilemez.</string>
     <string name="task_edit_error_quantity">Adet sıfırdan büyük bir tam sayı olmalı.</string>
     <string name="task_edit_error_quantity_below_progress">Adet, kaydedilmiş üretimin altına indirilemez.</string>
@@ -256,7 +256,7 @@
     <string name="cell_task_row_remove">%1$d. görev satırını sil</string>
     <string name="cell_task_row_remove_short">Sil</string>
     <string name="cell_task_row_floor">En az iki görev satırı gerekir.</string>
-    <string name="cell_task_row_duplicate">Bu renk yukarıdaki bir satırda seçildi. Başka bir renk seçin.</string>
+    <string name="cell_task_row_duplicate">Bu renk %1$d. görevde de seçili. İki görevden birine başka bir renk seçin.</string>
     <string name="cell_task_mode_multicolor">Tek öge çok renk</string>
     <string name="cell_task_mode_multicolor_hint">Tek görev, tek adet ve tek sayaç; görev adı seçilen renklere sırayla bölünür.</string>
     <string name="cell_task_color_order_label">Seçilen renkler, sırayla</string>
@@ -273,7 +273,7 @@
     <string name="cell_task_color_overflow">Ad seçilen renklerden kısa; harf düşmeyen renkler görevin yanında kendi göstergesiyle çizilir.</string>
     <string name="cell_task_save_many">%1$d görevi kaydet</string>
     <string name="cell_task_saving_many">Görevler kaydediliyor…</string>
-    <string name="cell_task_error_duplicate_color">Aynı renk iki satırda seçilemez.</string>
+    <string name="cell_task_error_duplicate_color">Aynı renk iki kez seçilemez: %1$d. ve %2$d. seçim aynı renk.</string>
     <string name="cell_task_error_no_task">Kaydedilecek görev satırı yok.</string>
     <string name="cell_task_error_game_gone">Bu oyun artık kayıtlı değil.</string>
     <string name="cell_task_error_cell_gone">Bu hücre artık kayıtlı değil.</string>

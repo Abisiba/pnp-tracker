@@ -198,7 +198,7 @@ class GameTablePresentationTest {
         // reached the screen as a backslash. Nothing the user reads should
         // carry one, and nothing should end up with the placeholder either.
         val everything =
-            TaskFromTextFailure.entries.map { messageOfFailure(it) } +
+            TaskFromTextFailure.entries.map { messageOfFailure(it) }.filterNot { it == Strings.CellTask.errorDuplicateColor } +
                 listOf(
                     Strings.CellTask.create,
                     Strings.CellTask.selectHint,
@@ -259,13 +259,63 @@ class GameTablePresentationTest {
         val constants =
             TaskFromTextFailure.entries.map { it.name } + TrackingMode.entries.map { it.name }
         val shown =
-            TaskFromTextFailure.entries.map { textOf(messageOfFailure(it)) } +
+            TaskFromTextFailure.entries.map { sentenceOfFailure(it) } +
                 TrackingMode.entries.map { textOf(labelOf(it)) }
 
         shown.forEach { text ->
             constants.forEach { constant ->
                 assertTrue(constant !in text, "the user is being shown the raw constant $constant")
             }
+        }
+    }
+
+    /**
+     * The sentence the screen really shows, places filled in.
+     *
+     * A duplicate colour is about a pair and says which two, so it is the one
+     * refusal that cannot be read as a bare resource.
+     */
+    private fun sentenceOfFailure(failure: TaskFromTextFailure): String =
+        if (failure == TaskFromTextFailure.DUPLICATE_COLOR) {
+            runBlocking { getString(Strings.CellTask.errorDuplicateColor, 1, 2) }
+        } else {
+            textOf(messageOfFailure(failure))
+        }
+
+    private fun sentenceOfEditFailure(failure: TaskEditFailure): String =
+        if (failure == TaskEditFailure.DUPLICATE_COLOR) {
+            runBlocking { getString(Strings.TaskEdit.errorDuplicateColor, 1, 2) }
+        } else {
+            textOf(messageOfEditFailure(failure))
+        }
+
+    @Test
+    fun `a task with no colour says so in words and still says its count`() {
+        val said =
+            runBlocking {
+                getString(Strings.CellTask.description, "Knight", 15, getString(Strings.CellTask.noColor))
+            }
+
+        // PLAN 5.10 keeps such a task, and PLAN 17 will not let a missing colour
+        // be shown by an absence: it is said.
+        assertTrue("renk seçilecek" in said, "a task with no colour says nothing about it: $said")
+        assertTrue("Knight" in said && "15" in said, "the description says too little: $said")
+        assertEquals(1, Regex("15").findAll(said).count(), "the count is said more than once: $said")
+        assertTrue(said.none { it == '%' }, "unformatted placeholder left in: $said")
+    }
+
+    @Test
+    fun `a duplicate colour is said about both of the places that clash`() {
+        val batch = runBlocking { getString(Strings.CellTask.errorDuplicateColor, 1, 3) }
+        val rowMark = runBlocking { getString(Strings.CellTask.rowDuplicate, 1) }
+        val edit = runBlocking { getString(Strings.TaskEdit.errorDuplicateColor, 2, 4) }
+
+        // Both ends of the clash, counted the way the panel numbers them.
+        assertTrue("1" in batch && "3" in batch, "the refusal does not name both places: $batch")
+        assertTrue("2" in edit && "4" in edit, "the refusal does not name both colours: $edit")
+        assertTrue("1" in rowMark, "the mark on a row does not say which row it repeats: $rowMark")
+        listOf(batch, rowMark, edit).forEach {
+            assertTrue(it.none { character -> character == '%' }, "unformatted placeholder left in: $it")
         }
     }
 
@@ -333,7 +383,6 @@ class GameTablePresentationTest {
             Strings.CellTask.rowAdd,
             Strings.CellTask.rowRemoveShort,
             Strings.CellTask.rowFloor,
-            Strings.CellTask.rowDuplicate,
             Strings.CellTask.savingMany,
         ).forEach { resource ->
             val text = textOf(resource)
@@ -376,7 +425,7 @@ class GameTablePresentationTest {
     fun `every way a task can refuse to change has its own sentence`() {
         val sentences =
             TaskEditFailure.entries.map { failure ->
-                val text = textOf(messageOfEditFailure(failure))
+                val text = sentenceOfEditFailure(failure)
                 assertTrue(text.isNotBlank(), "$failure has nothing to say")
                 assertTrue('%' !in text, "an unfilled placeholder reached the user in: $text")
                 text

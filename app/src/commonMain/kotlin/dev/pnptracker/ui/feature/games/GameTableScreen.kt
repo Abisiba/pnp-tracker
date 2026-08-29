@@ -1405,7 +1405,7 @@ private fun TaskEditPanel(
                 leastColors = MulticolorDraft.LEAST_COLORS,
                 floorText = stringResource(Strings.TaskEdit.colorFloor),
                 failedSlot = editor.failureRow?.takeIf { it in editor.colorIds.indices },
-                failureText = editor.failure?.let { stringResource(messageOf(it)) },
+                failureText = editor.failure?.let { sentenceOf(it, editor.failureRow, editor.failureConflictsWith) },
                 onMoveUp = controller::moveTaskEditColorUp,
                 onMoveDown = controller::moveTaskEditColorDown,
                 onDrop = controller::chooseTaskEditColor,
@@ -1469,7 +1469,7 @@ private fun TaskEditPanel(
         val note =
             when {
                 editor.isSaving -> stringResource(Strings.TaskEdit.saving)
-                editor.failure != null -> stringResource(messageOf(editor.failure))
+                editor.failure != null -> sentenceOf(editor.failure, editor.failureRow, editor.failureConflictsWith)
                 else -> stringResource(Strings.TaskEdit.hint)
             }
         NoteLine(text = note, isProblem = editor.failure != null)
@@ -1695,7 +1695,7 @@ private fun TaskComposerPanel(
             // not look like a form for several.
             TaskRowFields(
                 row = 0,
-                draft = composer.rows.first(),
+                draft = composer.single,
                 composer = composer,
                 colors = controller.colorsOffered(0),
                 isRepeatedColor = false,
@@ -1759,8 +1759,13 @@ private fun TaskComposerPanel(
             when {
                 composer.isSaving && composer.taskCount > 1 -> stringResource(Strings.CellTask.savingMany)
                 composer.isSaving -> stringResource(Strings.CellTask.saving)
-                composer.failure != null -> stringResource(messageOf(composer.failure))
-                composer.repeatedColorRows.isNotEmpty() -> stringResource(Strings.CellTask.errorDuplicateColor)
+                composer.failure != null ->
+                    sentenceOf(composer.failure, composer.failureRow, composer.failureConflictsWith)
+
+                composer.repeatedColorRows.isNotEmpty() ->
+                    composer.repeatedColorRows.entries.minByOrNull { it.key }!!.let { (later, earlier) ->
+                        stringResource(Strings.CellTask.errorDuplicateColor, earlier + 1, later + 1)
+                    }
                 composer.usedRows.any { it.colorId == null } -> stringResource(Strings.CellTask.colorRequired)
                 else -> stringResource(Strings.CellTask.hint)
             }
@@ -1907,17 +1912,20 @@ private fun TaskRowFields(
         emptyQuery = draft.colorQuery.isBlank(),
         onChoose = { controller.chooseTaskColor(row, it) },
     )
-    if (isRepeatedColor) {
+    composer.repeatedColorRows[row]?.let { earlier ->
         // Said on the row that repeats rather than only at the foot of the
-        // panel: with several rows open, a message at the bottom does not say
-        // which colour to change.
-        NoteLine(text = stringResource(Strings.CellTask.rowDuplicate), isProblem = true)
+        // panel, and naming the row it repeats: with several rows open, neither
+        // "somewhere above" nor a message at the bottom says what to change.
+        NoteLine(text = stringResource(Strings.CellTask.rowDuplicate, earlier + 1), isProblem = true)
     }
     if (composer.failureRow == row && composer.failure != null) {
         // The same reason. A batch is refused about one of its rows, and the
         // storage says which; showing it only at the foot would leave the user
         // to guess which colour went away.
-        NoteLine(text = stringResource(messageOf(composer.failure)), isProblem = true)
+        NoteLine(
+            text = sentenceOf(composer.failure, composer.failureRow, composer.failureConflictsWith),
+            isProblem = true,
+        )
     }
 
     OutlinedTextField(
@@ -2041,7 +2049,7 @@ private fun MulticolorFields(
         leastColors = MulticolorDraft.LEAST_COLORS,
         floorText = stringResource(Strings.CellTask.colorFloor),
         failedSlot = composer.failedColorSlot,
-        failureText = composer.failure?.let { stringResource(messageOf(it)) },
+        failureText = composer.failure?.let { sentenceOf(it, composer.failureRow, composer.failureConflictsWith) },
         onMoveUp = controller::moveMulticolorColorUp,
         onMoveDown = controller::moveMulticolorColorDown,
         onDrop = controller::toggleMulticolorColor,
@@ -2297,6 +2305,38 @@ private fun NoteLine(
         color = if (isProblem) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
+
+/**
+ * What a refusal reads as, with the places it is about filled in.
+ *
+ * A duplicate colour is the one refusal that is about a pair, so it is the one
+ * that cannot be a bare sentence: naming only the second of the two leaves the
+ * user looking for the first. Counted from one, because that is how the panel
+ * numbers what it shows.
+ */
+@Composable
+private fun sentenceOf(
+    failure: TaskFromTextFailure,
+    row: Int?,
+    conflictsWith: Int?,
+): String =
+    if (failure == TaskFromTextFailure.DUPLICATE_COLOR && row != null && conflictsWith != null) {
+        stringResource(Strings.CellTask.errorDuplicateColor, conflictsWith + 1, row + 1)
+    } else {
+        stringResource(messageOf(failure))
+    }
+
+@Composable
+private fun sentenceOf(
+    failure: TaskEditFailure,
+    row: Int?,
+    conflictsWith: Int?,
+): String =
+    if (failure == TaskEditFailure.DUPLICATE_COLOR && row != null && conflictsWith != null) {
+        stringResource(Strings.TaskEdit.errorDuplicateColor, conflictsWith + 1, row + 1)
+    } else {
+        stringResource(messageOf(failure))
+    }
 
 /** What to tell the user about words that did not become a task. */
 private fun messageOf(failure: TaskFromTextFailure) =

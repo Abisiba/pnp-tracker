@@ -287,13 +287,17 @@ data class MulticolorDraft(
  * exactly where the user pointed or is refused. Nothing in here is stored until
  * they save, and closing the panel leaves the cell and its text as they were.
  *
- * [rows] is the list in both modes rather than a list in one and a set of loose
- * fields in the other. That is what lets the mode be switched without losing
- * anything: single-colour mode simply works on the first row and leaves the rest
- * where they are, so going back to several tasks finds them still typed. The
- * name is not in the rows because it is not a row's to differ in — every task in
- * a batch starts from the same selected words (PLAN 12.7), and telling them
- * apart afterwards is a rename.
+ * Each of the three modes keeps its own draft, and none of them can reach
+ * another. Switching is then free in both directions: nothing is copied, nothing
+ * is merged, and coming back to a mode finds it exactly as it was left — which
+ * is the only version of "loses nothing" that also means "changes nothing".
+ * Sharing one row between the first two modes did lose something: a quantity
+ * typed while making one task landed in the first task of a batch prepared
+ * earlier, and the user was never told.
+ *
+ * The name is in none of the drafts, because it is not theirs to differ in —
+ * every task made here starts from the same selected words (PLAN 12.7), and
+ * telling them apart afterwards is a rename.
  */
 data class TaskComposer(
     val selection: CellTextSelection,
@@ -301,15 +305,16 @@ data class TaskComposer(
     /** The selected words, with the whitespace at their edges already left behind. */
     val name: String,
     val mode: TaskCreationMode = TaskCreationMode.SINGLE_COLOR,
+    /** The one task of the single-colour mode. */
+    val single: TaskDraftRow,
+    /** The tasks of the batch mode, never fewer than [LEAST_INDEPENDENT_TASKS]. */
     val rows: List<TaskDraftRow>,
     /**
-     * The one several-colour task, kept apart from [rows].
+     * The one several-colour task.
      *
      * Its own state rather than a row pressed into service, because it is not
      * one: a row is a task with a colour, and this is a task with a list of
-     * them. Keeping them separate is also what makes switching modes safe in
-     * both directions — neither can quietly consume or overwrite the other's
-     * answers, and coming back to a mode finds it exactly as it was left.
+     * them.
      */
     val palette: MulticolorDraft = MulticolorDraft(),
     val isSaving: Boolean = false,
@@ -322,9 +327,13 @@ data class TaskComposer(
      * which one to change.
      */
     val failureRow: Int? = null,
+    /** The place [failureRow] clashes with, when the refusal was about a pair. */
+    val failureConflictsWith: Int? = null,
 ) {
     init {
-        require(rows.isNotEmpty()) { "A task panel always has a row to type in." }
+        require(rows.size >= LEAST_INDEPENDENT_TASKS) {
+            "The batch mode always has its own rows to type in: ${rows.size}"
+        }
     }
 
     /**
@@ -336,29 +345,37 @@ data class TaskComposer(
     val usedRows: List<TaskDraftRow>
         get() =
             when (mode) {
-                TaskCreationMode.SINGLE_COLOR -> rows.take(1)
+                TaskCreationMode.SINGLE_COLOR -> listOf(single)
                 TaskCreationMode.INDEPENDENT_TASKS -> rows
                 TaskCreationMode.SINGLE_ITEM_MULTICOLOR -> emptyList()
             }
+
+    /** The row the panel shows at this place, in whichever mode is open. */
+    fun rowAt(row: Int): TaskDraftRow? = if (mode == TaskCreationMode.SINGLE_COLOR) single.takeIf { row == 0 } else rows.getOrNull(row)
 
     /** How many tasks saving this panel would create. */
     val taskCount: Int
         get() = if (mode == TaskCreationMode.SINGLE_ITEM_MULTICOLOR) 1 else usedRows.size
 
     /**
-     * The rows whose colour an earlier used row already took.
+     * Each row that repeats a colour, and the earlier row it repeats.
      *
-     * By place rather than by colour, so the panel can mark the second one and
-     * leave the first alone: the user chose that one first and it is not the one
-     * they need to change.
+     * A pair rather than a set, because a duplicate is never about one row on
+     * its own: the panel marks the second one — the user chose the first one
+     * first and it is not the one being asked to change — and names the first,
+     * so they can see what the clash is rather than hunting for it.
      */
-    val repeatedColorRows: Set<Int>
+    val repeatedColorRows: Map<Int, Int>
         get() {
-            val seen = mutableSetOf<EntityId>()
-            val repeated = mutableSetOf<Int>()
+            val firstSeenAt = mutableMapOf<EntityId, Int>()
+            val repeated = mutableMapOf<Int, Int>()
             usedRows.forEachIndexed { index, row ->
                 val colorId = row.colorId ?: return@forEachIndexed
-                if (!seen.add(colorId)) repeated += index
+                val earlier = firstSeenAt.put(colorId, index)
+                if (earlier != null) {
+                    firstSeenAt[colorId] = earlier
+                    repeated[index] = earlier
+                }
             }
             return repeated
         }
@@ -377,7 +394,7 @@ data class TaskComposer(
         get() =
             failureRow?.takeIf { it in usedRows.indices }
                 ?: usedRows.indexOfFirst { !it.isComplete }.takeIf { it >= 0 }
-                ?: repeatedColorRows.minOrNull()
+                ?: repeatedColorRows.keys.minOrNull()
 
     /** How many tasks this mode will not save fewer than. */
     val leastRows: Int
@@ -450,6 +467,8 @@ data class TaskEditor(
     val failure: TaskEditFailure? = null,
     /** Which colour of the list the refusal was about, if it was about one. */
     val failureRow: Int? = null,
+    /** The colour [failureRow] clashes with, when the refusal was a pair. */
+    val failureConflictsWith: Int? = null,
 ) {
     /** True when this is a task made in several colours (PLAN 12.7). */
     val holdsSeveralColors: Boolean get() = originalColorIds.size > 1

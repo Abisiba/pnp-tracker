@@ -93,5 +93,14 @@ class TaskFromTextException(
      * then the quantity is not about a row at all.
      */
     val row: Int? = null,
+    /**
+     * The place the one in [row] clashes with, when a refusal is about a pair.
+     *
+     * A duplicate colour is never about one line on its own: two of them say the
+     * same thing, and a message naming only the second leaves the user looking
+     * for the first. Both travel, so the panel can say which two and send the
+     * keyboard to the one it is asking them to change.
+     */
+    val conflictsWith: Int? = null,
     cause: Throwable? = null,
 ) : Exception("The selected text could not become a task: $failure", cause)

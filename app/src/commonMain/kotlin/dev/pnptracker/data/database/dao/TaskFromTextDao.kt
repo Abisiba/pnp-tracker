@@ -222,7 +222,15 @@ abstract class TaskFromTextDao {
         // make less than the user described — one task fewer, or one colour
         // fewer out of a name they meant to see split across it.
         val named = drafts.flatMap { it.colorIds }
-        if (named.distinct().size != named.size) refuse(TaskFromTextFailure.DUPLICATE_COLOR)
+        // Which two places say the same thing, not merely that two of them do:
+        // the user has a list in front of them and has to be told both ends of
+        // the clash. Checked before anything is read, so a duplicate costs no
+        // query at all and certainly no write.
+        val earlier = named.indexOfFirst { colorId -> named.indexOf(colorId) != named.lastIndexOf(colorId) }
+        if (earlier >= 0) {
+            val later = named.indexOfLast { it == named[earlier] }
+            refuse(TaskFromTextFailure.DUPLICATE_COLOR, row = later, conflictsWith = earlier)
+        }
         // Read once, compared in memory. Every draft is checked before any of
         // them is written: a batch that failed on its third row after writing
         // the first two would leave the user with tasks they did not finish
@@ -400,5 +408,6 @@ abstract class TaskFromTextDao {
     private fun refuse(
         failure: TaskFromTextFailure,
         row: Int? = null,
-    ): Nothing = throw TaskFromTextException(failure, row)
+        conflictsWith: Int? = null,
+    ): Nothing = throw TaskFromTextException(failure, row, conflictsWith)
 }

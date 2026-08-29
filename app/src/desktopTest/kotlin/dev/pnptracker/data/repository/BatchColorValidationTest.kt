@@ -383,5 +383,11 @@ class BatchColorValidationTest {
             statements.none { it.trimStart().startsWith("INSERT", ignoreCase = true) },
             "a refused batch wrote something: $statements",
         )
+        // And it is settled before the catalogue is even asked about: two rows
+        // naming one colour is knowable from the rows themselves.
+        assertTrue(
+            statements.colorReads().isEmpty(),
+            "a duplicate was found only after reading the colours: ${statements.colorReads()}",
+        )
     }
 }

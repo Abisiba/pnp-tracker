@@ -89,5 +89,7 @@ class TaskEditException(
      * entry of that list the user has to deal with.
      */
     val row: Int? = null,
+    /** The colour the one in [row] clashes with, when the refusal is a pair. */
+    val conflictsWith: Int? = null,
     cause: Throwable? = null,
 ) : Exception("The task could not be changed: $failure", cause)

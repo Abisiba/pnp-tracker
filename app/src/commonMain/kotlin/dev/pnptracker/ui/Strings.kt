@@ -714,6 +714,8 @@ object Strings {
         val rowRemove = Res.string.cell_task_row_remove
         val rowRemoveShort = Res.string.cell_task_row_remove_short
         val rowFloor = Res.string.cell_task_row_floor
+
+        /** Takes the earlier task's place in the panel, counting from one. */
         val rowDuplicate = Res.string.cell_task_row_duplicate
 
         /** Takes how many tasks the batch will create. */
@@ -731,6 +733,8 @@ object Strings {
         val errorNameEmpty = Res.string.cell_task_error_name_empty
         val errorColorGone = Res.string.cell_task_error_color_gone
         val errorQuantity = Res.string.cell_task_error_quantity
+
+        /** Takes the two places that name the same colour, counting from one. */
         val errorDuplicateColor = Res.string.cell_task_error_duplicate_color
         val errorNoTask = Res.string.cell_task_error_no_task
         val errorCouldNotSave = Res.string.cell_task_error_could_not_save
@@ -761,6 +765,8 @@ object Strings {
         val errorNameEmpty = Res.string.task_edit_error_name_empty
         val errorNameLineBreak = Res.string.task_edit_error_name_line_break
         val errorColorGone = Res.string.task_edit_error_color_gone
+
+        /** Takes the two colours that are the same, counting from one. */
         val errorDuplicateColor = Res.string.task_edit_error_duplicate_color
         val errorColorCount = Res.string.task_edit_error_color_count
         val errorQuantity = Res.string.task_edit_error_quantity

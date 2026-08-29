@@ -316,7 +316,11 @@ class GameTableController(
                                 selection = selection,
                                 columnType = editor.columnType,
                                 name = name,
-                                rows = listOf(emptyRowFor(poolType)),
+                                single = emptyRowFor(poolType),
+                                // The batch has its rows from the start rather
+                                // than being handed the other mode's when it is
+                                // opened: nothing is carried between the modes.
+                                rows = List(TaskComposer.LEAST_INDEPENDENT_TASKS) { emptyRowFor(poolType) },
                             ),
                     ),
                 blockedByEditor = false,
@@ -339,30 +343,49 @@ class GameTableController(
         state = state.copy(work = making.copy(composer = change(making.composer)))
     }
 
-    /** Changes one row and leaves every other row of the panel alone. */
+    /**
+     * Changes one row of the mode that is open, and nothing else.
+     *
+     * Which draft that row belongs to depends on the mode, and deliberately so:
+     * the single-colour mode has one task of its own and the batch has its own
+     * rows, so typing in one is never typing in the other. The panel says "the
+     * row I am showing at this place"; this is where that is resolved.
+     */
     private fun onRow(
         row: Int,
         change: (TaskDraftRow) -> TaskDraftRow,
     ) = onComposer { composer ->
-        if (row !in composer.rows.indices) {
-            composer
-        } else {
-            composer.copy(
-                rows = composer.rows.mapIndexed { index, existing -> if (index == row) change(existing) else existing },
-                failure = null,
-                failureRow = null,
-            )
+        when {
+            composer.mode == TaskCreationMode.SINGLE_COLOR ->
+                if (row != 0) {
+                    composer
+                } else {
+                    composer.copy(single = change(composer.single), failure = null, failureRow = null, failureConflictsWith = null)
+                }
+
+            row !in composer.rows.indices -> composer
+
+            else ->
+                composer.copy(
+                    rows =
+                        composer.rows.mapIndexed { index, existing ->
+                            if (index == row) change(existing) else existing
+                        },
+                    failure = null,
+                    failureRow = null,
+                    failureConflictsWith = null,
+                )
         }
     }
 
     /**
-     * Switches which way tasks are being made, keeping everything typed.
+     * Switches which way tasks are being made.
      *
-     * Nothing is thrown away and nothing is asked: single-colour mode works on
-     * the first row and leaves the rest standing, so a user who tries it and
-     * comes back finds their other rows exactly as they left them. Going the
-     * other way opens a second row when there is only one, because a batch of one
-     * is the mode they just left.
+     * Nothing is copied, nothing is merged and nothing is asked. Each mode keeps
+     * its own draft, so leaving one leaves it exactly as it stands and arriving
+     * at another finds it exactly as it was left — including having nothing in
+     * it. The only thing ever filled in is what the pool settles, which is not a
+     * choice being made on the user's behalf.
      */
     fun chooseCreationMode(mode: TaskCreationMode) =
         onComposer { composer ->
@@ -370,16 +393,6 @@ class GameTableController(
                 composer
             } else {
                 val poolType = composer.columnType.poolType
-                val rows =
-                    if (mode == TaskCreationMode.INDEPENDENT_TASKS && poolType != null) {
-                        composer.rows +
-                            List(TaskComposer.LEAST_INDEPENDENT_TASKS - composer.rows.size) { emptyRowFor(poolType) }
-                    } else {
-                        composer.rows
-                    }
-                // The several-colour draft keeps what it has and is only ever
-                // given the one thing the pool settles, so arriving there finds
-                // it as it was left with nothing chosen on the user's behalf.
                 val palette =
                     if (mode == TaskCreationMode.SINGLE_ITEM_MULTICOLOR && poolType != null) {
                         composer.palette.copy(
@@ -388,7 +401,7 @@ class GameTableController(
                     } else {
                         composer.palette
                     }
-                composer.copy(mode = mode, rows = rows, palette = palette, failure = null, failureRow = null)
+                composer.copy(mode = mode, palette = palette, failure = null, failureRow = null, failureConflictsWith = null)
             }
         }
 
@@ -396,7 +409,12 @@ class GameTableController(
     fun addTaskRow() =
         onComposer { composer ->
             val poolType = composer.columnType.poolType ?: return@onComposer composer
-            composer.copy(rows = composer.rows + emptyRowFor(poolType), failure = null, failureRow = null)
+            composer.copy(
+                rows = composer.rows + emptyRowFor(poolType),
+                failure = null,
+                failureRow = null,
+                failureConflictsWith = null,
+            )
         }
 
     /**
@@ -414,6 +432,7 @@ class GameTableController(
                     rows = composer.rows.filterIndexed { index, _ -> index != row },
                     failure = null,
                     failureRow = null,
+                    failureConflictsWith = null,
                 )
             }
         }
@@ -445,10 +464,38 @@ class GameTableController(
         trackingMode: TrackingMode,
     ) = onRow(row) { it.copy(trackingMode = trackingMode) }
 
-    private fun onPalette(change: (MulticolorDraft) -> MulticolorDraft) =
-        onComposer { composer ->
-            composer.copy(palette = change(composer.palette), failure = null, failureRow = null)
-        }
+    /**
+     * Changes the several-colour draft.
+     *
+     * [recallFocus] is for the changes that take away the control the user is
+     * standing on: an entry removed takes its own buttons with it, and one moved
+     * to either end leaves the button that moved it disabled. Focus on a control
+     * that is gone is focus nowhere — the keyboard falls out of the panel
+     * altogether — so it is called back to the panel's first field, which is
+     * where colours are chosen.
+     */
+    private fun onPalette(
+        recallFocus: Boolean = false,
+        change: (MulticolorDraft) -> MulticolorDraft,
+    ) {
+        val making = composing() ?: return
+        val composer = making.composer
+        if (composer.isSaving) return
+        state =
+            state.copy(
+                work =
+                    making.copy(
+                        composer =
+                            composer.copy(
+                                palette = change(composer.palette),
+                                failure = null,
+                                failureRow = null,
+                                failureConflictsWith = null,
+                            ),
+                    ),
+                focusRecall = if (recallFocus) state.focusRecall + 1 else state.focusRecall,
+            )
+    }
 
     fun editMulticolorColorQuery(query: String) = onPalette { it.copy(colorQuery = query) }
 
@@ -462,8 +509,14 @@ class GameTableController(
      * the user can be describing, and taking it out is the only reading of the
      * click that means anything.
      */
-    fun toggleMulticolorColor(colorId: EntityId) =
-        onPalette { palette ->
+    fun toggleMulticolorColor(colorId: EntityId) {
+        val removes =
+            composing()
+                ?.composer
+                ?.palette
+                ?.colorIds
+                ?.contains(colorId) == true
+        onPalette(recallFocus = removes) { palette ->
             val colors =
                 if (colorId in palette.colorIds) {
                     palette.colorIds - colorId
@@ -472,12 +525,13 @@ class GameTableController(
                 }
             palette.copy(colorIds = colors)
         }
+    }
 
     /** Moves one colour one place towards the front of the list. */
-    fun moveMulticolorColorUp(slot: Int) = onPalette { it.copy(colorIds = it.colorIds.movedUp(slot)) }
+    fun moveMulticolorColorUp(slot: Int) = onPalette(recallFocus = true) { it.copy(colorIds = it.colorIds.movedUp(slot)) }
 
     /** Moves one colour one place towards the back of the list. */
-    fun moveMulticolorColorDown(slot: Int) = onPalette { it.copy(colorIds = it.colorIds.movedUp(slot + 1)) }
+    fun moveMulticolorColorDown(slot: Int) = onPalette(recallFocus = true) { it.copy(colorIds = it.colorIds.movedUp(slot + 1)) }
 
     /** Takes the quantity as typed; what is not a usable number stays visible. */
     fun editMulticolorQuantity(text: String) = onPalette { it.copy(quantityText = text) }
@@ -537,7 +591,19 @@ class GameTableController(
                 }
             }
 
-        state = state.copy(work = making.copy(composer = composer.copy(isSaving = true, failure = null, failureRow = null)))
+        state =
+            state.copy(
+                work =
+                    making.copy(
+                        composer =
+                            composer.copy(
+                                isSaving = true,
+                                failure = null,
+                                failureRow = null,
+                                failureConflictsWith = null,
+                            ),
+                    ),
+            )
         try {
             taskCreation.createTasks(selection = composer.selection, drafts = drafts)
             // The cell has changed underneath the editor, so it closes rather
@@ -555,6 +621,7 @@ class GameTableController(
                                         isSaving = false,
                                         failure = refusal.failure,
                                         failureRow = refusal.row,
+                                        failureConflictsWith = refusal.conflictsWith,
                                     ),
                             )
                         },
@@ -580,8 +647,8 @@ class GameTableController(
                     if (open.composer.mode == TaskCreationMode.SINGLE_ITEM_MULTICOLOR) {
                         open.composer.palette.colorQuery
                     } else {
-                        open.composer.rows
-                            .getOrNull(row)
+                        open.composer
+                            .rowAt(row)
                             ?.colorQuery
                             .orEmpty()
                     }
@@ -668,10 +735,19 @@ class GameTableController(
             else -> null
         }
 
-    private fun onEditor(change: (TaskEditor) -> TaskEditor) {
+    private fun onEditor(
+        recallFocus: Boolean = false,
+        change: (TaskEditor) -> TaskEditor,
+    ) {
         val editing = state.work as? CellWork.EditingTask ?: return
         if (editing.editor.isSaving) return
-        state = state.copy(work = editing.copy(editor = change(editing.editor)))
+        state =
+            state.copy(
+                work = editing.copy(editor = change(editing.editor)),
+                // See onPalette: a control that has been taken away cannot keep
+                // the keyboard, so it is handed back to the panel itself.
+                focusRecall = if (recallFocus) state.focusRecall + 1 else state.focusRecall,
+            )
     }
 
     fun editTaskName(name: String) = onEditor { it.copy(name = name, failure = null) }
@@ -688,22 +764,36 @@ class GameTableController(
      * already in there — the list is ordered and its entries are unique (PLAN
      * 5.10), so the same colour twice is not something to describe.
      */
-    fun chooseTaskEditColor(colorId: EntityId) =
-        onEditor { editor ->
+    fun chooseTaskEditColor(colorId: EntityId) {
+        val editor = (state.work as? CellWork.EditingTask)?.editor
+        val removes = editor?.holdsSeveralColors == true && colorId in editor.colorIds
+        onEditor(recallFocus = removes) {
             val colors =
                 when {
-                    !editor.holdsSeveralColors -> listOf(colorId)
-                    colorId in editor.colorIds -> editor.colorIds - colorId
-                    else -> editor.colorIds + colorId
+                    !it.holdsSeveralColors -> listOf(colorId)
+                    colorId in it.colorIds -> it.colorIds - colorId
+                    else -> it.colorIds + colorId
                 }
-            editor.copy(colorIds = colors, failure = null, failureRow = null)
+            it.copy(colorIds = colors, failure = null, failureRow = null, failureConflictsWith = null)
         }
+    }
 
     /** Moves one of a several-colour task's colours towards the front. */
-    fun moveTaskEditColorUp(slot: Int) = onEditor { it.copy(colorIds = it.colorIds.movedUp(slot), failure = null, failureRow = null) }
+    fun moveTaskEditColorUp(slot: Int) =
+        onEditor(recallFocus = true) {
+            it.copy(colorIds = it.colorIds.movedUp(slot), failure = null, failureRow = null, failureConflictsWith = null)
+        }
 
     /** Moves one of a several-colour task's colours towards the back. */
-    fun moveTaskEditColorDown(slot: Int) = onEditor { it.copy(colorIds = it.colorIds.movedUp(slot + 1), failure = null, failureRow = null) }
+    fun moveTaskEditColorDown(slot: Int) =
+        onEditor(recallFocus = true) {
+            it.copy(
+                colorIds = it.colorIds.movedUp(slot + 1),
+                failure = null,
+                failureRow = null,
+                failureConflictsWith = null,
+            )
+        }
 
     fun editTaskEditQuantity(text: String) = onEditor { it.copy(quantityText = text, failure = null) }
 
@@ -743,6 +833,7 @@ class GameTableController(
                                         isSaving = false,
                                         failure = refusal.failure,
                                         failureRow = refusal.row,
+                                        failureConflictsWith = refusal.conflictsWith,
                                     ),
                             )
                         },
