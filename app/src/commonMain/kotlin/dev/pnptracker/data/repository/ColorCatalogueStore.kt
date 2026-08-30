@@ -4,17 +4,14 @@ import androidx.sqlite.SQLiteException
 import dev.pnptracker.data.database.dao.ColorDao
 import dev.pnptracker.data.database.entity.ColorEntity
 import dev.pnptracker.domain.colors.BaseColorRestore
-import dev.pnptracker.domain.colors.BaseColorRestoreBlock
 import dev.pnptracker.domain.colors.BaseColorRestoreConflict
 import dev.pnptracker.domain.colors.BaseColorRestorePlan
-import dev.pnptracker.domain.colors.BlockedBaseColor
 import dev.pnptracker.domain.colors.ColorRemoval
 import dev.pnptracker.domain.colors.ColorSetupException
 import dev.pnptracker.domain.colors.ColorSetupFailure
 import dev.pnptracker.domain.colors.ColorSummary
 import dev.pnptracker.domain.colors.ColorUsage
 import dev.pnptracker.domain.colors.ColorUsageSample
-import dev.pnptracker.domain.colors.baseColors
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.rules.isValidColorHex
@@ -175,22 +172,19 @@ class ColorCatalogueStore(
 
     /**
      * A conflict is answered rather than thrown on: PLAN 5.8 wants the user told
-     * which colour could not come back, and a colour that appeared underneath is
-     * one of those answers. The transaction has already put everything back.
+     * which colour could not come back and why, and something that appeared
+     * underneath is one of those answers. The transaction has already put
+     * everything back.
+     *
+     * A write that simply did not land is not one of those answers and is not
+     * turned into one. It comes through as the saving failure it is, so the user
+     * is never sent to rename a colour that has nothing wrong with it.
      */
     override suspend fun restoreMissingBaseColors(): BaseColorRestore =
         try {
             colorDao.restoreMissingBaseColorsTheUserHasConfirmed()
         } catch (conflict: BaseColorRestoreConflict) {
-            BaseColorRestore.Blocked(
-                listOf(
-                    BlockedBaseColor(
-                        canonicalName = conflict.canonicalName,
-                        hex = baseColors.first { it.canonicalName == conflict.canonicalName }.hex,
-                        reason = BaseColorRestoreBlock.APPEARED_MEANWHILE,
-                    ),
-                ),
-            )
+            BaseColorRestore.Blocked(listOf(conflict.blocked))
         } catch (cause: SQLiteException) {
             throw ColorSetupException(ColorSetupFailure.COULD_NOT_SAVE, cause)
         }

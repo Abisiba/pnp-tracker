@@ -288,6 +288,24 @@ class ColorManagementSurfaceTest {
     }
 
     @Test
+    fun `the restore action is named as somewhere the keyboard can be sent back to`() {
+        val surface = screen.substringAfter("private fun WorkSurface(").substringBefore("private fun ComposerCard(")
+
+        // The requester was attached to the button and then never asked for
+        // anything, so the keyboard came back to whatever row had last been
+        // asked about instead — or, after a restore, to the button beside it.
+        assertTrue("focusRequester(restore)" in surface, "the restore action cannot take the keyboard")
+        assertTrue(
+            "controller.focusesTheRestore -> restore.requestFocus()" in surface,
+            "nothing ever hands the keyboard back to the restore action",
+        )
+        assertTrue(
+            "focusTarget == null -> start.requestFocus()" in surface,
+            "the new colour button no longer takes the keyboard when no row is waiting",
+        )
+    }
+
+    @Test
     fun `the two actions sit at the edge of a row rather than after the name`() {
         val row = screen.substringAfter("private fun ColorRow(").substringBefore("private fun Swatch(")
 

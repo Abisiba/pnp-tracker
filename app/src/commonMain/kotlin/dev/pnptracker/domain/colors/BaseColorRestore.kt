@@ -70,16 +70,29 @@ sealed interface BaseColorRestore {
 }
 
 /**
- * Thrown when a base colour turned up between the check and the write.
+ * Thrown when something was already holding what a base colour needed, between
+ * the check and the write.
  *
- * Its own type rather than a storage failure: the row that appeared is a real
- * colour somebody else wrote, so overwriting it would be exactly what PLAN 5.8
- * forbids. The whole restore is undone and the user is told which colour it was.
+ * Its own type rather than a storage failure: what is in the way is a real row
+ * somebody else wrote, so writing over it would be exactly what PLAN 5.8
+ * forbids. The whole restore is undone and the user is told which colour it was
+ * and what was in the way.
+ *
+ * Carrying [reason] is the point of the type. A disk that will not take a write
+ * and a colour that appeared underneath are not the same thing and must not
+ * reach the user as the same sentence, so this is thrown only once the database
+ * has been asked what is actually there. Anything that cannot be explained that
+ * way stays a storage failure and is not dressed up as a race.
  */
 class BaseColorRestoreConflict(
     val canonicalName: String,
+    val hex: String,
+    val reason: BaseColorRestoreBlock,
     cause: Throwable? = null,
-) : Exception("The base colour '$canonicalName' was written by something else.", cause)
+) : Exception("The base colour '$canonicalName' could not be put back: $reason.", cause) {
+    /** The refusal as the preview would have shown it. */
+    val blocked: BlockedBaseColor get() = BlockedBaseColor(canonicalName, hex, reason)
+}
 
 /**
  * What a restore would do, given the catalogue and every alias in it.

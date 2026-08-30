@@ -9,7 +9,6 @@ import dev.pnptracker.data.database.aTask
 import dev.pnptracker.data.database.entity.TaskColorEntity
 import dev.pnptracker.data.database.insertGameCellAndTask
 import dev.pnptracker.domain.colors.BaseColorRestore
-import dev.pnptracker.domain.colors.BaseColorRestoreBlock
 import dev.pnptracker.domain.colors.ColorSetupException
 import dev.pnptracker.domain.colors.ColorSetupFailure
 import dev.pnptracker.domain.colors.baseColors
@@ -23,7 +22,6 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -36,9 +34,9 @@ import kotlin.test.assertTrue
  * back. PLAN 5.9 and 5.8 both say the same thing in different words: a run that
  * stops halfway changes nothing, and there is no such thing as half a restore.
  *
- * The parked slot range gets its own attention here. It exists between two
+ * The lifted slot range gets its own attention here. It exists between two
  * statements of one transaction, and a rollback that left one behind would leave
- * a task with a colour at slot minus a million.
+ * a task holding a colour at a slot below zero.
  */
 class ColorChangeRollbackTest {
     private lateinit var directory: TemporaryDatabaseDirectory
@@ -105,7 +103,7 @@ class ColorChangeRollbackTest {
             val task = aTaskIn(listOf(white.id, red.id))
             val before = snapshot(listOf(task))
 
-            refuse { it.startsWith("UPDATE TASK_COLORS SET SLOT_INDEX = SLOT_INDEX -") }
+            refuse { it.startsWith("UPDATE TASK_COLORS SET SLOT_INDEX =") && "CASE WHEN" !in it }
             assertFailsWith<ColorSetupException> { store.deleteColor(red.id) }
             driver.disarm()
 
@@ -238,31 +236,28 @@ class ColorChangeRollbackTest {
             val before = database.colorDao().allColors()
 
             refuse(occurrence = 2) { it.startsWith("INSERT") && "COLORS" in it }
-            val outcome = store.restoreMissingBaseColors()
+            assertFailsWith<ColorSetupException> { store.restoreMissingBaseColors() }
             driver.disarm()
 
-            val blocked = assertIs<BaseColorRestore.Blocked>(outcome)
-            assertEquals(
-                listOf("Siyah" to BaseColorRestoreBlock.APPEARED_MEANWHILE),
-                blocked.blocked.map { it.canonicalName to it.reason },
-            )
             assertEquals(before, database.colorDao().allColors(), "half a restore was left behind")
             assertNull(database.colorDao().colorById(white.id), "the first colour stayed in")
         }
 
     @Test
-    fun `a colour that turns up underneath is named rather than dressed up as a saving problem`() =
+    fun `a write that will not land is not dressed up as a colour that turned up`() =
         runBlocking<Unit> {
+            // The trap refuses the insert without anything being in the way: the
+            // identity is free, the name is free, nothing is known by it. Calling
+            // that a colour appearing underneath would send the user off to
+            // rename a colour that does not exist.
             database.colorDao().deleteColorTheUserHasConfirmed(white.id)
 
             refuse { it.startsWith("INSERT") && "COLORS" in it }
-            val outcome = store.restoreMissingBaseColors()
+            val failure = assertFailsWith<ColorSetupException> { store.restoreMissingBaseColors() }
             driver.disarm()
 
-            val blocked = assertIs<BaseColorRestore.Blocked>(outcome)
-            assertEquals(BaseColorRestoreBlock.APPEARED_MEANWHILE, blocked.blocked.single().reason)
-            assertEquals("Beyaz", blocked.blocked.single().canonicalName)
-            assertEquals("#FFFFFF", blocked.blocked.single().hex)
+            assertEquals(ColorSetupFailure.COULD_NOT_SAVE, failure.failure)
+            assertNull(database.colorDao().colorById(white.id))
         }
 
     @Test
@@ -271,7 +266,7 @@ class ColorChangeRollbackTest {
             database.colorDao().deleteColorTheUserHasConfirmed(white.id)
 
             refuse { it.startsWith("INSERT") && "COLORS" in it }
-            store.restoreMissingBaseColors()
+            assertFailsWith<ColorSetupException> { store.restoreMissingBaseColors() }
             driver.disarm()
 
             assertEquals(BaseColorRestore.Restored(listOf("Beyaz")), store.restoreMissingBaseColors())

@@ -747,6 +747,69 @@ class ColorCatalogueControllerTest {
             assertEquals(purple, controller.focusTarget)
         }
 
+    @Test
+    fun `the keyboard goes back to the restore action rather than to a row`() =
+        withCatalogue(seeded()) { controller ->
+            catalogueOf(controller).plan = BaseColorRestorePlan(missing = listOf(baseColors[0]), blocked = emptyList())
+
+            controller.startRestoring()
+
+            assertTrue(controller.focusesTheRestore, "nothing would hand the restore action the keyboard back")
+            assertNull(controller.focusTarget, "a row was named as well, and a row is not what was open")
+        }
+
+    @Test
+    fun `a row the user gave up on does not keep the keyboard for the next surface`() =
+        withCatalogue(seeded()) { controller ->
+            // Ask about deleting a colour, change your mind, then open the
+            // restore. The row that was asked about has nothing to do with what
+            // is open now and must not be where the keyboard lands.
+            catalogueOf(controller).plan = BaseColorRestorePlan(missing = listOf(baseColors[0]), blocked = emptyList())
+            controller.startDeleting(controller.idOf("Gri"))
+            controller.cancel()
+
+            controller.startRestoring()
+
+            assertNull(controller.focusTarget, "the abandoned row still had the keyboard")
+            assertTrue(controller.focusesTheRestore)
+        }
+
+    @Test
+    fun `a row the user gave up on does not keep the keyboard for the new colour form`() =
+        withCatalogue(seeded()) { controller ->
+            controller.startDeleting(controller.idOf("Gri"))
+            controller.cancel()
+
+            controller.startComposer()
+
+            assertNull(controller.focusTarget, "the abandoned row still had the keyboard")
+            assertFalse(controller.focusesTheRestore)
+        }
+
+    @Test
+    fun `a restore that finds nothing missing still hands the keyboard back`() =
+        withCatalogue(seeded()) { controller ->
+            catalogueOf(controller).plan = BaseColorRestorePlan(missing = emptyList(), blocked = emptyList())
+
+            controller.startRestoring()
+
+            assertTrue(controller.focusesTheRestore, "the keyboard was left on nothing after a no-op")
+        }
+
+    @Test
+    fun `opening a row's own surface takes the keyboard off the restore action`() =
+        withCatalogue(seeded()) { controller ->
+            catalogueOf(controller).plan = BaseColorRestorePlan(missing = listOf(baseColors[0]), blocked = emptyList())
+            controller.startRestoring()
+            controller.cancel()
+            val grey = controller.idOf("Gri")
+
+            controller.startEditing(grey)
+
+            assertEquals(grey, controller.focusTarget)
+            assertFalse(controller.focusesTheRestore, "two places were both waiting for the keyboard")
+        }
+
     // ---------------------------------------------------------------- restoring
 
     @Test

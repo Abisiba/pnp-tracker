@@ -38,9 +38,31 @@ class ColorCatalogueController(
     var focusRecall: Int by mutableStateOf(0)
         private set
 
-    /** The colour a successful edit or deletion should hand the keyboard back to. */
+    /** The colour a closing surface should hand the keyboard back to, if it is a row. */
     var focusTarget: EntityId? by mutableStateOf(null)
         private set
+
+    /**
+     * True when the closing surface belongs to the restore action rather than to
+     * a row.
+     *
+     * The two are set together and never both, because they are one decision:
+     * where the keyboard goes when what is open closes. Left to drift apart, a
+     * row named by a surface the user gave up on would still be holding the
+     * keyboard when the next surface closed, and the restore action — which no
+     * row can stand in for — would never get it back at all.
+     */
+    var focusesTheRestore: Boolean by mutableStateOf(false)
+        private set
+
+    /** Says where the keyboard goes next, and unsays wherever it was going before. */
+    private fun handTheKeyboardBackTo(
+        colorId: EntityId?,
+        restore: Boolean = false,
+    ) {
+        focusTarget = colorId
+        focusesTheRestore = restore
+    }
 
     /** Collects the catalogue until cancelled. */
     suspend fun observeColors() {
@@ -71,6 +93,7 @@ class ColorCatalogueController(
      */
     fun startComposer() {
         val start = baseColorsIn(colors()).firstOrNull()?.hex
+        handTheKeyboardBackTo(colorId = null)
         open(ColorWork.Creating(ColorComposer.startingFrom(start)))
     }
 
@@ -84,7 +107,7 @@ class ColorCatalogueController(
      */
     fun startEditing(colorId: EntityId) {
         val color = colors().firstOrNull { it.id == colorId } ?: return
-        focusTarget = colorId
+        handTheKeyboardBackTo(colorId)
         open(ColorWork.Editing(colorId = colorId, composer = ColorComposer.editingOf(color)))
     }
 
@@ -220,7 +243,7 @@ class ColorCatalogueController(
         // user never put.
         if (isSaving || state.work != null) return
         val color = colors().firstOrNull { it.id == colorId } ?: return
-        focusTarget = colorId
+        handTheKeyboardBackTo(colorId)
         val usage = catalogue.usageOf(colorId)
         // Read while nothing was open, so an answer that arrives after the user
         // moved on is dropped rather than opening a surface they did not ask for.
@@ -234,7 +257,7 @@ class ColorCatalogueController(
         state = state.copy(work = armed)
         try {
             val removal = catalogue.deleteColor(armed.color.id)
-            focusTarget = colorAfter(armed.color.id)
+            handTheKeyboardBackTo(colorAfter(armed.color.id))
             state = state.copy(work = null, notice = ColorNotice.Removed(armed.color.canonicalName, removal))
         } catch (failure: ColorSetupException) {
             state = state.copy(work = armed.copy(isSaving = false, failure = failure.failure))
@@ -262,6 +285,7 @@ class ColorCatalogueController(
      */
     suspend fun startRestoring() {
         if (isSaving || state.work != null) return
+        handTheKeyboardBackTo(colorId = null, restore = true)
         val plan = catalogue.previewBaseColorRestore()
         if (state.work != null) return
         if (plan.isNothingMissing) {

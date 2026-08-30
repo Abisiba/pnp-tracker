@@ -234,7 +234,17 @@ private fun WorkSurface(
     val start = remember { FocusRequester() }
     val restore = remember { FocusRequester() }
     LaunchedEffect(controller.focusRecall, state.work == null) {
-        if (state.work == null && controller.focusTarget == null) runCatching { start.requestFocus() }
+        if (state.work != null) return@LaunchedEffect
+        // A row asks for the keyboard itself, so there is nothing to do here for
+        // one. The restore action cannot be stood in for by a row and has to be
+        // named, or it never gets the keyboard back at all.
+        runCatching {
+            when {
+                controller.focusesTheRestore -> restore.requestFocus()
+                controller.focusTarget == null -> start.requestFocus()
+                else -> Unit
+            }
+        }
     }
 
     when (val work = state.work) {

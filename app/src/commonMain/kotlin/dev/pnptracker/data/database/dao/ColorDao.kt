@@ -11,7 +11,9 @@ import dev.pnptracker.data.database.entity.ColorEntity
 import dev.pnptracker.data.database.entity.TaskColorEntity
 import dev.pnptracker.data.database.projection.ColorUsageCounts
 import dev.pnptracker.data.database.projection.ColorUsageSampleRow
+import dev.pnptracker.domain.colors.BaseColor
 import dev.pnptracker.domain.colors.BaseColorRestore
+import dev.pnptracker.domain.colors.BaseColorRestoreBlock
 import dev.pnptracker.domain.colors.BaseColorRestoreConflict
 import dev.pnptracker.domain.colors.BaseColorRestorePlan
 import dev.pnptracker.domain.colors.ColorRemoval
@@ -22,15 +24,6 @@ import dev.pnptracker.domain.colors.planBaseColorRestore
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.rules.normalizeColorTerm
 import kotlinx.coroutines.flow.Flow
-
-/**
- * How far below zero a colour slot is parked while a gap is being closed.
- *
- * Far enough that a parked slot can never be mistaken for a real one, and the
- * subtraction keeps the order of the slots it moves. The range only exists
- * between two statements of one transaction; nothing outside ever sees it.
- */
-private const val SLOT_PARK_OFFSET = 1_000_000
 
 /**
  * Reads and writes the color catalogue.
@@ -242,57 +235,70 @@ interface ColorDao {
     ): List<ColorUsageSampleRow>
 
     /**
-     * Moves every colour slot of every task using [colorId] far below zero,
-     * keeping their order.
+     * Moves every colour slot of every task using [colorId] out of the way,
+     * below zero.
      *
      * One statement for all of them. Renumbering in place would collide with the
      * unique index the moment a colour landed on a place another one still held,
-     * so the whole set is lifted out of the way first. Subtracting keeps the
-     * order the same way negating would not, which is what lets the gaps be
-     * closed by counting afterwards.
+     * so the whole set is lifted out of the way first.
+     *
+     * The move is `-1 - slot`, which is its own inverse: `0` goes to `-1`, `1`
+     * to `-2`, and `Int.MAX_VALUE` to `Int.MIN_VALUE`. That matters more than it
+     * looks. Subtracting a fixed number instead would only work while every slot
+     * stayed below that number — a slot of exactly a million, parked by
+     * subtracting a million, comes out at zero, is not below zero any more, and
+     * is never brought back. A slot is an `Int` and [TaskColorEntity] asks only
+     * that it not be negative, so no number is large enough to subtract and no
+     * ceiling may be invented for a list the user builds. This move has no
+     * ceiling: it carries the whole non-negative range onto the whole negative
+     * range, one to one, and nothing it computes leaves what an `Int` holds.
+     *
+     * It reverses the order, which the statement that undoes it accounts for.
      */
     @Query(
         """
-        UPDATE task_colors SET slot_index = slot_index - :offset
+        UPDATE task_colors SET slot_index = -1 - slot_index
         WHERE task_id IN (SELECT task_id FROM task_colors WHERE color_id = :colorId)
         """,
     )
-    suspend fun parkSlotsOfTasksUsing(
-        colorId: EntityId,
-        offset: Int,
-    ): Int
+    suspend fun parkSlotsOfTasksUsing(colorId: EntityId): Int
 
     /**
-     * Brings every parked slot back to a dense `0..N-1`, in one statement.
+     * Brings every parked slot back, closing the one gap, in one statement.
      *
-     * A row keeps its own place and steps down by one if the colour on its way
-     * out was in front of it. Nothing here counts the other rows, so nothing
-     * depends on how many of them have already been moved — which is the whole
-     * point: SQLite gives no promise about the order an `UPDATE` visits rows in,
-     * and a rank worked out by counting live rows comes out differently
-     * depending on where it starts. A task has at most one row per colour, so
-     * "how many went before me" is one question with a yes or a no.
+     * `-1 - slot` undoes the park, and then a row steps down by one if the
+     * colour on its way out was in front of it. Nothing here counts the other
+     * rows, so nothing depends on how many of them have already been moved —
+     * which is the whole point: SQLite gives no promise about the order an
+     * `UPDATE` visits rows in, and a rank worked out by counting live rows comes
+     * out differently depending on where it starts. A task has at most one row
+     * per colour, so "did it go before me" is one question with a yes or a no.
      *
-     * The row of the colour being removed is left parked and is deleted next, so
-     * the place it vacates is never briefly held by two rows at once.
+     * The comparison is `<` rather than `>` because the park turns the order
+     * upside down: a row parked further below zero was further up the list.
+     *
+     * No two rows can meet on the way. Everything still parked is below zero and
+     * everything already brought back is not, and the two rows that would land
+     * on the same place are the one leaving and the one after it — and the one
+     * leaving is not brought back at all. It is left parked and deleted next, so
+     * the place it vacates is never briefly held twice.
      *
      * Only this transaction can have parked anything: Room writes through one
-     * connection, so no other writer can be halfway through a park of its own.
+     * connection, so no other writer can be halfway through a park of its own,
+     * and [TaskColorEntity] refuses a negative slot, so nothing else is below
+     * zero to be caught up in this.
      */
     @Query(
         """
-        UPDATE task_colors SET slot_index = slot_index + :offset -
-          (CASE WHEN slot_index >
+        UPDATE task_colors SET slot_index = -1 - slot_index -
+          (CASE WHEN slot_index <
                   (SELECT leaving.slot_index FROM task_colors leaving
                     WHERE leaving.task_id = task_colors.task_id AND leaving.color_id = :colorId)
                 THEN 1 ELSE 0 END)
         WHERE slot_index < 0 AND color_id <> :colorId
         """,
     )
-    suspend fun closeParkedSlotGaps(
-        colorId: EntityId,
-        offset: Int,
-    ): Int
+    suspend fun closeParkedSlotGaps(colorId: EntityId): Int
 
     /**
      * Removes a colour the user has agreed to lose, along with everything that
@@ -326,8 +332,8 @@ interface ColorDao {
     suspend fun deleteColorTheUserHasConfirmed(colorId: EntityId): ColorRemoval {
         colorById(colorId) ?: throw ColorSetupException(ColorSetupFailure.COLOR_NO_LONGER_EXISTS)
         val counts = usageCountsOf(colorId)
-        parkSlotsOfTasksUsing(colorId = colorId, offset = SLOT_PARK_OFFSET)
-        closeParkedSlotGaps(colorId = colorId, offset = SLOT_PARK_OFFSET)
+        parkSlotsOfTasksUsing(colorId)
+        closeParkedSlotGaps(colorId)
         val removedRelations = removeEveryUseOfColor(colorId)
         val removedAliases = removeAliasesOfColor(colorId)
         val removed = deleteColorRow(colorId)
@@ -460,13 +466,55 @@ interface ColorDao {
                     ),
                 )
             } catch (cause: SQLiteException) {
-                // Not a saving problem: a real colour is sitting on that identity
-                // now, and PLAN 5.8 will not write over one. The whole restore
-                // goes back rather than leaving some of the twelve in.
-                throw BaseColorRestoreConflict(base.canonicalName, cause)
+                // Why it would not go in is a question for the database, not for
+                // the exception. Either answer undoes the whole restore rather
+                // than leaving some of the twelve in.
+                throw whyARestoreWouldNotTake(base, cause)
             }
         }
         return BaseColorRestore.Restored(plan.missing.map { it.canonicalName })
+    }
+
+    /**
+     * What was in the way of putting [base] back, asked of the database rather
+     * than guessed from the failure.
+     *
+     * A refused insert says only that it was refused. Three different things can
+     * refuse it and the user has to do a different thing about each: a colour
+     * appeared on that identity, a colour took that name, or a colour is known
+     * by that name. None of them can be told from the others by reading the
+     * message, and reading the message is how a classification quietly rots the
+     * first time a version of SQLite words one differently — so this asks three
+     * questions instead, in the order of what would have to be true.
+     *
+     * A fourth thing can also refuse it: the write simply did not land. A disk
+     * that is full, a driver that gave out, a constraint nothing here knows
+     * about. None of those is a race, and answering them with one would tell the
+     * user to go and rename a colour that is perfectly fine. So when the
+     * database says nothing is in the way, the original failure is handed back
+     * untouched and becomes an ordinary saving failure.
+     *
+     * The questions themselves may fail — a connection that just refused a write
+     * may refuse a read too. That is also not a race, and is answered the same
+     * way.
+     */
+    suspend fun whyARestoreWouldNotTake(
+        base: BaseColor,
+        cause: SQLiteException,
+    ): Throwable {
+        val normalized = normalizeColorTerm(base.canonicalName)
+        val reason =
+            try {
+                when {
+                    colorById(base.id) != null -> BaseColorRestoreBlock.APPEARED_MEANWHILE
+                    colorByNormalizedName(normalized) != null -> BaseColorRestoreBlock.NAME_TAKEN_BY_COLOR
+                    colorByNormalizedAlias(normalized) != null -> BaseColorRestoreBlock.NAME_TAKEN_BY_ALIAS
+                    else -> null
+                }
+            } catch (ignored: SQLiteException) {
+                null
+            }
+        return reason?.let { BaseColorRestoreConflict(base.canonicalName, base.hex, it, cause) } ?: cause
     }
 
     /** The catalogue and every alias in it, read once each and weighed in memory. */
