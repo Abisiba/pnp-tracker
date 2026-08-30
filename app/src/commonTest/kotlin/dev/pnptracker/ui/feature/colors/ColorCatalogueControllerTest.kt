@@ -4,6 +4,8 @@ import dev.pnptracker.data.repository.ColorCatalogue
 import dev.pnptracker.domain.colors.ColorSetupException
 import dev.pnptracker.domain.colors.ColorSetupFailure
 import dev.pnptracker.domain.colors.ColorSummary
+import dev.pnptracker.domain.colors.WheelPoint
+import dev.pnptracker.domain.colors.baseColors
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import kotlinx.coroutines.CompletableDeferred
@@ -87,13 +89,25 @@ class ColorCatalogueControllerTest {
         }
     }
 
-    private suspend fun ColorCatalogueController.fillIn(
-        name: String = "Lacivert",
-        hex: String = "#1A237E",
-    ) {
+    /** The catalogue as a new database has it, so the squares are really there. */
+    private fun seeded(): FakeCatalogue =
+        FakeCatalogue().apply {
+            colors.value = baseColors.map { ColorSummary(it.id, it.canonicalName, it.hex, it.sortOrder) }
+        }
+
+    private fun ColorCatalogueController.fillIn(name: String = "Lacivert") {
         startComposer()
         editName(name)
-        editHex(hex)
+    }
+
+    /** Puts the form on an exact colour, the way clicking one of the squares does. */
+    private fun ColorCatalogueController.takeColorOf(name: String) {
+        val id =
+            assertIs<ColorCatalogueState.Content>(state.catalogue)
+                .colors
+                .first { it.canonicalName == name }
+                .id
+        chooseBaseColor(id)
     }
 
     @Test
@@ -149,7 +163,7 @@ class ColorCatalogueControllerTest {
         catalogue.failWith = ColorSetupFailure.NAME_ALREADY_USED
         withCatalogue(catalogue) { controller ->
             val before = assertIs<ColorCatalogueState.Content>(controller.state.catalogue).colors
-            controller.fillIn(name = "GRİ", hex = "#1A237E")
+            controller.fillIn(name = "GRİ")
             controller.save()
             assertEquals(ColorSetupFailure.NAME_ALREADY_USED, controller.state.failure, "the refusal was never shown")
 
@@ -182,131 +196,84 @@ class ColorCatalogueControllerTest {
     }
 
     @Test
-    fun `a value that is not written as RRGGBB cannot be saved`() {
-        val catalogue = FakeCatalogue()
+    fun `the form opens on the first base colour the catalogue still has`() {
+        val catalogue = seeded()
         withCatalogue(catalogue) { controller ->
-            listOf("1A237E", "#1A237", "#1A237EE", "#GGGGGG").forEach { attempt ->
-                controller.fillIn(hex = attempt)
+            controller.startComposer()
 
-                val composer = assertNotNull(controller.state.composer)
-                assertTrue(!composer.isHexUsable, "'$attempt' was accepted")
-                assertTrue(!composer.canSave)
-                controller.save()
+            val composer = assertNotNull(controller.state.composer)
+            assertEquals("#FFFFFF", composer.hex, "the wheel did not open where the first square is")
+            assertEquals("", composer.name, "a name was offered that the user did not choose")
+        }
+    }
+
+    @Test
+    fun `a form opened on an empty catalogue still has a colour to show`() {
+        withCatalogue(FakeCatalogue()) { controller ->
+            controller.startComposer()
+
+            // Every colour can be removed, the base ones included (PLAN 5.7), so
+            // this is a state the picker has to be able to open in.
+            assertEquals(ColorComposer.FALLBACK_START, assertNotNull(controller.state.composer).hex)
+        }
+    }
+
+    @Test
+    fun `a square takes the whole colour, and the preview says the same`() {
+        val catalogue = seeded()
+        withCatalogue(catalogue) { controller ->
+            controller.fillIn()
+
+            controller.takeColorOf("Mavi")
+
+            assertEquals("#1E88E5", assertNotNull(controller.state.composer).hex)
+        }
+    }
+
+    @Test
+    fun `the brightness control moves the brightness and nothing else`() {
+        val catalogue = seeded()
+        withCatalogue(catalogue) { controller ->
+            controller.fillIn()
+            controller.takeColorOf("Mavi")
+            val before = assertNotNull(controller.state.composer).color
+
+            controller.setBrightness(0.4f)
+
+            val after = assertNotNull(controller.state.composer).color
+            assertEquals(before.hue, after.hue, "the place on the wheel moved")
+            assertEquals(before.saturation, after.saturation, "the saturation moved")
+            assertEquals(0.4f, after.brightness)
+        }
+    }
+
+    @Test
+    fun `turning the wheel asks storage nothing at all`() {
+        val catalogue = seeded()
+        withCatalogue(catalogue) { controller ->
+            controller.fillIn()
+
+            repeat(300) { step ->
+                controller.moveOnWheel(WheelPoint(x = step % 40 - 20f, y = 20f - step % 40), radius = 50f)
+                controller.setBrightness(step / 300f)
             }
 
+            assertEquals(emptyList(), catalogue.hexLookups, "a drag went to the database")
             assertEquals(0, catalogue.created.size)
         }
     }
 
     @Test
-    fun `the preview waits until what is typed is a whole value`() {
-        withCatalogue(FakeCatalogue()) { controller ->
-            controller.startComposer()
-
-            controller.editHex("#1A2")
-            assertNull(assertNotNull(controller.state.composer).previewHex, "a half typed value was drawn")
-
-            controller.editHex("#1A237E")
-            assertEquals("#1A237E", assertNotNull(controller.state.composer).previewHex)
-
-            controller.editHex("  #1A237E  ")
-            assertEquals("#1A237E", assertNotNull(controller.state.composer).previewHex, "spacing stopped the preview")
-        }
-    }
-
-    @Test
-    fun `a value another colour already carries is remarked on`() {
-        val catalogue = FakeCatalogue()
-        catalogue.colors.value = listOf(aColor("Gri", "#808080"))
+    fun `the name is stored with the spaces at its ends left behind`() {
+        val catalogue = seeded()
         withCatalogue(catalogue) { controller ->
-            controller.fillIn(name = "Duman", hex = "#808080")
-
-            val composer = assertNotNull(controller.state.composer)
-            assertTrue(composer.sharesHexWithAnotherColor)
-            assertEquals(listOf("Gri"), composer.colorsSharingHex.map { it.canonicalName })
-        }
-    }
-
-    @Test
-    fun `the remark does not stand in the way of saving`() {
-        val catalogue = FakeCatalogue()
-        catalogue.colors.value = listOf(aColor("Gri", "#808080"))
-        withCatalogue(catalogue) { controller ->
-            controller.fillIn(name = "Duman", hex = "#808080")
-            assertTrue(assertNotNull(controller.state.composer).canSave)
+            controller.fillIn(name = "  Lacivert  ")
 
             controller.save()
 
-            assertEquals(CreatedColor("Duman", "#808080"), catalogue.created.single())
-            assertNull(controller.state.composer, "the form stayed open after a colour was saved")
-            assertNull(controller.state.failure)
+            assertEquals("Lacivert", catalogue.created.single().canonicalName)
         }
     }
-
-    @Test
-    fun `a value nobody carries is remarked on by nobody`() {
-        val catalogue = FakeCatalogue()
-        catalogue.colors.value = listOf(aColor("Gri", "#808080"))
-        withCatalogue(catalogue) { controller ->
-            controller.fillIn(hex = "#1A237E")
-
-            assertTrue(!assertNotNull(controller.state.composer).sharesHexWithAnotherColor)
-        }
-    }
-
-    @Test
-    fun `a half typed value is not taken to the catalogue at all`() {
-        val catalogue = FakeCatalogue()
-        withCatalogue(catalogue) { controller ->
-            controller.startComposer()
-
-            controller.editHex("#1A2")
-
-            assertEquals(emptyList(), catalogue.hexLookups, "storage was asked about something that is not a value")
-        }
-    }
-
-    @Test
-    fun `an earlier remark is dropped the moment the value changes`() {
-        val catalogue = FakeCatalogue()
-        catalogue.colors.value = listOf(aColor("Gri", "#808080"))
-        withCatalogue(catalogue) { controller ->
-            controller.fillIn(name = "Duman", hex = "#808080")
-            assertTrue(assertNotNull(controller.state.composer).sharesHexWithAnotherColor)
-
-            controller.editHex("#80808")
-
-            assertTrue(
-                !assertNotNull(controller.state.composer).sharesHexWithAnotherColor,
-                "a remark was left standing next to a value it was not about",
-            )
-        }
-    }
-
-    @Test
-    fun `an answer that arrives after the user has typed on is discarded`() =
-        runBlocking {
-            val catalogue = FakeCatalogue()
-            catalogue.colors.value = listOf(aColor("Gri", "#808080"))
-            val held = CompletableDeferred<Unit>()
-            catalogue.heldLookup = held
-            val controller = ColorCatalogueController(catalogue)
-            controller.startComposer()
-
-            // Unconfined, so the lookup has really started by the time it suspends.
-            val slow = CoroutineScope(Job() + Dispatchers.Unconfined).launch { controller.editHex("#808080") }
-            catalogue.heldLookup = null
-            controller.editHex("#1A237E")
-            held.complete(Unit)
-            slow.join()
-
-            val composer = assertNotNull(controller.state.composer)
-            assertEquals("#1A237E", composer.hex)
-            assertTrue(
-                !composer.sharesHexWithAnotherColor,
-                "a stale answer was attached to a value the user had already replaced",
-            )
-        }
 
     @Test
     fun `a second click while the first save is still going writes only one colour`() =
@@ -332,7 +299,7 @@ class ColorCatalogueControllerTest {
     fun `a saved colour closes the form and turns up in the list`() {
         val catalogue = FakeCatalogue()
         withCatalogue(catalogue) { controller ->
-            controller.fillIn(name = "Lacivert", hex = "#1A237E")
+            controller.fillIn(name = "Lacivert")
 
             controller.save()
             yield()
@@ -348,7 +315,7 @@ class ColorCatalogueControllerTest {
         val catalogue = FakeCatalogue()
         catalogue.failWith = ColorSetupFailure.NAME_ALREADY_USED
         withCatalogue(catalogue) { controller ->
-            controller.fillIn(name = "Gri", hex = "#1A237E")
+            controller.fillIn(name = "Gri")
 
             controller.save()
 
@@ -363,7 +330,7 @@ class ColorCatalogueControllerTest {
         val catalogue = FakeCatalogue()
         catalogue.failWith = ColorSetupFailure.NAME_IS_ANOTHER_COLORS_ALIAS
         withCatalogue(catalogue) { controller ->
-            controller.fillIn(name = "Gri Ton", hex = "#1A237E")
+            controller.fillIn(name = "Gri Ton")
 
             controller.save()
 

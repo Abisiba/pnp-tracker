@@ -88,6 +88,10 @@ import dev.pnptracker.resources.cell_task_save_text_first
 import dev.pnptracker.resources.cell_task_saving
 import dev.pnptracker.resources.cell_task_saving_many
 import dev.pnptracker.resources.cell_task_select_hint
+import dev.pnptracker.resources.colors_base_label
+import dev.pnptracker.resources.colors_base_none
+import dev.pnptracker.resources.colors_brightness_label
+import dev.pnptracker.resources.colors_brightness_state
 import dev.pnptracker.resources.colors_count
 import dev.pnptracker.resources.colors_create
 import dev.pnptracker.resources.colors_description
@@ -96,17 +100,23 @@ import dev.pnptracker.resources.colors_error_color_gone
 import dev.pnptracker.resources.colors_error_could_not_save
 import dev.pnptracker.resources.colors_error_name_is_alias
 import dev.pnptracker.resources.colors_error_name_used
-import dev.pnptracker.resources.colors_hex_hint
-import dev.pnptracker.resources.colors_hex_invalid
-import dev.pnptracker.resources.colors_hex_label
 import dev.pnptracker.resources.colors_hex_shared
 import dev.pnptracker.resources.colors_loading
 import dev.pnptracker.resources.colors_name_label
 import dev.pnptracker.resources.colors_name_required
-import dev.pnptracker.resources.colors_preview
+import dev.pnptracker.resources.colors_new_action
+import dev.pnptracker.resources.colors_new_title
+import dev.pnptracker.resources.colors_preview_of
+import dev.pnptracker.resources.colors_preview_unnamed
 import dev.pnptracker.resources.colors_save
+import dev.pnptracker.resources.colors_saving
+import dev.pnptracker.resources.colors_stranded
+import dev.pnptracker.resources.colors_stranded_dismiss
 import dev.pnptracker.resources.colors_swatch
 import dev.pnptracker.resources.colors_title
+import dev.pnptracker.resources.colors_wheel_hint
+import dev.pnptracker.resources.colors_wheel_label
+import dev.pnptracker.resources.colors_wheel_state
 import dev.pnptracker.resources.column_notes
 import dev.pnptracker.resources.confirm_action
 import dev.pnptracker.resources.confirm_dialog_accept
@@ -560,16 +570,28 @@ object Strings {
         val count = Res.string.colors_count
 
         val create = Res.string.colors_create
+        val newAction = Res.string.colors_new_action
+        val newTitle = Res.string.colors_new_title
         val nameLabel = Res.string.colors_name_label
         val nameRequired = Res.string.colors_name_required
-        val hexLabel = Res.string.colors_hex_label
-        val hexHint = Res.string.colors_hex_hint
-        val hexInvalid = Res.string.colors_hex_invalid
         val hexShared = Res.string.colors_hex_shared
-        val preview = Res.string.colors_preview
         val swatch = Res.string.colors_swatch
         val save = Res.string.colors_save
+        val saving = Res.string.colors_saving
         val discard = Res.string.colors_discard
+
+        val baseLabel = Res.string.colors_base_label
+        val baseNone = Res.string.colors_base_none
+        val wheelLabel = Res.string.colors_wheel_label
+        val wheelState = Res.string.colors_wheel_state
+        val wheelHint = Res.string.colors_wheel_hint
+        val brightnessLabel = Res.string.colors_brightness_label
+        val brightnessState = Res.string.colors_brightness_state
+        val previewOf = Res.string.colors_preview_of
+        val previewUnnamed = Res.string.colors_preview_unnamed
+
+        val stranded = Res.string.colors_stranded
+        val strandedDismiss = Res.string.colors_stranded_dismiss
 
         val errorCouldNotSave = Res.string.colors_error_could_not_save
         val errorNameUsed = Res.string.colors_error_name_used

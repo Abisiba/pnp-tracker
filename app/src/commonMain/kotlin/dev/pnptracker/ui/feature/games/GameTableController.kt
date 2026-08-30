@@ -9,7 +9,10 @@ import dev.pnptracker.data.repository.GameSetup
 import dev.pnptracker.data.repository.GameTableSource
 import dev.pnptracker.data.repository.TaskCreationFromText
 import dev.pnptracker.data.repository.TaskEditing
+import dev.pnptracker.domain.colors.ColorSetupException
 import dev.pnptracker.domain.colors.ColorSummary
+import dev.pnptracker.domain.colors.WheelNudge
+import dev.pnptracker.domain.colors.WheelPoint
 import dev.pnptracker.domain.games.CellSegmentPreview
 import dev.pnptracker.domain.games.CellTextException
 import dev.pnptracker.domain.games.CellTextFailure
@@ -31,6 +34,8 @@ import dev.pnptracker.domain.tasks.TaskFromTextException
 import dev.pnptracker.domain.tasks.TaskFromTextFailure
 import dev.pnptracker.domain.tasks.onlyTrackingModeOf
 import dev.pnptracker.domain.tasks.splitForTaskName
+import dev.pnptracker.ui.feature.colors.ColorComposer
+import dev.pnptracker.ui.feature.colors.baseColorsIn
 import kotlinx.coroutines.flow.collect
 
 /**
@@ -107,6 +112,9 @@ class GameTableController(
                 is CellWork.TaskMenu -> work.taskId
                 is CellWork.EditingTask -> work.from.taskId
                 is CellWork.ConfirmingConvert -> work.taskId
+                // The picker stands on the panel below it: if that panel has
+                // nothing left to act on, neither has this.
+                is CellWork.MakingColor -> return work.takeIf { stillValid(work.from) != null }
                 else -> return work
             }
         val cell = rowOf(work.gameId)?.cell(work.columnType)
@@ -540,6 +548,224 @@ class GameTableController(
     fun editMulticolorNotes(text: String) = onPalette { it.copy(notes = text) }
 
     fun chooseMulticolorTracking(trackingMode: TrackingMode) = onPalette { it.copy(trackingMode = trackingMode) }
+
+    // ------------------------------------------------------ making a colour
+
+    /**
+     * Opens the colour picker over the panel that asked for it.
+     *
+     * [target] is fixed here and carried, rather than worked out when the colour
+     * comes back. Each mode keeps its own draft and a batch has several rows, so
+     * "where the new colour goes" is a question only the click that opened this
+     * can answer.
+     *
+     * The wheel starts on the colour that place already holds, so a user
+     * adjusting a colour they can see starts from it rather than from somewhere
+     * else. The name always starts empty: PLAN 5.7 makes naming a decision, and
+     * offering the old colour's name would be making it for them.
+     */
+    fun beginColorCreation(target: NewColorTarget) {
+        val over = state.work
+        val busy =
+            when (over) {
+                is CellWork.MakingTask -> over.composer.isSaving
+                is CellWork.EditingTask -> over.editor.isSaving
+                else -> return
+            }
+        if (busy) return
+        state =
+            state.copy(
+                work =
+                    CellWork.MakingColor(
+                        from = over,
+                        target = target,
+                        composer = ColorComposer.startingFrom(startingColorFor(over, target)),
+                    ),
+                blockedByEditor = false,
+                savedColorNotice = null,
+                focusRecall = state.focusRecall + 1,
+            )
+    }
+
+    /** The colour the target already holds, or the first base colour there is. */
+    private fun startingColorFor(
+        over: CellWork,
+        target: NewColorTarget,
+    ): String? {
+        val standing =
+            when {
+                over is CellWork.MakingTask && target is NewColorTarget.SingleDraft -> over.composer.single.colorId
+                over is CellWork.MakingTask && target is NewColorTarget.BatchRow ->
+                    over.composer.rows
+                        .getOrNull(target.row)
+                        ?.colorId
+
+                over is CellWork.MakingTask && target is NewColorTarget.MulticolorList ->
+                    over.composer.palette.colorIds
+                        .lastOrNull()
+
+                over is CellWork.EditingTask -> over.editor.colorIds.lastOrNull()
+                else -> null
+            }
+        return standing?.let { id -> state.colors.firstOrNull { it.id == id }?.hex }
+            ?: baseColorsIn(state.colors).firstOrNull()?.hex
+    }
+
+    private fun making(): CellWork.MakingColor? = state.work as? CellWork.MakingColor
+
+    private fun onNewColor(change: (ColorComposer) -> ColorComposer) {
+        val making = making() ?: return
+        if (making.isSaving) return
+        state = state.copy(work = making.copy(composer = change(making.composer), failure = null))
+    }
+
+    fun editNewColorName(name: String) = onNewColor { it.copy(name = name) }
+
+    /** Takes the whole colour from one of the twelve squares. */
+    fun chooseNewColorBase(colorId: EntityId) {
+        val hex = state.colors.firstOrNull { it.id == colorId }?.hex ?: return
+        onNewColor { it.setTo(hex) }
+    }
+
+    /** Moves the colour to where the pointer is; the brightness does not move. */
+    fun moveNewColorOnWheel(
+        point: WheelPoint,
+        radius: Float,
+    ) = onNewColor { it.movedTo(point, radius) }
+
+    /** The same, one arrow key press at a time. */
+    fun nudgeNewColorWheel(nudge: WheelNudge) = onNewColor { it.nudgedBy(nudge) }
+
+    /** Only the brightness moves; the place on the wheel stays. */
+    fun setNewColorBrightness(brightness: Float) = onNewColor { it.brightenedTo(brightness) }
+
+    /**
+     * Closes the picker and writes nothing.
+     *
+     * The panel underneath comes back exactly as it was: nothing about the task
+     * was being decided here.
+     */
+    fun cancelColorCreation() {
+        val making = making() ?: return
+        if (making.isSaving) return
+        state = state.copy(work = making.from, focusRecall = state.focusRecall + 1)
+    }
+
+    /** Puts away the word that a colour was saved with nowhere to go. */
+    fun acknowledgeSavedColor() {
+        state = state.copy(savedColorNotice = null)
+    }
+
+    /**
+     * Writes the colour, and then puts it where the picker was opened from.
+     *
+     * Two things, deliberately not one. PLAN 5.7 makes a saved colour a global
+     * catalogue record from the moment it is written, so it is written on its
+     * own — no task, no relation and no cell is touched by it — and choosing it
+     * on a draft afterwards is nothing but a change to what is on screen. That
+     * is also why giving up on the task afterwards leaves the colour standing:
+     * it was never part of the task's transaction.
+     *
+     * The guard is set before anything suspends, which is the only place it
+     * works, so two clicks in one frame make one colour.
+     *
+     * What comes back is applied to the panel this was opened from and to no
+     * other. If that panel has gone, or moved on to another mode, the colour
+     * still exists and the user is told so rather than having it dropped onto
+     * whatever is open now.
+     */
+    suspend fun saveNewColor() {
+        val making = making() ?: return
+        if (!making.composer.canSave || making.isSaving) return
+        val armed = making.copy(isSaving = true, failure = null)
+        state = state.copy(work = armed)
+        val created =
+            try {
+                colors.createColor(canonicalName = armed.composer.cleanName, hex = armed.composer.hex)
+            } catch (failure: ColorSetupException) {
+                if (state.work === armed) {
+                    state = state.copy(work = armed.copy(isSaving = false, failure = failure.failure))
+                }
+                return
+            }
+        // Identity rather than equality: the picker that is open has to be the
+        // one this call armed, not another one that happens to look the same.
+        if (state.work !== armed) {
+            state = state.copy(savedColorNotice = SavedColorNotice(armed.composer.cleanName))
+            return
+        }
+        val applied = appliedTo(armed.from, armed.target, created)
+        state =
+            state.copy(
+                work = applied ?: armed.from,
+                savedColorNotice = if (applied == null) SavedColorNotice(armed.composer.cleanName) else null,
+                focusRecall = state.focusRecall + 1,
+            )
+    }
+
+    /**
+     * The panel with the new colour chosen on it, or null when it cannot be.
+     *
+     * The mode is checked as well as the place: a target names a row of one
+     * draft, and each mode has its own, so applying a batch row's colour to a
+     * panel now showing another mode would change a draft the user was not
+     * looking at.
+     */
+    private fun appliedTo(
+        over: CellWork,
+        target: NewColorTarget,
+        colorId: EntityId,
+    ): CellWork? =
+        when {
+            over is CellWork.MakingTask -> {
+                val composer = over.composer
+                val changed =
+                    when {
+                        target is NewColorTarget.SingleDraft && composer.mode == TaskCreationMode.SINGLE_COLOR ->
+                            composer.copy(single = composer.single.copy(colorId = colorId))
+
+                        target is NewColorTarget.BatchRow &&
+                            composer.mode == TaskCreationMode.INDEPENDENT_TASKS &&
+                            target.row in composer.rows.indices ->
+                            composer.copy(
+                                rows =
+                                    composer.rows.mapIndexed { index, row ->
+                                        if (index == target.row) row.copy(colorId = colorId) else row
+                                    },
+                            )
+
+                        target is NewColorTarget.MulticolorList &&
+                            composer.mode == TaskCreationMode.SINGLE_ITEM_MULTICOLOR ->
+                            // At the end, which is where the next colour goes and
+                            // the order the name will be drawn in (PLAN 12.7).
+                            composer.copy(
+                                palette =
+                                    composer.palette.copy(
+                                        colorIds = composer.palette.colorIds + colorId,
+                                    ),
+                            )
+
+                        else -> null
+                    }
+                changed?.let {
+                    over.copy(
+                        composer = it.copy(failure = null, failureRow = null, failureConflictsWith = null),
+                    )
+                }
+            }
+
+            over is CellWork.EditingTask && target is NewColorTarget.EditedTask -> {
+                val editor = over.editor
+                // Which of the two it is was settled by the task, not here: PLAN
+                // does not let a task cross between one colour and several.
+                val colorIds = if (editor.holdsSeveralColors) editor.colorIds + colorId else listOf(colorId)
+                over.copy(
+                    editor = editor.copy(colorIds = colorIds, failure = null, failureRow = null, failureConflictsWith = null),
+                )
+            }
+
+            else -> null
+        }
 
     /**
      * Closes the panel and nothing else.

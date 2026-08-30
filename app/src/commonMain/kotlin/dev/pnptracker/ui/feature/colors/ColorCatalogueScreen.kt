@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -23,10 +24,19 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -73,18 +83,23 @@ fun ColorCatalogueScreen(
 
             is ColorCatalogueState.Content ->
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize().widthIn(max = MAX_CONTENT_WIDTH),
+                    // Height first and width capped, in that order: filling the
+                    // size before the cap fixes the width at the window's, and
+                    // the cap can then never bring it back down — which is how
+                    // a form meant to be 720 dp wide came to span a whole
+                    // monitor, with a name field and a brightness slider
+                    // stretched across all of it.
+                    modifier = Modifier.fillMaxHeight().widthIn(max = MAX_CONTENT_WIDTH),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     item(key = "composer") {
                         ComposerOrButton(
                             composer = state.composer,
+                            catalogue = catalogue.colors,
                             isSaving = controller.isSaving,
-                            onStart = { controller.startComposer() },
-                            onEditName = { name -> controller.editName(name) },
-                            onEditHex = { hex -> scope.launch { controller.editHex(hex) } },
+                            focusRecall = controller.focusRecall,
+                            controller = controller,
                             onSave = { scope.launch { controller.save() } },
-                            onDiscard = { controller.cancelComposer() },
                         )
                     }
                     item(key = "count") {
@@ -142,65 +157,86 @@ private fun Swatch(
 @Composable
 private fun ComposerOrButton(
     composer: ColorComposer?,
+    catalogue: List<ColorSummary>,
     isSaving: Boolean,
-    onStart: () -> Unit,
-    onEditName: (String) -> Unit,
-    onEditHex: (String) -> Unit,
+    focusRecall: Int,
+    controller: ColorCatalogueController,
     onSave: () -> Unit,
-    onDiscard: () -> Unit,
 ) {
+    val start = remember { FocusRequester() }
+    val name = remember { FocusRequester() }
+    LaunchedEffect(focusRecall, composer == null) {
+        if (composer == null) start.requestFocus() else name.requestFocus()
+    }
     if (composer == null) {
-        Button(onClick = onStart, enabled = !isSaving) {
+        Button(
+            onClick = { controller.startComposer() },
+            enabled = !isSaving,
+            modifier = Modifier.focusRequester(start),
+        ) {
             Text(stringResource(Strings.Colors.create))
         }
         return
     }
 
-    Card(modifier = Modifier.fillMaxWidth().widthIn(max = MAX_CONTENT_WIDTH)) {
+    Card(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .widthIn(max = MAX_CONTENT_WIDTH)
+                // Caught for the whole form rather than for one field in it: the
+                // user may be on the wheel, the slider or the name when they
+                // finish. The wheel takes the arrow keys before this sees them,
+                // so moving it never leaks out into the list behind.
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when {
+                        event.key == Key.Escape -> {
+                            controller.cancelComposer()
+                            true
+                        }
+
+                        event.isCtrlPressed && (event.key == Key.Enter || event.key == Key.NumPadEnter) -> {
+                            if (composer.canSave && !isSaving) onSave()
+                            true
+                        }
+
+                        else -> false
+                    }
+                },
+    ) {
         Column(
             modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             OutlinedTextField(
                 value = composer.name,
-                onValueChange = onEditName,
+                onValueChange = { controller.editName(it) },
+                enabled = !isSaving,
                 label = { Text(stringResource(Strings.Colors.nameLabel)) },
                 isError = !composer.isNameUsable,
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().focusRequester(name),
             )
             if (!composer.isNameUsable) NoteLine(stringResource(Strings.Colors.nameRequired), isError = true)
 
-            OutlinedTextField(
-                value = composer.hex,
-                onValueChange = onEditHex,
-                label = { Text(stringResource(Strings.Colors.hexLabel)) },
-                isError = composer.hex.isNotBlank() && !composer.isHexUsable,
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+            ColorPicker(
+                composer = composer,
+                catalogue = catalogue,
+                enabled = !isSaving,
+                onChooseBase = { controller.chooseBaseColor(it) },
+                onMoveWheel = { point, radius -> controller.moveOnWheel(point, radius) },
+                onNudgeWheel = { controller.nudgeWheel(it) },
+                onBrightness = { controller.setBrightness(it) },
             )
-            if (composer.hex.isNotBlank() && !composer.isHexUsable) {
-                NoteLine(stringResource(Strings.Colors.hexInvalid), isError = true)
-            } else {
-                NoteLine(stringResource(Strings.Colors.hexHint), isError = false)
-            }
 
-            composer.previewHex?.let { hex ->
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Swatch(hex = hex, name = composer.name.ifBlank { hex })
-                    Text(
-                        text = "${stringResource(Strings.Colors.preview)} · $hex",
-                        style = MaterialTheme.typography.labelMedium,
-                    )
-                }
-            }
-
-            if (composer.sharesHexWithAnotherColor) {
+            val sharing = composer.sharedWith(catalogue)
+            if (sharing.isNotEmpty()) {
+                // A remark and not a refusal: PLAN 5.7 allows the same value
+                // under two names. It is read out like any other line here, so
+                // it reaches somebody who cannot see that the squares match.
                 NoteLine(
-                    stringResource(
-                        Strings.Colors.hexShared,
-                        composer.colorsSharingHex.joinToString(", ") { it.canonicalName },
-                    ),
+                    stringResource(Strings.Colors.hexShared, sharing.joinToString(", ") { it.canonicalName }),
                     isError = false,
                 )
             }
@@ -209,10 +245,11 @@ private fun ComposerOrButton(
                 Button(onClick = onSave, enabled = composer.canSave && !isSaving) {
                     Text(stringResource(Strings.Colors.save))
                 }
-                OutlinedButton(onClick = onDiscard, enabled = !isSaving) {
+                OutlinedButton(onClick = { controller.cancelComposer() }, enabled = !isSaving) {
                     Text(stringResource(Strings.Colors.discard))
                 }
             }
+            if (isSaving) NoteLine(stringResource(Strings.Colors.saving), isError = false)
         }
     }
 }

@@ -98,6 +98,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import dev.pnptracker.domain.colors.ColorSetupFailure
 import dev.pnptracker.domain.colors.ColorSummary
 import dev.pnptracker.domain.games.CellPreview
 import dev.pnptracker.domain.games.CellSegmentPreview
@@ -116,6 +117,7 @@ import dev.pnptracker.domain.tasks.trackingModesOf
 import dev.pnptracker.domain.text.graphemeBoundariesOf
 import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.columnNameOf
+import dev.pnptracker.ui.feature.colors.ColorPicker
 import dev.pnptracker.ui.feature.importworkspace.labelOf
 import dev.pnptracker.ui.theme.PnpStatus
 import dev.pnptracker.ui.theme.opaqueColorOf
@@ -256,6 +258,29 @@ private fun TableControls(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
             )
+        }
+
+        state.savedColorNotice?.let { notice ->
+            // Both halves of what happened: the colour is really in the
+            // catalogue, and it is not on the draft it was made for. Saying only
+            // one of them would leave the user looking for a colour that is
+            // there, or expecting one that is not.
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(Strings.Colors.stranded, notice.colorName),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(onClick = controller::acknowledgeSavedColor) {
+                    Text(
+                        text = stringResource(Strings.Colors.strandedDismiss),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
         }
 
         val composer = state.gameComposer
@@ -494,8 +519,10 @@ private fun TableRow(
                 CellEditorSlot(
                     cell = cell,
                     editor = writing,
-                    composer = (state.work as? CellWork.MakingTask)?.composer,
+                    composer = state.composingIn(row.gameId, columnType)?.composer,
+                    creator = state.creatingColorIn(row.gameId, columnType),
                     colors = controller.colorsOffered(),
+                    catalogue = state.colors,
                     focusRecall = state.focusRecall,
                     controller = controller,
                 )
@@ -1000,7 +1027,9 @@ private fun CellEditorSlot(
     cell: CellPreview,
     editor: CellWork.WritingText,
     composer: TaskComposer?,
+    creator: CellWork.MakingColor?,
     colors: List<ColorSummary>,
+    catalogue: List<ColorSummary>,
     focusRecall: Int,
     controller: GameTableController,
 ) {
@@ -1020,12 +1049,13 @@ private fun CellEditorSlot(
     }
     // The keyboard comes back here whenever a panel closes or an action was
     // refused, so Escape reaches this cell rather than whatever was clicked.
-    LaunchedEffect(editor.gameId, editor.columnType, focusRecall, composer == null) {
-        if (composer == null) focus.requestFocus()
+    LaunchedEffect(editor.gameId, editor.columnType, focusRecall, composer == null, creator == null) {
+        if (composer == null && creator == null) focus.requestFocus()
     }
     val columnName = stringResource(columnNameOf(cell.columnType))
     val save = { if (!editor.isSaving) scope.launch { controller.saveEditing() } }
     val saveTask = { if (composer?.canSave == true) scope.launch { controller.saveTask() } }
+    val saveColor = { if (creator?.composer?.canSave == true && !creator.isSaving) scope.launch { controller.saveNewColor() } }
     val drawn = drawnDocumentOf(cell, withCounts = false)
     val painted = remember(drawn.text) { TaskPainting(drawn.text) }
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
@@ -1061,7 +1091,7 @@ private fun CellEditorSlot(
             // Held still while a task panel is open: the panel carries offsets
             // into the text as it stands, and a keystroke would move the words
             // out from under the selection the user made.
-            readOnly = composer != null,
+            readOnly = composer != null || creator != null,
             // A note has lines, so Enter makes one. Nothing here parses what is
             // typed or pasted: the text is stored as the user left it.
             singleLine = false,
@@ -1087,14 +1117,23 @@ private fun CellEditorSlot(
                         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                         when {
                             event.key == Key.Escape -> {
-                                // With a panel open, giving up means giving up on
-                                // the task; the cell and its words stay.
-                                if (composer != null) controller.cancelTaskComposer() else controller.cancelEditing()
+                                // One layer at a time: the picker, then the task
+                                // panel, then the cell. Giving up on a colour is
+                                // not giving up on the task it was for.
+                                when {
+                                    creator != null -> controller.cancelColorCreation()
+                                    composer != null -> controller.cancelTaskComposer()
+                                    else -> controller.cancelEditing()
+                                }
                                 true
                             }
 
                             event.isCtrlPressed && (event.key == Key.Enter || event.key == Key.NumPadEnter) -> {
-                                if (composer != null) saveTask() else save()
+                                when {
+                                    creator != null -> saveColor()
+                                    composer != null -> saveTask()
+                                    else -> save()
+                                }
                                 true
                             }
 
@@ -1103,16 +1142,26 @@ private fun CellEditorSlot(
                     },
         )
 
-        if (composer == null) {
-            CellEditorActions(editor = editor, field = field, controller = controller, onSave = { save() })
-        } else {
-            TaskComposerPanel(
-                composer = composer,
-                catalogue = colors,
-                focusRecall = focusRecall,
-                controller = controller,
-                onSave = { saveTask() },
-            )
+        when {
+            creator != null ->
+                NewColorPanel(
+                    creator = creator,
+                    catalogue = catalogue,
+                    focusRecall = focusRecall,
+                    controller = controller,
+                    onSave = { saveColor() },
+                )
+
+            composer != null ->
+                TaskComposerPanel(
+                    composer = composer,
+                    catalogue = colors,
+                    focusRecall = focusRecall,
+                    controller = controller,
+                    onSave = { saveTask() },
+                )
+
+            else -> CellEditorActions(editor = editor, field = field, controller = controller, onSave = { save() })
         }
     }
 }
@@ -1230,7 +1279,18 @@ private fun TaskPopover(
     val provider = remember(gap) { AnchoredAboveWord(gap) }
     val focus = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(state.work, state.focusRecall) { focus.requestFocus() }
+    // Which surface is showing, and not what is typed in it. Keyed on the whole
+    // of the open work, this fired on every keystroke and pulled the keyboard
+    // back to the popover itself: a name typed in here kept only its first
+    // letter, in the colour picker and in the task's own name alike.
+    val openLayer =
+        when (state.work) {
+            is CellWork.MakingColor -> "color"
+            is CellWork.EditingTask -> "edit"
+            is CellWork.ConfirmingConvert -> "convert"
+            else -> "menu"
+        }
+    LaunchedEffect(openLayer, menu.taskId, state.focusRecall) { focus.requestFocus() }
     // Caught for the whole popover rather than for one field in it: the user may
     // be anywhere inside when they finish, and handling it deeper left Ctrl+Enter
     // dead in exactly the field they end up in.
@@ -1238,6 +1298,9 @@ private fun TaskPopover(
         when (val work = state.work) {
             is CellWork.EditingTask -> if (work.editor.canSave) scope.launch { controller.saveTaskEdit() } else Unit
             is CellWork.ConfirmingConvert -> if (!work.isSaving) scope.launch { controller.confirmConvertToText() } else Unit
+            is CellWork.MakingColor ->
+                if (work.composer.canSave && !work.isSaving) scope.launch { controller.saveNewColor() } else Unit
+
             else -> Unit
         }
     }
@@ -1282,6 +1345,15 @@ private fun TaskPopover(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 when (val work = state.work) {
+                    is CellWork.MakingColor ->
+                        NewColorPanel(
+                            creator = work,
+                            catalogue = state.colors,
+                            focusRecall = state.focusRecall,
+                            controller = controller,
+                            onSave = { confirm() },
+                        )
+
                     is CellWork.EditingTask ->
                         TaskEditPanel(
                             editor = work.editor,
@@ -1389,6 +1461,11 @@ private fun TaskEditPanel(
             enabled = !editor.isSaving,
             emptyQuery = editor.colorQuery.isBlank(),
             onChoose = controller::chooseTaskEditColor,
+        )
+        NewColorButton(
+            target = NewColorTarget.EditedTask,
+            enabled = !editor.isSaving,
+            controller = controller,
         )
         if (editor.holdsSeveralColors) {
             // The whole ordered list, editable: PLAN 5.10 numbers these from the
@@ -1698,6 +1775,7 @@ private fun TaskComposerPanel(
                 draft = composer.single,
                 composer = composer,
                 colors = controller.colorsOffered(0),
+                target = NewColorTarget.SingleDraft,
                 isRepeatedColor = false,
                 focus = panelFocus.takeIf { landing == 0 },
                 controller = controller,
@@ -1773,6 +1851,142 @@ private fun TaskComposerPanel(
             text = note,
             isProblem = composer.failure != null || composer.repeatedColorRows.isNotEmpty(),
         )
+    }
+}
+
+/**
+ * Making a colour that does not exist yet, over the panel that asked for it.
+ *
+ * The innermost surface: Escape closes this and leaves the task panel standing,
+ * and the draft underneath is not touched by anything done here. PLAN 5.7 makes
+ * a colour a catalogue record in its own right, so saving one writes a colour
+ * and nothing else — the task is still unsaved, and stays that way until the
+ * user saves it.
+ */
+@Composable
+private fun NewColorPanel(
+    creator: CellWork.MakingColor,
+    catalogue: List<ColorSummary>,
+    focusRecall: Int,
+    controller: GameTableController,
+    onSave: () -> Unit,
+) {
+    val name = remember { FocusRequester() }
+    LaunchedEffect(focusRecall) { name.requestFocus() }
+    val sharing = creator.composer.sharedWith(catalogue)
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+        // Caught here rather than left to the surface underneath. The keyboard is
+        // inside this panel, and the cell's own handler is a sibling of it rather
+        // than an ancestor, so an Escape typed in here never reached it: the
+        // picker simply would not close from the keyboard at all.
+        modifier =
+            Modifier.onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when {
+                    event.key == Key.Escape -> {
+                        controller.cancelColorCreation()
+                        true
+                    }
+
+                    event.isCtrlPressed && (event.key == Key.Enter || event.key == Key.NumPadEnter) -> {
+                        onSave()
+                        true
+                    }
+
+                    else -> false
+                }
+            },
+    ) {
+        Text(text = stringResource(Strings.Colors.newTitle), style = MaterialTheme.typography.labelLarge)
+        OutlinedTextField(
+            value = creator.composer.name,
+            onValueChange = controller::editNewColorName,
+            enabled = !creator.isSaving,
+            singleLine = true,
+            isError = !creator.composer.isNameUsable,
+            textStyle = MaterialTheme.typography.bodySmall,
+            label = { Text(stringResource(Strings.Colors.nameLabel)) },
+            modifier = Modifier.fillMaxWidth().focusRequester(name),
+        )
+        if (!creator.composer.isNameUsable) {
+            // PLAN 5.7: without a name there is no colour to save at all, so
+            // this is said from the start rather than only after a refusal.
+            NoteLine(text = stringResource(Strings.Colors.nameRequired), isProblem = true)
+        }
+
+        ColorPicker(
+            composer = creator.composer,
+            catalogue = catalogue,
+            enabled = !creator.isSaving,
+            onChooseBase = controller::chooseNewColorBase,
+            onMoveWheel = { point, radius -> controller.moveNewColorOnWheel(point, radius) },
+            onNudgeWheel = controller::nudgeNewColorWheel,
+            onBrightness = controller::setNewColorBrightness,
+        )
+
+        if (sharing.isNotEmpty()) {
+            // A remark, never a refusal: PLAN 5.7 allows the same value under
+            // two names. Written out so it reaches a reader who cannot see that
+            // the two squares match.
+            NoteLine(
+                text = stringResource(Strings.Colors.hexShared, sharing.joinToString(", ") { it.canonicalName }),
+                isProblem = false,
+            )
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            val saveLabel = stringResource(Strings.Colors.save)
+            val discardLabel = stringResource(Strings.Colors.discard)
+            Button(
+                onClick = onSave,
+                enabled = creator.composer.canSave && !creator.isSaving,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = saveLabel },
+            ) {
+                Text(text = saveLabel, style = MaterialTheme.typography.labelMedium)
+            }
+            TextButton(
+                onClick = controller::cancelColorCreation,
+                enabled = !creator.isSaving,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = discardLabel },
+            ) {
+                Text(text = discardLabel, style = MaterialTheme.typography.labelMedium)
+            }
+        }
+        if (creator.isSaving) {
+            NoteLine(text = stringResource(Strings.Colors.saving), isProblem = false)
+        }
+        creator.failure?.let { failure ->
+            NoteLine(text = stringResource(messageOf(failure)), isProblem = true)
+        }
+    }
+}
+
+/**
+ * The offer to make a colour that is not in the catalogue yet.
+ *
+ * One button under each place a colour is chosen, and it says which place it
+ * belongs to by carrying [target] rather than by being worked out afterwards:
+ * the panel has several of these open at once, and a colour that landed on
+ * whichever one was last touched would land on the wrong row.
+ */
+@Composable
+private fun NewColorButton(
+    target: NewColorTarget,
+    enabled: Boolean,
+    controller: GameTableController,
+) {
+    val label = stringResource(Strings.Colors.newAction)
+    TextButton(
+        onClick = { controller.beginColorCreation(target) },
+        enabled = enabled,
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+        modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = label },
+    ) {
+        Text(text = label, style = MaterialTheme.typography.labelMedium)
     }
 }
 
@@ -1869,6 +2083,9 @@ private fun BatchTaskRow(
         draft = draft,
         composer = composer,
         colors = colors,
+        // This row and no other: a colour made from here belongs to the task
+        // being described here, and the batch has several of these open at once.
+        target = NewColorTarget.BatchRow(row),
         isRepeatedColor = row in composer.repeatedColorRows,
         focus = focus,
         controller = controller,
@@ -1887,6 +2104,7 @@ private fun TaskRowFields(
     draft: TaskDraftRow,
     composer: TaskComposer,
     colors: List<ColorSummary>,
+    target: NewColorTarget,
     isRepeatedColor: Boolean,
     focus: FocusRequester?,
     controller: GameTableController,
@@ -1912,6 +2130,7 @@ private fun TaskRowFields(
         emptyQuery = draft.colorQuery.isBlank(),
         onChoose = { controller.chooseTaskColor(row, it) },
     )
+    NewColorButton(target = target, enabled = !composer.isSaving, controller = controller)
     composer.repeatedColorRows[row]?.let { earlier ->
         // Said on the row that repeats rather than only at the foot of the
         // panel, and naming the row it repeats: with several rows open, neither
@@ -2039,6 +2258,11 @@ private fun MulticolorFields(
         // Choosing one already in the list takes it back out, so the same colour
         // can never be in it twice — PLAN 5.10 numbers a task's colours uniquely.
         onChoose = controller::toggleMulticolorColor,
+    )
+    NewColorButton(
+        target = NewColorTarget.MulticolorList,
+        enabled = !composer.isSaving,
+        controller = controller,
     )
 
     ChosenColorList(
@@ -2368,6 +2592,14 @@ private fun messageOf(failure: CellTextFailure) =
     }
 
 /** What to tell the user about a task that did not change. */
+private fun messageOf(failure: ColorSetupFailure) =
+    when (failure) {
+        ColorSetupFailure.COULD_NOT_SAVE -> Strings.Colors.errorCouldNotSave
+        ColorSetupFailure.NAME_ALREADY_USED -> Strings.Colors.errorNameUsed
+        ColorSetupFailure.NAME_IS_ANOTHER_COLORS_ALIAS -> Strings.Colors.errorNameIsAlias
+        ColorSetupFailure.COLOR_NO_LONGER_EXISTS -> Strings.Colors.errorColorGone
+    }
+
 private fun messageOf(failure: TaskEditFailure) =
     when (failure) {
         TaskEditFailure.TASK_NOT_AVAILABLE -> Strings.TaskEdit.errorTaskGone

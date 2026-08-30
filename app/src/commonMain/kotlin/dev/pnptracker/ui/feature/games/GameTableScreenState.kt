@@ -1,5 +1,6 @@
 package dev.pnptracker.ui.feature.games
 
+import dev.pnptracker.domain.colors.ColorSetupFailure
 import dev.pnptracker.domain.colors.ColorSummary
 import dev.pnptracker.domain.games.CellTextFailure
 import dev.pnptracker.domain.games.DocumentRun
@@ -13,6 +14,7 @@ import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.tasks.CellTextSelection
 import dev.pnptracker.domain.tasks.TaskEditFailure
 import dev.pnptracker.domain.tasks.TaskFromTextFailure
+import dev.pnptracker.ui.feature.colors.ColorComposer
 
 /** Where the table is. */
 sealed interface GameTableRowsState {
@@ -170,7 +172,86 @@ sealed interface CellWork {
         val taskId: EntityId get() = from.taskId
         val name: String get() = from.name
     }
+
+    /**
+     * Making a colour that does not exist yet, over the panel that wanted it.
+     *
+     * The innermost surface there is. It carries the panel it was opened from,
+     * so saving a colour or giving up on one returns to a draft that has not
+     * moved: PLAN 5.7 makes a colour a catalogue record in its own right, and
+     * nothing about a task is decided here.
+     *
+     * [target] is where the colour goes once it exists, fixed when this opened.
+     * Named rather than worked out afterwards, because by then the panel may
+     * have moved on — and a colour applied to whatever happens to be open is a
+     * colour applied to the wrong row.
+     */
+    data class MakingColor(
+        val from: CellWork,
+        val target: NewColorTarget,
+        val composer: ColorComposer,
+        val isSaving: Boolean = false,
+        val failure: ColorSetupFailure? = null,
+    ) : CellWork {
+        init {
+            require(from is MakingTask || from is EditingTask) {
+                "A colour is made over a task panel, not over ${from::class.simpleName}"
+            }
+        }
+
+        override val gameId: EntityId get() = from.gameId
+        override val columnType: CellColumnType get() = from.columnType
+        override val parent: CellWork get() = from
+        override val hasUnsavedChanges: Boolean get() = composer.isTouched
+    }
 }
+
+/**
+ * Where a colour made from a task surface is to be applied once it exists.
+ *
+ * Fixed when the picker opens, and named rather than inferred. Each of the
+ * panel's modes keeps its own draft, so "the colour the user just made" has no
+ * meaning on its own: it belongs to one row of one draft, and saying which is
+ * the only way it cannot land in another.
+ *
+ * There is nothing here for the global colour section. A colour made there goes
+ * into the catalogue and nowhere else, because there is no draft in front of the
+ * user to put it in.
+ */
+sealed interface NewColorTarget {
+    /** The one task of the single-colour mode. */
+    data object SingleDraft : NewColorTarget
+
+    /** One exact task of the batch mode, by the place it is shown at. */
+    data class BatchRow(
+        val row: Int,
+    ) : NewColorTarget
+
+    /** The end of the several-colour list being composed. */
+    data object MulticolorList : NewColorTarget
+
+    /**
+     * The task being edited: its one colour, or the end of its list.
+     *
+     * One case rather than two, because which it is is not the picker's to
+     * decide: PLAN does not let a task cross between being made in one colour
+     * and being made in several, so the task itself already settles it.
+     */
+    data object EditedTask : NewColorTarget
+}
+
+/**
+ * A colour that reached the catalogue but had nowhere left to be put.
+ *
+ * Only happens when the draft it was meant for went away while the colour was
+ * being written. The colour is real and stays — PLAN 5.7 has no unsaved
+ * colours — so the honest thing is to say both halves: it was saved, and it was
+ * not applied. Guessing another home for it would put it on a task the user
+ * never pointed at.
+ */
+data class SavedColorNotice(
+    val colorName: String,
+)
 
 /**
  * Which of the panel's ways of creating tasks the user is working in.
@@ -525,6 +606,8 @@ data class GameTableScreenState(
      * keyboard back where the work is.
      */
     val focusRecall: Int = 0,
+    /** A colour that was saved while the draft it was for went away. */
+    val savedColorNotice: SavedColorNotice? = null,
 ) {
     /** The text editor open in this cell, whatever is layered over it. */
     fun writingIn(
@@ -534,8 +617,28 @@ data class GameTableScreenState(
         when (val open = work) {
             is CellWork.WritingText -> open.takeIf { it.isOn(gameId, columnType) }
             is CellWork.MakingTask -> open.from.takeIf { it.isOn(gameId, columnType) }
+            // The picker is layered over the panel, and the panel over the cell:
+            // the cell it is all standing on is still open and still drawn.
+            is CellWork.MakingColor -> (open.from as? CellWork.MakingTask)?.from?.takeIf { it.isOn(gameId, columnType) }
             else -> null
         }
+
+    /** The task panel open in this cell, whatever is layered over it. */
+    fun composingIn(
+        gameId: EntityId,
+        columnType: CellColumnType,
+    ): CellWork.MakingTask? =
+        when (val open = work) {
+            is CellWork.MakingTask -> open.takeIf { it.isOn(gameId, columnType) }
+            is CellWork.MakingColor -> (open.from as? CellWork.MakingTask)?.takeIf { it.isOn(gameId, columnType) }
+            else -> null
+        }
+
+    /** The colour picker open in this cell, if there is one. */
+    fun creatingColorIn(
+        gameId: EntityId,
+        columnType: CellColumnType,
+    ): CellWork.MakingColor? = (work as? CellWork.MakingColor)?.takeIf { it.isOn(gameId, columnType) }
 
     /** The task whose menu or panel is open in this cell, if any. */
     fun menuIn(
@@ -546,6 +649,7 @@ data class GameTableScreenState(
             is CellWork.TaskMenu -> open.takeIf { it.isOn(gameId, columnType) }
             is CellWork.EditingTask -> open.from.takeIf { it.isOn(gameId, columnType) }
             is CellWork.ConfirmingConvert -> open.from.takeIf { it.isOn(gameId, columnType) }
+            is CellWork.MakingColor -> (open.from as? CellWork.EditingTask)?.from?.takeIf { it.isOn(gameId, columnType) }
             else -> null
         }
 }

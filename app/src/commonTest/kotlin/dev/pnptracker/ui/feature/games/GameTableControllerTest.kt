@@ -6,7 +6,12 @@ import dev.pnptracker.data.repository.GameSetup
 import dev.pnptracker.data.repository.GameTableSource
 import dev.pnptracker.data.repository.TaskCreationFromText
 import dev.pnptracker.data.repository.TaskEditing
+import dev.pnptracker.domain.colors.ColorSetupException
+import dev.pnptracker.domain.colors.ColorSetupFailure
 import dev.pnptracker.domain.colors.ColorSummary
+import dev.pnptracker.domain.colors.WheelNudge
+import dev.pnptracker.domain.colors.WheelPoint
+import dev.pnptracker.domain.colors.baseColors
 import dev.pnptracker.domain.games.CellPreview
 import dev.pnptracker.domain.games.CellSegmentPreview
 import dev.pnptracker.domain.games.CellSummary
@@ -28,7 +33,9 @@ import dev.pnptracker.domain.tasks.TaskEditException
 import dev.pnptracker.domain.tasks.TaskEditFailure
 import dev.pnptracker.domain.tasks.TaskFromTextException
 import dev.pnptracker.domain.tasks.TaskFromTextFailure
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
@@ -200,20 +207,42 @@ class GameTableControllerTest {
 
     private fun GameTableController.taskEditorState(): TaskEditor? = (state.work as? CellWork.EditingTask)?.editor
 
-    /** Hands out whatever catalogue a test gives it. */
+    /** What the catalogue was asked to create. */
+    private data class CreatedColor(
+        val canonicalName: String,
+        val hex: String,
+    )
+
+    /** Hands out whatever catalogue a test gives it, and records what was written. */
     private class FakeColors(
         colors: List<ColorSummary> = emptyList(),
     ) : ColorCatalogue {
         val colors = MutableStateFlow(colors)
+        val created = mutableListOf<CreatedColor>()
+        val hexLookups = mutableListOf<String>()
+        var failWith: ColorSetupFailure? = null
+
+        /** Held open so a test can act while a colour is still on its way. */
+        var heldSave: CompletableDeferred<Unit>? = null
 
         override fun observeColors(): Flow<List<ColorSummary>> = colors
 
-        override suspend fun colorsUsingHex(hex: String): List<ColorSummary> = emptyList()
+        override suspend fun colorsUsingHex(hex: String): List<ColorSummary> {
+            hexLookups += hex
+            return emptyList()
+        }
 
         override suspend fun createColor(
             canonicalName: String,
             hex: String,
-        ): EntityId = IdGenerator.Random.newId()
+        ): EntityId {
+            heldSave?.await()
+            failWith?.let { throw ColorSetupException(it) }
+            created += CreatedColor(canonicalName, hex)
+            val id = IdGenerator.Random.newId()
+            colors.value = colors.value + ColorSummary(id, canonicalName, hex, colors.value.size)
+            return id
+        }
     }
 
     /** Records the tasks that were asked for, and can be told to refuse. */
@@ -2713,5 +2742,636 @@ class GameTableControllerTest {
             assertEquals(listOf("Basılacak: Knight, token"), cells.expectations)
             assertEquals("Kesilecek: Knight, token", cells.saved.single().third)
             collecting.cancelAndJoin()
+        }
+
+    // ------------------------------------------------- making a colour
+
+    /** The twelve base colours, so the picker has its squares to work from. */
+    private fun seededColors(): FakeColors = FakeColors(baseColors.map { ColorSummary(it.id, it.canonicalName, it.hex, it.sortOrder) })
+
+    private fun GameTableController.creatorState(): CellWork.MakingColor? = state.work as? CellWork.MakingColor
+
+    /** Opens the picker over whatever is open, and gives it a name to save. */
+    private fun GameTableController.nameANewColor(
+        target: NewColorTarget,
+        name: String = "Lacivert",
+    ) {
+        beginColorCreation(target)
+        editNewColorName(name)
+    }
+
+    @Test
+    fun `a colour made from the single-colour mode is chosen on that mode's own draft`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = seededColors()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+
+            controller.nameANewColor(NewColorTarget.SingleDraft)
+            controller.saveNewColor()
+
+            val composer = assertNotNull(controller.composerState())
+            val made = colors.colors.value.last()
+            assertEquals("Lacivert", made.canonicalName)
+            assertEquals(made.id, composer.single.colorId, "the new colour did not reach the draft it was made for")
+            assertTrue(composer.rows.all { it.colorId == null }, "the batch was given a colour it never asked for")
+            assertEquals(emptyList(), composer.palette.colorIds, "the several-colour list was given a colour")
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `a colour made from one task of a batch reaches that task and no other`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Token"))
+            val colors = seededColors()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) =
+                readyComposer(controller, row, colors, word = "Token", mode = TaskCreationMode.INDEPENDENT_TASKS)
+            controller.addTaskRow()
+
+            controller.nameANewColor(NewColorTarget.BatchRow(2))
+            controller.saveNewColor()
+
+            val composer = assertNotNull(controller.composerState())
+            val made =
+                colors.colors.value
+                    .last()
+                    .id
+            assertEquals(made, composer.rows[2].colorId)
+            assertNull(composer.rows[1].colorId, "a task nobody was making a colour for was given one")
+            assertEquals(made != composer.rows[0].colorId, true, "the first task was given the new colour")
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `a colour made for a several-colour task goes on the end of its list`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Yarasa"))
+            val colors = seededColors()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) =
+                readyComposer(controller, row, colors, word = "Yarasa", mode = TaskCreationMode.SINGLE_ITEM_MULTICOLOR)
+            val first = colors.colors.value[0].id
+            val second = colors.colors.value[1].id
+            controller.toggleMulticolorColor(first)
+            controller.toggleMulticolorColor(second)
+
+            controller.nameANewColor(NewColorTarget.MulticolorList)
+            controller.saveNewColor()
+
+            val made =
+                colors.colors.value
+                    .last()
+                    .id
+            // The end, because that is the order the name will be drawn in.
+            assertEquals(listOf(first, second, made), assertNotNull(controller.composerState()).palette.colorIds)
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `a colour made while editing a one-colour task becomes its colour`() =
+        runBlocking<Unit> {
+            val piece = taskPiece("Knight", quantity = 4)
+            val row = row("Harmonies", cells = mapOf(CellColumnType.THREE_D to listOf(piece)))
+            val colors = seededColors()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val collecting = collect(controller)
+            val catalogue = launch { controller.observeColorCatalogue() }
+            settle()
+            controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, assertNotNull(piece.taskId))
+            controller.beginTaskEdit()
+
+            controller.nameANewColor(NewColorTarget.EditedTask)
+            controller.saveNewColor()
+
+            val made =
+                colors.colors.value
+                    .last()
+                    .id
+            // One colour, not a list of one and not a list of two: PLAN does not
+            // let a task cross between the two kinds.
+            assertEquals(listOf(made), assertNotNull(controller.taskEditorState()).colorIds)
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `a colour made while editing a several-colour task goes on the end of its list`() =
+        runBlocking<Unit> {
+            val colors = seededColors()
+            val first = colors.colors.value[0]
+            val second = colors.colors.value[1]
+            val piece =
+                CellSegmentPreview(
+                    segmentId = IdGenerator.Random.newId(),
+                    taskId = IdGenerator.Random.newId(),
+                    text = "Yarasa",
+                    requiredQuantity = 7,
+                    colors =
+                        listOf(
+                            TaskColorPreview(colorId = first.id, hex = first.hex, canonicalName = first.canonicalName),
+                            TaskColorPreview(colorId = second.id, hex = second.hex, canonicalName = second.canonicalName),
+                        ),
+                )
+            val row = row("Harmonies", cells = mapOf(CellColumnType.THREE_D to listOf(piece)))
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val collecting = collect(controller)
+            val catalogue = launch { controller.observeColorCatalogue() }
+            settle()
+            controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, assertNotNull(piece.taskId))
+            controller.beginTaskEdit()
+
+            controller.nameANewColor(NewColorTarget.EditedTask)
+            controller.saveNewColor()
+
+            val made =
+                colors.colors.value
+                    .last()
+                    .id
+            assertEquals(listOf(first.id, second.id, made), assertNotNull(controller.taskEditorState()).colorIds)
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `making a colour leaves the other two modes' drafts exactly as they were`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Token"))
+            val colors = seededColors()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors, word = "Token")
+            controller.chooseCreationMode(TaskCreationMode.INDEPENDENT_TASKS)
+            controller.editTaskQuantity(0, "9")
+            controller.editTaskNotes(0, "toplu not")
+            controller.chooseCreationMode(TaskCreationMode.SINGLE_ITEM_MULTICOLOR)
+            controller.editMulticolorQuantity("4")
+            controller.chooseCreationMode(TaskCreationMode.SINGLE_COLOR)
+            val before = assertNotNull(controller.composerState())
+
+            controller.nameANewColor(NewColorTarget.SingleDraft)
+            controller.saveNewColor()
+
+            val after = assertNotNull(controller.composerState())
+            assertEquals(before.rows, after.rows, "the batch was changed by a colour made in another mode")
+            assertEquals(before.palette, after.palette, "the several-colour draft was changed from another mode")
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    /** Opens the picker over the edit panel of a task, with its save held open. */
+    private suspend fun CoroutineScope.pickerOverAnEditedTask(
+        colors: FakeColors,
+        held: CompletableDeferred<Unit>,
+    ): Triple<GameTableController, FakeTable, Pair<Job, Job>> {
+        val piece = taskPiece("Knight", quantity = 4)
+        val row = row("Harmonies", cells = mapOf(CellColumnType.THREE_D to listOf(piece)))
+        colors.heldSave = held
+        val table = FakeTable(listOf(row))
+        val controller = controllerOf(table, colors = colors)
+        val collecting = collect(controller)
+        val catalogue = launch { controller.observeColorCatalogue() }
+        settle()
+        controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, assertNotNull(piece.taskId))
+        controller.beginTaskEdit()
+        controller.nameANewColor(NewColorTarget.EditedTask)
+        return Triple(controller, table, collecting to catalogue)
+    }
+
+    @Test
+    fun `a colour whose draft has gone while it was being written is kept, and said to be kept`() =
+        runBlocking<Unit> {
+            val colors = seededColors()
+            val held = CompletableDeferred<Unit>()
+            val (controller, table, jobs) = pickerOverAnEditedTask(colors, held)
+
+            val saving = CoroutineScope(Job() + Dispatchers.Unconfined).launch { controller.saveNewColor() }
+            // The game goes while the colour is still on its way, so the panel
+            // the colour was made for is not there to receive it.
+            table.rows.value = emptyList()
+            settle()
+            held.complete(Unit)
+            saving.join()
+
+            assertEquals(1, colors.created.size, "the colour was not written")
+            assertTrue(colors.colors.value.any { it.canonicalName == "Lacivert" }, "the colour did not reach the catalogue")
+            assertNull(controller.state.work, "a panel bound to something that is gone was left standing")
+            assertEquals(
+                "Lacivert",
+                assertNotNull(controller.state.savedColorNotice, "the user was not told what happened").colorName,
+            )
+            jobs.first.cancelAndJoin()
+            jobs.second.cancelAndJoin()
+        }
+
+    @Test
+    fun `the notice about a colour with nowhere to go can be put away`() =
+        runBlocking<Unit> {
+            val colors = seededColors()
+            val held = CompletableDeferred<Unit>()
+            val (controller, table, jobs) = pickerOverAnEditedTask(colors, held)
+            val saving = CoroutineScope(Job() + Dispatchers.Unconfined).launch { controller.saveNewColor() }
+            table.rows.value = emptyList()
+            settle()
+            held.complete(Unit)
+            saving.join()
+            assertNotNull(controller.state.savedColorNotice)
+
+            controller.acknowledgeSavedColor()
+
+            assertNull(controller.state.savedColorNotice)
+            jobs.first.cancelAndJoin()
+            jobs.second.cancelAndJoin()
+        }
+
+    @Test
+    fun `a picker whose panel has gone does not put the colour on whatever opens next`() =
+        runBlocking<Unit> {
+            val colors = seededColors()
+            val held = CompletableDeferred<Unit>()
+            val (controller, table, jobs) = pickerOverAnEditedTask(colors, held)
+            val saving = CoroutineScope(Job() + Dispatchers.Unconfined).launch { controller.saveNewColor() }
+            table.rows.value = emptyList()
+            settle()
+
+            // Something else is opened before the answer comes back.
+            val other = row("Wingspan", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            table.rows.value = listOf(other)
+            settle()
+            controller.beginEditing(other.gameId, CellColumnType.THREE_D)
+            controller.beginTaskComposer(0, "Knight".length)
+            held.complete(Unit)
+            saving.join()
+
+            val composer = assertNotNull(controller.composerState())
+            assertNull(composer.single.colorId, "a late answer landed on a panel it was never made for")
+            assertTrue(composer.rows.all { it.colorId == null })
+            assertNotNull(controller.state.savedColorNotice)
+            jobs.first.cancelAndJoin()
+            jobs.second.cancelAndJoin()
+        }
+
+    @Test
+    fun `giving up on the picker writes nothing and leaves the draft alone`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = seededColors()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+            val before = assertNotNull(controller.composerState())
+
+            controller.nameANewColor(NewColorTarget.SingleDraft)
+            controller.setNewColorBrightness(0.2f)
+            controller.cancelColorCreation()
+
+            assertEquals(0, colors.created.size, "giving up on the picker wrote a colour")
+            assertEquals(before, assertNotNull(controller.composerState()), "giving up on a colour changed the task")
+            assertNull(controller.creatorState(), "the picker stayed open")
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `a colour is kept when the task it was made for is given up on`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = seededColors()
+            val creation = FakeTaskCreation()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+            controller.nameANewColor(NewColorTarget.SingleDraft)
+            controller.saveNewColor()
+
+            controller.cancelTaskComposer()
+
+            // PLAN 5.7: a saved colour is a catalogue record from the moment it
+            // is written, so it does not go away with a task nobody made.
+            assertEquals(1, colors.created.size)
+            assertTrue(colors.colors.value.any { it.canonicalName == "Lacivert" }, "the colour left with the task")
+            assertEquals(0, creation.calls, "giving up on the task wrote one")
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `a task that will not save leaves the colour it was given standing`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = seededColors()
+            val creation = FakeTaskCreation(failure = TaskFromTextFailure.COULD_NOT_SAVE)
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+            controller.nameANewColor(NewColorTarget.SingleDraft)
+            controller.saveNewColor()
+            val made =
+                colors.colors.value
+                    .last()
+                    .id
+
+            controller.saveTask()
+
+            assertTrue(colors.colors.value.any { it.id == made }, "a refused task took a saved colour with it")
+            val composer = assertNotNull(controller.composerState())
+            assertEquals(made, composer.single.colorId, "the refusal lost the colour the user had chosen")
+            assertEquals(TaskFromTextFailure.COULD_NOT_SAVE, composer.failure)
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `a refused colour leaves the name, the wheel and the brightness where they were`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = seededColors()
+            colors.failWith = ColorSetupFailure.NAME_ALREADY_USED
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+            controller.nameANewColor(NewColorTarget.SingleDraft, name = "Gri")
+            controller.setNewColorBrightness(0.42f)
+            controller.nudgeNewColorWheel(WheelNudge.HUE_FORWARD)
+            val before = assertNotNull(controller.creatorState()).composer
+
+            controller.saveNewColor()
+
+            val creator = assertNotNull(controller.creatorState(), "the picker closed on a colour that was never saved")
+            assertEquals(before, creator.composer, "the refusal took the answers the user had already given")
+            assertEquals(ColorSetupFailure.NAME_ALREADY_USED, creator.failure)
+            assertTrue(!creator.isSaving, "the saving flag was left stuck on")
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `a second click while the first colour is still on its way writes one colour`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = seededColors()
+            val held = CompletableDeferred<Unit>()
+            colors.heldSave = held
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+            controller.nameANewColor(NewColorTarget.SingleDraft)
+
+            val first = CoroutineScope(Job() + Dispatchers.Unconfined).launch { controller.saveNewColor() }
+            assertTrue(assertNotNull(controller.creatorState()).isSaving, "the first save is not in flight")
+
+            // The button and Ctrl+Enter both reach the same call, so this is both.
+            controller.saveNewColor()
+            controller.saveNewColor()
+            held.complete(Unit)
+            first.join()
+
+            assertEquals(1, colors.created.size, "one insistent click became two colours")
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `nothing can be typed into a picker that is already saving`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = seededColors()
+            val held = CompletableDeferred<Unit>()
+            colors.heldSave = held
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+            controller.nameANewColor(NewColorTarget.SingleDraft)
+            val saving = CoroutineScope(Job() + Dispatchers.Unconfined).launch { controller.saveNewColor() }
+            val inFlight = assertNotNull(controller.creatorState()).composer
+
+            controller.editNewColorName("Bordo")
+            controller.setNewColorBrightness(0.1f)
+            controller.cancelColorCreation()
+
+            assertEquals(inFlight, assertNotNull(controller.creatorState()).composer, "a colour changed under its own save")
+            held.complete(Unit)
+            saving.join()
+            assertEquals("Lacivert", colors.created.single().canonicalName)
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `turning the wheel in a task panel asks the database nothing`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = seededColors()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+            controller.nameANewColor(NewColorTarget.SingleDraft)
+
+            repeat(400) { step ->
+                controller.moveNewColorOnWheel(WheelPoint(x = (step % 60) - 30f, y = 30f - (step % 60)), radius = 55f)
+                controller.setNewColorBrightness(step / 400f)
+            }
+
+            assertEquals(emptyList(), colors.hexLookups, "a drag went to the database")
+            assertEquals(0, colors.created.size)
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `Escape closes the picker first and leaves the task panel standing`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = seededColors()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+            controller.nameANewColor(NewColorTarget.SingleDraft)
+
+            controller.closeInnermost()
+            assertNull(controller.creatorState(), "the picker did not close")
+            assertNotNull(controller.composerState(), "the panel underneath went down with the picker")
+
+            controller.closeInnermost()
+            assertNull(controller.composerState(), "the panel did not close")
+            assertNotNull(controller.editorState(), "the cell went down with the panel")
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `a picker with something in it counts as work that closing would throw away`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = seededColors()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+
+            controller.beginColorCreation(NewColorTarget.SingleDraft)
+            // A form nobody has touched holds nothing, so a click away may close
+            // it; one with a name or a moved wheel in it may not.
+            assertTrue(!assertNotNull(controller.state.work).hasUnsavedChanges)
+
+            controller.editNewColorName("L")
+            assertTrue(assertNotNull(controller.state.work).hasUnsavedChanges)
+
+            controller.editNewColorName("")
+            controller.nudgeNewColorWheel(WheelNudge.SATURATION_OUT)
+            assertTrue(
+                assertNotNull(controller.state.work).hasUnsavedChanges,
+                "a moved wheel could be thrown away by a click somewhere else",
+            )
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `a fresh catalogue from the database leaves an open picker exactly as it is`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = seededColors()
+            val table = FakeTable(listOf(row))
+            val controller = controllerOf(table, colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+            controller.nameANewColor(NewColorTarget.SingleDraft, name = "Yarı yazılmış")
+            controller.setNewColorBrightness(0.33f)
+            val before = assertNotNull(controller.creatorState())
+
+            colors.colors.value = colors.colors.value + color("Bordo", "#880E4F", sortOrder = 12)
+            table.rows.value = listOf(row)
+            settle()
+
+            assertEquals(before, controller.creatorState(), "a list arriving from the database disturbed the picker")
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `a picker opens on the colour its place already holds`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = seededColors()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+            val chosen = colors.colors.value.first { it.canonicalName == "Mavi" }
+            controller.chooseTaskColor(0, chosen.id)
+
+            controller.beginColorCreation(NewColorTarget.SingleDraft)
+
+            val creator = assertNotNull(controller.creatorState())
+            assertEquals(chosen.hex, creator.composer.hex, "the wheel did not open on the colour that is there")
+            assertEquals("", creator.composer.name, "the old colour's name was offered as the new one's")
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `a picker opened where there is no colour yet opens on the first square`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Token"))
+            val colors = seededColors()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) =
+                readyComposer(controller, row, colors, word = "Token", mode = TaskCreationMode.INDEPENDENT_TASKS)
+
+            controller.beginColorCreation(NewColorTarget.BatchRow(1))
+
+            assertEquals("#FFFFFF", assertNotNull(controller.creatorState()).composer.hex)
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `a square takes the whole colour into the picker`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = seededColors()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+            controller.nameANewColor(NewColorTarget.SingleDraft)
+
+            controller.chooseNewColorBase(
+                colors.colors.value
+                    .first { it.canonicalName == "Yeşil" }
+                    .id,
+            )
+
+            assertEquals("#43A047", assertNotNull(controller.creatorState()).composer.hex)
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `the value written is the one the picker was showing`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = seededColors()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+            controller.nameANewColor(NewColorTarget.SingleDraft, name = "  Lacivert  ")
+            controller.chooseNewColorBase(
+                colors.colors.value
+                    .first { it.canonicalName == "Mor" }
+                    .id,
+            )
+            controller.setNewColorBrightness(0.5f)
+            val shown = assertNotNull(controller.creatorState()).composer.hex
+
+            controller.saveNewColor()
+
+            assertEquals(CreatedColor("Lacivert", shown), colors.created.single())
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `a colour with no name never reaches the catalogue`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = seededColors()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+
+            listOf("", " ", "   ").forEach { attempt ->
+                controller.nameANewColor(NewColorTarget.SingleDraft, name = attempt)
+                controller.saveNewColor()
+                assertTrue(!assertNotNull(controller.creatorState()).composer.canSave, "'$attempt' was accepted")
+            }
+
+            assertEquals(0, colors.created.size)
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `a saved colour turns up in the catalogue the panel picks from`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = seededColors()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+            controller.nameANewColor(NewColorTarget.SingleDraft, name = "Lacivert")
+            controller.saveNewColor()
+            settle()
+
+            controller.editTaskColorQuery(0, "laci")
+            assertEquals(listOf("Lacivert"), controller.colorsOffered(0).map { it.canonicalName })
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `the picker cannot be opened over anything but a task panel`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = seededColors()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val collecting = collect(controller)
+            val catalogue = launch { controller.observeColorCatalogue() }
+            settle()
+
+            controller.beginColorCreation(NewColorTarget.SingleDraft)
+            assertNull(controller.creatorState(), "a picker opened over nothing at all")
+
+            controller.beginEditing(row.gameId, CellColumnType.THREE_D)
+            controller.beginColorCreation(NewColorTarget.SingleDraft)
+            assertNull(controller.creatorState(), "a picker opened over a cell with no panel in it")
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
         }
 }
