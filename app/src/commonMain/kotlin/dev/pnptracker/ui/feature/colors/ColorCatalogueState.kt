@@ -1,7 +1,10 @@
 package dev.pnptracker.ui.feature.colors
 
+import dev.pnptracker.domain.colors.BaseColorRestorePlan
+import dev.pnptracker.domain.colors.ColorRemoval
 import dev.pnptracker.domain.colors.ColorSetupFailure
 import dev.pnptracker.domain.colors.ColorSummary
+import dev.pnptracker.domain.colors.ColorUsage
 import dev.pnptracker.domain.colors.HsbColor
 import dev.pnptracker.domain.colors.WheelNudge
 import dev.pnptracker.domain.colors.WheelPoint
@@ -9,6 +12,7 @@ import dev.pnptracker.domain.colors.atWheelPoint
 import dev.pnptracker.domain.colors.baseColorIds
 import dev.pnptracker.domain.colors.hsbOfHex
 import dev.pnptracker.domain.colors.nudged
+import dev.pnptracker.domain.model.EntityId
 
 /**
  * Where the colour catalogue is.
@@ -48,6 +52,12 @@ data class ColorComposer(
     val name: String = "",
     val color: HsbColor,
     val startedAt: HsbColor,
+    /** The colour being changed, or null while one is being made. */
+    val editing: EntityId? = null,
+    /** The name this form opened on: empty when making, the colour's when editing. */
+    val startedName: String = "",
+    /** The value this form opened on, for telling a real change from none. */
+    val startedHex: String? = null,
 ) {
     /** The value this would be written as: `#RRGGBB`, upper case, opaque. */
     val hex: String get() = color.toHex()
@@ -57,8 +67,22 @@ data class ColorComposer(
 
     val canSave: Boolean get() = isNameUsable
 
-    /** True once there is something here that closing would throw away. */
-    val isTouched: Boolean get() = name.isNotEmpty() || color != startedAt
+    /**
+     * True once there is something here that closing would throw away.
+     *
+     * Measured against what the form opened on rather than against nothing, so
+     * an edit form nobody has touched is as closable as a creation form nobody
+     * has touched.
+     */
+    val isTouched: Boolean get() = name != startedName || color != startedAt
+
+    /**
+     * True when saving this edit would write the row back exactly as it stands.
+     *
+     * There is nothing to record, so nothing is written. A creation form is
+     * never this: a colour that does not exist yet is always a change.
+     */
+    val isNoOp: Boolean get() = editing != null && cleanName == startedName && hex == startedHex
 
     /** The name as it would be stored, with the spaces at its ends left behind. */
     val cleanName: String get() = name.trim()
@@ -87,7 +111,8 @@ data class ColorComposer(
      * PLAN 5.7 allows the same value under different names — so it never stands
      * in the way of a save.
      */
-    fun sharedWith(catalogue: List<ColorSummary>): List<ColorSummary> = catalogue.filter { it.hex.equals(hex, ignoreCase = true) }
+    fun sharedWith(catalogue: List<ColorSummary>): List<ColorSummary> =
+        catalogue.filter { it.id != editing && it.hex.equals(hex, ignoreCase = true) }
 
     companion object {
         /**
@@ -111,6 +136,25 @@ data class ColorComposer(
             val start = hsbOfHex(startHex ?: FALLBACK_START)
             return ColorComposer(name = "", color = start, startedAt = start)
         }
+
+        /**
+         * A form opened on a colour that already exists.
+         *
+         * The name starts filled in here, unlike a creation form: the colour has
+         * one, and asking the user to type it again to change its value would be
+         * asking them to re-decide something they already decided.
+         */
+        fun editingOf(color: ColorSummary): ColorComposer {
+            val start = hsbOfHex(color.hex)
+            return ColorComposer(
+                name = color.canonicalName,
+                color = start,
+                startedAt = start,
+                editing = color.id,
+                startedName = color.canonicalName,
+                startedHex = color.hex,
+            )
+        }
     }
 }
 
@@ -125,9 +169,99 @@ data class ColorComposer(
  */
 fun baseColorsIn(catalogue: List<ColorSummary>): List<ColorSummary> = catalogue.filter { it.id in baseColorIds }
 
-/** What the section is showing, what is being made, and what did not save. */
+/**
+ * The one thing the colour section is doing, or nothing while it is only read.
+ *
+ * One field rather than a flag for each: a screen that could be making a colour
+ * and confirming a deletion at the same time is a screen with states nobody
+ * designed. Only one of these is ever open, so only one of them exists.
+ */
+sealed interface ColorWork {
+    /** True while this is on its way to the database. */
+    val isSaving: Boolean
+
+    /** What the storage refused, if it refused something. */
+    val failure: ColorSetupFailure?
+
+    /** True when closing this would throw away something the user typed. */
+    val hasUnsavedChanges: Boolean get() = false
+
+    /** A colour being made, which does not exist yet. */
+    data class Creating(
+        val composer: ColorComposer,
+        override val isSaving: Boolean = false,
+        override val failure: ColorSetupFailure? = null,
+    ) : ColorWork {
+        override val hasUnsavedChanges: Boolean get() = composer.isTouched
+    }
+
+    /** A colour that exists, being renamed or recoloured. */
+    data class Editing(
+        val colorId: EntityId,
+        val composer: ColorComposer,
+        override val isSaving: Boolean = false,
+        override val failure: ColorSetupFailure? = null,
+    ) : ColorWork {
+        override val hasUnsavedChanges: Boolean get() = composer.isTouched
+    }
+
+    /**
+     * A colour the user has been asked about losing.
+     *
+     * [usage] is what the numbers said when the question was put. It is what the
+     * user is deciding on, not what the deletion acts on: the transaction reads
+     * the relations again, so a task added in the meantime still loses the
+     * colour it was given.
+     */
+    data class Deleting(
+        val color: ColorSummary,
+        val usage: ColorUsage,
+        override val isSaving: Boolean = false,
+        override val failure: ColorSetupFailure? = null,
+    ) : ColorWork
+
+    /** The base colours that are missing, and why some of them cannot come back. */
+    data class Restoring(
+        val plan: BaseColorRestorePlan,
+        override val isSaving: Boolean = false,
+        override val failure: ColorSetupFailure? = null,
+    ) : ColorWork
+}
+
+/** Something that happened and is worth saying, once, above the catalogue. */
+sealed interface ColorNotice {
+    /** A colour and everything pointing at it went. */
+    data class Removed(
+        val colorName: String,
+        val removal: ColorRemoval,
+    ) : ColorNotice
+
+    /** The named base colours came back. */
+    data class Restored(
+        val canonicalNames: List<String>,
+    ) : ColorNotice
+
+    /** Nothing was missing, so nothing was written. */
+    data object NothingMissing : ColorNotice
+}
+
+/** What the section is showing, what is being done, and what did not save. */
 data class ColorCatalogueScreenState(
     val catalogue: ColorCatalogueState = ColorCatalogueState.Loading,
-    val composer: ColorComposer? = null,
-    val failure: ColorSetupFailure? = null,
-)
+    /** The one open surface, or null when the catalogue is only being read. */
+    val work: ColorWork? = null,
+    val notice: ColorNotice? = null,
+) {
+    /** The colour being made, when that is what is open. */
+    val composer: ColorComposer?
+        get() =
+            when (val open = work) {
+                is ColorWork.Creating -> open.composer
+                is ColorWork.Editing -> open.composer
+                else -> null
+            }
+
+    val failure: ColorSetupFailure? get() = work?.failure
+
+    val isSaving: Boolean get() = work?.isSaving == true
+}

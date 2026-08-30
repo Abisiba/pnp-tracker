@@ -243,6 +243,25 @@ class GameTableControllerTest {
             colors.value = colors.value + ColorSummary(id, canonicalName, hex, colors.value.size)
             return id
         }
+
+        // The table never edits, removes or restores a colour: that belongs to
+        // the colour section, and a table test reaching one of these is a test
+        // asking the wrong object.
+        override suspend fun editColor(
+            id: EntityId,
+            expectedName: String,
+            expectedHex: String,
+            canonicalName: String,
+            hex: String,
+        ): Unit = error("The table does not change colours.")
+
+        override suspend fun usageOf(id: EntityId) = error("The table does not weigh colours.")
+
+        override suspend fun deleteColor(id: EntityId) = error("The table does not remove colours.")
+
+        override suspend fun previewBaseColorRestore() = error("The table does not restore colours.")
+
+        override suspend fun restoreMissingBaseColors() = error("The table does not restore colours.")
     }
 
     /** Records the tasks that were asked for, and can be told to refuse. */
@@ -3371,6 +3390,181 @@ class GameTableControllerTest {
             controller.beginEditing(row.gameId, CellColumnType.THREE_D)
             controller.beginColorCreation(NewColorTarget.SingleDraft)
             assertNull(controller.creatorState(), "a picker opened over a cell with no panel in it")
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    // ------------------------------- a colour removed while a draft is open
+
+    @Test
+    fun `a colour removed elsewhere is left where the user put it`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = seededColors()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+            val chosen = assertNotNull(controller.composerState()).single.colorId
+
+            colors.colors.value = colors.colors.value.filterNot { it.id == chosen }
+            settle()
+
+            val composer = assertNotNull(controller.composerState())
+            assertEquals(chosen, composer.single.colorId, "the choice was taken out from under the user")
+            assertEquals("15", composer.single.quantityText, "the rest of the draft went with it")
+            assertNotNull(controller.state.work, "the panel closed itself")
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `a draft naming a colour that is gone is not allowed to save`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = seededColors()
+            val creation = FakeTaskCreation()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+            val chosen = assertNotNull(controller.composerState()).single.colorId
+
+            colors.colors.value = colors.colors.value.filterNot { it.id == chosen }
+            settle()
+            controller.saveTask()
+
+            assertEquals(emptyList(), creation.created, "a task was written pointing at a colour that is gone")
+            assertEquals(setOf(chosen), controller.state.strandedColorIds)
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `choosing another colour lets the draft be saved again`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = seededColors()
+            val creation = FakeTaskCreation()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+            val chosen = assertNotNull(controller.composerState()).single.colorId
+
+            colors.colors.value = colors.colors.value.filterNot { it.id == chosen }
+            settle()
+            val replacement =
+                controller.state.colors
+                    .first()
+                    .id
+            controller.chooseTaskColor(0, replacement)
+            controller.saveTask()
+
+            assertEquals(emptySet(), controller.state.strandedColorIds)
+            assertEquals(listOf(replacement), creation.created.single().colorIds)
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `only the mode being worked in decides whether a draft can be saved`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = seededColors()
+            val creation = FakeTaskCreation()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+            // A colour chosen in the batch mode, then left behind for another mode.
+            controller.chooseCreationMode(TaskCreationMode.INDEPENDENT_TASKS)
+            val batchColor =
+                controller.state.colors
+                    .last()
+                    .id
+            controller.chooseTaskColor(0, batchColor)
+            controller.chooseCreationMode(TaskCreationMode.SINGLE_COLOR)
+
+            colors.colors.value = colors.colors.value.filterNot { it.id == batchColor }
+            settle()
+
+            assertEquals(
+                emptySet(),
+                controller.state.strandedColorIds,
+                "a colour missing from a mode nobody is looking at stopped the one they are",
+            )
+            controller.saveTask()
+            assertEquals(1, creation.created.size)
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `a colour that was only renamed keeps the draft saveable`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = seededColors()
+            val creation = FakeTaskCreation()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+            val chosen = assertNotNull(controller.composerState()).single.colorId
+
+            colors.colors.value =
+                colors.colors.value.map { if (it.id == chosen) it.copy(canonicalName = "Kar", hex = "#FAFAFA") else it }
+            settle()
+
+            assertEquals(emptySet(), controller.state.strandedColorIds)
+            assertEquals(
+                "Kar" to "#FAFAFA",
+                controller.state.colors
+                    .first { it.id == chosen }
+                    .let { it.canonicalName to it.hex },
+                "the draft would not show the new name and value",
+            )
+            controller.saveTask()
+            assertEquals(listOf(chosen), creation.created.single().colorIds)
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `a colour just made from the panel is not mistaken for one that was removed`() =
+        runBlocking<Unit> {
+            val row = row("Harmonies", cells = cellsOf(CellColumnType.THREE_D to "Knight"))
+            val colors = seededColors()
+            val creation = FakeTaskCreation()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskCreation = creation)
+            val (collecting, catalogue) = readyComposer(controller, row, colors)
+            controller.nameANewColor(NewColorTarget.SingleDraft)
+
+            controller.saveNewColor()
+            // The catalogue stream has not been given a chance to catch up yet.
+            controller.saveTask()
+
+            assertEquals(emptySet(), controller.state.strandedColorIds)
+            assertEquals(1, creation.created.size, "the task the user had just given a colour would not save")
+            collecting.cancelAndJoin()
+            catalogue.cancelAndJoin()
+        }
+
+    @Test
+    fun `an open task edit will not save a colour that has been removed`() =
+        runBlocking<Unit> {
+            val grey = baseColors[2]
+            val (row, taskId) =
+                rowWithTask(colors = listOf(TaskColorPreview(grey.id, grey.canonicalName, grey.hex)))
+            val colors = seededColors()
+            val editing = FakeTaskEditing()
+            val controller = controllerOf(FakeTable(listOf(row)), colors = colors, taskEditing = editing)
+            val collecting = collect(controller)
+            val catalogue = launch { controller.observeColorCatalogue() }
+            settle()
+            controller.openTaskMenu(row.gameId, CellColumnType.THREE_D, taskId)
+            controller.beginTaskEdit()
+            controller.editTaskName("Token II")
+
+            colors.colors.value = colors.colors.value.filterNot { it.id == grey.id }
+            settle()
+            controller.saveTaskEdit()
+
+            assertEquals(emptyList(), editing.edits, "an edit was written naming a colour that is gone")
+            assertEquals(setOf(grey.id), controller.state.strandedColorIds)
+            val editor = assertNotNull(controller.taskEditorState())
+            assertEquals(listOf(grey.id), editor.colorIds, "the colour was quietly dropped from the task")
+            assertEquals("Token II", editor.name, "the rest of the edit was lost")
             collecting.cancelAndJoin()
             catalogue.cancelAndJoin()
         }

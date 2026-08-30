@@ -7,6 +7,8 @@ import dev.pnptracker.domain.colors.baseColors
 import dev.pnptracker.domain.model.IdGenerator
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** The form's own rules, with no screen and no storage in the way. */
@@ -147,5 +149,115 @@ class ColorComposerTest {
         // nothing here quietly recreates it.
         assertEquals(9, baseColorsIn(short).size)
         assertEquals("Kahverengi", baseColorsIn(short).first().canonicalName)
+    }
+
+    // ------------------------------------------------------------------ editing
+
+    private fun aCatalogueColor(
+        name: String = "Gri",
+        hex: String = "#808080",
+    ) = ColorSummary(IdGenerator.Random.newId(), name, hex, 2)
+
+    @Test
+    fun `a form opened on a colour starts on its name and its value`() {
+        val color = aCatalogueColor()
+
+        val composer = ColorComposer.editingOf(color)
+
+        assertEquals("Gri", composer.name)
+        assertEquals("#808080", composer.hex)
+        assertEquals(color.id, composer.editing)
+        assertEquals("Gri", composer.startedName)
+        assertEquals("#808080", composer.startedHex)
+    }
+
+    @Test
+    fun `an edit form nobody has touched knows it has nothing to lose`() {
+        val composer = ColorComposer.editingOf(aCatalogueColor())
+
+        assertFalse(composer.isTouched)
+        assertTrue(composer.isNoOp, "a form that would write the row back unchanged is not a change")
+    }
+
+    @Test
+    fun `typing a different name makes it a change`() {
+        val composer = ColorComposer.editingOf(aCatalogueColor()).copy(name = "Duman")
+
+        assertTrue(composer.isTouched)
+        assertFalse(composer.isNoOp)
+    }
+
+    @Test
+    fun `changing only the letter case is a change`() {
+        val composer = ColorComposer.editingOf(aCatalogueColor()).copy(name = "GRİ")
+
+        assertTrue(composer.isTouched)
+        assertFalse(composer.isNoOp, "the user's own spelling would have been thrown away silently")
+    }
+
+    @Test
+    fun `spaces at the ends of an unchanged name are still no change`() {
+        val composer = ColorComposer.editingOf(aCatalogueColor()).copy(name = "  Gri  ")
+
+        assertTrue(composer.isTouched, "the field says something different from what it opened on")
+        assertTrue(composer.isNoOp, "trimming makes it the same name, so there is nothing to write")
+    }
+
+    @Test
+    fun `moving the wheel makes it a change even with the same name`() {
+        // A colour with a hue to move: turning the wheel on a grey changes
+        // nothing, because a grey has no hue to turn.
+        val composer = ColorComposer.editingOf(aCatalogueColor("Mavi", "#1E88E5")).nudgedBy(WheelNudge.HUE_FORWARD)
+
+        assertTrue(composer.isTouched)
+        assertFalse(composer.isNoOp)
+    }
+
+    @Test
+    fun `coming back to exactly where it started is not a change`() {
+        val start = ColorComposer.editingOf(aCatalogueColor("Mavi", "#1E88E5"))
+
+        val there = start.nudgedBy(WheelNudge.HUE_FORWARD).nudgedBy(WheelNudge.HUE_BACK)
+
+        assertEquals(start.hex, there.hex)
+        assertTrue(there.isNoOp)
+    }
+
+    @Test
+    fun `a colour being edited is never listed as sharing its own value`() {
+        val grey = aCatalogueColor()
+        val other = ColorSummary(IdGenerator.Random.newId(), "Duman", "#808080", 12)
+        val composer = ColorComposer.editingOf(grey)
+
+        assertEquals(listOf("Duman"), composer.sharedWith(listOf(grey, other)).map { it.canonicalName })
+    }
+
+    @Test
+    fun `a colour being made is compared against the whole catalogue`() {
+        val grey = aCatalogueColor()
+        val composer = ColorComposer.startingFrom("#808080")
+
+        assertEquals(listOf("Gri"), composer.sharedWith(listOf(grey)).map { it.canonicalName })
+        assertNull(composer.editing)
+        assertFalse(composer.isNoOp, "a colour that does not exist yet was called a no-op")
+    }
+
+    @Test
+    fun `an edit form still refuses an empty name`() {
+        val composer = ColorComposer.editingOf(aCatalogueColor()).copy(name = "   ")
+
+        assertFalse(composer.isNameUsable)
+        assertFalse(composer.canSave)
+    }
+
+    @Test
+    fun `a form for making a colour is unchanged by all of this`() {
+        val composer = ColorComposer.startingFrom("#808080")
+
+        assertEquals("", composer.name)
+        assertEquals("", composer.startedName)
+        assertNull(composer.startedHex)
+        assertFalse(composer.isTouched)
+        assertFalse(composer.canSave, "a colour with no name could be saved")
     }
 }

@@ -19,6 +19,16 @@ enum class ColorSetupFailure {
 
     /** The colour was gone by the time the change reached the database. */
     COLOR_NO_LONGER_EXISTS,
+
+    /**
+     * Somebody else changed the colour while this form was open.
+     *
+     * Its own outcome rather than a saving problem, because the answer is not to
+     * try again: what the user is looking at is not what the colour says any
+     * more, and writing over it would drop the other change without telling
+     * anybody.
+     */
+    COLOR_CHANGED_MEANWHILE,
 }
 
 /**

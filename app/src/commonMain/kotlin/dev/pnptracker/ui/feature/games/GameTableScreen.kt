@@ -1054,7 +1054,11 @@ private fun CellEditorSlot(
     }
     val columnName = stringResource(columnNameOf(cell.columnType))
     val save = { if (!editor.isSaving) scope.launch { controller.saveEditing() } }
-    val saveTask = { if (composer?.canSave == true) scope.launch { controller.saveTask() } }
+    val saveTask = {
+        if (composer?.canSave == true && catalogue.stillHasEvery(composer.colorsInPlay)) {
+            scope.launch { controller.saveTask() }
+        }
+    }
     val saveColor = { if (creator?.composer?.canSave == true && !creator.isSaving) scope.launch { controller.saveNewColor() } }
     val drawn = drawnDocumentOf(cell, withCounts = false)
     val painted = remember(drawn.text) { TaskPainting(drawn.text) }
@@ -1296,7 +1300,12 @@ private fun TaskPopover(
     // dead in exactly the field they end up in.
     val confirm = {
         when (val work = state.work) {
-            is CellWork.EditingTask -> if (work.editor.canSave) scope.launch { controller.saveTaskEdit() } else Unit
+            is CellWork.EditingTask ->
+                if (work.editor.canSave && state.strandedColorIds.isEmpty()) {
+                    scope.launch { controller.saveTaskEdit() }
+                } else {
+                    Unit
+                }
             is CellWork.ConfirmingConvert -> if (!work.isSaving) scope.launch { controller.confirmConvertToText() } else Unit
             is CellWork.MakingColor ->
                 if (work.composer.canSave && !work.isSaving) scope.launch { controller.saveNewColor() } else Unit
@@ -1428,7 +1437,8 @@ private fun TaskEditPanel(
     val scope = rememberCoroutineScope()
     val focus = remember { FocusRequester() }
     LaunchedEffect(editor.taskId) { focus.requestFocus() }
-    val save = { if (editor.canSave) scope.launch { controller.saveTaskEdit() } }
+    val colorsAreThere = catalogue.stillHasEvery(editor.colorIds)
+    val save = { if (editor.canSave && colorsAreThere) scope.launch { controller.saveTaskEdit() } }
 
     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Text(text = stringResource(Strings.TaskEdit.title), style = MaterialTheme.typography.labelLarge)
@@ -1529,7 +1539,7 @@ private fun TaskEditPanel(
             val discardLabel = stringResource(Strings.CellTask.discard)
             Button(
                 onClick = { save() },
-                enabled = editor.canSave,
+                enabled = editor.canSave && colorsAreThere,
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                 modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = saveLabel },
             ) {
@@ -1547,9 +1557,12 @@ private fun TaskEditPanel(
             when {
                 editor.isSaving -> stringResource(Strings.TaskEdit.saving)
                 editor.failure != null -> sentenceOf(editor.failure, editor.failureRow, editor.failureConflictsWith)
+                // Said in words, because a colour that is gone leaves nothing to
+                // look at: the row is still chosen, it just names nothing now.
+                !colorsAreThere -> stringResource(Strings.CellTask.colorGone)
                 else -> stringResource(Strings.TaskEdit.hint)
             }
-        NoteLine(text = note, isProblem = editor.failure != null)
+        NoteLine(text = note, isProblem = editor.failure != null || !colorsAreThere)
     }
 }
 
@@ -1819,7 +1832,7 @@ private fun TaskComposerPanel(
             val discardLabel = stringResource(Strings.CellTask.discard)
             Button(
                 onClick = onSave,
-                enabled = composer.canSave,
+                enabled = composer.canSave && catalogue.stillHasEvery(composer.colorsInPlay),
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                 modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = saveLabel },
             ) {
@@ -1844,12 +1857,16 @@ private fun TaskComposerPanel(
                     composer.repeatedColorRows.entries.minByOrNull { it.key }!!.let { (later, earlier) ->
                         stringResource(Strings.CellTask.errorDuplicateColor, earlier + 1, later + 1)
                     }
+                !catalogue.stillHasEvery(composer.colorsInPlay) -> stringResource(Strings.CellTask.colorGone)
                 composer.usedRows.any { it.colorId == null } -> stringResource(Strings.CellTask.colorRequired)
                 else -> stringResource(Strings.CellTask.hint)
             }
         NoteLine(
             text = note,
-            isProblem = composer.failure != null || composer.repeatedColorRows.isNotEmpty(),
+            isProblem =
+                composer.failure != null ||
+                    composer.repeatedColorRows.isNotEmpty() ||
+                    !catalogue.stillHasEvery(composer.colorsInPlay),
         )
     }
 }
@@ -2591,6 +2608,15 @@ private fun messageOf(failure: CellTextFailure) =
         CellTextFailure.COULD_NOT_SAVE -> Strings.Cell.errorCouldNotSave
     }
 
+/**
+ * True when the catalogue still has every colour in [ids].
+ *
+ * A colour someone removed elsewhere leaves the draft exactly as the user built
+ * it, so the panel has to ask this rather than assume: the choice is still
+ * there, it just does not name anything any more.
+ */
+private fun List<ColorSummary>.stillHasEvery(ids: List<EntityId>): Boolean = isEmpty() || ids.all { id -> any { it.id == id } }
+
 /** What to tell the user about a task that did not change. */
 private fun messageOf(failure: ColorSetupFailure) =
     when (failure) {
@@ -2598,6 +2624,7 @@ private fun messageOf(failure: ColorSetupFailure) =
         ColorSetupFailure.NAME_ALREADY_USED -> Strings.Colors.errorNameUsed
         ColorSetupFailure.NAME_IS_ANOTHER_COLORS_ALIAS -> Strings.Colors.errorNameIsAlias
         ColorSetupFailure.COLOR_NO_LONGER_EXISTS -> Strings.Colors.errorColorGone
+        ColorSetupFailure.COLOR_CHANGED_MEANWHILE -> Strings.Colors.errorChanged
     }
 
 private fun messageOf(failure: TaskEditFailure) =

@@ -124,7 +124,7 @@ class ColorPickerPresentationTest {
     }
 
     @Test
-    fun `the four ways a colour can be refused all read differently`() {
+    fun `every way a colour can be refused reads differently`() {
         val sentences =
             ColorSetupFailure.entries.map {
                 textOf(
@@ -133,6 +133,7 @@ class ColorPickerPresentationTest {
                         ColorSetupFailure.NAME_ALREADY_USED -> Strings.Colors.errorNameUsed
                         ColorSetupFailure.NAME_IS_ANOTHER_COLORS_ALIAS -> Strings.Colors.errorNameIsAlias
                         ColorSetupFailure.COLOR_NO_LONGER_EXISTS -> Strings.Colors.errorColorGone
+                        ColorSetupFailure.COLOR_CHANGED_MEANWHILE -> Strings.Colors.errorChanged
                     },
                 )
             }

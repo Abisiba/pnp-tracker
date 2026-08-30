@@ -431,6 +431,15 @@ data class TaskComposer(
                 TaskCreationMode.SINGLE_ITEM_MULTICOLOR -> emptyList()
             }
 
+    /** Every colour the mode being worked in would actually save. */
+    val colorsInPlay: List<EntityId>
+        get() =
+            when (mode) {
+                TaskCreationMode.SINGLE_COLOR -> listOfNotNull(single.colorId)
+                TaskCreationMode.INDEPENDENT_TASKS -> rows.mapNotNull { it.colorId }
+                TaskCreationMode.SINGLE_ITEM_MULTICOLOR -> palette.colorIds
+            }
+
     /** The row the panel shows at this place, in whichever mode is open. */
     fun rowAt(row: Int): TaskDraftRow? = if (mode == TaskCreationMode.SINGLE_COLOR) single.takeIf { row == 0 } else rows.getOrNull(row)
 
@@ -608,6 +617,15 @@ data class GameTableScreenState(
     val focusRecall: Int = 0,
     /** A colour that was saved while the draft it was for went away. */
     val savedColorNotice: SavedColorNotice? = null,
+    /**
+     * Colours written from a panel that the catalogue stream has not shown yet.
+     *
+     * The write and the stream are two different journeys, and the second one is
+     * slower. Without this, a colour the user made a moment ago would look to
+     * the draft exactly like a colour somebody else had deleted, and the save
+     * they were about to make would be refused for it.
+     */
+    val awaitedColorIds: Set<EntityId> = emptySet(),
 ) {
     /** The text editor open in this cell, whatever is layered over it. */
     fun writingIn(
@@ -651,5 +669,39 @@ data class GameTableScreenState(
             is CellWork.ConfirmingConvert -> open.from.takeIf { it.isOn(gameId, columnType) }
             is CellWork.MakingColor -> (open.from as? CellWork.EditingTask)?.from?.takeIf { it.isOn(gameId, columnType) }
             else -> null
+        }
+
+    /**
+     * Colours the open draft still names that the catalogue does not have.
+     *
+     * A colour removed from somewhere else does not reach in and edit what
+     * somebody is typing: the choice stays exactly where they put it, and this
+     * is what lets the panel say so and refuse to save until they decide what
+     * to do about it. Quietly dropping the row would change their task without
+     * asking, and quietly keeping it would write a task pointing at nothing.
+     *
+     * Only the mode being worked in is counted. The other two modes keep their
+     * own drafts, and a colour missing from one they are not looking at is not
+     * a reason to refuse the one they are.
+     */
+    val strandedColorIds: Set<EntityId>
+        get() {
+            // Nothing is known until the catalogue has arrived, and nothing that
+            // is not known can be said to be missing. Without this, every draft
+            // would look stranded for as long as the first emission took.
+            if (colors.isEmpty()) return emptySet()
+            val wanted = colorsTheDraftNames(work)
+            if (wanted.isEmpty()) return emptySet()
+            val known = colors.mapTo(mutableSetOf()) { it.id }
+            known += awaitedColorIds
+            return wanted.filterTo(mutableSetOf()) { it !in known }
+        }
+
+    private fun colorsTheDraftNames(open: CellWork?): List<EntityId> =
+        when (open) {
+            is CellWork.MakingTask -> open.composer.colorsInPlay
+            is CellWork.EditingTask -> open.editor.colorIds
+            is CellWork.MakingColor -> colorsTheDraftNames(open.from)
+            else -> emptyList()
         }
 }

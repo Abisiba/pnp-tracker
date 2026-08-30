@@ -29,6 +29,7 @@ import dev.pnptracker.resources.cell_task_color_drop
 import dev.pnptracker.resources.cell_task_color_drop_short
 import dev.pnptracker.resources.cell_task_color_empty
 import dev.pnptracker.resources.cell_task_color_floor
+import dev.pnptracker.resources.cell_task_color_gone
 import dev.pnptracker.resources.cell_task_color_label
 import dev.pnptracker.resources.cell_task_color_move_down
 import dev.pnptracker.resources.cell_task_color_move_down_short
@@ -94,8 +95,24 @@ import dev.pnptracker.resources.colors_brightness_label
 import dev.pnptracker.resources.colors_brightness_state
 import dev.pnptracker.resources.colors_count
 import dev.pnptracker.resources.colors_create
+import dev.pnptracker.resources.colors_delete_action
+import dev.pnptracker.resources.colors_delete_confirm
+import dev.pnptracker.resources.colors_delete_examples
+import dev.pnptracker.resources.colors_delete_irreversible
+import dev.pnptracker.resources.colors_delete_losing
+import dev.pnptracker.resources.colors_delete_more
+import dev.pnptracker.resources.colors_delete_sample
+import dev.pnptracker.resources.colors_delete_short
+import dev.pnptracker.resources.colors_delete_title
+import dev.pnptracker.resources.colors_delete_unused
+import dev.pnptracker.resources.colors_delete_used
+import dev.pnptracker.resources.colors_deleting
 import dev.pnptracker.resources.colors_description
 import dev.pnptracker.resources.colors_discard
+import dev.pnptracker.resources.colors_edit_action
+import dev.pnptracker.resources.colors_edit_short
+import dev.pnptracker.resources.colors_edit_title
+import dev.pnptracker.resources.colors_error_changed
 import dev.pnptracker.resources.colors_error_color_gone
 import dev.pnptracker.resources.colors_error_could_not_save
 import dev.pnptracker.resources.colors_error_name_is_alias
@@ -106,14 +123,32 @@ import dev.pnptracker.resources.colors_name_label
 import dev.pnptracker.resources.colors_name_required
 import dev.pnptracker.resources.colors_new_action
 import dev.pnptracker.resources.colors_new_title
+import dev.pnptracker.resources.colors_notice_dismiss
 import dev.pnptracker.resources.colors_preview_of
 import dev.pnptracker.resources.colors_preview_unnamed
+import dev.pnptracker.resources.colors_removed
+import dev.pnptracker.resources.colors_restore_action
+import dev.pnptracker.resources.colors_restore_block_alias
+import dev.pnptracker.resources.colors_restore_block_name
+import dev.pnptracker.resources.colors_restore_block_race
+import dev.pnptracker.resources.colors_restore_blocked
+import dev.pnptracker.resources.colors_restore_blocked_note
+import dev.pnptracker.resources.colors_restore_confirm
+import dev.pnptracker.resources.colors_restore_explains
+import dev.pnptracker.resources.colors_restore_item
+import dev.pnptracker.resources.colors_restore_missing
+import dev.pnptracker.resources.colors_restore_nothing_missing
+import dev.pnptracker.resources.colors_restore_title
+import dev.pnptracker.resources.colors_restored
+import dev.pnptracker.resources.colors_restoring
 import dev.pnptracker.resources.colors_save
 import dev.pnptracker.resources.colors_saving
 import dev.pnptracker.resources.colors_stranded
 import dev.pnptracker.resources.colors_stranded_dismiss
 import dev.pnptracker.resources.colors_swatch
+import dev.pnptracker.resources.colors_swatch_of
 import dev.pnptracker.resources.colors_title
+import dev.pnptracker.resources.colors_value
 import dev.pnptracker.resources.colors_wheel_hint
 import dev.pnptracker.resources.colors_wheel_label
 import dev.pnptracker.resources.colors_wheel_state
@@ -593,10 +628,47 @@ object Strings {
         val stranded = Res.string.colors_stranded
         val strandedDismiss = Res.string.colors_stranded_dismiss
 
+        val editShort = Res.string.colors_edit_short
+        val editAction = Res.string.colors_edit_action
+        val editTitle = Res.string.colors_edit_title
+        val value = Res.string.colors_value
+        val swatchOf = Res.string.colors_swatch_of
+
+        val deleteShort = Res.string.colors_delete_short
+        val deleteAction = Res.string.colors_delete_action
+        val deleteTitle = Res.string.colors_delete_title
+        val deleteUnused = Res.string.colors_delete_unused
+        val deleteUsed = Res.string.colors_delete_used
+        val deleteLosing = Res.string.colors_delete_losing
+        val deleteExamples = Res.string.colors_delete_examples
+        val deleteSample = Res.string.colors_delete_sample
+        val deleteMore = Res.string.colors_delete_more
+        val deleteIrreversible = Res.string.colors_delete_irreversible
+        val deleteConfirm = Res.string.colors_delete_confirm
+        val deleting = Res.string.colors_deleting
+        val removed = Res.string.colors_removed
+
+        val restoreAction = Res.string.colors_restore_action
+        val restoreTitle = Res.string.colors_restore_title
+        val restoreExplains = Res.string.colors_restore_explains
+        val restoreMissing = Res.string.colors_restore_missing
+        val restoreItem = Res.string.colors_restore_item
+        val restoreBlocked = Res.string.colors_restore_blocked
+        val restoreBlockName = Res.string.colors_restore_block_name
+        val restoreBlockAlias = Res.string.colors_restore_block_alias
+        val restoreBlockRace = Res.string.colors_restore_block_race
+        val restoreBlockedNote = Res.string.colors_restore_blocked_note
+        val restoreConfirm = Res.string.colors_restore_confirm
+        val restoring = Res.string.colors_restoring
+        val restored = Res.string.colors_restored
+        val restoreNothingMissing = Res.string.colors_restore_nothing_missing
+        val noticeDismiss = Res.string.colors_notice_dismiss
+
         val errorCouldNotSave = Res.string.colors_error_could_not_save
         val errorNameUsed = Res.string.colors_error_name_used
         val errorNameIsAlias = Res.string.colors_error_name_is_alias
         val errorColorGone = Res.string.colors_error_color_gone
+        val errorChanged = Res.string.colors_error_changed
     }
 
     /** The columns of the game table. */
@@ -725,6 +797,7 @@ object Strings {
         val colorDropShort = Res.string.cell_task_color_drop_short
         val colorFloor = Res.string.cell_task_color_floor
         val colorUnknown = Res.string.cell_task_color_unknown
+        val colorGone = Res.string.cell_task_color_gone
         val colorNoneChosen = Res.string.cell_task_color_none_chosen
         val colorOverflow = Res.string.cell_task_color_overflow
 

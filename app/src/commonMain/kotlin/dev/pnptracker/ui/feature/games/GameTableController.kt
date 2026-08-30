@@ -93,7 +93,12 @@ class GameTableController(
      */
     suspend fun observeColorCatalogue() {
         colors.observeColors().collect { catalogue ->
-            state = state.copy(colors = catalogue)
+            state =
+                state.copy(
+                    colors = catalogue,
+                    // Whatever has arrived is no longer being waited for.
+                    awaitedColorIds = state.awaitedColorIds - catalogue.mapTo(mutableSetOf()) { it.id },
+                )
         }
     }
 
@@ -700,6 +705,9 @@ class GameTableController(
                 work = applied ?: armed.from,
                 savedColorNotice = if (applied == null) SavedColorNotice(armed.composer.cleanName) else null,
                 focusRecall = state.focusRecall + 1,
+                // Written, but the catalogue stream has not caught up. Until it
+                // does, the draft holding it is not holding something missing.
+                awaitedColorIds = if (applied == null) state.awaitedColorIds else state.awaitedColorIds + created,
             )
     }
 
@@ -789,6 +797,10 @@ class GameTableController(
         val making = composing() ?: return
         val composer = making.composer
         if (composer.isSaving || !composer.canSave) return
+        // A colour the draft still names but the catalogue has lost. The choice
+        // is left exactly where the user put it and the save is refused instead,
+        // so nothing is written pointing at a colour that is not there.
+        if (state.strandedColorIds.isNotEmpty()) return
         // Read once, here, so a second Enter arriving while the first save is in
         // flight finds isSaving already set and does nothing: the same words
         // cannot become two sets of tasks.
@@ -1037,6 +1049,7 @@ class GameTableController(
         val editing = state.work as? CellWork.EditingTask ?: return
         val editor = editing.editor
         if (!editor.canSave) return
+        if (state.strandedColorIds.isNotEmpty()) return
         state = state.copy(work = editing.copy(editor = editor.copy(isSaving = true, failure = null)))
         try {
             taskEditing.editTask(
