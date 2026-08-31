@@ -1,11 +1,13 @@
 package dev.pnptracker.ui.feature.games
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -31,8 +33,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -59,7 +63,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.Key
@@ -70,14 +76,19 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
@@ -92,6 +103,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import dev.pnptracker.domain.colors.ColorSetupFailure
@@ -104,7 +116,10 @@ import dev.pnptracker.domain.games.GameTableRow
 import dev.pnptracker.domain.games.GameTableView
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.model.stagesOf
 import dev.pnptracker.domain.tasks.TaskFromTextFailure
+import dev.pnptracker.domain.tasks.TaskProgressFailure
 import dev.pnptracker.domain.tasks.taskColorLayoutOf
 import dev.pnptracker.domain.tasks.trackingModesOf
 import dev.pnptracker.ui.Strings
@@ -120,6 +135,7 @@ import dev.pnptracker.ui.feature.tasks.focusOutline
 import dev.pnptracker.ui.feature.tasks.sentenceOf
 import dev.pnptracker.ui.feature.tasks.stillHasEvery
 import dev.pnptracker.ui.feature.tasks.taskEditMessageOf
+import dev.pnptracker.ui.stageNameOf
 import dev.pnptracker.ui.theme.PnpStatus
 import dev.pnptracker.ui.theme.opaqueColorOf
 import dev.pnptracker.ui.theme.readableInkOn
@@ -158,6 +174,20 @@ private val ColorListHeight = 96.dp
  * and the cell reads back without either of them.
  */
 private const val QUANTITY_GAP = " "
+
+/**
+ * What stands in for a tick where the text is read rather than drawn.
+ *
+ * Never seen: the placeholder is always filled. It exists because a reserved box
+ * still needs a character behind it, and one that says nothing is the honest
+ * choice — the tick is a control, not a word of the document.
+ */
+private const val TICK_ALTERNATE = " "
+private val TICK_WIDTH = 1.35.em
+private val TICK_HEIGHT = 1.0.em
+private val TICK_SIDE = 12.dp
+private val TICK_STROKE = 1.6.dp
+private val TICK_CORNER = 2.5.dp
 
 /**
  * The swatch drawn for a colour the task's name was too short to reach.
@@ -635,6 +665,9 @@ private data class DrawnTask(
     val stripes: List<DrawnStripe>,
 )
 
+/** The name a task's tick is reserved and looked up under, inside one cell's text. */
+private fun tickIdOf(taskId: EntityId): String = "tick:" + taskId.value
+
 /** The document as it is drawn, and where each task's word ended up in it. */
 private data class DrawnDocument(
     val text: AnnotatedString,
@@ -692,6 +725,17 @@ private fun drawnDocumentOf(
                 val taskPaints = requireNotNull(paints[index])
                 val layout = requireNotNull(layouts[index])
                 val stripes = mutableListOf<DrawnStripe>()
+                // Room for the tick, laid out with the text so the name is never
+                // covered and a name that wraps wraps around it. It is reserved
+                // rather than written: PLAN 5.5 makes the cell a document, and
+                // the document says what the user typed. The editor draws the
+                // same text without this, because there the string has to match
+                // the document character for character.
+                if (withCounts) {
+                    segment.taskId?.let { taskId ->
+                        appendInlineContent(tickIdOf(taskId), TICK_ALTERNATE)
+                    }
+                }
                 val start = length
                 // The name in the colours it is made in, in slot order. One
                 // colour is one piece covering the whole name, which is every
@@ -866,6 +910,7 @@ private fun CellSlot(
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = CELL_PREVIEW_LINES,
                     overflow = TextOverflow.Ellipsis,
+                    inlineContent = tickContentOf(drawn.tasks, gameId, cell.columnType, controller),
                     onTextLayout = { layout = it },
                     modifier =
                         Modifier.drawBehind {
@@ -910,6 +955,91 @@ private fun CellSlot(
 }
 
 /**
+ * One tick for each task drawn in a cell.
+ *
+ * Built from the same list the handles are, so a task has a tick exactly when it
+ * has a word — no separate bookkeeping to fall out of step with the document.
+ */
+@Composable
+private fun tickContentOf(
+    tasks: List<DrawnTask>,
+    gameId: EntityId,
+    columnType: CellColumnType,
+    controller: GameTableController,
+): Map<String, InlineTextContent> {
+    val scope = rememberCoroutineScope()
+    return tasks.associate { task ->
+        val taskId = requireNotNull(task.segment.taskId)
+        tickIdOf(taskId) to
+            InlineTextContent(
+                placeholder =
+                    Placeholder(
+                        width = TICK_WIDTH,
+                        height = TICK_HEIGHT,
+                        placeholderVerticalAlign = PlaceholderVerticalAlign.Center,
+                    ),
+            ) {
+                CompletionTick(
+                    isCompleted = task.segment.isCompletedTask,
+                    onToggle = { scope.launch { controller.toggleTaskCompletion(gameId, columnType, taskId) } },
+                )
+            }
+    }
+}
+
+/**
+ * The box that says whether a piece of work is done, and takes it either way.
+ *
+ * It says nothing of its own to a screen reader and takes no focus. Both are
+ * deliberate: PLAN 12.5 makes the whole task one thing to reach, and a tick with
+ * a voice of its own would have a reader announce every task twice and Tab stop
+ * at each of them twice. What the keyboard uses instead is the action on the
+ * task's own node, and the menu, which say the same thing in words.
+ *
+ * It is pressed rather than clicked — `pointerInput` rather than `clickable` —
+ * for the same reason: a clickable would bring its own semantics and its own
+ * focus with it.
+ */
+@Composable
+private fun CompletionTick(
+    isCompleted: Boolean,
+    onToggle: () -> Unit,
+) {
+    val ink = if (isCompleted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    Box(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .pointerHoverIcon(PointerIcon.Hand)
+                .pointerInput(isCompleted) { detectTapGestures { onToggle() } }
+                .clearAndSetSemantics { },
+    ) {
+        Canvas(modifier = Modifier.align(Alignment.Center).size(TICK_SIDE)) {
+            val stroke = TICK_STROKE.toPx()
+            val inset = stroke / 2f
+            drawRoundRect(
+                color = ink,
+                topLeft = Offset(inset, inset),
+                size = Size(size.width - stroke, size.height - stroke),
+                cornerRadius = CornerRadius(TICK_CORNER.toPx(), TICK_CORNER.toPx()),
+                style = Stroke(width = stroke),
+            )
+            if (isCompleted) {
+                // A real check rather than a filled square: a square says only
+                // that something is different, and the difference is the answer.
+                val path =
+                    Path().apply {
+                        moveTo(size.width * 0.24f, size.height * 0.52f)
+                        lineTo(size.width * 0.43f, size.height * 0.72f)
+                        lineTo(size.width * 0.78f, size.height * 0.28f)
+                    }
+                drawPath(path = path, color = ink, style = Stroke(width = stroke * 1.3f, cap = StrokeCap.Round))
+            }
+        }
+    }
+}
+
+/**
  * The part of a cell that is one task: what it responds to, and what opens on it.
  *
  * Laid over the word rather than replacing it, so the text keeps flowing and
@@ -931,6 +1061,14 @@ private fun TaskHandle(
     val density = LocalDensity.current
     val menu = state.menuIn(gameId, columnType)?.takeIf { it.taskId == taskId }
     val spoken = spokenTaskOf(task)
+    val completion =
+        stringResource(if (task.isCompletedTask) Strings.Shortage.stateCompleted else Strings.Shortage.stateOpen)
+    val finishLabel =
+        stringResource(
+            if (task.isCompletedTask) Strings.Shortage.tickReopen else Strings.Shortage.tickComplete,
+            task.text,
+        )
+    val scope = rememberCoroutineScope()
     val openLabel = stringResource(Strings.TaskMenu.open, task.text)
     var focused by remember { mutableStateOf(false) }
     val interactions = remember { MutableInteractionSource() }
@@ -992,6 +1130,21 @@ private fun TaskHandle(
                             Modifier.semantics {
                                 contentDescription = spoken
                                 role = Role.Button
+                                // Said as a state rather than folded into the
+                                // name, so a reader hears it once and hears it
+                                // change when the task does.
+                                stateDescription = completion
+                                // The tick draws the same thing and says nothing,
+                                // so this is the only place the keyboard and a
+                                // reader can reach it — and there is one of it
+                                // per task however many colours the name is in.
+                                customActions =
+                                    listOf(
+                                        CustomAccessibilityAction(finishLabel) {
+                                            scope.launch { controller.toggleTaskCompletion(gameId, columnType, taskId) }
+                                            true
+                                        },
+                                    )
                             }
                         } else {
                             Modifier.clearAndSetSemantics { }
@@ -1293,6 +1446,8 @@ private fun TaskPopover(
             is CellWork.MakingColor -> "color"
             is CellWork.EditingTask -> "edit"
             is CellWork.ConfirmingConvert -> "convert"
+            is CellWork.ReportingShortage -> "report"
+            is CellWork.ResolvingShortage -> "resolve"
             else -> "menu"
         }
     LaunchedEffect(openLayer, menu.taskId, state.focusRecall) { focus.requestFocus() }
@@ -1310,6 +1465,9 @@ private fun TaskPopover(
             is CellWork.ConfirmingConvert -> if (!work.isSaving) scope.launch { controller.confirmConvertToText() } else Unit
             is CellWork.MakingColor ->
                 if (work.composer.canSave && !work.isSaving) scope.launch { controller.saveNewColor() } else Unit
+
+            is CellWork.ReportingShortage -> if (!work.isSaving) scope.launch { controller.saveShortage() } else Unit
+            is CellWork.ResolvingShortage -> if (!work.isSaving) scope.launch { controller.saveShortage() } else Unit
 
             else -> Unit
         }
@@ -1379,6 +1537,32 @@ private fun TaskPopover(
                             },
                         )
                     is CellWork.ConfirmingConvert -> ConvertConfirmation(work, controller)
+                    is CellWork.ReportingShortage ->
+                        ShortagePanel(
+                            title = stringResource(Strings.Shortage.reportTitle),
+                            hint = stringResource(Strings.Shortage.reportHint),
+                            draft = work.draft,
+                            poolType = menu.poolType,
+                            isSaving = work.isSaving,
+                            failure = work.failure,
+                            outstanding = null,
+                            controller = controller,
+                            onSave = { confirm() },
+                        )
+
+                    is CellWork.ResolvingShortage ->
+                        ShortagePanel(
+                            title = stringResource(Strings.Shortage.resolveTitle),
+                            hint = stringResource(Strings.Shortage.resolveHint, work.outstanding.toString()),
+                            draft = work.draft,
+                            poolType = menu.poolType,
+                            isSaving = work.isSaving,
+                            failure = work.failure,
+                            outstanding = work.outstanding,
+                            controller = controller,
+                            onSave = { confirm() },
+                        )
+
                     else -> TaskMenuActions(menu, controller)
                 }
             }
@@ -1387,12 +1571,173 @@ private fun TaskPopover(
 }
 
 /**
+ * The form that says what came out short, or what has been made good again.
+ *
+ * One panel for both, because PLAN 6.3 asks the same things of each. Which one
+ * it is is carried in its title and its hint rather than in its shape, so a user
+ * who has filled one in has already learnt the other.
+ *
+ * The optional detail is offered only where it means something: PLAN 7.4 gives
+ * naming a card to the card pipeline, and a step to a pool that has one. Showing
+ * either elsewhere would collect an answer the record cannot keep.
+ */
+@Composable
+private fun ShortagePanel(
+    title: String,
+    hint: String,
+    draft: ShortageDraft,
+    poolType: PoolType?,
+    isSaving: Boolean,
+    failure: TaskProgressFailure?,
+    outstanding: Int?,
+    controller: GameTableController,
+    onSave: () -> Unit,
+) {
+    val amount = remember { FocusRequester() }
+    // The amount is what a shortage is about, so it is where the keyboard lands
+    // — and where it is called back to when what was typed will not do.
+    LaunchedEffect(title, failure) { amount.requestFocus() }
+    Text(text = title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+    Text(
+        text = hint,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    val quantityLabel = stringResource(Strings.Shortage.quantityLabel)
+    OutlinedTextField(
+        value = draft.quantity,
+        onValueChange = controller::editShortageQuantity,
+        label = { Text(text = quantityLabel) },
+        singleLine = true,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .focusRequester(amount)
+                .semantics { contentDescription = quantityLabel },
+    )
+    val noteLabel = stringResource(Strings.Shortage.noteLabel)
+    OutlinedTextField(
+        value = draft.note,
+        onValueChange = controller::editShortageNote,
+        label = { Text(text = noteLabel) },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth().semantics { contentDescription = noteLabel },
+    )
+    if (poolType == PoolType.CARD) {
+        val cardLabel = stringResource(Strings.Shortage.cardLabel)
+        OutlinedTextField(
+            value = draft.cardReference,
+            onValueChange = controller::editShortageCardReference,
+            label = { Text(text = cardLabel) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = cardLabel },
+        )
+    }
+    // Only where the pool runs through steps, and only its own steps. Choosing
+    // one records where the pieces were noticed and nothing else: PLAN 7.3 gives
+    // moving a counter to the badge, which is not this.
+    val pipeline = poolType?.let { stagesOf(it) }.orEmpty()
+    if (pipeline.isNotEmpty()) {
+        Text(
+            text = stringResource(Strings.Shortage.stageLabel),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            StageChoice(
+                label = stringResource(Strings.Shortage.stageNone),
+                selected = draft.stage == null,
+                onChoose = { controller.chooseShortageStage(null) },
+            )
+            pipeline.forEach { stage ->
+                StageChoice(
+                    label = stringResource(stageNameOf(stage)),
+                    selected = draft.stage == stage,
+                    onChoose = { controller.chooseShortageStage(stage) },
+                )
+            }
+        }
+    }
+    failure?.let { NoteLine(text = shortageMessageOf(it, gameIsCompleted = false), isProblem = true) }
+    val save = stringResource(Strings.Shortage.save)
+    val cancel = stringResource(Strings.Shortage.cancel)
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        TextButton(
+            onClick = onSave,
+            enabled = !isSaving,
+            modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = save },
+        ) {
+            Text(text = save, style = MaterialTheme.typography.labelMedium)
+        }
+        TextButton(
+            onClick = controller::closeInnermost,
+            modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = cancel },
+        ) {
+            Text(text = cancel, style = MaterialTheme.typography.labelMedium)
+        }
+    }
+    outstanding?.let {
+        Text(
+            text = stringResource(Strings.Shortage.missing, it.toString()),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** One step of a pipeline, offered as somewhere a shortage was noticed. */
+@Composable
+private fun StageChoice(
+    label: String,
+    selected: Boolean,
+    onChoose: () -> Unit,
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onChoose,
+        label = { Text(text = label, style = MaterialTheme.typography.labelSmall) },
+        modifier = Modifier.focusOutline(ComposerShape),
+    )
+}
+
+/**
+ * What a refused progress change is called, in the user's own terms.
+ *
+ * Never the failure's name and never what the database said: PLAN 17 has the
+ * application explain itself in words about the work. A case with nothing
+ * particular to say falls back on the general sentence rather than on silence.
+ */
+@Composable
+private fun shortageMessageOf(
+    failure: TaskProgressFailure,
+    gameIsCompleted: Boolean,
+): String =
+    when {
+        // A task in a finished game is the one refusal with a reason of its own,
+        // and the reason is that the work to reopen the game is not built yet.
+        failure == TaskProgressFailure.TASK_NOT_AVAILABLE && gameIsCompleted ->
+            stringResource(Strings.TaskMenu.gameCompleted)
+
+        failure == TaskProgressFailure.INVALID_QUANTITY -> stringResource(Strings.Shortage.errorQuantity)
+        failure == TaskProgressFailure.MORE_RESOLVED_THAN_OUTSTANDING -> stringResource(Strings.Shortage.errorTooMany)
+        failure == TaskProgressFailure.TASK_NOT_AVAILABLE -> stringResource(Strings.Shortage.errorGone)
+        failure == TaskProgressFailure.EVENT_ID_ALREADY_USED -> stringResource(Strings.Shortage.errorEventUsed)
+        failure == TaskProgressFailure.CARD_REFERENCE_ONLY_FOR_CARDS -> stringResource(Strings.Shortage.errorDetail)
+        failure == TaskProgressFailure.STAGE_NOT_IN_PIPELINE -> stringResource(Strings.Shortage.errorDetail)
+        failure == TaskProgressFailure.TASK_HAS_NO_STAGES -> stringResource(Strings.Shortage.errorDetail)
+        else -> stringResource(Strings.Shortage.errorGeneral)
+    }
+
+/**
  * What can be done to a task, in the menu over its own word.
  *
- * Only the actions this step really has. PLAN 12.5 also lists `Eksik parça`, and
- * PLAN 18 gives shortages to a later slice — so it is absent rather than present
- * and dead. A button that looks like it works and does not is worse than one
- * that is not there yet.
+ * PLAN 12.5's three actions, and the two PLAN 6.3 adds to them. Making good is
+ * offered only where there is something to make good; the rest are always there,
+ * because a task can always be finished, reopened, or reported against.
+ *
+ * Only actions this step really has. Nothing here is drawn disabled to stand for
+ * work that is not built: a button that looks like it works and does not is
+ * worse than one that is not there yet.
  */
 @Composable
 private fun TaskMenuActions(
@@ -1405,6 +1750,43 @@ private fun TaskMenuActions(
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )
+    if (menu.owesSomething) {
+        Text(
+            text = stringResource(Strings.Shortage.missing, menu.currentMissingQuantity.toString()),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    val scope = rememberCoroutineScope()
+    // One control, both ways round: PLAN 12.5 gives a task a tick, and what the
+    // tick says is "this is done" whether it is being said or taken back.
+    val finish = stringResource(if (menu.isCompleted) Strings.TaskMenu.reopen else Strings.TaskMenu.complete)
+    TextButton(
+        onClick = { scope.launch { controller.toggleCompletionFromMenu() } },
+        enabled = !menu.isWorking,
+        modifier = Modifier.fillMaxWidth().focusOutline(ComposerShape).semantics { contentDescription = finish },
+    ) {
+        Text(text = finish, style = MaterialTheme.typography.labelMedium)
+    }
+    val report = stringResource(Strings.TaskMenu.reportShortage)
+    TextButton(
+        onClick = controller::beginReportShortage,
+        modifier = Modifier.fillMaxWidth().focusOutline(ComposerShape).semantics { contentDescription = report },
+    ) {
+        Text(text = report, style = MaterialTheme.typography.labelMedium)
+    }
+    // Offered only when there is something to make good. PLAN 6.3 subtracts from
+    // what is owed, and an action that could only ever subtract from nothing
+    // would be a button with no meaning on most tasks.
+    if (menu.owesSomething) {
+        val resolve = stringResource(Strings.TaskMenu.resolveShortage)
+        TextButton(
+            onClick = controller::beginResolveShortage,
+            modifier = Modifier.fillMaxWidth().focusOutline(ComposerShape).semantics { contentDescription = resolve },
+        ) {
+            Text(text = resolve, style = MaterialTheme.typography.labelMedium)
+        }
+    }
     val edit = stringResource(Strings.TaskMenu.edit)
     val convert = stringResource(Strings.TaskMenu.convertToText)
     TextButton(
@@ -1419,6 +1801,11 @@ private fun TaskMenuActions(
     ) {
         Text(text = convert, style = MaterialTheme.typography.labelMedium)
     }
+    // PLAN 6.3 has a shortage on a task in a finished game reopen the game in the
+    // same transaction. That transaction belongs to the slice that finishes
+    // games, so the reason is given in words rather than the action being half
+    // applied — and the words are about the work, not about the code.
+    menu.failure?.let { NoteLine(text = shortageMessageOf(it, menu.gameIsCompleted), isProblem = true) }
     NoteLine(text = stringResource(Strings.TaskMenu.hint), isProblem = false)
 }
 
@@ -1510,7 +1897,10 @@ private fun spokenTaskOf(segment: CellSegmentPreview): String {
         segment.requiredQuantity?.let { quantity ->
             stringResource(Strings.CellTask.description, segment.text, quantity, colors)
         } ?: stringResource(Strings.CellTask.descriptionUnknownQuantity, segment.text, colors)
-    return if (segment.isCompletedTask) said + ", " + stringResource(Strings.CellTask.completed) else said
+    // Whether it is finished is deliberately not folded in here. The piece says
+    // that as a state of its own, so a reader hears it once and hears it change;
+    // saying it in the name as well would have it read out twice.
+    return said
 }
 
 /**

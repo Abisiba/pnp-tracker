@@ -16,6 +16,7 @@ import dev.pnptracker.data.repository.ImportReviewStore
 import dev.pnptracker.data.repository.PoolStore
 import dev.pnptracker.data.repository.TaskEditStore
 import dev.pnptracker.data.repository.TaskFromTextStore
+import dev.pnptracker.data.repository.TaskProgressStore
 import dev.pnptracker.platform.awt.applyLinuxFileDialogPolicy
 import dev.pnptracker.platform.files.AppDirectoryInitializer
 import dev.pnptracker.platform.files.XdgAppPathsResolver
@@ -74,6 +75,7 @@ fun main() {
             colors = colorCatalogue,
             taskCreation = TaskFromTextStore(database.taskFromTextDao()),
             taskEditing = TaskEditStore(database.taskEditDao()),
+            taskProgress = TaskProgressStore(database.taskProgressDao()),
         )
     val colorCatalogueController = ColorCatalogueController(colorCatalogue)
     // The pools read the same tasks the table reads and write through the same

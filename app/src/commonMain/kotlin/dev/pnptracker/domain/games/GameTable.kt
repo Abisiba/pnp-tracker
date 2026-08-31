@@ -2,6 +2,7 @@ package dev.pnptracker.domain.games
 
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.tasks.CellTextSelection
 
@@ -80,6 +81,16 @@ data class CellSegmentPreview(
     /** The task's note, exactly as the user wrote it. */
     val notes: String? = null,
     val trackingMode: TrackingMode? = null,
+    /** Which pool the task is worked in; null on plain text. */
+    val poolType: PoolType? = null,
+    /**
+     * How much the task still owes and has to be made again (PLAN 6.2).
+     *
+     * Carried with the piece for the same reason [hasProgress] is: the menu over
+     * a task decides from it whether there is anything to make good, and asking
+     * the database when the menu opens would be a read per task.
+     */
+    val currentMissingQuantity: Int = 0,
     /**
      * True when work has been recorded against the task.
      *

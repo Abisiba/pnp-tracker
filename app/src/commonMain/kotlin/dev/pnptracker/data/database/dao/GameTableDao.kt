@@ -45,6 +45,8 @@ interface GameTableDao {
                tasks.required_quantity AS task_required_quantity,
                tasks.notes AS task_notes,
                tasks.tracking_mode AS task_tracking_mode,
+               tasks.pool_type AS task_pool_type,
+               tasks.current_missing_quantity AS task_current_missing_quantity,
                (tasks.primary_batch_completed = 1
                 OR tasks.current_missing_quantity > 0
                 OR EXISTS (SELECT 1 FROM progress_events WHERE progress_events.task_id = tasks.id)

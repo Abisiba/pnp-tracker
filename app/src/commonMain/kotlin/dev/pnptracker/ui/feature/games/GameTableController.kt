@@ -9,6 +9,8 @@ import dev.pnptracker.data.repository.GameSetup
 import dev.pnptracker.data.repository.GameTableSource
 import dev.pnptracker.data.repository.TaskCreationFromText
 import dev.pnptracker.data.repository.TaskEditing
+import dev.pnptracker.data.repository.TaskProgressOutcome
+import dev.pnptracker.data.repository.TaskProgressing
 import dev.pnptracker.domain.colors.ColorSetupException
 import dev.pnptracker.domain.colors.ColorSummary
 import dev.pnptracker.domain.colors.WheelNudge
@@ -25,19 +27,32 @@ import dev.pnptracker.domain.games.planDocumentChange
 import dev.pnptracker.domain.games.runsFrom
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.rules.normalizeColorTerm
 import dev.pnptracker.domain.tasks.TaskDraft
 import dev.pnptracker.domain.tasks.TaskEditException
 import dev.pnptracker.domain.tasks.TaskFromTextException
 import dev.pnptracker.domain.tasks.TaskFromTextFailure
+import dev.pnptracker.domain.tasks.TaskProgressFailure
 import dev.pnptracker.domain.tasks.onlyTrackingModeOf
 import dev.pnptracker.domain.tasks.splitForTaskName
 import dev.pnptracker.ui.feature.colors.ColorComposer
 import dev.pnptracker.ui.feature.colors.baseColorsIn
 import dev.pnptracker.ui.feature.tasks.TaskEditingHost
 import kotlinx.coroutines.flow.collect
+
+/**
+ * The most digits a shortage amount may be typed in.
+ *
+ * Nine of them cannot reach the top of an `Int`, so the number the user typed is
+ * always the number that arrives. What is too much for the task is still refused
+ * by the transaction — this only keeps the field from collecting something that
+ * could not be read back as what it says.
+ */
+private const val SHORTAGE_DIGITS = 9
 
 /**
  * The game table: which games it shows, what is being written in it, and what is
@@ -66,6 +81,8 @@ class GameTableController(
     private val colors: ColorCatalogue,
     private val taskCreation: TaskCreationFromText,
     private val taskEditing: TaskEditing,
+    private val taskProgress: TaskProgressing,
+    private val idGenerator: IdGenerator = IdGenerator.Random,
 ) : TaskEditingHost {
     var state: GameTableScreenState by mutableStateOf(GameTableScreenState())
         private set
@@ -118,14 +135,58 @@ class GameTableController(
                 is CellWork.TaskMenu -> work.taskId
                 is CellWork.EditingTask -> work.from.taskId
                 is CellWork.ConfirmingConvert -> work.taskId
+                is CellWork.ReportingShortage -> work.taskId
+                is CellWork.ResolvingShortage -> work.taskId
                 // The picker stands on the panel below it: if that panel has
                 // nothing left to act on, neither has this.
                 is CellWork.MakingColor -> return work.takeIf { stillValid(work.from) != null }
                 else -> return work
             }
         val cell = rowOf(work.gameId)?.cell(work.columnType)
-        return work.takeIf { cell?.tasks.orEmpty().any { it.taskId == taskId } }
+        val task = cell?.tasks.orEmpty().firstOrNull { it.taskId == taskId } ?: return null
+        // The menu is refreshed from the row that just arrived, so what it
+        // offers follows the task: a finish made elsewhere turns `Tamamla` into
+        // `Yeniden aç` without the menu having to close and be reopened. Only
+        // the menu's own facts move. Anything the user is part way through
+        // typing — a draft, an editor, the name a movement will be written
+        // under — is left exactly where it was.
+        return work.withMenu(freshMenu(work.menuOf() ?: return work, task))
     }
+
+    /** The menu this piece of work stands on, if it stands on one. */
+    private fun CellWork.menuOf(): CellWork.TaskMenu? =
+        when (this) {
+            is CellWork.TaskMenu -> this
+            is CellWork.EditingTask -> from
+            is CellWork.ConfirmingConvert -> from
+            is CellWork.ReportingShortage -> from
+            is CellWork.ResolvingShortage -> from
+            else -> null
+        }
+
+    /** The same piece of work, standing on a menu that has been brought up to date. */
+    private fun CellWork.withMenu(menu: CellWork.TaskMenu): CellWork =
+        when (this) {
+            is CellWork.TaskMenu -> menu
+            is CellWork.EditingTask -> copy(from = menu)
+            is CellWork.ConfirmingConvert -> copy(from = menu)
+            is CellWork.ReportingShortage -> copy(from = menu)
+            is CellWork.ResolvingShortage -> copy(from = menu)
+            else -> this
+        }
+
+    /** The menu's facts as the task now stands, keeping everything else it holds. */
+    private fun freshMenu(
+        menu: CellWork.TaskMenu,
+        task: CellSegmentPreview,
+    ): CellWork.TaskMenu =
+        menu.copy(
+            name = task.text,
+            isCompleted = task.isCompletedTask,
+            currentMissingQuantity = task.currentMissingQuantity,
+            poolType = task.poolType ?: menu.poolType,
+            gameIsCompleted = rowOf(menu.gameId)?.isCompleted ?: menu.gameIsCompleted,
+        )
 
     /**
      * Shows another view of the same rows. Reads nothing and writes nothing.
@@ -927,16 +988,240 @@ class GameTableController(
         val task = taskIn(gameId, columnType, taskId) ?: return
         state =
             state.copy(
-                work = CellWork.TaskMenu(gameId, columnType, taskId, task.text),
+                work = menuOver(gameId, columnType, task),
                 blockedByEditor = false,
             )
     }
+
+    /** A menu standing on one task, carrying everything it needs to decide what to offer. */
+    private fun menuOver(
+        gameId: EntityId,
+        columnType: CellColumnType,
+        task: CellSegmentPreview,
+    ): CellWork.TaskMenu =
+        CellWork.TaskMenu(
+            gameId = gameId,
+            columnType = columnType,
+            taskId = requireNotNull(task.taskId),
+            name = task.text,
+            isCompleted = task.isCompletedTask,
+            currentMissingQuantity = task.currentMissingQuantity,
+            poolType = task.poolType ?: columnType.poolType,
+            gameIsCompleted = rowOf(gameId)?.isCompleted == true,
+            completionEventId = idGenerator.newId(),
+        )
 
     private fun taskIn(
         gameId: EntityId,
         columnType: CellColumnType,
         taskId: EntityId,
     ): CellSegmentPreview? = rowOf(gameId)?.cell(columnType)?.tasks?.firstOrNull { it.taskId == taskId }
+
+    // ------------------------------------------- finishing work, and what it owes
+
+    /**
+     * The task the inline tick is being pressed on, while its write is on its way.
+     *
+     * A finish and a reopen are one click each, and the click can be made again
+     * before the first has landed. Holding the task here makes the second press
+     * do nothing rather than send a second write — which would be harmless for
+     * the finish itself (it is idempotent) but would settle a shortage twice
+     * under two different names.
+     */
+    var busyTaskId: EntityId? by mutableStateOf(null)
+        private set
+
+    /** Why the last tick did not take, and on which task; cleared by the next try. */
+    var tickFailure: Pair<EntityId, TaskProgressFailure>? by mutableStateOf(null)
+        private set
+
+    /**
+     * Finishes an unfinished task, or reopens a finished one.
+     *
+     * What the tick on the piece does, and PLAN 12.5 puts a tick on every piece.
+     * It reads which way to go from the task rather than from the caller, so the
+     * control has one meaning — "this is done" — in both directions.
+     */
+    suspend fun toggleTaskCompletion(
+        gameId: EntityId,
+        columnType: CellColumnType,
+        taskId: EntityId,
+    ) {
+        if (busyTaskId != null) return
+        val task = taskIn(gameId, columnType, taskId) ?: return
+        busyTaskId = taskId
+        tickFailure = null
+        val outcome =
+            if (task.isCompletedTask) {
+                taskProgress.reopenTask(taskId)
+            } else {
+                taskProgress.completeTask(taskId = taskId, eventId = idGenerator.newId())
+            }
+        busyTaskId = null
+        // Nothing left to do is not a failure. A second press that arrives after
+        // the first has landed has got what it asked for.
+        if (outcome is TaskProgressOutcome.Refused) tickFailure = taskId to outcome.failure
+    }
+
+    /** The same, asked for from the menu, so the keyboard reaches it too. */
+    suspend fun toggleCompletionFromMenu() {
+        val menu = state.menu() ?: return
+        if (menu.isWorking) return
+        state = state.copy(work = state.work?.withMenu(menu.copy(isWorking = true, failure = null)))
+        val outcome =
+            if (menu.isCompleted) {
+                taskProgress.reopenTask(menu.taskId)
+            } else {
+                taskProgress.completeTask(taskId = menu.taskId, eventId = menu.completionEventId)
+            }
+        val settled = state.menu() ?: return
+        state =
+            state.copy(
+                work =
+                    state.work?.withMenu(
+                        settled.copy(
+                            isWorking = false,
+                            failure = (outcome as? TaskProgressOutcome.Refused)?.failure,
+                        ),
+                    ),
+            )
+    }
+
+    /**
+     * Opens the form that says how many pieces came out missing or spoiled.
+     *
+     * PLAN 6.3 has one action for both, so there is one form. A task in a
+     * finished game is left alone until the slice that reopens games arrives:
+     * reporting here would reopen the task and leave its game marked finished,
+     * which is the half applied state PLAN 6.3 writes as one transaction.
+     */
+    fun beginReportShortage() {
+        val menu = state.menu() ?: return
+        if (menu.gameIsCompleted) {
+            state = state.copy(work = state.work?.withMenu(menu.copy(failure = TaskProgressFailure.TASK_NOT_AVAILABLE)))
+            return
+        }
+        state = state.copy(work = CellWork.ReportingShortage(from = menu.copy(failure = null), draft = newDraft()))
+    }
+
+    /** Opens the form that says how many of the pieces owed have been made again. */
+    fun beginResolveShortage() {
+        val menu = state.menu() ?: return
+        if (!menu.owesSomething) return
+        state = state.copy(work = CellWork.ResolvingShortage(from = menu.copy(failure = null), draft = newDraft()))
+    }
+
+    /** A fresh draft, with the name its movement will be written under already chosen. */
+    private fun newDraft(): ShortageDraft = ShortageDraft(eventId = idGenerator.newId())
+
+    fun editShortageQuantity(text: String) = onDraft { it.copy(quantity = text.filter(Char::isDigit).take(SHORTAGE_DIGITS)) }
+
+    fun editShortageNote(text: String) = onDraft { it.copy(note = text) }
+
+    fun editShortageCardReference(text: String) = onDraft { it.copy(cardReference = text) }
+
+    /** Chooses the step the pieces were noticed at, or takes the choice back. */
+    fun chooseShortageStage(stage: ProductionStage?) = onDraft { it.copy(stage = stage) }
+
+    private fun onDraft(change: (ShortageDraft) -> ShortageDraft) {
+        state =
+            state.copy(
+                work =
+                    when (val open = state.work) {
+                        is CellWork.ReportingShortage -> open.copy(draft = change(open.draft), failure = null)
+                        is CellWork.ResolvingShortage -> open.copy(draft = change(open.draft), failure = null)
+                        else -> return
+                    },
+            )
+    }
+
+    /**
+     * Sends whichever shortage form is open.
+     *
+     * The name the movement is written under comes from the draft and is not
+     * made again here, so a send that failed uncertainly and is sent again is
+     * the same movement. A send already on its way is not sent a second time:
+     * PLAN 5.12 makes the identity what tells a retry from a second report, and
+     * two sends of one form are one report however fast they arrive.
+     */
+    suspend fun saveShortage() {
+        val open = state.work
+        if (open !is CellWork.ReportingShortage && open !is CellWork.ResolvingShortage) return
+        val menu = open.menuOf() ?: return
+        val draft =
+            when (open) {
+                is CellWork.ReportingShortage -> open.draft
+                is CellWork.ResolvingShortage -> open.draft
+                else -> return
+            }
+        if (isSavingShortage(open)) return
+        val counted = draft.countedQuantity
+        if (counted == null || counted <= 0) {
+            state = state.copy(work = failing(open, TaskProgressFailure.INVALID_QUANTITY))
+            return
+        }
+        state = state.copy(work = saving(open))
+        val outcome =
+            when (open) {
+                is CellWork.ReportingShortage ->
+                    taskProgress.reportFailure(
+                        eventId = draft.eventId,
+                        taskId = menu.taskId,
+                        quantity = counted,
+                        note = draft.writtenNote,
+                        cardReference = draft.writtenCardReference(menu.poolType),
+                        stage = draft.chosenStage(menu.poolType),
+                    )
+
+                else ->
+                    taskProgress.resolveShortage(
+                        eventId = draft.eventId,
+                        taskId = menu.taskId,
+                        quantity = counted,
+                        note = draft.writtenNote,
+                        cardReference = draft.writtenCardReference(menu.poolType),
+                    )
+            }
+        val current = state.work
+        if (current !is CellWork.ReportingShortage && current !is CellWork.ResolvingShortage) return
+        state =
+            when (outcome) {
+                // Done or already recorded: either way the movement the user
+                // asked for is in the history, so the form has finished its job
+                // and closing back to the menu shows them the task as it now is.
+                is TaskProgressOutcome.Done, TaskProgressOutcome.AlreadySo ->
+                    state.copy(work = current.menuOf()?.copy(failure = null))
+
+                // The draft stays exactly as typed, and so does the name the
+                // movement would be written under, so trying again is the same
+                // movement rather than a second one.
+                is TaskProgressOutcome.Refused -> state.copy(work = failing(current, outcome.failure))
+            }
+    }
+
+    private fun isSavingShortage(work: CellWork): Boolean =
+        when (work) {
+            is CellWork.ReportingShortage -> work.isSaving
+            is CellWork.ResolvingShortage -> work.isSaving
+            else -> false
+        }
+
+    private fun saving(work: CellWork): CellWork =
+        when (work) {
+            is CellWork.ReportingShortage -> work.copy(isSaving = true, failure = null)
+            is CellWork.ResolvingShortage -> work.copy(isSaving = true, failure = null)
+            else -> work
+        }
+
+    private fun failing(
+        work: CellWork,
+        failure: TaskProgressFailure,
+    ): CellWork =
+        when (work) {
+            is CellWork.ReportingShortage -> work.copy(isSaving = false, failure = failure)
+            is CellWork.ResolvingShortage -> work.copy(isSaving = false, failure = failure)
+            else -> work
+        }
 
     /** Opens the panel that changes what the task is, over the same word. */
     fun beginTaskEdit() {
@@ -966,13 +1251,7 @@ class GameTableController(
             )
     }
 
-    private fun GameTableScreenState.menu(): CellWork.TaskMenu? =
-        when (val open = work) {
-            is CellWork.TaskMenu -> open
-            is CellWork.EditingTask -> open.from
-            is CellWork.ConfirmingConvert -> open.from
-            else -> null
-        }
+    private fun GameTableScreenState.menu(): CellWork.TaskMenu? = work?.menuOf()
 
     private fun onEditor(
         recallFocus: Boolean = false,

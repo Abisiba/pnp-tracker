@@ -130,6 +130,8 @@ class GameTableStore(
                             colors = colorsByTask[taskId].orEmpty(),
                             notes = row.taskNotes,
                             trackingMode = row.taskTrackingMode,
+                            poolType = row.taskPoolType,
+                            currentMissingQuantity = row.taskCurrentMissingQuantity ?: 0,
                             hasProgress = row.taskHasProgress == true,
                         )
                     }

@@ -2,6 +2,7 @@ package dev.pnptracker.data.database.projection
 
 import androidx.room3.ColumnInfo
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.SegmentKind
 import dev.pnptracker.domain.model.TrackingMode
 
@@ -42,6 +43,12 @@ data class CellContentRow(
     val taskNotes: String?,
     @ColumnInfo(name = "task_tracking_mode")
     val taskTrackingMode: TrackingMode?,
+    /** Which pool the task is worked in; what decides the detail a shortage may carry. */
+    @ColumnInfo(name = "task_pool_type")
+    val taskPoolType: PoolType?,
+    /** How much the task still owes, so a menu over it costs no query of its own. */
+    @ColumnInfo(name = "task_current_missing_quantity")
+    val taskCurrentMissingQuantity: Int?,
     /**
      * Whether any work has been recorded against the task.
      *

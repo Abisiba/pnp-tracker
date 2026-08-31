@@ -106,6 +106,130 @@ class TaskProgressTest {
 
     private suspend fun taskOf(taskId: EntityId) = assertNotNull(progress.taskById(taskId))
 
+    // -------------------------------------------- amounts that are not amounts
+
+    @Test
+    fun `an amount too large to add is refused rather than wrapped around`() =
+        runBlocking<Unit> {
+            // Without a total there is nothing to saturate against, so an amount
+            // that would not fit in what a task can owe is refused. Added as an
+            // `Int` this used to wrap round to a negative debt, and the negative
+            // number was the one the cap was then applied to.
+            val taskId = aTaskIn(PoolType.THREE_D, requiredQuantity = null)
+            progress.reportFailure(ids.newId(), taskId, 10, clock)
+
+            assertEquals(
+                TaskProgressFailure.INVALID_QUANTITY,
+                assertFailsWith<TaskProgressException> {
+                    progress.reportFailure(ids.newId(), taskId, Int.MAX_VALUE, clock)
+                }.failure,
+            )
+
+            // Nothing of the refused attempt survives: not the counter, not the
+            // event, not the failure total it would have joined.
+            assertEquals(10, taskOf(taskId).currentMissingQuantity)
+            assertEquals(1, progress.progressEventsOfTask(taskId).size)
+            assertEquals(10L, progress.failureTotalOf(taskId))
+        }
+
+    @Test
+    fun `a huge amount on a task with a total is kept whole and the counter stops at the total`() =
+        runBlocking<Unit> {
+            // PLAN 6.4: what is owed cannot pass what the task needs, while the
+            // failure total is free to go past it — a piece can be spoiled more
+            // than once. So the event keeps what was really reported.
+            val taskId = aTaskIn(PoolType.THREE_D, requiredQuantity = 40)
+
+            assertTrue(progress.reportFailure(ids.newId(), taskId, Int.MAX_VALUE, clock))
+
+            assertEquals(40, taskOf(taskId).currentMissingQuantity, "the counter passed the total")
+            assertEquals(Int.MAX_VALUE, progress.progressEventsOfTask(taskId).single().quantity)
+            assertEquals(Int.MAX_VALUE.toLong(), progress.failureTotalOf(taskId))
+        }
+
+    @Test
+    fun `two large reports on one task do not overflow the counter between them`() =
+        runBlocking<Unit> {
+            val taskId = aTaskIn(PoolType.THREE_D, requiredQuantity = 40)
+            progress.reportFailure(ids.newId(), taskId, Int.MAX_VALUE, clock)
+
+            assertTrue(progress.reportFailure(ids.newId(), taskId, Int.MAX_VALUE, clock))
+
+            assertEquals(40, taskOf(taskId).currentMissingQuantity)
+            assertEquals(2, progress.progressEventsOfTask(taskId).size)
+        }
+
+    @Test
+    fun `an amount with no total behind it is taken as far as it will really go`() =
+        runBlocking<Unit> {
+            val taskId = aTaskIn(PoolType.THREE_D, requiredQuantity = null)
+
+            assertTrue(progress.reportFailure(ids.newId(), taskId, Int.MAX_VALUE, clock))
+
+            assertEquals(Int.MAX_VALUE, taskOf(taskId).currentMissingQuantity)
+        }
+
+    @Test
+    fun `a shortage reported at a step leaves the pipeline exactly where it was`() =
+        runBlocking<Unit> {
+            // PLAN 7.3 gives moving a counter to the badge, which is a later
+            // slice. Naming a step here says where the pieces were noticed and
+            // changes nothing about how far the work has got.
+            val cardId = aTaskIn(PoolType.CARD, requiredQuantity = 20)
+            progress.setStageQuantity(cardId, ProductionStage.PRINT, 20, clock)
+            val before = progress.stagesOfTask(cardId).map { it.stage to it.completedQuantity }
+
+            assertTrue(
+                progress.reportFailure(
+                    ids.newId(),
+                    cardId,
+                    3,
+                    clock,
+                    cardReference = "Bird 12",
+                    stage = ProductionStage.LAMINATE,
+                ),
+            )
+
+            assertEquals(before, progress.stagesOfTask(cardId).map { it.stage to it.completedQuantity })
+            assertEquals(3, taskOf(cardId).currentMissingQuantity)
+            val event = progress.progressEventsOfTask(cardId).single()
+            assertEquals(ProductionStage.LAMINATE, event.stage)
+            assertEquals("Bird 12", event.cardReference)
+        }
+
+    @Test
+    fun `a board shortage may name its own middle step and not the other pipeline's`() =
+        runBlocking<Unit> {
+            val boardId = aTaskIn(PoolType.BOARD, requiredQuantity = 12)
+
+            assertTrue(progress.reportFailure(ids.newId(), boardId, 2, clock, stage = ProductionStage.GLUE))
+            assertEquals(
+                TaskProgressFailure.STAGE_NOT_IN_PIPELINE,
+                assertFailsWith<TaskProgressException> {
+                    progress.reportFailure(ids.newId(), boardId, 1, clock, stage = ProductionStage.LAMINATE)
+                }.failure,
+            )
+
+            assertEquals(2, taskOf(boardId).currentMissingQuantity, "the refused report still moved the counter")
+            assertEquals(listOf(0, 0, 0), progress.stagesOfTask(boardId).map { it.completedQuantity })
+        }
+
+    @Test
+    fun `making good on a board task leaves its steps alone too`() =
+        runBlocking<Unit> {
+            val boardId = aTaskIn(PoolType.BOARD, requiredQuantity = 12)
+            progress.setStageQuantity(boardId, ProductionStage.PRINT, 12, clock)
+            progress.reportFailure(ids.newId(), boardId, 4, clock)
+
+            assertTrue(progress.resolveShortage(ids.newId(), boardId, 4, clock))
+
+            assertEquals(0, taskOf(boardId).currentMissingQuantity)
+            assertEquals(listOf(12, 0, 0), progress.stagesOfTask(boardId).map { it.completedQuantity })
+            // Owing nothing is not the same as having done the work: PLAN 7.2
+            // finishes a card or board task when every step reaches the total.
+            assertFalse(taskOf(boardId).isCompleted)
+        }
+
     // ------------------------------------------------- finishing and reopening
 
     @Test
@@ -295,7 +419,7 @@ class TaskProgressTest {
 
             val task = taskOf(taskId)
             assertEquals(3, task.currentMissingQuantity)
-            assertEquals(3, progress.failureTotalOf(taskId))
+            assertEquals(3L, progress.failureTotalOf(taskId))
             assertFalse(task.isCompleted, "a task that owes three pieces was left finished")
         }
 
@@ -325,7 +449,7 @@ class TaskProgressTest {
             val task = taskOf(taskId)
             assertEquals(0, task.currentMissingQuantity)
             assertTrue(task.isCompleted)
-            assertEquals(3, progress.failureTotalOf(taskId), "making good erased the history of having failed")
+            assertEquals(3L, progress.failureTotalOf(taskId), "making good erased the history of having failed")
             assertEquals(
                 listOf(ProgressEventKind.FAILURE_REPORTED, ProgressEventKind.SHORTAGE_RESOLVED),
                 progress.progressEventsOfTask(taskId).map { it.kind },
@@ -344,7 +468,7 @@ class TaskProgressTest {
             val task = taskOf(taskId)
             assertEquals(3, task.currentMissingQuantity)
             assertFalse(task.isCompleted)
-            assertEquals(5, progress.failureTotalOf(taskId))
+            assertEquals(5L, progress.failureTotalOf(taskId))
         }
 
     @Test
@@ -366,13 +490,22 @@ class TaskProgressTest {
         runBlocking<Unit> {
             val taskId = aTaskIn(PoolType.THREE_D)
 
-            listOf(0, -1, -40).forEach { quantity ->
-                assertFailsWith<IllegalArgumentException> {
-                    progress.reportFailure(ids.newId(), taskId, quantity, clock)
-                }
-                assertFailsWith<IllegalArgumentException> {
-                    progress.resolveShortage(ids.newId(), taskId, quantity, clock)
-                }
+            // Refused as an outcome and not as an argument error: the amount
+            // comes from a box the user typed in, so what is wrong with it is
+            // something a screen has to be able to say.
+            listOf(0, -1, -40, Int.MIN_VALUE).forEach { quantity ->
+                assertEquals(
+                    TaskProgressFailure.INVALID_QUANTITY,
+                    assertFailsWith<TaskProgressException> {
+                        progress.reportFailure(ids.newId(), taskId, quantity, clock)
+                    }.failure,
+                )
+                assertEquals(
+                    TaskProgressFailure.INVALID_QUANTITY,
+                    assertFailsWith<TaskProgressException> {
+                        progress.resolveShortage(ids.newId(), taskId, quantity, clock)
+                    }.failure,
+                )
             }
             assertEquals(0, taskOf(taskId).currentMissingQuantity)
             assertEquals(emptyList(), progress.progressEventsOfTask(taskId))
@@ -388,7 +521,7 @@ class TaskProgressTest {
             assertFalse(progress.reportFailure(eventId, taskId, 3, clock), "the retry claimed to have recorded")
 
             assertEquals(3, taskOf(taskId).currentMissingQuantity)
-            assertEquals(3, progress.failureTotalOf(taskId))
+            assertEquals(3L, progress.failureTotalOf(taskId))
             assertEquals(1, progress.progressEventsOfTask(taskId).size)
         }
 
@@ -403,7 +536,7 @@ class TaskProgressTest {
             progress.reportFailure(ids.newId(), taskId, 4, clock)
 
             assertEquals(5, taskOf(taskId).currentMissingQuantity)
-            assertEquals(8, progress.failureTotalOf(taskId))
+            assertEquals(8L, progress.failureTotalOf(taskId))
         }
 
     @Test
@@ -436,8 +569,8 @@ class TaskProgressTest {
             val task = taskOf(taskId)
             assertTrue(task.isCompleted)
             assertEquals(0, task.currentMissingQuantity)
-            assertEquals(3, progress.failureTotalOf(taskId), "settling erased the history")
-            assertEquals(3, progress.resolvedTotalOf(taskId))
+            assertEquals(3L, progress.failureTotalOf(taskId), "settling erased the history")
+            assertEquals(3L, progress.resolvedTotalOf(taskId))
             assertEquals(
                 listOf(ProgressEventKind.FAILURE_REPORTED, ProgressEventKind.SHORTAGE_RESOLVED),
                 progress.progressEventsOfTask(taskId).map { it.kind },
@@ -453,7 +586,7 @@ class TaskProgressTest {
             database.taskDao().softDelete(taskId, deletedAt)
 
             assertEquals(1, progress.progressEventsOfTask(taskId).size)
-            assertEquals(3, progress.failureTotalOf(taskId))
+            assertEquals(3L, progress.failureTotalOf(taskId))
             assertEquals("Kırık çıktı", progress.progressEventsOfTask(taskId).single().note)
         }
 
@@ -839,7 +972,7 @@ class TaskProgressTest {
             assertTrue(progress.resolveShortage(ids.newId(), taskId, 2, clock))
 
             assertTrue(taskOf(taskId).isCompleted, "the task did not finish again once nothing was owed")
-            assertEquals(2, progress.failureTotalOf(taskId))
+            assertEquals(2L, progress.failureTotalOf(taskId))
         }
 
     @Test
@@ -925,7 +1058,7 @@ class TaskProgressTest {
             assertEquals(after, taskOf(taskId), "the retry moved the task")
             assertEquals(readsAfterFirst, clock.reads, "the retry read the clock")
             assertEquals(1, progress.progressEventsOfTask(taskId).size)
-            assertEquals(3, progress.failureTotalOf(taskId))
+            assertEquals(3L, progress.failureTotalOf(taskId))
         }
 
     @Test
@@ -957,7 +1090,7 @@ class TaskProgressTest {
 
             assertEquals(TaskProgressFailure.EVENT_ID_ALREADY_USED, refusal.failure)
             assertEquals(5, taskOf(taskId).currentMissingQuantity, "the resolution was applied anyway")
-            assertEquals(0, progress.resolvedTotalOf(taskId))
+            assertEquals(0L, progress.resolvedTotalOf(taskId))
         }
 
     @Test
@@ -1150,7 +1283,7 @@ class TaskProgressTest {
             assertEquals(7, outcomes.count { !it })
             assertEquals(1, progress.progressEventsOfTask(taskId).size)
             assertEquals(1, taskOf(taskId).currentMissingQuantity, "the counter moved more than once")
-            assertEquals(1, progress.failureTotalOf(taskId))
+            assertEquals(1L, progress.failureTotalOf(taskId))
         }
 
     @Test
@@ -1180,6 +1313,6 @@ class TaskProgressTest {
 
             val recorded = progress.progressEventsOfTask(taskId).single()
             assertEquals(recorded.quantity, taskOf(taskId).currentMissingQuantity, "the counter lost track")
-            assertEquals(recorded.quantity, progress.failureTotalOf(taskId))
+            assertEquals(recorded.quantity.toLong(), progress.failureTotalOf(taskId))
         }
 }

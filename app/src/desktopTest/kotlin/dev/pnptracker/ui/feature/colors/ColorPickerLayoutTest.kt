@@ -174,9 +174,14 @@ class ColorPickerLayoutTest {
         // A second implementation is a second set of bugs and a second thing to
         // keep in step with the arithmetic.
         listOf(colorScreen, gameScreen).forEach { surface ->
-            assertTrue("Canvas(" !in surface, "a surface draws a wheel of its own")
+            // The wheel, not drawing in general. A surface may well have a
+            // canvas of its own — the tick on a task is one — and banning the
+            // tool rather than the thing built with it would stop honest work
+            // while a wheel assembled some other way still slipped through.
             assertTrue("sweepGradient" !in surface, "a surface builds its own colour wheel")
+            assertTrue("ColorWheel(" !in surface, "a surface draws a wheel of its own")
         }
+        assertEquals(1, Regex("""fun ColorWheel\(""").findAll(picker).count())
         assertEquals(1, Regex("""fun ColorPicker\(""").findAll(picker).count())
     }
 

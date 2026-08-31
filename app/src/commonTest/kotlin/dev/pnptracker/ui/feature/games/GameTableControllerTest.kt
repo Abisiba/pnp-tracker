@@ -6,6 +6,8 @@ import dev.pnptracker.data.repository.GameSetup
 import dev.pnptracker.data.repository.GameTableSource
 import dev.pnptracker.data.repository.TaskCreationFromText
 import dev.pnptracker.data.repository.TaskEditing
+import dev.pnptracker.data.repository.TaskProgressOutcome
+import dev.pnptracker.data.repository.TaskProgressing
 import dev.pnptracker.domain.colors.ColorSetupException
 import dev.pnptracker.domain.colors.ColorSetupFailure
 import dev.pnptracker.domain.colors.ColorSummary
@@ -26,6 +28,8 @@ import dev.pnptracker.domain.games.TaskColorPreview
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
+import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.tasks.CellTextSelection
 import dev.pnptracker.domain.tasks.TaskDraft
@@ -33,6 +37,7 @@ import dev.pnptracker.domain.tasks.TaskEditException
 import dev.pnptracker.domain.tasks.TaskEditFailure
 import dev.pnptracker.domain.tasks.TaskFromTextException
 import dev.pnptracker.domain.tasks.TaskFromTextFailure
+import dev.pnptracker.domain.tasks.TaskProgressFailure
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -186,6 +191,77 @@ class GameTableControllerTest {
         }
     }
 
+    /** A progress store that remembers what it was asked, and answers as told. */
+    private class FakeTaskProgress(
+        private val outcome: TaskProgressOutcome = TaskProgressOutcome.Done,
+    ) : TaskProgressing {
+        val completed = mutableListOf<Pair<EntityId, EntityId>>()
+        val reopened = mutableListOf<EntityId>()
+        val reported = mutableListOf<RecordedMovement>()
+        val resolved = mutableListOf<RecordedMovement>()
+
+        /**
+         * Run once, in the middle of the next call.
+         *
+         * Where a second press really lands: the first call has not answered
+         * yet, so nothing about the task has changed that would stop it.
+         */
+        var whileWorking: (suspend () -> Unit)? = null
+
+        private suspend fun answer(): TaskProgressOutcome {
+            whileWorking?.let {
+                whileWorking = null
+                it()
+            }
+            return outcome
+        }
+
+        override suspend fun completeTask(
+            taskId: EntityId,
+            eventId: EntityId,
+        ): TaskProgressOutcome {
+            completed += taskId to eventId
+            return answer()
+        }
+
+        override suspend fun reopenTask(taskId: EntityId): TaskProgressOutcome {
+            reopened += taskId
+            return answer()
+        }
+
+        override suspend fun reportFailure(
+            eventId: EntityId,
+            taskId: EntityId,
+            quantity: Int,
+            note: String?,
+            cardReference: String?,
+            stage: ProductionStage?,
+        ): TaskProgressOutcome {
+            reported += RecordedMovement(eventId, taskId, quantity, note, cardReference, stage)
+            return answer()
+        }
+
+        override suspend fun resolveShortage(
+            eventId: EntityId,
+            taskId: EntityId,
+            quantity: Int,
+            note: String?,
+            cardReference: String?,
+        ): TaskProgressOutcome {
+            resolved += RecordedMovement(eventId, taskId, quantity, note, cardReference, stage = null)
+            return answer()
+        }
+    }
+
+    private data class RecordedMovement(
+        val eventId: EntityId,
+        val taskId: EntityId,
+        val quantity: Int,
+        val note: String?,
+        val cardReference: String?,
+        val stage: ProductionStage?,
+    )
+
     private data class EditedTask(
         val taskId: EntityId,
         val name: String,
@@ -314,11 +390,18 @@ class GameTableControllerTest {
     private fun taskPiece(
         name: String,
         quantity: Int? = null,
+        taskId: EntityId = IdGenerator.Random.newId(),
+        isCompleted: Boolean = false,
+        missing: Int = 0,
+        poolType: PoolType = PoolType.THREE_D,
     ) = CellSegmentPreview(
         segmentId = IdGenerator.Random.newId(),
-        taskId = IdGenerator.Random.newId(),
+        taskId = taskId,
         text = name,
+        isCompletedTask = isCompleted,
         requiredQuantity = quantity,
+        poolType = poolType,
+        currentMissingQuantity = missing,
     )
 
     private fun controllerOf(
@@ -328,7 +411,8 @@ class GameTableControllerTest {
         colors: FakeColors = FakeColors(),
         taskCreation: FakeTaskCreation = FakeTaskCreation(),
         taskEditing: FakeTaskEditing = FakeTaskEditing(),
-    ) = GameTableController(table, setup, cells, colors, taskCreation, taskEditing)
+        taskProgress: FakeTaskProgress = FakeTaskProgress(),
+    ) = GameTableController(table, setup, cells, colors, taskCreation, taskEditing, taskProgress)
 
     private fun visibleNames(controller: GameTableController): List<String> =
         assertIs<GameTableRowsState.Content>(controller.state.rows).rows.map { it.gameName }
@@ -3567,5 +3651,583 @@ class GameTableControllerTest {
             assertEquals("Token II", editor.name, "the rest of the edit was lost")
             collecting.cancelAndJoin()
             catalogue.cancelAndJoin()
+        }
+
+    // ------------------------------------- finishing work, and what it still owes
+
+    /**
+     * One game holding one task, and everything a test needs to amend it.
+     *
+     * The row itself comes back, not just its identity, because a test that
+     * wants the task to change has to hand the same game back with a different
+     * piece in it: building a fresh row would invent a new game, and the open
+     * menu would rightly decide its task had gone.
+     */
+    private class ProgressFixture(
+        val taskId: EntityId,
+        val table: FakeTable,
+        val piece: CellSegmentPreview,
+        val gameRow: GameTableRow,
+        val columnType: CellColumnType,
+    ) {
+        val gameId: EntityId get() = gameRow.gameId
+
+        /** The same game, with this piece in place of the one it had. */
+        fun holding(piece: CellSegmentPreview?) {
+            table.rows.value =
+                listOf(
+                    gameRow.copy(
+                        cells =
+                            gameRow.cells.map { cell ->
+                                if (cell.columnType == columnType) cell.copy(segments = listOfNotNull(piece)) else cell
+                            },
+                    ),
+                )
+        }
+    }
+
+    private fun progressFixture(
+        isCompleted: Boolean = false,
+        missing: Int = 0,
+        poolType: PoolType = PoolType.THREE_D,
+        gameCompleted: Boolean = false,
+        columnType: CellColumnType = CellColumnType.THREE_D,
+    ): ProgressFixture {
+        val taskId = IdGenerator.Random.newId()
+        val piece =
+            taskPiece("Token", quantity = 40, taskId = taskId, isCompleted = isCompleted, missing = missing, poolType = poolType)
+        val gameRow = row("Harmonies", isCompleted = gameCompleted, cells = mapOf(columnType to listOf(piece)))
+        return ProgressFixture(taskId, FakeTable(listOf(gameRow)), piece, gameRow, columnType)
+    }
+
+    /**
+     * A controller looking at every game, whichever way they stand.
+     *
+     * A finished game is not in the view the table opens on, so a test about a
+     * task inside one has to be looking somewhere it can see it.
+     */
+    private suspend fun CoroutineScope.watching(
+        fixture: ProgressFixture,
+        progress: FakeTaskProgress,
+    ): Pair<GameTableController, Job> {
+        val controller = controllerOf(fixture.table, taskProgress = progress)
+        val job = collect(controller)
+        controller.showView(GameTableView.ALL)
+        return controller to job
+    }
+
+    private fun openMenu(controller: GameTableController): CellWork.TaskMenu = assertIs(controller.state.work)
+
+    private fun reportingForm(controller: GameTableController): CellWork.ReportingShortage = assertIs(controller.state.work)
+
+    private fun resolvingForm(controller: GameTableController): CellWork.ResolvingShortage = assertIs(controller.state.work)
+
+    @Test
+    fun `every surface a task can open is one the cell can find again`() =
+        runBlocking<Unit> {
+            // The popover hangs off the cell, and the cell finds it by asking
+            // which menu is open in it. A surface the cell cannot find is a
+            // surface nothing draws — and because open work also blocks every
+            // other cell, the window would be left saying something is open with
+            // nothing on screen to close. So each of them is opened for real and
+            // looked for the way the screen looks for it.
+            val fixture = progressFixture(missing = 3)
+            val (controller, job) = watching(fixture, FakeTaskProgress())
+            val found = { controller.state.menuIn(fixture.gameId, CellColumnType.THREE_D) }
+
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            assertNotNull(found(), "the menu itself cannot be found")
+
+            controller.beginReportShortage()
+            assertIs<CellWork.ReportingShortage>(controller.state.work)
+            assertNotNull(found(), "the form for what came up short is drawn nowhere")
+            controller.closeInnermost()
+
+            controller.beginResolveShortage()
+            assertIs<CellWork.ResolvingShortage>(controller.state.work)
+            assertNotNull(found(), "the form for what was made good is drawn nowhere")
+            controller.closeInnermost()
+
+            controller.beginTaskEdit()
+            assertNotNull(found(), "the edit panel is drawn nowhere")
+            controller.closeInnermost()
+
+            controller.beginConvertToText()
+            assertNotNull(found(), "the confirmation is drawn nowhere")
+            job.cancel()
+        }
+
+    @Test
+    fun `the tick finishes an unfinished task and takes a finished one back`() =
+        runBlocking<Unit> {
+            val open = progressFixture()
+            val openProgress = FakeTaskProgress()
+            val (a, jobA) = watching(open, openProgress)
+            a.toggleTaskCompletion(open.gameId, CellColumnType.THREE_D, open.taskId)
+            assertEquals(listOf(open.taskId), openProgress.completed.map { it.first })
+            assertTrue(openProgress.reopened.isEmpty(), "finishing also reopened something")
+            jobA.cancel()
+
+            val done = progressFixture(isCompleted = true)
+            val doneProgress = FakeTaskProgress()
+            val (b, jobB) = watching(done, doneProgress)
+            b.toggleTaskCompletion(done.gameId, CellColumnType.THREE_D, done.taskId)
+            assertEquals(listOf(done.taskId), doneProgress.reopened)
+            assertTrue(doneProgress.completed.isEmpty(), "reopening also finished something")
+            jobB.cancel()
+        }
+
+    @Test
+    fun `a second press while the first is on its way writes nothing more`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+            val gameId = fixture.gameId
+            progress.whileWorking = { controller.toggleTaskCompletion(gameId, CellColumnType.THREE_D, fixture.taskId) }
+
+            controller.toggleTaskCompletion(gameId, CellColumnType.THREE_D, fixture.taskId)
+
+            assertEquals(1, progress.completed.size, "a double click finished the task twice")
+            job.cancel()
+        }
+
+    @Test
+    fun `nothing left to do is not shown as something going wrong`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val (controller, job) = watching(fixture, FakeTaskProgress(TaskProgressOutcome.AlreadySo))
+
+            controller.toggleTaskCompletion(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+
+            assertNull(controller.tickFailure, "a task that was already finished was reported as a failure")
+            job.cancel()
+        }
+
+    @Test
+    fun `a refused tick is remembered against the task it happened on`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val refusing = FakeTaskProgress(TaskProgressOutcome.Refused(TaskProgressFailure.TASK_NOT_AVAILABLE))
+            val (controller, job) = watching(fixture, refusing)
+
+            controller.toggleTaskCompletion(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+
+            assertEquals(fixture.taskId to TaskProgressFailure.TASK_NOT_AVAILABLE, controller.tickFailure)
+            job.cancel()
+        }
+
+    @Test
+    fun `the menu finishes a task the same way the tick does`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+
+            controller.toggleCompletionFromMenu()
+
+            assertEquals(listOf(fixture.taskId), progress.completed.map { it.first })
+            assertFalse(openMenu(controller).isWorking, "the menu stayed busy after the write landed")
+            job.cancel()
+        }
+
+    @Test
+    fun `a finish settles under the name the menu was opened with, however often it is tried`() =
+        runBlocking<Unit> {
+            // A finish may have to settle what the task owes, and PLAN 5.12 makes
+            // that a real event. Tried twice it has to be the same event, or the
+            // settling is recorded twice over.
+            val fixture = progressFixture(missing = 4)
+            val refusing = FakeTaskProgress(TaskProgressOutcome.Refused(TaskProgressFailure.TASK_NOT_AVAILABLE))
+            val (controller, job) = watching(fixture, refusing)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            val named = openMenu(controller).completionEventId
+
+            controller.toggleCompletionFromMenu()
+            controller.toggleCompletionFromMenu()
+
+            assertEquals(listOf(named, named), refusing.completed.map { it.second })
+            job.cancel()
+        }
+
+    @Test
+    fun `a finish made elsewhere turns the menu's offer round without closing it`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val (controller, job) = watching(fixture, FakeTaskProgress())
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            assertFalse(openMenu(controller).isCompleted)
+
+            fixture.holding(fixture.piece.copy(isCompletedTask = true))
+            yield()
+
+            assertTrue(openMenu(controller).isCompleted, "the menu still offers to finish a finished task")
+            job.cancel()
+        }
+
+    @Test
+    fun `a shortage form is given the name its movement will be written under`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val (controller, job) = watching(fixture, FakeTaskProgress())
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+
+            controller.beginReportShortage()
+
+            assertNotNull(reportingForm(controller).draft.eventId)
+            job.cancel()
+        }
+
+    @Test
+    fun `a refused send keeps the draft and the name it was sent under`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val refusing = FakeTaskProgress(TaskProgressOutcome.Refused(TaskProgressFailure.TASK_NOT_AVAILABLE))
+            val (controller, job) = watching(fixture, refusing)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.beginReportShortage()
+            controller.editShortageQuantity("3")
+            controller.editShortageNote("Tabla kenarı")
+            val named = reportingForm(controller).draft.eventId
+
+            controller.saveShortage()
+
+            val after = reportingForm(controller)
+            assertEquals("3", after.draft.quantity, "what was typed was lost")
+            assertEquals("Tabla kenarı", after.draft.note)
+            assertEquals(named, after.draft.eventId, "a retry would go in as a second report")
+            assertEquals(TaskProgressFailure.TASK_NOT_AVAILABLE, after.failure)
+            assertFalse(after.isSaving, "the form stayed stuck sending")
+            job.cancel()
+        }
+
+    @Test
+    fun `sending the same form again is the same movement`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val refusing = FakeTaskProgress(TaskProgressOutcome.Refused(TaskProgressFailure.TASK_NOT_AVAILABLE))
+            val (controller, job) = watching(fixture, refusing)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.beginReportShortage()
+            controller.editShortageQuantity("3")
+
+            controller.saveShortage()
+            controller.saveShortage()
+
+            assertEquals(2, refusing.reported.size)
+            assertEquals(
+                1,
+                refusing.reported
+                    .map { it.eventId }
+                    .toSet()
+                    .size,
+                "the retry went in as a new report",
+            )
+            job.cancel()
+        }
+
+    @Test
+    fun `two sends racing out of one form are still one report`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.beginReportShortage()
+            controller.editShortageQuantity("3")
+            progress.whileWorking = { controller.saveShortage() }
+
+            controller.saveShortage()
+
+            assertEquals(1, progress.reported.size, "one form sent two reports")
+            job.cancel()
+        }
+
+    @Test
+    fun `a new form after one that landed is a new movement`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+            val gameId = fixture.gameId
+            controller.openTaskMenu(gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.beginReportShortage()
+            controller.editShortageQuantity("3")
+            controller.saveShortage()
+            controller.beginReportShortage()
+            controller.editShortageQuantity("2")
+            controller.saveShortage()
+
+            assertEquals(2, progress.reported.size)
+            assertEquals(
+                2,
+                progress.reported
+                    .map { it.eventId }
+                    .toSet()
+                    .size,
+                "the second report reused the first name",
+            )
+            job.cancel()
+        }
+
+    @Test
+    fun `a list arriving from the database leaves an open draft and its name alone`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val (controller, job) = watching(fixture, FakeTaskProgress())
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.beginReportShortage()
+            controller.editShortageQuantity("7")
+            controller.editShortageNote("Yarım kaldı")
+            val named = reportingForm(controller).draft.eventId
+
+            fixture.holding(fixture.piece)
+            yield()
+
+            val after = reportingForm(controller)
+            assertEquals("7", after.draft.quantity)
+            assertEquals("Yarım kaldı", after.draft.note)
+            assertEquals(named, after.draft.eventId)
+            job.cancel()
+        }
+
+    @Test
+    fun `an amount that is not a number never reaches the database`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.beginReportShortage()
+
+            controller.saveShortage()
+
+            assertTrue(progress.reported.isEmpty(), "an empty amount was sent to the database")
+            assertEquals(TaskProgressFailure.INVALID_QUANTITY, reportingForm(controller).failure)
+            job.cancel()
+        }
+
+    @Test
+    fun `the amount field takes digits and nothing else`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val (controller, job) = watching(fixture, FakeTaskProgress())
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.beginReportShortage()
+
+            controller.editShortageQuantity("-4a2")
+
+            // A minus sign is not a number of pieces anybody meant, and reading
+            // one would turn a slip into a movement the wrong way round.
+            assertEquals("42", reportingForm(controller).draft.quantity)
+            job.cancel()
+        }
+
+    @Test
+    fun `a note of nothing but spaces is kept as no note at all`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.beginReportShortage()
+            controller.editShortageQuantity("2")
+            controller.editShortageNote("   ")
+
+            controller.saveShortage()
+
+            assertNull(progress.reported.single().note)
+            job.cancel()
+        }
+
+    @Test
+    fun `a card is named only on a task made of cards, and a step only where there is one`() =
+        runBlocking<Unit> {
+            val plain = progressFixture()
+            val plainProgress = FakeTaskProgress()
+            val (a, jobA) = watching(plain, plainProgress)
+            a.openTaskMenu(plain.gameId, CellColumnType.THREE_D, plain.taskId)
+            a.beginReportShortage()
+            a.editShortageQuantity("2")
+            a.editShortageCardReference("Bird 12")
+            a.chooseShortageStage(ProductionStage.PRINT)
+            a.saveShortage()
+            assertNull(plainProgress.reported.single().cardReference, "a 3D task carried a card's name")
+            assertNull(plainProgress.reported.single().stage, "a 3D task carried a step it never runs through")
+            jobA.cancel()
+
+            val cards = progressFixture(poolType = PoolType.CARD, columnType = CellColumnType.CARD)
+            val cardProgress = FakeTaskProgress()
+            val (b, jobB) = watching(cards, cardProgress)
+            b.openTaskMenu(cards.gameId, CellColumnType.CARD, cards.taskId)
+            b.beginReportShortage()
+            b.editShortageQuantity("3")
+            b.editShortageCardReference("Bird 12")
+            b.chooseShortageStage(ProductionStage.LAMINATE)
+            b.saveShortage()
+            assertEquals("Bird 12", cardProgress.reported.single().cardReference)
+            assertEquals(ProductionStage.LAMINATE, cardProgress.reported.single().stage)
+            jobB.cancel()
+        }
+
+    @Test
+    fun `making good is offered only on a task that owes something`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture(missing = 0)
+            val (controller, job) = watching(fixture, FakeTaskProgress())
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+
+            controller.beginResolveShortage()
+
+            assertIs<CellWork.TaskMenu>(controller.state.work, "a task owing nothing opened a form to make good")
+            job.cancel()
+        }
+
+    @Test
+    fun `making good sends what was typed against the task that owes it`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture(missing = 5)
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+
+            controller.beginResolveShortage()
+            assertEquals(5, resolvingForm(controller).outstanding)
+            controller.editShortageQuantity("2")
+            controller.saveShortage()
+
+            assertEquals(2, progress.resolved.single().quantity)
+            assertEquals(fixture.taskId, progress.resolved.single().taskId)
+            assertTrue(progress.reported.isEmpty(), "making good was recorded as a shortage")
+            job.cancel()
+        }
+
+    @Test
+    fun `making good more than is owed comes back as something to read`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture(missing = 2)
+            val refusing = FakeTaskProgress(TaskProgressOutcome.Refused(TaskProgressFailure.MORE_RESOLVED_THAN_OUTSTANDING))
+            val (controller, job) = watching(fixture, refusing)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.beginResolveShortage()
+            controller.editShortageQuantity("9")
+
+            controller.saveShortage()
+
+            assertEquals(TaskProgressFailure.MORE_RESOLVED_THAN_OUTSTANDING, resolvingForm(controller).failure)
+            job.cancel()
+        }
+
+    @Test
+    fun `a movement that landed closes the form and leaves the menu`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val (controller, job) = watching(fixture, FakeTaskProgress())
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.beginReportShortage()
+            controller.editShortageQuantity("3")
+
+            controller.saveShortage()
+
+            assertIs<CellWork.TaskMenu>(controller.state.work, "the form did not close, or it took the menu with it")
+            job.cancel()
+        }
+
+    @Test
+    fun `closing a shortage form goes back to the menu and not out of the task`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val (controller, job) = watching(fixture, FakeTaskProgress())
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.beginReportShortage()
+
+            controller.closeInnermost()
+            assertIs<CellWork.TaskMenu>(controller.state.work)
+
+            controller.closeInnermost()
+            assertNull(controller.state.work)
+            job.cancel()
+        }
+
+    @Test
+    fun `a shortage form with something typed in it says so`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val (controller, job) = watching(fixture, FakeTaskProgress())
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.beginReportShortage()
+            assertFalse(reportingForm(controller).hasUnsavedChanges, "an untouched form claims to hold something")
+
+            controller.editShortageQuantity("3")
+
+            // What a click away reads to decide whether it may close this.
+            assertTrue(reportingForm(controller).hasUnsavedChanges, "a click away would throw this away silently")
+            job.cancel()
+        }
+
+    @Test
+    fun `a task that goes while its form is open takes the form with it`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val (controller, job) = watching(fixture, FakeTaskProgress())
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.beginReportShortage()
+
+            fixture.holding(null)
+            yield()
+
+            assertNull(controller.state.work, "a form stayed open over a task that is no longer there")
+            job.cancel()
+        }
+
+    @Test
+    fun `a shortage on a task in a finished game is refused rather than half applied`() =
+        runBlocking<Unit> {
+            // PLAN 6.3 reopens the game in the same transaction, and that
+            // transaction belongs to a later slice. Reopening only the task would
+            // leave a game marked finished with unfinished work inside it.
+            val fixture = progressFixture(gameCompleted = true)
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+
+            controller.beginReportShortage()
+
+            assertIs<CellWork.TaskMenu>(controller.state.work, "the form opened over a finished game")
+            assertEquals(TaskProgressFailure.TASK_NOT_AVAILABLE, openMenu(controller).failure)
+            assertTrue(progress.reported.isEmpty(), "a shortage was written against a finished game")
+            job.cancel()
+        }
+
+    @Test
+    fun `a task in a finished game may still be finished and taken back`() =
+        runBlocking<Unit> {
+            // Only the shortage waits: finishing a task says nothing about the
+            // game, so there is no half applied state to avoid.
+            val fixture = progressFixture(gameCompleted = true)
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+
+            controller.toggleTaskCompletion(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+
+            assertEquals(listOf(fixture.taskId), progress.completed.map { it.first })
+            job.cancel()
+        }
+
+    @Test
+    fun `a finished task whose game is still going may be reported against`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture(isCompleted = true)
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+
+            controller.beginReportShortage()
+            controller.editShortageQuantity("2")
+            controller.saveShortage()
+
+            assertEquals(2, progress.reported.single().quantity)
+            job.cancel()
         }
 }

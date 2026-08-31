@@ -347,6 +347,23 @@ import dev.pnptracker.resources.review_select_cell_accessibility
 import dev.pnptracker.resources.review_title
 import dev.pnptracker.resources.review_unavailable
 import dev.pnptracker.resources.review_unavailable_title
+import dev.pnptracker.resources.shortage_cancel
+import dev.pnptracker.resources.shortage_card_label
+import dev.pnptracker.resources.shortage_error_detail
+import dev.pnptracker.resources.shortage_error_event_used
+import dev.pnptracker.resources.shortage_error_general
+import dev.pnptracker.resources.shortage_error_gone
+import dev.pnptracker.resources.shortage_error_quantity
+import dev.pnptracker.resources.shortage_error_too_many
+import dev.pnptracker.resources.shortage_note_label
+import dev.pnptracker.resources.shortage_quantity_label
+import dev.pnptracker.resources.shortage_report_hint
+import dev.pnptracker.resources.shortage_report_title
+import dev.pnptracker.resources.shortage_resolve_hint
+import dev.pnptracker.resources.shortage_resolve_title
+import dev.pnptracker.resources.shortage_save
+import dev.pnptracker.resources.shortage_stage_label
+import dev.pnptracker.resources.shortage_stage_none
 import dev.pnptracker.resources.source_column_board
 import dev.pnptracker.resources.source_column_borrowed
 import dev.pnptracker.resources.source_column_card
@@ -405,10 +422,20 @@ import dev.pnptracker.resources.task_edit_name_label
 import dev.pnptracker.resources.task_edit_save
 import dev.pnptracker.resources.task_edit_saving
 import dev.pnptracker.resources.task_edit_title
+import dev.pnptracker.resources.task_menu_complete
 import dev.pnptracker.resources.task_menu_convert
 import dev.pnptracker.resources.task_menu_edit
 import dev.pnptracker.resources.task_menu_hint
 import dev.pnptracker.resources.task_menu_open
+import dev.pnptracker.resources.task_menu_reopen
+import dev.pnptracker.resources.task_menu_report_shortage
+import dev.pnptracker.resources.task_menu_resolve_shortage
+import dev.pnptracker.resources.task_progress_game_completed
+import dev.pnptracker.resources.task_progress_missing
+import dev.pnptracker.resources.task_state_completed
+import dev.pnptracker.resources.task_state_open
+import dev.pnptracker.resources.task_tick_complete
+import dev.pnptracker.resources.task_tick_reopen
 import dev.pnptracker.resources.tasks_cell_label
 import dev.pnptracker.resources.tasks_cell_required
 import dev.pnptracker.resources.tasks_create
@@ -934,6 +961,44 @@ object Strings {
         val edit = Res.string.task_menu_edit
         val convertToText = Res.string.task_menu_convert
         val hint = Res.string.task_menu_hint
+        val complete = Res.string.task_menu_complete
+        val reopen = Res.string.task_menu_reopen
+        val reportShortage = Res.string.task_menu_report_shortage
+        val resolveShortage = Res.string.task_menu_resolve_shortage
+        val gameCompleted = Res.string.task_progress_game_completed
+    }
+
+    /** Saying what came out short, and what has been made good again. */
+    object Shortage {
+        /** Takes the task's name. */
+        val tickComplete = Res.string.task_tick_complete
+
+        /** Takes the task's name. */
+        val tickReopen = Res.string.task_tick_reopen
+        val stateCompleted = Res.string.task_state_completed
+        val stateOpen = Res.string.task_state_open
+
+        /** Takes how much is still owed. */
+        val missing = Res.string.task_progress_missing
+        val reportTitle = Res.string.shortage_report_title
+        val resolveTitle = Res.string.shortage_resolve_title
+        val reportHint = Res.string.shortage_report_hint
+
+        /** Takes how much is still owed. */
+        val resolveHint = Res.string.shortage_resolve_hint
+        val quantityLabel = Res.string.shortage_quantity_label
+        val noteLabel = Res.string.shortage_note_label
+        val cardLabel = Res.string.shortage_card_label
+        val stageLabel = Res.string.shortage_stage_label
+        val stageNone = Res.string.shortage_stage_none
+        val save = Res.string.shortage_save
+        val cancel = Res.string.shortage_cancel
+        val errorQuantity = Res.string.shortage_error_quantity
+        val errorTooMany = Res.string.shortage_error_too_many
+        val errorGone = Res.string.shortage_error_gone
+        val errorEventUsed = Res.string.shortage_error_event_used
+        val errorDetail = Res.string.shortage_error_detail
+        val errorGeneral = Res.string.shortage_error_general
     }
 
     /** Changing what a task already written down is. */

@@ -372,7 +372,7 @@ class ColorDeletionDetailTest {
             store.deleteColor(red.id)
 
             assertEquals(eventsBefore, database.taskProgressDao().progressEventsOfTask(task))
-            assertEquals(3, database.taskProgressDao().failureTotalOf(task))
+            assertEquals(3L, database.taskProgressDao().failureTotalOf(task))
             assertEquals(rowBefore, database.taskProgressDao().taskById(task), "the task row itself was rewritten")
         }
 

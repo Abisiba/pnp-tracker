@@ -10,10 +10,14 @@ import dev.pnptracker.domain.games.GameTableView
 import dev.pnptracker.domain.games.documentText
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.model.hasStages
 import dev.pnptracker.domain.tasks.CellTextSelection
 import dev.pnptracker.domain.tasks.TaskEditFailure
 import dev.pnptracker.domain.tasks.TaskFromTextFailure
+import dev.pnptracker.domain.tasks.TaskProgressFailure
 import dev.pnptracker.ui.feature.colors.ColorComposer
 
 /** Where the table is. */
@@ -137,9 +141,75 @@ sealed interface CellWork {
         override val columnType: CellColumnType,
         val taskId: EntityId,
         val name: String,
+        /** Whether the task is finished, which decides what the menu offers. */
+        val isCompleted: Boolean = false,
+        /** How much it still owes; more than none is what offers making good. */
+        val currentMissingQuantity: Int = 0,
+        /** Which pool it is worked in, so a shortage form asks for the right detail. */
+        val poolType: PoolType? = null,
+        /**
+         * Whether the game holding it has been marked finished.
+         *
+         * PLAN 6.3 has a shortage on a task in a finished game reopen the game
+         * too, in the same transaction. That transaction belongs to the slice
+         * that finishes games, so until then the action is offered but refused
+         * here rather than half applied.
+         */
+        val gameIsCompleted: Boolean = false,
+        /** True while a finish or a reopen is being written. */
+        val isWorking: Boolean = false,
+        /** Why the last finish or reopen did not happen; cleared by the next try. */
+        val failure: TaskProgressFailure? = null,
+        /**
+         * The name the settling event of a completion will be written under.
+         *
+         * Fixed when the menu opens rather than made at the moment of writing,
+         * so a finish that failed uncertainly and is tried again is the same
+         * settling rather than a second one.
+         */
+        val completionEventId: EntityId,
     ) : CellWork {
         override val parent: CellWork? get() = null
         override val hasUnsavedChanges: Boolean get() = false
+
+        /** True when there is something owed that could be made good. */
+        val owesSomething: Boolean get() = currentMissingQuantity > 0
+    }
+
+    /**
+     * Saying how many pieces came out missing or spoiled (PLAN 6.3).
+     *
+     * One surface for both, because PLAN gives one action: a piece that was
+     * spoiled has to be made again exactly as one that never arrived does.
+     */
+    data class ReportingShortage(
+        val from: TaskMenu,
+        val draft: ShortageDraft,
+        val isSaving: Boolean = false,
+        val failure: TaskProgressFailure? = null,
+    ) : CellWork {
+        override val gameId: EntityId get() = from.gameId
+        override val columnType: CellColumnType get() = from.columnType
+        override val parent: CellWork get() = from
+        override val hasUnsavedChanges: Boolean get() = draft.isTouched
+        val taskId: EntityId get() = from.taskId
+    }
+
+    /** Saying how many of the pieces that were owed have been made again. */
+    data class ResolvingShortage(
+        val from: TaskMenu,
+        val draft: ShortageDraft,
+        val isSaving: Boolean = false,
+        val failure: TaskProgressFailure? = null,
+    ) : CellWork {
+        override val gameId: EntityId get() = from.gameId
+        override val columnType: CellColumnType get() = from.columnType
+        override val parent: CellWork get() = from
+        override val hasUnsavedChanges: Boolean get() = draft.isTouched
+        val taskId: EntityId get() = from.taskId
+
+        /** What is owed right now, which is the most that can be made good. */
+        val outstanding: Int get() = from.currentMissingQuantity
     }
 
     /** Changing what a task is, in a panel bound to the same word. */
@@ -207,6 +277,50 @@ sealed interface CellWork {
 }
 
 /**
+ * What the user is filling in about a shortage, reported or made good.
+ *
+ * One draft for both surfaces, because PLAN 6.3 asks the same things of each: an
+ * amount, and optionally something about which pieces and where. The amount is
+ * held as text rather than as a number so a half typed one is still what the
+ * user typed — a field that turned `1` into `1` and `` into `0` would answer
+ * back while they were still writing.
+ *
+ * [eventId] is the name this movement will be written under. It is made when the
+ * form opens and kept for as long as the form is open, so a submit that failed
+ * uncertainly can be sent again as the same movement. PLAN 5.12 makes the
+ * identity the whole of what tells a retry from a second report.
+ */
+data class ShortageDraft(
+    val eventId: EntityId,
+    val quantity: String = "",
+    val note: String = "",
+    val cardReference: String = "",
+    val stage: ProductionStage? = null,
+) {
+    /** True once there is anything here that closing would throw away. */
+    val isTouched: Boolean
+        get() = quantity.isNotBlank() || note.isNotBlank() || cardReference.isNotBlank() || stage != null
+
+    /**
+     * The amount as a number, or null when what is typed is not one.
+     *
+     * Only digits count. A minus sign is not a number of pieces the user could
+     * have meant, and reading one would turn a slip into a movement backwards.
+     */
+    val countedQuantity: Int?
+        get() = quantity.takeIf { it.isNotEmpty() && it.all(Char::isDigit) }?.toIntOrNull()
+
+    /** The note with nothing in it treated as no note at all. */
+    val writtenNote: String? get() = note.trim().takeIf { it.isNotEmpty() }
+
+    /** The card named, or null; only a card task may carry one (PLAN 7.4). */
+    fun writtenCardReference(poolType: PoolType?): String? = cardReference.trim().takeIf { it.isNotEmpty() && poolType == PoolType.CARD }
+
+    /** The stage chosen, or null; only a pool with a pipeline has one. */
+    fun chosenStage(poolType: PoolType?): ProductionStage? = stage.takeIf { poolType?.hasStages == true }
+}
+
+/**
  * Where a colour made from a task surface is to be applied once it exists.
  *
  * Fixed when the picker opens, and named rather than inferred. Each of the
@@ -218,6 +332,7 @@ sealed interface CellWork {
  * into the catalogue and nowhere else, because there is no draft in front of the
  * user to put it in.
  */
+
 sealed interface NewColorTarget {
     /** The one task of the single-colour mode. */
     data object SingleDraft : NewColorTarget
@@ -667,6 +782,8 @@ data class GameTableScreenState(
             is CellWork.TaskMenu -> open.takeIf { it.isOn(gameId, columnType) }
             is CellWork.EditingTask -> open.from.takeIf { it.isOn(gameId, columnType) }
             is CellWork.ConfirmingConvert -> open.from.takeIf { it.isOn(gameId, columnType) }
+            is CellWork.ReportingShortage -> open.from.takeIf { it.isOn(gameId, columnType) }
+            is CellWork.ResolvingShortage -> open.from.takeIf { it.isOn(gameId, columnType) }
             is CellWork.MakingColor -> (open.from as? CellWork.EditingTask)?.from?.takeIf { it.isOn(gameId, columnType) }
             else -> null
         }

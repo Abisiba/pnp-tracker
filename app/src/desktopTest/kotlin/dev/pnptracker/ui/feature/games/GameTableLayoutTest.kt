@@ -23,6 +23,12 @@ class GameTableLayoutTest {
             .of("src/commonMain/kotlin/dev/pnptracker/ui/feature/games/GameTableScreen.kt")
             .let { Files.readString(it) }
 
+    /** The controller behind the screen, for the decisions that are not drawn. */
+    private val controllerSource: String =
+        Path
+            .of("src/commonMain/kotlin/dev/pnptracker/ui/feature/games/GameTableController.kt")
+            .let { Files.readString(it) }
+
     /**
      * The task editor, which the pools share with the table.
      *
@@ -51,7 +57,7 @@ class GameTableLayoutTest {
 
         anchors.forEach { anchor ->
             assertTrue(
-                anchor in source || anchor in editingSurface,
+                anchor in source || anchor in editingSurface || anchor in controllerSource,
                 "these tests read the screen at a place it no longer has: $anchor",
             )
         }
@@ -318,7 +324,13 @@ class GameTableLayoutTest {
         assertTrue("Strings.CellTask.description" in spoken, "a task has no spoken description")
         assertTrue("canonicalName" in spoken, "the colours are not said in words")
         assertTrue("Strings.CellTask.noColor" in spoken, "a task with no colour says nothing about it")
-        assertTrue("Strings.CellTask.completed" in spoken, "a finished task does not say so out loud")
+        // Whether it is finished is said as a state of the piece rather than
+        // folded into its name, so it is heard once and heard changing.
+        assertTrue("Strings.CellTask.completed" !in spoken, "a finished task says so twice over")
+        val handle = source.substringAfter("private fun TaskHandle(").substringBefore("private fun CellEditorSlot(")
+        assertTrue("stateDescription = completion" in handle, "a task never says whether it is finished")
+        assertTrue("Strings.Shortage.stateCompleted" in handle, "a finished task does not say so out loud")
+        assertTrue("Strings.Shortage.stateOpen" in handle, "an unfinished task does not say so out loud")
         assertTrue("Strings.Table.cellDescription" in source, "the cell no longer describes itself")
     }
 
@@ -652,23 +664,132 @@ class GameTableLayoutTest {
 
     @Test
     fun `the menu offers what this step really has and nothing dead`() {
-        // PLAN 12.5 also lists a shortage action; PLAN 18 gives shortages to a
-        // later slice, so it is absent rather than present and dead.
+        // PLAN 12.5's three actions and the two PLAN 6.3 adds to them.
         val menu = source.substringAfter("private fun TaskMenuActions(").substringBefore("private fun ConvertConfirmation(")
         assertTrue("Strings.TaskMenu.edit" in menu, "there is no way to edit a task")
         assertTrue("Strings.TaskMenu.convertToText" in menu, "there is no way to turn a task back into text")
+        assertTrue("Strings.TaskMenu.reportShortage" in menu, "there is no way to say something came out short")
         assertTrue("enabled = false" !in menu, "the menu carries a button that cannot do anything")
-        listOf("eksik", "Eksik", "shortage", "Shortage", "missingPart").forEach { later ->
-            assertTrue(later !in menu, "the menu offers a $later action this step does not have")
+        // Still nothing here for the work that has not been done: moving a
+        // pipeline counter is the next slice's, and finishing a whole game the
+        // one after that.
+        listOf("setStageQuantity", "completePrimaryBatch", "setManuallyCompleted").forEach { later ->
+            assertTrue(later !in source, "the table offers a $later this step does not have")
         }
     }
 
     @Test
-    fun `there is no completion tick on a task yet`() {
-        // PLAN 12.5 gives a task one; PLAN 18 gives finishing to a later slice.
-        listOf("Checkbox", "TriStateCheckbox", "onComplete(", "markCompleted(", "completeTask").forEach { later ->
-            assertTrue(later !in source, "the table draws a $later that this step does not have")
+    fun `the shortage form asks for one amount and offers to say more`() {
+        val panel = source.substringAfter("private fun ShortagePanel(").substringBefore("/** One step of a pipeline")
+        assertTrue("Strings.Shortage.quantityLabel" in panel, "there is nowhere to say how many")
+        assertTrue("Strings.Shortage.noteLabel" in panel, "there is nowhere to say what happened")
+        assertTrue("Strings.Shortage.save" in panel && "Strings.Shortage.cancel" in panel, "the form cannot be finished")
+        // PLAN 7.4 gives naming a card to the card pipeline, and a step to a pool
+        // that runs through steps. Elsewhere they would collect an answer the
+        // record cannot keep.
+        assertTrue("poolType == PoolType.CARD" in panel, "any task at all is asked which card came up short")
+        assertTrue("pipeline.isNotEmpty()" in panel, "a pool with no steps is asked which step")
+        // PLAN 7.3 gives moving a counter to the badge, which is the next slice.
+        assertTrue("setStageQuantity" !in panel, "the shortage form moves a pipeline counter")
+    }
+
+    @Test
+    fun `one form serves both saying what came up short and what was made good`() {
+        // PLAN 6.3 asks the same things of each, so a user who has filled one in
+        // has already learnt the other.
+        assertEquals(1, Regex("private fun ShortagePanel\\(").findAll(source).count())
+        val popover = source.substringAfter("private fun TaskPopover(").substringBefore("private fun ShortagePanel(")
+        assertTrue("is CellWork.ReportingShortage ->" in popover, "there is no way to say something came up short")
+        assertTrue("is CellWork.ResolvingShortage ->" in popover, "there is no way to say something was made good")
+        assertTrue("Strings.Shortage.reportTitle" in popover && "Strings.Shortage.resolveTitle" in popover)
+    }
+
+    @Test
+    fun `what went wrong is said in words about the work and never in the database's own`() {
+        val message = source.substringAfter("private fun shortageMessageOf(").substringBefore("private fun TaskMenuActions(")
+        // Every case the user can reach has a sentence, and anything else falls
+        // back on one rather than on the failure's own name.
+        assertTrue("Strings.Shortage.errorGeneral" in message, "an unnamed refusal would show nothing")
+        assertTrue("failure.name" !in message, "the refusal is shown by its own name")
+        listOf("errorQuantity", "errorTooMany", "errorGone", "errorEventUsed", "errorDetail").forEach {
+            assertTrue(it in message, "$it is never said")
         }
+    }
+
+    @Test
+    fun `the amount is where the keyboard lands, and where it is called back to`() {
+        val panel = source.substringAfter("private fun ShortagePanel(").substringBefore("/** One step of a pipeline")
+        assertTrue("LaunchedEffect(title, failure) { amount.requestFocus() }" in panel, "a refused amount keeps the focus")
+        assertTrue("focusRequester(amount)" in panel, "the amount field cannot take the focus")
+    }
+
+    @Test
+    fun `sending a form again is the same movement rather than a second one`() {
+        // PLAN 5.12: the identity is the whole of what tells a retry from a
+        // second report, so it is chosen when the form opens and not when it is
+        // sent — and a send already on its way is not sent again.
+        assertTrue(
+            "ShortageDraft(eventId = idGenerator.newId())" in controllerSource,
+            "the name of a movement is not fixed when its form opens",
+        )
+        val save = controllerSource.substringAfter("suspend fun saveShortage()").substringBefore("private fun isSavingShortage(")
+        assertTrue("eventId = draft.eventId" in save, "a retry would be sent under a new name")
+        assertTrue("if (isSavingShortage(open)) return" in save, "one form could send two reports")
+        assertTrue("newId()" !in save, "a name is made at the moment of sending")
+    }
+
+    @Test
+    fun `a task in a finished game is left alone rather than half reopened`() {
+        // PLAN 6.3 reopens the game in the same transaction; PLAN 18 gives
+        // finishing a game to a later slice, so this waits for it.
+        val begin = controllerSource.substringAfter("fun beginReportShortage()").substringBefore("fun beginResolveShortage()")
+        assertTrue("menu.gameIsCompleted" in begin, "a shortage would reopen a task inside a finished game")
+        assertTrue("setManuallyCompleted" !in controllerSource, "the table finishes a game this step does not have")
+        assertTrue("Strings.TaskMenu.gameCompleted" in source, "the reason is never given")
+    }
+
+    @Test
+    fun `a task can be finished and taken back from its own menu`() {
+        val menu = source.substringAfter("private fun TaskMenuActions(").substringBefore("private fun ConvertConfirmation(")
+        // One control both ways round, chosen from the task rather than from
+        // two buttons standing side by side.
+        assertTrue("Strings.TaskMenu.reopen" in menu && "Strings.TaskMenu.complete" in menu, "a task cannot be finished")
+        assertTrue("if (menu.isCompleted)" in menu, "the menu offers the same word whichever way the task stands")
+        assertTrue("toggleCompletionFromMenu()" in menu, "the menu's finish does nothing")
+    }
+
+    @Test
+    fun `making good is offered only when there is something to make good`() {
+        val menu = source.substringAfter("private fun TaskMenuActions(").substringBefore("private fun ConvertConfirmation(")
+        val guarded = menu.substringAfter("if (menu.owesSomething) {", "")
+        assertTrue("Strings.TaskMenu.resolveShortage" in guarded, "making good is offered on a task that owes nothing")
+        assertTrue("beginResolveShortage" in menu, "making good does nothing")
+    }
+
+    @Test
+    fun `a task carries its own tick, drawn with the text rather than written into it`() {
+        // PLAN 12.5 puts a tick on the piece and PLAN 5.6 leaves a finished task
+        // in its cell. The room for it is reserved in the laid out text, so the
+        // name is never covered and a name that wraps wraps around it — but the
+        // document the user typed does not gain a character.
+        assertTrue("appendInlineContent(tickIdOf(" in source, "the tick is not laid out with the text")
+        assertTrue("if (withCounts) {" in source, "the tick would be drawn where the text has to match the document")
+        assertTrue("private fun CompletionTick(" in source, "there is no tick")
+        val tick = source.substringAfter("private fun CompletionTick(").substringBefore("/**")
+        // No focus and no voice of its own: one task is one stop and one node.
+        assertTrue("clearAndSetSemantics" in tick, "the tick speaks over the task it belongs to")
+        assertTrue("clickable" !in tick, "the tick takes a keyboard stop of its own")
+        assertTrue("detectTapGestures" in tick, "the tick cannot be pressed")
+    }
+
+    @Test
+    fun `finishing a task is reachable from the keyboard without a stop of its own`() {
+        val handle = source.substringAfter("private fun TaskHandle(").substringBefore("private fun CellEditorSlot(")
+        assertTrue("CustomAccessibilityAction(finishLabel)" in handle, "there is no way to finish a task by keyboard")
+        assertTrue("toggleTaskCompletion(gameId, columnType, taskId)" in handle, "the action does nothing")
+        // The action hangs off the leading box, which is the one that takes
+        // focus, so a task in several colours still offers it exactly once.
+        assertTrue("if (leading) {" in handle, "every piece of a task carries its own action")
     }
 
     // ------------------------------------------------- changing a task

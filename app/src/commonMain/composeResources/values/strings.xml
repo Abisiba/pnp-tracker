@@ -190,6 +190,33 @@
     <string name="task_menu_edit">Düzenle</string>
     <string name="task_menu_convert">Görevi metne dönüştür</string>
     <string name="task_menu_hint">Esc menüyü kapatır.</string>
+    <string name="task_menu_complete">Tamamla</string>
+    <string name="task_menu_reopen">Yeniden aç</string>
+    <string name="task_menu_report_shortage">Eksik/hatalı bildir</string>
+    <string name="task_menu_resolve_shortage">Eksik giderildi</string>
+    <string name="task_tick_complete">%1$s görevini tamamla</string>
+    <string name="task_tick_reopen">%1$s görevini yeniden aç</string>
+    <string name="task_state_completed">tamamlandı</string>
+    <string name="task_state_open">sürüyor</string>
+    <string name="task_progress_missing">Eksik: %1$s</string>
+    <string name="task_progress_game_completed">Bu oyun tamamlanmış görünüyor. Eksik bildirimi oyunu da yeniden açar; bu henüz hazır değil.</string>
+    <string name="shortage_report_title">Eksik/hatalı bildir</string>
+    <string name="shortage_resolve_title">Eksik giderildi</string>
+    <string name="shortage_report_hint">Bildirilen adet yeniden basılacaklara eklenir.</string>
+    <string name="shortage_resolve_hint">Şu anda %1$s adet yeniden basılmayı bekliyor.</string>
+    <string name="shortage_quantity_label">Adet</string>
+    <string name="shortage_note_label">Not (isteğe bağlı)</string>
+    <string name="shortage_card_label">Kart adı veya numarası (isteğe bağlı)</string>
+    <string name="shortage_stage_label">Hangi aşamada fark edildi (isteğe bağlı)</string>
+    <string name="shortage_stage_none">Belirtme</string>
+    <string name="shortage_save">Kaydet</string>
+    <string name="shortage_cancel">Vazgeç</string>
+    <string name="shortage_error_quantity">Sıfırdan büyük bir adet yazın.</string>
+    <string name="shortage_error_too_many">Bu görevde o kadar eksik yok.</string>
+    <string name="shortage_error_gone">Bu görev artık burada değil.</string>
+    <string name="shortage_error_event_used">Bu bildirim başka bir kayıtla çakıştı. Formu kapatıp yeniden deneyin.</string>
+    <string name="shortage_error_detail">Bu ayrıntı bu görev için kullanılamaz.</string>
+    <string name="shortage_error_general">Kayıt tamamlanamadı. Yazdıklarınız duruyor.</string>
 
     <!-- Game table: changing a task -->
     <string name="task_edit_title">Görevi düzenle</string>

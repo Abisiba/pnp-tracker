@@ -97,6 +97,11 @@ abstract class TaskProgressDao {
      *
      * Summed from the events and stored nowhere, which is what PLAN 6.2 means by
      * it being derived, and why making a shortage good does not reduce it.
+     *
+     * Counted wide. PLAN 6.4 lets this total pass what the task needs — a piece
+     * can be spoiled again and again — so unlike the counter it has no ceiling
+     * to lean on, and a sum of enough reports would not fit in the width one of
+     * them does.
      */
     @Query(
         """
@@ -104,7 +109,7 @@ abstract class TaskProgressDao {
         WHERE task_id = :taskId AND kind = 'FAILURE_REPORTED'
         """,
     )
-    abstract suspend fun failureTotalOf(taskId: EntityId): Int
+    abstract suspend fun failureTotalOf(taskId: EntityId): Long
 
     /** Everything ever reported made good on this task. */
     @Query(
@@ -113,7 +118,7 @@ abstract class TaskProgressDao {
         WHERE task_id = :taskId AND kind = 'SHORTAGE_RESOLVED'
         """,
     )
-    abstract suspend fun resolvedTotalOf(taskId: EntityId): Int
+    abstract suspend fun resolvedTotalOf(taskId: EntityId): Long
 
     /**
      * Every shortage on a task that named a card, oldest first.
@@ -349,9 +354,8 @@ abstract class TaskProgressDao {
      *
      * @return true when this call was the one that recorded the shortage.
      * @throws TaskProgressException if there is no task to record it on, the
-     *   detail does not belong to it, or the event name is already spent on a
-     *   different event.
-     * @throws IllegalArgumentException if the amount is not at least one piece.
+     *   amount is not a number of pieces, the detail does not belong to it, or
+     *   the event name is already spent on a different event.
      */
     @Transaction
     open suspend fun reportFailure(
@@ -363,7 +367,7 @@ abstract class TaskProgressDao {
         cardReference: String? = null,
         stage: ProductionStage? = null,
     ): Boolean {
-        require(quantity > 0) { "A shortage has to be about at least one piece, was: $quantity" }
+        requireCountableQuantity(quantity)
         val task = workableTaskById(taskId) ?: refuse(TaskProgressFailure.TASK_NOT_AVAILABLE)
         requireDetailBelongsTo(task, cardReference, stage)
         val event =
@@ -382,13 +386,24 @@ abstract class TaskProgressDao {
         val moment = clock.now()
         if (!recordOnce(event.copy(recordedAt = moment))) return false
 
-        val owed = task.currentMissingQuantity + quantity
+        // Added as a Long and only then brought back. PLAN 6.4 caps what a task
+        // owes at what it needs, and the failure total is free to go past it —
+        // so the event keeps the amount the user really reported while the
+        // counter saturates. Adding as Int first would wrap around before the
+        // cap ever applied, and the wrapped number is the one that would be
+        // capped: a large report would come back as a negative debt.
+        val owed = task.currentMissingQuantity.toLong() + quantity.toLong()
+        val settled =
+            task.requiredQuantity?.let { total -> minOf(owed, total.toLong()) }
+                // With no total there is nothing to saturate against, so an
+                // amount that will not fit is refused rather than truncated.
+                ?: owed.takeIf { it <= Int.MAX_VALUE } ?: refuse(TaskProgressFailure.INVALID_QUANTITY)
         writeProgress(
             taskId = taskId,
             isCompleted = false,
             completedAt = null,
             primaryBatchCompleted = task.primaryBatchCompleted || task.poolType == PoolType.THREE_D,
-            currentMissingQuantity = task.requiredQuantity?.let { minOf(owed, it) } ?: owed,
+            currentMissingQuantity = settled.toInt(),
             updatedAt = moment,
         )
         requireProgressHolds(taskId)
@@ -413,10 +428,10 @@ abstract class TaskProgressDao {
      * over the events: making good is a new event, not the deletion of an old one.
      *
      * @return true when this call was the one that recorded it.
-     * @throws TaskProgressException if there is no such task, more was made good
-     *   than was owed, the detail does not belong to the task, or the event name
-     *   is already spent on a different event.
-     * @throws IllegalArgumentException if the amount is not at least one piece.
+     * @throws TaskProgressException if there is no such task, the amount is not
+     *   a number of pieces, more was made good than was owed, the detail does
+     *   not belong to the task, or the event name is already spent on a
+     *   different event.
      */
     @Transaction
     open suspend fun resolveShortage(
@@ -427,7 +442,7 @@ abstract class TaskProgressDao {
         note: String? = null,
         cardReference: String? = null,
     ): Boolean {
-        require(quantity > 0) { "Making good has to be about at least one piece, was: $quantity" }
+        requireCountableQuantity(quantity)
         val task = workableTaskById(taskId) ?: refuse(TaskProgressFailure.TASK_NOT_AVAILABLE)
         requireDetailBelongsTo(task, cardReference, stage = null)
         val event =
@@ -555,6 +570,19 @@ abstract class TaskProgressDao {
                 task.requiredQuantity?.let { total -> stages.all { it.completedQuantity == total } } == true
             PoolType.SPECIAL -> false
         }
+
+    /**
+     * Refuses an amount that is not a number of pieces.
+     *
+     * A typed outcome rather than a thrown argument error: the amount comes from
+     * a box the user typed in, so what is wrong with it is something a screen
+     * has to be able to say. PLAN 5.12 rules out nothing and less than nothing;
+     * the upper bound is here because a task's debt is an `Int` and an amount
+     * that could not be added to it without wrapping is not the amount typed.
+     */
+    private fun requireCountableQuantity(quantity: Int) {
+        if (quantity <= 0) refuse(TaskProgressFailure.INVALID_QUANTITY)
+    }
 
     /**
      * Refuses detail that does not belong to the task it is being recorded on.

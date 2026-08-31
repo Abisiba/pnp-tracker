@@ -236,7 +236,7 @@ class Migration4To5Test {
             // Read through Room before counting on a connection of our own: Room
             // opens the file lazily, so the migration has not run until it does.
             assertEquals(emptyList(), database.taskProgressDao().progressEventsOfTask(threeDTaskId))
-            assertEquals(0, database.taskProgressDao().failureTotalOf(threeDTaskId))
+            assertEquals(0L, database.taskProgressDao().failureTotalOf(threeDTaskId))
             assertEquals(0, rows("progress_events"))
         }
 

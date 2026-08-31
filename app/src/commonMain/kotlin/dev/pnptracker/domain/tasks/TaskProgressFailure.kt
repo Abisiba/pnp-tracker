@@ -4,14 +4,24 @@ package dev.pnptracker.domain.tasks
  * Why a change to a task's progress did not happen, in words a screen can show.
  *
  * Separate from [TaskSetupFailure] because these are things that go wrong while
- * working a task that already exists, not while making one. A quantity that is
- * zero or negative is missing from this list on purpose: PLAN 5.12 forbids it
- * outright, so it is refused before anything is attempted rather than being an
- * outcome the user is told about.
+ * working a task that already exists, not while making one.
  */
 enum class TaskProgressFailure {
     /** There is no such task, or it has been deleted. */
     TASK_NOT_AVAILABLE,
+
+    /**
+     * The amount was not a number of pieces this could be about.
+     *
+     * PLAN 5.12 will not have a movement of nothing or of less than nothing, and
+     * PLAN 6.4 caps what a task can owe at what it needs in total. An amount so
+     * large that adding it up would wrap around is refused here for the same
+     * reason: what came back would not be the number the user typed.
+     *
+     * A typed outcome rather than a thrown argument error, because the screen
+     * that collects the amount has to be able to say what was wrong with it.
+     */
+    INVALID_QUANTITY,
 
     /** The pool this task belongs to has no pipeline, so it has no stages. */
     TASK_HAS_NO_STAGES,
