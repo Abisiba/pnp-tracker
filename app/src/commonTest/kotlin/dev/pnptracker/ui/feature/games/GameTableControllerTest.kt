@@ -4230,4 +4230,190 @@ class GameTableControllerTest {
             assertEquals(2, progress.reported.single().quantity)
             job.cancel()
         }
+
+    @Test
+    fun `a form still open when its game is finished elsewhere does not go on to write`() =
+        runBlocking<Unit> {
+            // Refusing to open the form is not the whole rule: the form may be
+            // standing open when the game it belongs to is finished. Sending it
+            // then would reopen the task inside a game still marked finished,
+            // which is exactly what refusing to open it prevents.
+            val fixture = progressFixture()
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.beginReportShortage()
+            controller.editShortageQuantity("2")
+            fixture.table.rows.value = listOf(fixture.gameRow.copy(isCompleted = true))
+            settle()
+            assertTrue(reportingForm(controller).from.gameIsCompleted, "the fixture never finished the game")
+
+            controller.saveShortage()
+
+            assertTrue(progress.reported.isEmpty(), "a shortage was written against a finished game")
+            val refused = reportingForm(controller)
+            assertEquals(TaskProgressFailure.TASK_NOT_AVAILABLE, refused.failure)
+            assertEquals("2", refused.draft.quantity, "the refusal threw away what had been typed")
+            assertFalse(refused.isSaving, "the form was left looking as though it were still sending")
+            job.cancel()
+        }
+
+    @Test
+    fun `making good is still allowed on a task whose game has been finished`() =
+        runBlocking<Unit> {
+            // A task that owes something was never finished, so settling what it
+            // owes cannot reopen anything. There is no half applied state to
+            // avoid, and refusing would leave the debt with no way to clear it.
+            val fixture = progressFixture(missing = 3)
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.beginResolveShortage()
+            controller.editShortageQuantity("3")
+            fixture.table.rows.value = listOf(fixture.gameRow.copy(isCompleted = true))
+            settle()
+
+            controller.saveShortage()
+
+            assertEquals(3, progress.resolved.single().quantity)
+            job.cancel()
+        }
+
+    @Test
+    fun `the tick finishes a task without a menu having been opened on it`() =
+        runBlocking<Unit> {
+            // The name a settling event is written under is chosen when the menu
+            // opens. The tick is reached without opening one, so it must name its
+            // own movement rather than reach for a name that is not there.
+            val fixture = progressFixture(missing = 2)
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+
+            controller.toggleTaskCompletion(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+
+            val finished = progress.completed.single()
+            assertEquals(fixture.taskId, finished.first)
+            assertNotNull(finished.second, "the tick finished a task under no name at all")
+            job.cancel()
+        }
+
+    @Test
+    fun `a list arriving from the database leaves the name a finish would settle under alone`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture(missing = 2)
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            val chosen = openMenu(controller).completionEventId
+
+            fixture.holding(fixture.piece.copy(text = "Token bir"))
+
+            assertEquals(chosen, openMenu(controller).completionEventId, "the row that arrived renamed the movement")
+            job.cancel()
+        }
+
+    @Test
+    fun `a card named as nothing but spaces is kept as no card at all`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture(poolType = PoolType.CARD, columnType = CellColumnType.CARD)
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.CARD, fixture.taskId)
+            controller.beginReportShortage()
+            controller.editShortageQuantity("1")
+            controller.editShortageCardReference("   ")
+
+            controller.saveShortage()
+
+            assertNull(progress.reported.single().cardReference, "a card named with nothing was written down")
+            job.cancel()
+        }
+
+    @Test
+    fun `an amount of nothing is refused on both forms alike`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture(missing = 3)
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+
+            controller.beginResolveShortage()
+            controller.editShortageQuantity("0")
+            controller.saveShortage()
+
+            assertTrue(progress.resolved.isEmpty(), "nothing at all was made good")
+            assertEquals(TaskProgressFailure.INVALID_QUANTITY, resolvingForm(controller).failure)
+            assertEquals("0", resolvingForm(controller).draft.quantity, "the refusal threw away what had been typed")
+            job.cancel()
+        }
+
+    @Test
+    fun `two presses meant as one leave the task where the first press put it`() =
+        runBlocking<Unit> {
+            // The write comes back long before the row carrying its result does,
+            // and until then the tick is still drawn unfinished. A second press
+            // in that gap would ask for the opposite of the first and undo it —
+            // leaving a task that looks untouched while the shortage it owed has
+            // been settled into its history for good.
+            val fixture = progressFixture(missing = 3)
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+
+            controller.toggleTaskCompletion(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.toggleTaskCompletion(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+
+            assertEquals(1, progress.completed.size, "the task was finished more than once")
+            assertTrue(progress.reopened.isEmpty(), "the second press took the first one back")
+            job.cancel()
+        }
+
+    @Test
+    fun `the tick can be pressed again once the table has shown the answer`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+
+            controller.toggleTaskCompletion(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            fixture.holding(fixture.piece.copy(isCompletedTask = true))
+            settle()
+            controller.toggleTaskCompletion(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+
+            assertEquals(1, progress.completed.size)
+            assertEquals(listOf(fixture.taskId), progress.reopened, "the tick was left unusable")
+            job.cancel()
+        }
+
+    @Test
+    fun `a tick refused by the database does not leave the task unpressable`() =
+        runBlocking<Unit> {
+            // A refusal is answered by nothing arriving, so it cannot be waited
+            // for. Waiting anyway would leave a task that can never be worked on
+            // again without reopening the whole window.
+            val fixture = progressFixture()
+            val progress = FakeTaskProgress(TaskProgressOutcome.Refused(TaskProgressFailure.TASK_NOT_AVAILABLE))
+            val (controller, job) = watching(fixture, progress)
+
+            controller.toggleTaskCompletion(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.toggleTaskCompletion(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+
+            assertEquals(2, progress.completed.size, "a refused press was never let go of")
+            assertEquals(fixture.taskId to TaskProgressFailure.TASK_NOT_AVAILABLE, controller.tickFailure)
+            job.cancel()
+        }
+
+    @Test
+    fun `a task that leaves the view lets its pressed tick go`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+
+            controller.toggleTaskCompletion(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            fixture.holding(null)
+            settle()
+
+            assertNull(controller.busyTaskId, "a tick was left waiting for a row that will never come")
+            job.cancel()
+        }
 }

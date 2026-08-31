@@ -32,7 +32,7 @@ class PoolScreenModelTest {
         colors: List<PoolColor> = emptyList(),
         stages: List<PoolStage> = emptyList(),
         missing: Int = 0,
-        failures: Int = 0,
+        failures: Long = 0L,
         tracking: TrackingMode = TrackingMode.THREE_D_BATCH,
     ) = PoolTask(
         taskId = taskId,
@@ -252,7 +252,7 @@ class PoolScreenModelTest {
                 .single()
 
         assertEquals(4, group.missingTotal)
-        assertEquals(7, group.failureTotal)
+        assertEquals(7L, group.failureTotal)
     }
 
     @Test
@@ -262,7 +262,7 @@ class PoolScreenModelTest {
         assertEquals(2, section.taskCount)
         assertEquals(10, section.requiredTotal)
         assertEquals(2, section.missingTotal)
-        assertEquals(1, section.failureTotal)
+        assertEquals(1L, section.failureTotal)
     }
 
     // ---------------------------------------------------------- the order

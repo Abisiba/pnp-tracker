@@ -98,6 +98,8 @@ class GameTableController(
     suspend fun observeTable() {
         table.observeTable().collect { rows ->
             allRows = rows
+            // Whatever has arrived is no longer being waited for.
+            settleTick()
             state = state.copy(rows = rowsFor(state.view), work = stillValid(state.work))
         }
     }
@@ -1019,17 +1021,42 @@ class GameTableController(
 
     // ------------------------------------------- finishing work, and what it owes
 
+    /** A tick that has been pressed, and the answer it is waiting for. */
+    private data class PressedTick(
+        val gameId: EntityId,
+        val columnType: CellColumnType,
+        val taskId: EntityId,
+        val finishing: Boolean,
+    )
+
+    private var pressedTick: PressedTick? by mutableStateOf(null)
+
     /**
-     * The task the inline tick is being pressed on, while its write is on its way.
+     * The task whose tick has been pressed, until the table has shown the answer.
      *
-     * A finish and a reopen are one click each, and the click can be made again
-     * before the first has landed. Holding the task here makes the second press
-     * do nothing rather than send a second write — which would be harmless for
-     * the finish itself (it is idempotent) but would settle a shortage twice
-     * under two different names.
+     * Held until the row arrives, not merely until the write comes back. The
+     * write returns well before the row carrying its result does, and in that
+     * gap the tick is still drawn in its old state — so a second press lands on
+     * a control that has not caught up, reads the state it is about to leave and
+     * asks for the opposite of it. Two presses meant as one would then finish a
+     * task and reopen it, which looks afterwards like nothing having happened
+     * while a shortage the task owed has been settled and written into its
+     * history for good.
      */
-    var busyTaskId: EntityId? by mutableStateOf(null)
-        private set
+    val busyTaskId: EntityId? get() = pressedTick?.taskId
+
+    /**
+     * Lets go of a pressed tick once the table has said what became of it.
+     *
+     * A task that has left the view altogether is let go of too: there is no row
+     * left to answer with, and holding on would leave a tick that can never be
+     * pressed again.
+     */
+    private fun settleTick() {
+        val waiting = pressedTick ?: return
+        val shown = taskIn(waiting.gameId, waiting.columnType, waiting.taskId)
+        if (shown == null || shown.isCompletedTask == waiting.finishing) pressedTick = null
+    }
 
     /** Why the last tick did not take, and on which task; cleared by the next try. */
     var tickFailure: Pair<EntityId, TaskProgressFailure>? by mutableStateOf(null)
@@ -1047,20 +1074,27 @@ class GameTableController(
         columnType: CellColumnType,
         taskId: EntityId,
     ) {
-        if (busyTaskId != null) return
+        if (pressedTick != null) return
         val task = taskIn(gameId, columnType, taskId) ?: return
-        busyTaskId = taskId
+        val finishing = !task.isCompletedTask
+        pressedTick = PressedTick(gameId, columnType, taskId, finishing)
         tickFailure = null
         val outcome =
-            if (task.isCompletedTask) {
-                taskProgress.reopenTask(taskId)
-            } else {
+            if (finishing) {
                 taskProgress.completeTask(taskId = taskId, eventId = idGenerator.newId())
+            } else {
+                taskProgress.reopenTask(taskId)
             }
-        busyTaskId = null
         // Nothing left to do is not a failure. A second press that arrives after
-        // the first has landed has got what it asked for.
-        if (outcome is TaskProgressOutcome.Refused) tickFailure = taskId to outcome.failure
+        // the first has landed has got what it asked for — and the row already
+        // says so, which is what lets the tick go. A refusal is different:
+        // nothing will arrive to answer it, so it is let go of here.
+        if (outcome is TaskProgressOutcome.Refused) {
+            pressedTick = null
+            tickFailure = taskId to outcome.failure
+        } else {
+            settleTick()
+        }
     }
 
     /** The same, asked for from the menu, so the keyboard reaches it too. */
@@ -1155,6 +1189,17 @@ class GameTableController(
                 else -> return
             }
         if (isSavingShortage(open)) return
+        // The rule that keeps the form from opening over a finished game, asked
+        // again where the write would happen. A game finished while the form
+        // stood open would otherwise let the report through and reopen the task
+        // inside it — the half applied state PLAN 6.3 writes as one transaction,
+        // arrived at by a slower route. Making good is not asked: a task that
+        // owes something was never finished, so settling what it owes cannot
+        // reopen anything.
+        if (open is CellWork.ReportingShortage && menu.gameIsCompleted) {
+            state = state.copy(work = failing(open, TaskProgressFailure.TASK_NOT_AVAILABLE))
+            return
+        }
         val counted = draft.countedQuantity
         if (counted == null || counted <= 0) {
             state = state.copy(work = failing(open, TaskProgressFailure.INVALID_QUANTITY))

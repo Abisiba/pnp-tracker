@@ -839,4 +839,51 @@ class GameTableLayoutTest {
         val actions = source.substringAfter("private fun CellEditorActions(").substringBefore("/**\n * Naming the colour")
         assertTrue("editor.refusal" in actions, "a refused change says nothing at all")
     }
+
+    @Test
+    fun `only the form that reports asks where the pieces were noticed`() {
+        // Nothing is kept about where a shortage was made good again — only
+        // about where it went wrong — so a step chooser on the other form would
+        // take an answer and drop it. The panel is shared between the two, so
+        // the pool having a pipeline is not on its own enough to show it.
+        val panel =
+            source
+                .substringAfter("private fun ShortagePanel(")
+                .substringBefore("@Composable\nprivate fun StageChoice(")
+        assertTrue("asksWhereNoticed" in panel, "the panel offers a step without being asked for one")
+        assertTrue(
+            "if (asksWhereNoticed) poolType?.let { stagesOf(it) }.orEmpty() else emptyList()" in panel,
+            "the step chooser is decided by the pool alone",
+        )
+        val calls =
+            source
+                .substringAfter("is CellWork.ReportingShortage ->")
+                .substringBefore("else -> TaskMenuActions(")
+        assertTrue("asksWhereNoticed = true," in calls, "the report form stopped asking where")
+        assertTrue("asksWhereNoticed = false," in calls, "the making good form was left asking where")
+    }
+
+    @Test
+    fun `a pressed tick is held until the table has answered it`() {
+        // Letting go when the write comes back is too early: the row saying so
+        // arrives later, and in that gap the tick is still drawn in its old
+        // state, so a second press reads what it is about to leave and asks for
+        // the opposite. Two presses meant as one would undo each other.
+        val toggle =
+            controllerSource
+                .substringAfter("suspend fun toggleTaskCompletion(")
+                .substringBefore("/** The same, asked for from the menu")
+        assertTrue("pressedTick = PressedTick(" in toggle, "the tick is not held while it waits")
+        assertTrue("busyTaskId = null" !in toggle, "the tick is let go of before the table has answered")
+        val settle =
+            controllerSource
+                .substringAfter("private fun settleTick()")
+                .substringBefore("/**\n     * Finishes an unfinished task")
+        assertTrue("shown == null || shown.isCompletedTask == waiting.finishing" in settle, "the answer is not recognised")
+        val watching =
+            controllerSource
+                .substringAfter("suspend fun observeTable()")
+                .substringBefore("suspend fun observeColorCatalogue()")
+        assertTrue("settleTick()" in watching, "the rows arriving never let a pressed tick go")
+    }
 }

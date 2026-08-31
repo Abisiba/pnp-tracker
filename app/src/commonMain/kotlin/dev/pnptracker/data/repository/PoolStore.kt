@@ -96,7 +96,7 @@ class PoolStore(
             stages.groupBy { it.taskId }.mapValues { (_, held) ->
                 held.map { PoolStage(it.stage, it.completedQuantity) }
             }
-        val failureByTask: Map<EntityId, Int> = failures.associate { it.taskId to it.failureTotal }
+        val failureByTask: Map<EntityId, Long> = failures.associate { it.taskId to it.failureTotal }
         return rows.map { row ->
             PoolTask(
                 taskId = row.taskId,
@@ -112,7 +112,7 @@ class PoolStore(
                 currentMissingQuantity = row.currentMissingQuantity,
                 colors = colorsByTask[row.taskId].orEmpty(),
                 stages = stagesByTask[row.taskId].orEmpty(),
-                failureTotal = failureByTask[row.taskId] ?: 0,
+                failureTotal = failureByTask[row.taskId] ?: 0L,
             )
         }
     }

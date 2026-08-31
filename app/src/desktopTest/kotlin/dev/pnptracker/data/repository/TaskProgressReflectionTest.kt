@@ -13,13 +13,18 @@ import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.model.TrackingMode
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -329,5 +334,246 @@ class TaskProgressReflectionTest {
             // nothing to do, and doing nothing costs one look and no write.
             assertEquals(1, counted["UPDATE tasks"], "a no-op wrote the task: $counted")
             assertEquals(0, counted.filterKeys { it.startsWith("INSERT") }.values.sum())
+        }
+
+    // ---------------------------------------- what a finish does, and what it costs
+
+    /**
+     * Runs one action against a task and says what statements it really took.
+     *
+     * [setUp] happens before the count starts, so what is measured is the action
+     * itself and never the fixture it needed.
+     */
+    private suspend fun costOf(
+        taskId: EntityId,
+        setUp: suspend (EntityId) -> Unit = {},
+        action: suspend (EntityId) -> Unit,
+    ): Map<String, Int> {
+        setUp(taskId)
+        driver.start()
+        action(taskId)
+        return tally(driver.stop())
+    }
+
+    @Test
+    fun `a finish with nothing owed writes no event, whatever colours the task is made in`() =
+        runBlocking<Unit> {
+            val plain = task("Tek")
+            val coloured = task("Üç", colors = palette(3))
+
+            val forPlain = costOf(plain) { progress.completeTask(it, clock, ids) }
+            val forColoured = costOf(coloured) { progress.completeTask(it, clock, ids) }
+
+            assertEquals(forPlain, forColoured, "a finish was paid for one colour at a time")
+            listOf(plain to forPlain, coloured to forColoured).forEach { (id, counted) ->
+                assertEquals(1, counted["UPDATE tasks"], "a finish wrote the task more than once: $counted")
+                assertEquals(null, counted["INSERT progress_events"], "a finish with nothing owed wrote an event")
+                assertEquals(0, counted.filterKeys { "task_colors" in it }.values.sum(), "a finish touched the colours")
+                assertTrue(progress.progressEventsOfTask(id).isEmpty(), "an untroubled task was given a history")
+                val finished = checkNotNull(progress.taskById(id))
+                assertTrue(finished.isCompleted, "the task was not finished")
+                assertEquals(0, finished.currentMissingQuantity)
+                assertTrue(finished.primaryBatchCompleted, "a finished 3D task was left without its print run")
+            }
+        }
+
+    @Test
+    fun `a finish with pieces owed settles them in one event, whatever colours the task is made in`() =
+        runBlocking<Unit> {
+            val plain = task("Tek")
+            val coloured = task("Üç", colors = palette(3))
+
+            val forPlain =
+                costOf(plain, setUp = { progress.reportFailure(ids.newId(), it, 3, clock) }) {
+                    progress.completeTask(it, clock, ids)
+                }
+            val forColoured =
+                costOf(coloured, setUp = { progress.reportFailure(ids.newId(), it, 3, clock) }) {
+                    progress.completeTask(it, clock, ids)
+                }
+
+            assertEquals(forPlain, forColoured, "settling was paid for one colour at a time")
+            listOf(plain to forPlain, coloured to forColoured).forEach { (id, counted) ->
+                assertEquals(1, counted["UPDATE tasks"], "a finish wrote the task more than once: $counted")
+                assertEquals(1, counted["INSERT progress_events"], "settling was not one event: $counted")
+                assertEquals(0, counted.filterKeys { "task_colors" in it }.values.sum(), "a finish touched the colours")
+                val settling = progress.progressEventsOfTask(id).last()
+                // What was owed is what is made good, exactly: PLAN 6.4 will not
+                // have the finished mark stand over a counter that still says work
+                // is left, and settling for anything else would leave one of the two
+                // wrong.
+                assertEquals(3, settling.quantity, "the settling event was not for what was owed")
+                assertEquals(3L, progress.failureTotalOf(id), "finishing erased the history of having failed")
+                assertEquals(3L, progress.resolvedTotalOf(id))
+                val finished = checkNotNull(progress.taskById(id))
+                assertTrue(finished.isCompleted)
+                assertEquals(0, finished.currentMissingQuantity)
+            }
+        }
+
+    // ------------------------------------------------- what a pool card is told
+
+    @Test
+    fun `a pool card carries a failure total the database counted past what an Int holds`() =
+        runBlocking<Unit> {
+            val taskId = task("Çok", quantity = 40)
+            // Three of the largest amount the form will take. PLAN 6.4 caps what
+            // a task owes at what it needs and leaves the failure total uncapped,
+            // so this is a number the application can really reach.
+            repeat(3) { progress.reportFailure(ids.newId(), taskId, 999_999_999, clock) }
+            val counted = 3L * 999_999_999L
+            assertTrue(counted > Int.MAX_VALUE, "the fixture never left what an Int holds")
+
+            assertEquals(counted, progress.failureTotalOf(taskId), "the database did not add it up as asked")
+            val projected =
+                database
+                    .poolDao()
+                    .observeFailureTotalsOfPool(PoolType.THREE_D)
+                    .first()
+                    .single()
+            assertEquals(counted, projected.failureTotal, "the projection reported a different number")
+            val shown =
+                pools
+                    .observePool(PoolType.THREE_D)
+                    .first()
+                    .tasks
+                    .single()
+            assertEquals(counted, shown.failureTotal, "the pool card reported a different number")
+            assertTrue(shown.failureTotal > 0, "a card with everything wrong showed nothing wrong")
+            // The debt is a different number and stays inside the task's total.
+            assertEquals(40, shown.currentMissingQuantity, "what is owed went past what the task needs")
+        }
+
+    // ------------------------------------------------------- giving up half way
+
+    @Test
+    fun `giving up on a coroutine is not turned into something to show the user`() =
+        runBlocking<Unit> {
+            val taskId = task("Vazgeçilen")
+            val store = TaskProgressStore(progress, clock)
+            var returned: TaskProgressOutcome? = null
+            val apart = CoroutineScope(Job())
+            val attempt =
+                apart.launch {
+                    // Cancelled before it asks, so the first place the write
+                    // suspends is a place it must give up at.
+                    coroutineContext.job.cancel()
+                    returned = store.reportFailure(ids.newId(), taskId, 1)
+                }
+            attempt.join()
+
+            assertNull(returned, "giving up came back as an ordinary answer instead of travelling on")
+            assertTrue(attempt.isCancelled, "the coroutine was left looking as though it had finished")
+            assertTrue(progress.progressEventsOfTask(taskId).isEmpty(), "a report was written after giving up")
+        }
+
+    // ------------------------------------- what an action costs, in every setting
+
+    /**
+     * One progress action, named, with whatever fixture it needs first.
+     *
+     * Kept as a list rather than measured one by one so the same seven actions
+     * go through every setting — a crowd of other tasks, a long history, a
+     * handful of colours — and none of them is quietly left out of one of them.
+     */
+    private class ProgressAction(
+        val name: String,
+        val setUp: suspend (EntityId) -> Unit = {},
+        val run: suspend (EntityId) -> Unit,
+    )
+
+    private val progressActions: List<ProgressAction> =
+        listOf(
+            ProgressAction("complete owing nothing") { progress.completeTask(it, clock, ids) },
+            ProgressAction(
+                name = "complete owing something",
+                setUp = { progress.reportFailure(ids.newId(), it, 2, clock) },
+                run = { progress.completeTask(it, clock, ids) },
+            ),
+            ProgressAction(
+                name = "reopen",
+                setUp = { progress.completeTask(it, clock, ids) },
+                run = { progress.reopenTask(it, clock) },
+            ),
+            ProgressAction("report") { progress.reportFailure(ids.newId(), it, 1, clock) },
+            ProgressAction(
+                name = "resolve",
+                setUp = { progress.reportFailure(ids.newId(), it, 2, clock) },
+                run = { progress.resolveShortage(ids.newId(), it, 1, clock) },
+            ),
+            ProgressAction(
+                name = "a finish with nothing to do",
+                setUp = { progress.completeTask(it, clock, ids) },
+                run = { progress.completeTask(it, clock, ids) },
+            ),
+            ProgressAction("a reopen with nothing to do") { progress.reopenTask(it, clock) },
+        )
+
+    /** What every one of [progressActions] costs in one setting, named by action. */
+    private suspend fun costOfEachAction(
+        label: String,
+        colours: List<EntityId> = emptyList(),
+        history: Int = 0,
+    ): Map<String, Map<String, Int>> =
+        progressActions.associate { action ->
+            val id = task("$label ${action.name}", colors = colours, quantity = 1000)
+            if (history > 0) {
+                // A long history and an outstanding debt are two different
+                // things, and only the first is being varied here: the reports
+                // are all made good again and the task put back to work, so what
+                // is left is the length of the history alone.
+                repeat(history) { progress.reportFailure(ids.newId(), id, 1, clock) }
+                progress.resolveShortage(ids.newId(), id, history, clock)
+                progress.reopenTask(id, clock)
+            }
+            action.name to costOf(id, action.setUp, action.run)
+        }
+
+    @Test
+    fun `no progress action grows with the number of tasks around it`() =
+        runBlocking<Unit> {
+            val alone = costOfEachAction("Yalnız")
+            repeat(42) { index -> task("Kalabalık $index") }
+            val crowded = costOfEachAction("Kalabalıkta")
+
+            assertEquals(alone, crowded, "an action grew with the tasks around it")
+            // Named rather than only compared, so a change that made both sides
+            // cost more equally would still be seen.
+            assertEquals(
+                mapOf(
+                    "SELECT tasks" to 2,
+                    "SELECT task_stages" to 2,
+                    "SELECT progress_events" to 2,
+                    "SELECT other" to 1,
+                    "UPDATE tasks" to 1,
+                ),
+                alone.getValue("complete owing nothing"),
+            )
+            assertEquals(mapOf("SELECT tasks" to 1), alone.getValue("a finish with nothing to do"))
+            assertEquals(mapOf("SELECT tasks" to 1), alone.getValue("a reopen with nothing to do"))
+        }
+
+    @Test
+    fun `no progress action grows with the history already behind the task`() =
+        runBlocking<Unit> {
+            // The totals are added up in the database, so a long history is one
+            // read however long it is. A read per event would make an old task
+            // slower to work on than a new one, which PLAN 16 will not have.
+            val fresh = costOfEachAction("Yeni")
+            val busy = costOfEachAction("Geçmişli", history = 42)
+
+            assertEquals(fresh, busy, "an action grew with the history behind it")
+        }
+
+    @Test
+    fun `no progress action grows with the colours the task is made in`() =
+        runBlocking<Unit> {
+            val plain = costOfEachAction("Tek")
+            val coloured = costOfEachAction("Üç", colours = palette(3))
+
+            assertEquals(plain, coloured, "an action grew with the colours of the task")
+            coloured.forEach { (name, counted) ->
+                assertEquals(0, counted.filterKeys { "task_colors" in it }.values.sum(), "$name touched the colours")
+            }
         }
 }

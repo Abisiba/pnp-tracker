@@ -69,7 +69,7 @@ data class PoolColorGroup(
     val taskCount: Int get() = tasks.size
     val requiredTotal: Int get() = tasks.sumOf { it.requiredQuantity ?: 0 }
     val missingTotal: Int get() = tasks.sumOf { it.currentMissingQuantity }
-    val failureTotal: Int get() = tasks.sumOf { it.failureTotal }
+    val failureTotal: Long get() = tasks.sumOf { it.failureTotal }
 }
 
 /**
@@ -86,7 +86,7 @@ data class PoolAwaitingColorSection(
     val taskCount: Int get() = tasks.size
     val requiredTotal: Int get() = tasks.sumOf { it.requiredQuantity ?: 0 }
     val missingTotal: Int get() = tasks.sumOf { it.currentMissingQuantity }
-    val failureTotal: Int get() = tasks.sumOf { it.failureTotal }
+    val failureTotal: Long get() = tasks.sumOf { it.failureTotal }
     val isEmpty: Boolean get() = tasks.isEmpty()
 }
 

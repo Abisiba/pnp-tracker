@@ -1546,6 +1546,7 @@ private fun TaskPopover(
                             isSaving = work.isSaving,
                             failure = work.failure,
                             outstanding = null,
+                            asksWhereNoticed = true,
                             controller = controller,
                             onSave = { confirm() },
                         )
@@ -1559,6 +1560,10 @@ private fun TaskPopover(
                             isSaving = work.isSaving,
                             failure = work.failure,
                             outstanding = work.outstanding,
+                            // Nothing is kept about where a piece was made good
+                            // again — only about where it went wrong — so asking
+                            // would be collecting an answer the record throws away.
+                            asksWhereNoticed = false,
                             controller = controller,
                             onSave = { confirm() },
                         )
@@ -1590,6 +1595,7 @@ private fun ShortagePanel(
     isSaving: Boolean,
     failure: TaskProgressFailure?,
     outstanding: Int?,
+    asksWhereNoticed: Boolean,
     controller: GameTableController,
     onSave: () -> Unit,
 ) {
@@ -1633,10 +1639,11 @@ private fun ShortagePanel(
             modifier = Modifier.fillMaxWidth().semantics { contentDescription = cardLabel },
         )
     }
-    // Only where the pool runs through steps, and only its own steps. Choosing
-    // one records where the pieces were noticed and nothing else: PLAN 7.3 gives
-    // moving a counter to the badge, which is not this.
-    val pipeline = poolType?.let { stagesOf(it) }.orEmpty()
+    // Only where the pool runs through steps, only its own steps, and only on
+    // the form that has somewhere to put the answer. Choosing one records where
+    // the pieces were noticed and nothing else: PLAN 7.3 gives moving a counter
+    // to the badge, which is not this.
+    val pipeline = if (asksWhereNoticed) poolType?.let { stagesOf(it) }.orEmpty() else emptyList()
     if (pipeline.isNotEmpty()) {
         Text(
             text = stringResource(Strings.Shortage.stageLabel),

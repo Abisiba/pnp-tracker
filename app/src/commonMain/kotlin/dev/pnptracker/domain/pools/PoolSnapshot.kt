@@ -45,7 +45,8 @@ data class PoolTask(
     val colors: List<PoolColor> = emptyList(),
     /** In pipeline order, empty for the pools that have no pipeline. */
     val stages: List<PoolStage> = emptyList(),
-    val failureTotal: Int = 0,
+    /** Uncapped, and so kept as wide as the database added it up (PLAN 6.4). */
+    val failureTotal: Long = 0L,
 ) {
     /** True when something has gone wrong on this task, which sorts it forward. */
     val needsAttention: Boolean get() = currentMissingQuantity > 0 || failureTotal > 0

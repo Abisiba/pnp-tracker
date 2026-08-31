@@ -79,8 +79,18 @@ data class PoolStageRow(
 data class PoolFailureRow(
     @ColumnInfo(name = "task_id")
     val taskId: EntityId,
+    /**
+     * Held as a `Long` because that is what the database added up.
+     *
+     * `SUM` over the events is a 64 bit number and the failure total is
+     * deliberately uncapped — PLAN 6.4 lets a piece be spoiled more times than
+     * the task needs pieces — so there is nothing here to bound it by. Narrowing
+     * it would not report a number too large, it would report a different one:
+     * the low half of it, which past two thousand million reads as a negative
+     * count of things that went wrong.
+     */
     @ColumnInfo(name = "failure_total")
-    val failureTotal: Int,
+    val failureTotal: Long,
 )
 
 /** How much work each pool is holding, for the sidebar. */

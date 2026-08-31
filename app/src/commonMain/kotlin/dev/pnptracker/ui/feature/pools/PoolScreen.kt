@@ -236,7 +236,7 @@ private fun SectionHeading(
     taskCount: Int,
     requiredTotal: Int,
     missingTotal: Int,
-    failureTotal: Int,
+    failureTotal: Long,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         SectionTitle(title)
@@ -257,7 +257,7 @@ private fun Summary(
     taskCount: Int,
     requiredTotal: Int,
     missingTotal: Int,
-    failureTotal: Int,
+    failureTotal: Long,
 ) {
     Text(
         text =
