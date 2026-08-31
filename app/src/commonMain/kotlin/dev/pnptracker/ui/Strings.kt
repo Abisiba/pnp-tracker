@@ -264,6 +264,7 @@ import dev.pnptracker.resources.navigation_colors
 import dev.pnptracker.resources.navigation_games
 import dev.pnptracker.resources.navigation_home
 import dev.pnptracker.resources.navigation_import
+import dev.pnptracker.resources.navigation_pool_active_badge
 import dev.pnptracker.resources.navigation_pool_active_count
 import dev.pnptracker.resources.navigation_pool_board
 import dev.pnptracker.resources.navigation_pool_card
@@ -636,6 +637,7 @@ object Strings {
         val navBoard = Res.string.navigation_pool_board
         val navSpecial = Res.string.navigation_pool_special
         val navActiveCount = Res.string.navigation_pool_active_count
+        val navActiveBadge = Res.string.navigation_pool_active_badge
         val introThreeD = Res.string.pool_intro_three_d
         val introCard = Res.string.pool_intro_card
         val introBoard = Res.string.pool_intro_board

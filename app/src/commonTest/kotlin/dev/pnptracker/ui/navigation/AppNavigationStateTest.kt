@@ -87,6 +87,35 @@ class AppNavigationStateTest {
     }
 
     @Test
+    fun `a window standing on the special pool is moved to the 3D one when it goes`() {
+        val navigation = AppNavigationState(Screen.Pool(PoolType.SPECIAL))
+        val gone = PoolNavigationSummary.EMPTY
+
+        // What the window does when the last special task is deleted: the pool
+        // stops being offered, so standing on it would leave a section the
+        // sidebar can no longer name. PLAN 9 hides the pool and says nothing
+        // else about it, so the move is silent and lands on the first pool.
+        assertFalse(Screen.Pool(PoolType.SPECIAL) in Screen.offered(gone))
+        navigation.navigateTo(Screen.threeDPool)
+
+        assertEquals(Screen.Pool(PoolType.THREE_D), navigation.currentScreen)
+        assertTrue(Screen.threeDPool in Screen.offered(gone), "the pool it moved to is not offered either")
+    }
+
+    @Test
+    fun `a pool full of work elsewhere does not offer the special one`() {
+        val busy =
+            PoolNavigationSummary(
+                mapOf(
+                    PoolType.THREE_D to PoolCounts(activeCount = 42, taskCount = 42),
+                    PoolType.CARD to PoolCounts(activeCount = 9, taskCount = 20),
+                ),
+            )
+
+        assertFalse(Screen.Pool(PoolType.SPECIAL) in Screen.offered(busy))
+    }
+
+    @Test
     fun `the special pool is offered only once there is special work`() {
         // PLAN 9 hides it until the first special task and keeps it afterwards,
         // so what decides this is how many exist rather than how many are left.

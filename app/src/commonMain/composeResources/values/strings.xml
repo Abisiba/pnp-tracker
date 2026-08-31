@@ -468,6 +468,7 @@
     <string name="navigation_pool_board">Mukavva</string>
     <string name="navigation_pool_special">Özel</string>
     <string name="navigation_pool_active_count">%1$s aktif görev</string>
+    <string name="navigation_pool_active_badge">%1$s aktif</string>
     <string name="pool_intro_three_d">Bütün oyunların 3D görevleri, rengine göre bir arada. Buradaki her görev oyun tablosundaki görevin kendisidir.</string>
     <string name="pool_intro_card">Bütün oyunların kart görevleri, her birinin sıradaki üretim aşamasıyla birlikte.</string>
     <string name="pool_intro_board">Bütün oyunların mukavva görevleri, her birinin sıradaki üretim aşamasıyla birlikte.</string>

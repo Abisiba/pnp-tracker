@@ -79,6 +79,37 @@ class PoolQueryCountTest {
             .filter { touchesAPoolTable(it) && it.trimStart().uppercase().startsWith("SELECT") }
             .sorted()
 
+    /**
+     * Which query one statement is.
+     *
+     * Named rather than matched on its whole text, so what a count means is
+     * readable in the assertion instead of in a wall of SQL. The summary is
+     * asked for first because it too reads `tasks`, and would otherwise answer
+     * to the name of the query that lists a pool.
+     */
+    private fun nameOf(sql: String): String {
+        val text = sql.lowercase()
+        return when {
+            "sum(case when tasks.is_completed" in text -> "navigation_summary"
+            "sum(progress_events.quantity)" in text -> "failure_totals"
+            "from task_colors" in text -> "pool_colors"
+            "from task_stages" in text -> "pool_stages"
+            "from tasks" in text -> "active_pool_tasks"
+            else -> "unexpected(" + sql.trim().take(40) + ")"
+        }
+    }
+
+    /**
+     * How many times each query really ran.
+     *
+     * A count and not a set. Two runs of one query and one run of it are the
+     * same set and different maps, and the difference between them is exactly
+     * what an N+1 looks like: the same SQL, over and over. Order is left out
+     * because the reads are separate streams gathered together and which of
+     * them answers first is the coroutines' business, but multiplicity is not.
+     */
+    private fun frequenciesOf(recorded: List<String>): Map<String, Int> = statementsOf(recorded).groupingBy { nameOf(it) }.eachCount()
+
     private suspend fun fill(
         poolType: PoolType,
         size: Int,
@@ -128,7 +159,120 @@ class PoolQueryCountTest {
             statementsOf(driver.stop())
         }
 
+    private fun frequenciesToOpen(
+        poolType: PoolType,
+        size: Int,
+        colorsEach: Int = 1,
+    ): Map<String, Int> =
+        runBlocking {
+            fill(poolType, size, colorsEach)
+            database.colorDao().allColors()
+
+            driver.start()
+            PoolStore(database.poolDao()).observePool(poolType).first()
+            frequenciesOf(driver.stop())
+        }
+
     private fun freshDatabase(): PoolQueryCountTest = this
+
+    // -------------------------------------------- every query, counted by name
+
+    @Test
+    fun `the 3D pool runs each of its three queries exactly once at either size`() {
+        val expected = mapOf("active_pool_tasks" to 1, "pool_colors" to 1, "failure_totals" to 1)
+
+        assertEquals(expected, frequenciesToOpen(PoolType.THREE_D, 1))
+
+        closeDatabase()
+        openDatabase()
+        assertEquals(expected, frequenciesToOpen(PoolType.THREE_D, 42), "a query ran again for every task")
+
+        closeDatabase()
+        openDatabase()
+        assertEquals(expected, frequenciesToOpen(PoolType.THREE_D, 42, colorsEach = 3), "a query ran per colour")
+
+        closeDatabase()
+        openDatabase()
+        assertEquals(expected, frequenciesToOpen(PoolType.THREE_D, 42, colorsEach = 0), "a colourless pool asked more")
+    }
+
+    @Test
+    fun `the card pool runs each of its three queries exactly once at either size`() {
+        val expected = mapOf("active_pool_tasks" to 1, "pool_stages" to 1, "failure_totals" to 1)
+
+        assertEquals(expected, frequenciesToOpen(PoolType.CARD, 1, colorsEach = 0))
+
+        closeDatabase()
+        openDatabase()
+        assertEquals(expected, frequenciesToOpen(PoolType.CARD, 42, colorsEach = 0), "a query ran per task or stage")
+    }
+
+    @Test
+    fun `the board pool runs each of its three queries exactly once at either size`() {
+        val expected = mapOf("active_pool_tasks" to 1, "pool_stages" to 1, "failure_totals" to 1)
+
+        assertEquals(expected, frequenciesToOpen(PoolType.BOARD, 1, colorsEach = 0))
+
+        closeDatabase()
+        openDatabase()
+        assertEquals(expected, frequenciesToOpen(PoolType.BOARD, 42, colorsEach = 0))
+    }
+
+    @Test
+    fun `the special pool runs each of its two queries exactly once at either size`() {
+        val expected = mapOf("active_pool_tasks" to 1, "failure_totals" to 1)
+
+        assertEquals(expected, frequenciesToOpen(PoolType.SPECIAL, 1, colorsEach = 0))
+
+        closeDatabase()
+        openDatabase()
+        assertEquals(expected, frequenciesToOpen(PoolType.SPECIAL, 42, colorsEach = 0))
+    }
+
+    @Test
+    fun `the sidebar summary runs its one query exactly once at either size`() {
+        val expected = mapOf("navigation_summary" to 1)
+        val summaryOnly: () -> Map<String, Int> = {
+            runBlocking {
+                database.colorDao().allColors()
+                driver.start()
+                PoolStore(database.poolDao()).observeNavigationSummary().first()
+                frequenciesOf(driver.stop())
+            }
+        }
+
+        runBlocking { fill(PoolType.THREE_D, 1, 1) }
+        assertEquals(expected, summaryOnly())
+
+        closeDatabase()
+        openDatabase()
+        runBlocking {
+            fill(PoolType.THREE_D, 42, 3)
+            fill(PoolType.SPECIAL, 42, 0)
+        }
+        assertEquals(expected, summaryOnly(), "the summary asked once per pool or per task")
+    }
+
+    @Test
+    fun `opening one pool runs no query for the other three`() =
+        runBlocking<Unit> {
+            fill(PoolType.THREE_D, 5, 1)
+            fill(PoolType.CARD, 5, 0)
+            fill(PoolType.BOARD, 5, 0)
+            fill(PoolType.SPECIAL, 5, 0)
+            database.colorDao().allColors()
+
+            driver.start()
+            PoolStore(database.poolDao()).observePool(PoolType.THREE_D).first()
+            val frequencies = frequenciesOf(driver.stop())
+
+            // The detail queries of the pool on screen and nothing else. The
+            // sidebar's own count is a separate read and is not among these:
+            // opening a pool must not pay for the three nobody is looking at.
+            assertEquals(mapOf("active_pool_tasks" to 1, "pool_colors" to 1, "failure_totals" to 1), frequencies)
+            assertEquals(0, frequencies["pool_stages"] ?: 0, "a pipeline pool was read while the 3D one was open")
+            assertEquals(0, frequencies["navigation_summary"] ?: 0, "the sidebar was read again by the pool")
+        }
 
     // ------------------------------------------------------ the same, at scale
 

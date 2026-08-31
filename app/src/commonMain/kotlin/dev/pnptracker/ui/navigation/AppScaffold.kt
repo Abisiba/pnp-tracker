@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -198,6 +199,22 @@ private fun NavigationEntry(
     NavigationDrawerItem(
         selected = selected,
         onClick = onSelect,
+        // PLAN 9 asks for the number itself to be on screen: the Special pool
+        // stays offered after its last task is done and says `0 aktif`, which
+        // only means anything if it can be seen. The reader already hears the
+        // count from the entry's state, so the badge is drawn and not spoken —
+        // otherwise it would be said twice.
+        badge =
+            activeCount?.let { count ->
+                {
+                    Text(
+                        text = stringResource(Strings.Pool.navActiveBadge, count.toString()),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.clearAndSetSemantics {},
+                    )
+                }
+            },
         icon = {
             // A shape, not only a colour, says which section is open.
             Box(modifier = Modifier.width(SelectionMarkerWidth)) {

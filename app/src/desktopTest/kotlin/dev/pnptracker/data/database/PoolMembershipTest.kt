@@ -384,6 +384,70 @@ class PoolMembershipTest {
         }
 
     @Test
+    fun `one piece of special work offers the pool and counts as one`() =
+        runBlocking<Unit> {
+            task(pool = PoolType.SPECIAL, tracking = TrackingMode.CHECKLIST, quantity = null)
+
+            val summary = pools.observeNavigationSummary().first()
+
+            assertTrue(summary.showsSpecial)
+            assertEquals(1, summary.activeCountOf(PoolType.SPECIAL))
+        }
+
+    @Test
+    fun `a special task written in no cell does not offer the pool`() =
+        runBlocking<Unit> {
+            // Visibility is decided by the same anchored reading the pool itself
+            // is: a task nothing points at is in no document, so it cannot put a
+            // section in the sidebar that would then open on nothing.
+            val orphan =
+                aTask(
+                    poolType = PoolType.SPECIAL,
+                    trackingMode = TrackingMode.CHECKLIST,
+                    name = "Çapasız özel",
+                    requiredQuantity = null,
+                )
+            database.taskDao().insert(orphan)
+
+            val summary = pools.observeNavigationSummary().first()
+
+            assertTrue(!summary.showsSpecial, "an anchorless task offered the pool")
+            assertEquals(0, summary.activeCountOf(PoolType.SPECIAL))
+        }
+
+    @Test
+    fun `the pool is put away when its last task becomes ordinary text`() =
+        runBlocking<Unit> {
+            val id = task(pool = PoolType.SPECIAL, tracking = TrackingMode.CHECKLIST, quantity = null)
+            assertTrue(pools.observeNavigationSummary().first().showsSpecial)
+
+            database.taskEditDao().convertTaskToText(id, FixedClock(moment), IdGenerator.Random)
+
+            // Converting is not finishing: the task stops existing, so unlike a
+            // completed one it leaves nothing behind to keep the pool offered.
+            assertTrue(!pools.observeNavigationSummary().first().showsSpecial)
+        }
+
+    @Test
+    fun `work in the other pools neither offers nor hides the special one`() =
+        runBlocking<Unit> {
+            repeat(6) { index -> task(pool = PoolType.THREE_D, name = "Parça $index") }
+            task(pool = PoolType.CARD, tracking = TrackingMode.PIPELINE)
+            task(pool = PoolType.BOARD, tracking = TrackingMode.PIPELINE)
+
+            assertTrue(!pools.observeNavigationSummary().first().showsSpecial, "another pool offered this one")
+
+            val id = task(pool = PoolType.SPECIAL, tracking = TrackingMode.COUNTED, quantity = 8)
+            assertTrue(pools.observeNavigationSummary().first().showsSpecial)
+
+            database.taskDao().softDelete(id, moment)
+
+            // Eight tasks elsewhere, none of them special: the pool goes away
+            // however busy the rest of the application is.
+            assertTrue(!pools.observeNavigationSummary().first().showsSpecial)
+        }
+
+    @Test
     fun `the special pool is put away once its tasks are deleted`() =
         runBlocking<Unit> {
             val id = task(pool = PoolType.SPECIAL, tracking = TrackingMode.CHECKLIST, quantity = null)

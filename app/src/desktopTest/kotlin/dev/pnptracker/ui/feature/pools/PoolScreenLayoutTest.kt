@@ -158,6 +158,34 @@ class PoolScreenLayoutTest {
         assertTrue(said.isNotBlank())
     }
 
+    @Test
+    fun `the count a pool is holding is written on the entry and not only spoken`() {
+        // PLAN 9 and its ninth scenario: once the last special task is done the
+        // pool stays in the sidebar and shows `0 aktif`. A number only a screen
+        // reader can reach would leave that promise unkept for everyone else.
+        assertEquals("0 aktif", textOf(Strings.Pool.navActiveBadge, "0"))
+
+        assertTrue(
+            "badge =" in scaffold && "Strings.Pool.navActiveBadge" in scaffold,
+            "the entry draws no count of its own",
+        )
+        // Drawn but not spoken: the entry already carries the count in its state,
+        // and a badge with semantics of its own would say it a second time.
+        val badge = scaffold.substringAfter("badge =").substringBefore("icon =")
+        assertTrue("clearAndSetSemantics" in badge, "the badge is read out as well as the entry's state")
+        assertTrue("navActiveCount" in scaffold, "the spoken count was dropped")
+    }
+
+    @Test
+    fun `only a pool carries a count`() {
+        // The count comes from the pool summary, so the sections that are not
+        // pools are given none rather than a nought that would mean nothing.
+        assertTrue(
+            "(screen as? Screen.Pool)?.let { summary.activeCountOf(it.poolType) }" in scaffold,
+            "the count is no longer taken from the pool alone",
+        )
+    }
+
     // ---------------------------------------------------------- what is drawn
 
     @Test
