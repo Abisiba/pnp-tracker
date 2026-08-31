@@ -13,6 +13,7 @@ import dev.pnptracker.data.repository.GameTableStore
 import dev.pnptracker.data.repository.ImportConfirmationStore
 import dev.pnptracker.data.repository.ImportDraftStore
 import dev.pnptracker.data.repository.ImportReviewStore
+import dev.pnptracker.data.repository.PoolStore
 import dev.pnptracker.data.repository.TaskEditStore
 import dev.pnptracker.data.repository.TaskFromTextStore
 import dev.pnptracker.platform.awt.applyLinuxFileDialogPolicy
@@ -27,6 +28,7 @@ import dev.pnptracker.ui.feature.games.GameTableController
 import dev.pnptracker.ui.feature.importreview.ImportController
 import dev.pnptracker.ui.feature.importworkspace.ImportConfirmationController
 import dev.pnptracker.ui.feature.importworkspace.ImportReviewController
+import dev.pnptracker.ui.feature.pools.PoolControllers
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.compose.resources.stringResource
 import java.awt.Dimension
@@ -74,6 +76,15 @@ fun main() {
             taskEditing = TaskEditStore(database.taskEditDao()),
         )
     val colorCatalogueController = ColorCatalogueController(colorCatalogue)
+    // The pools read the same tasks the table reads and write through the same
+    // editing transaction, so they are given the very same store rather than one
+    // of their own.
+    val poolControllers =
+        PoolControllers(
+            pools = PoolStore(database.poolDao()),
+            colors = colorCatalogue,
+            taskEditing = TaskEditStore(database.taskEditDao()),
+        )
 
     application {
         Window(
@@ -94,6 +105,7 @@ fun main() {
                 confirmationController,
                 gameTableController,
                 colorCatalogueController,
+                poolControllers,
             )
         }
     }

@@ -264,12 +264,51 @@ import dev.pnptracker.resources.navigation_colors
 import dev.pnptracker.resources.navigation_games
 import dev.pnptracker.resources.navigation_home
 import dev.pnptracker.resources.navigation_import
+import dev.pnptracker.resources.navigation_pool_active_count
+import dev.pnptracker.resources.navigation_pool_board
+import dev.pnptracker.resources.navigation_pool_card
+import dev.pnptracker.resources.navigation_pool_special
+import dev.pnptracker.resources.navigation_pool_three_d
 import dev.pnptracker.resources.navigation_section_label
 import dev.pnptracker.resources.navigation_state_not_selected
 import dev.pnptracker.resources.navigation_state_selected
 import dev.pnptracker.resources.pool_board
 import dev.pnptracker.resources.pool_card
+import dev.pnptracker.resources.pool_empty
+import dev.pnptracker.resources.pool_error
+import dev.pnptracker.resources.pool_group_failures
+import dev.pnptracker.resources.pool_group_missing
+import dev.pnptracker.resources.pool_group_summary
+import dev.pnptracker.resources.pool_group_summary_unknown
+import dev.pnptracker.resources.pool_intro_board
+import dev.pnptracker.resources.pool_intro_card
+import dev.pnptracker.resources.pool_intro_special
+import dev.pnptracker.resources.pool_intro_three_d
+import dev.pnptracker.resources.pool_loading
+import dev.pnptracker.resources.pool_section_awaiting_color
+import dev.pnptracker.resources.pool_section_multicolor
+import dev.pnptracker.resources.pool_section_single_color
 import dev.pnptracker.resources.pool_special
+import dev.pnptracker.resources.pool_special_checklist
+import dev.pnptracker.resources.pool_special_counted
+import dev.pnptracker.resources.pool_special_game
+import dev.pnptracker.resources.pool_special_remaining
+import dev.pnptracker.resources.pool_stage_badge
+import dev.pnptracker.resources.pool_stage_count
+import dev.pnptracker.resources.pool_stage_count_of
+import dev.pnptracker.resources.pool_stage_details_close
+import dev.pnptracker.resources.pool_stage_details_open
+import dev.pnptracker.resources.pool_stage_done
+import dev.pnptracker.resources.pool_task_color_current
+import dev.pnptracker.resources.pool_task_colors
+import dev.pnptracker.resources.pool_task_failures
+import dev.pnptracker.resources.pool_task_missing
+import dev.pnptracker.resources.pool_task_open
+import dev.pnptracker.resources.pool_task_primary_done
+import dev.pnptracker.resources.pool_task_primary_pending
+import dev.pnptracker.resources.pool_task_quantity
+import dev.pnptracker.resources.pool_task_quantity_unknown
+import dev.pnptracker.resources.pool_task_spoken
 import dev.pnptracker.resources.pool_three_d
 import dev.pnptracker.resources.review_back
 import dev.pnptracker.resources.review_cell_location
@@ -314,6 +353,10 @@ import dev.pnptracker.resources.source_column_game
 import dev.pnptracker.resources.source_column_missing
 import dev.pnptracker.resources.source_column_special
 import dev.pnptracker.resources.source_column_three_d
+import dev.pnptracker.resources.stage_cut
+import dev.pnptracker.resources.stage_glue
+import dev.pnptracker.resources.stage_laminate
+import dev.pnptracker.resources.stage_print
 import dev.pnptracker.resources.table_add_game
 import dev.pnptracker.resources.table_add_game_hint
 import dev.pnptracker.resources.table_cell_description
@@ -584,6 +627,53 @@ object Strings {
         val card = Res.string.pool_card
         val board = Res.string.pool_board
         val special = Res.string.pool_special
+    }
+
+    /** What a pool screen says, and what the sidebar says about it. */
+    object Pool {
+        val navThreeD = Res.string.navigation_pool_three_d
+        val navCard = Res.string.navigation_pool_card
+        val navBoard = Res.string.navigation_pool_board
+        val navSpecial = Res.string.navigation_pool_special
+        val navActiveCount = Res.string.navigation_pool_active_count
+        val introThreeD = Res.string.pool_intro_three_d
+        val introCard = Res.string.pool_intro_card
+        val introBoard = Res.string.pool_intro_board
+        val introSpecial = Res.string.pool_intro_special
+        val empty = Res.string.pool_empty
+        val loading = Res.string.pool_loading
+        val sectionAwaitingColor = Res.string.pool_section_awaiting_color
+        val sectionSingleColor = Res.string.pool_section_single_color
+        val sectionMulticolor = Res.string.pool_section_multicolor
+        val groupSummary = Res.string.pool_group_summary
+        val groupSummaryUnknown = Res.string.pool_group_summary_unknown
+        val groupMissing = Res.string.pool_group_missing
+        val groupFailures = Res.string.pool_group_failures
+        val quantity = Res.string.pool_task_quantity
+        val quantityUnknown = Res.string.pool_task_quantity_unknown
+        val missing = Res.string.pool_task_missing
+        val failures = Res.string.pool_task_failures
+        val primaryDone = Res.string.pool_task_primary_done
+        val primaryPending = Res.string.pool_task_primary_pending
+        val open = Res.string.pool_task_open
+        val colors = Res.string.pool_task_colors
+        val currentColor = Res.string.pool_task_color_current
+        val stageBadge = Res.string.pool_stage_badge
+        val stageDone = Res.string.pool_stage_done
+        val stageDetailsOpen = Res.string.pool_stage_details_open
+        val stageDetailsClose = Res.string.pool_stage_details_close
+        val stageCount = Res.string.pool_stage_count
+        val stageCountOf = Res.string.pool_stage_count_of
+        val checklist = Res.string.pool_special_checklist
+        val counted = Res.string.pool_special_counted
+        val remaining = Res.string.pool_special_remaining
+        val game = Res.string.pool_special_game
+        val spokenTask = Res.string.pool_task_spoken
+        val error = Res.string.pool_error
+        val stagePrint = Res.string.stage_print
+        val stageLaminate = Res.string.stage_laminate
+        val stageGlue = Res.string.stage_glue
+        val stageCut = Res.string.stage_cut
     }
 
     /** How progress on a task is counted. */

@@ -36,6 +36,7 @@ import dev.pnptracker.domain.tasks.onlyTrackingModeOf
 import dev.pnptracker.domain.tasks.splitForTaskName
 import dev.pnptracker.ui.feature.colors.ColorComposer
 import dev.pnptracker.ui.feature.colors.baseColorsIn
+import dev.pnptracker.ui.feature.tasks.TaskEditingHost
 import kotlinx.coroutines.flow.collect
 
 /**
@@ -65,7 +66,7 @@ class GameTableController(
     private val colors: ColorCatalogue,
     private val taskCreation: TaskCreationFromText,
     private val taskEditing: TaskEditing,
-) {
+) : TaskEditingHost {
     var state: GameTableScreenState by mutableStateOf(GameTableScreenState())
         private set
 
@@ -160,7 +161,7 @@ class GameTableController(
      * from, the panel to the menu, the menu to nothing. Collapsing several at
      * once would take the user somewhere they did not ask to be.
      */
-    fun closeInnermost() {
+    override fun closeInnermost() {
         val work = state.work ?: return
         state = state.copy(work = work.parent, blockedByEditor = false, focusRecall = state.focusRecall + 1)
     }
@@ -988,9 +989,9 @@ class GameTableController(
             )
     }
 
-    fun editTaskName(name: String) = onEditor { it.copy(name = name, failure = null) }
+    override fun editTaskName(name: String) = onEditor { it.copy(name = name, failure = null) }
 
-    fun editTaskEditColorQuery(query: String) = onEditor { it.copy(colorQuery = query) }
+    override fun editTaskEditColorQuery(query: String) = onEditor { it.copy(colorQuery = query) }
 
     /**
      * Chooses what the task is made in.
@@ -1002,7 +1003,7 @@ class GameTableController(
      * already in there — the list is ordered and its entries are unique (PLAN
      * 5.10), so the same colour twice is not something to describe.
      */
-    fun chooseTaskEditColor(colorId: EntityId) {
+    override fun chooseTaskEditColor(colorId: EntityId) {
         val editor = (state.work as? CellWork.EditingTask)?.editor
         val removes = editor?.holdsSeveralColors == true && colorId in editor.colorIds
         onEditor(recallFocus = removes) {
@@ -1017,13 +1018,13 @@ class GameTableController(
     }
 
     /** Moves one of a several-colour task's colours towards the front. */
-    fun moveTaskEditColorUp(slot: Int) =
+    override fun moveTaskEditColorUp(slot: Int) =
         onEditor(recallFocus = true) {
             it.copy(colorIds = it.colorIds.movedUp(slot), failure = null, failureRow = null, failureConflictsWith = null)
         }
 
     /** Moves one of a several-colour task's colours towards the back. */
-    fun moveTaskEditColorDown(slot: Int) =
+    override fun moveTaskEditColorDown(slot: Int) =
         onEditor(recallFocus = true) {
             it.copy(
                 colorIds = it.colorIds.movedUp(slot + 1),
@@ -1033,11 +1034,11 @@ class GameTableController(
             )
         }
 
-    fun editTaskEditQuantity(text: String) = onEditor { it.copy(quantityText = text, failure = null) }
+    override fun editTaskEditQuantity(text: String) = onEditor { it.copy(quantityText = text, failure = null) }
 
-    fun editTaskEditNotes(text: String) = onEditor { it.copy(notes = text) }
+    override fun editTaskEditNotes(text: String) = onEditor { it.copy(notes = text) }
 
-    fun chooseTaskEditTracking(trackingMode: TrackingMode) = onEditor { it.copy(trackingMode = trackingMode, failure = null) }
+    override fun chooseTaskEditTracking(trackingMode: TrackingMode) = onEditor { it.copy(trackingMode = trackingMode, failure = null) }
 
     /**
      * Saves everything the user changed about the task, all at once.
@@ -1045,7 +1046,7 @@ class GameTableController(
      * A refusal leaves the panel standing with what they typed, so they can read
      * what went wrong and still have their answers.
      */
-    suspend fun saveTaskEdit() {
+    override suspend fun saveTaskEdit() {
         val editing = state.work as? CellWork.EditingTask ?: return
         val editor = editing.editor
         if (!editor.canSave) return

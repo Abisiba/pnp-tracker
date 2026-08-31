@@ -72,7 +72,7 @@ class TurkishTextCatalogTest {
         runBlocking<Unit> {
             val names = Screen.all.map { getString(textsOf(it).navigationLabel) }
 
-            assertEquals(4, names.size)
+            assertEquals(Screen.all.size, names.size)
             assertEquals(names.size, names.toSet().size, "navigation names are not unique: $names")
         }
 

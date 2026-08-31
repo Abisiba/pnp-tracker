@@ -1,5 +1,6 @@
 package dev.pnptracker.ui
 
+import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.ui.navigation.Screen
 import org.jetbrains.compose.resources.StringResource
 
@@ -50,4 +51,33 @@ fun textsOf(screen: Screen): ScreenTexts =
                 title = Strings.ScreenTitles.colors,
                 description = Strings.ScreenDescriptions.colors,
             )
+
+        // The sidebar names a pool in the plural the plan uses for the section
+        // (`Kartlar`), while the table column beside it names the one kind of
+        // work a cell holds (`Kart`). The heading over the pool is the section's
+        // own name, so both readings stay whatever the catalogue says they are.
+        is Screen.Pool ->
+            ScreenTexts(
+                navigationLabel = poolNavigationNameOf(screen.poolType),
+                title = poolNavigationNameOf(screen.poolType),
+                description = poolDescriptionOf(screen.poolType),
+            )
+    }
+
+/** What the sidebar calls one pool. */
+fun poolNavigationNameOf(poolType: PoolType): StringResource =
+    when (poolType) {
+        PoolType.THREE_D -> Strings.Pool.navThreeD
+        PoolType.CARD -> Strings.Pool.navCard
+        PoolType.BOARD -> Strings.Pool.navBoard
+        PoolType.SPECIAL -> Strings.Pool.navSpecial
+    }
+
+/** What one pool holds, in a sentence under its heading. */
+fun poolDescriptionOf(poolType: PoolType): StringResource =
+    when (poolType) {
+        PoolType.THREE_D -> Strings.Pool.introThreeD
+        PoolType.CARD -> Strings.Pool.introCard
+        PoolType.BOARD -> Strings.Pool.introBoard
+        PoolType.SPECIAL -> Strings.Pool.introSpecial
     }

@@ -3,6 +3,7 @@ package dev.pnptracker.ui
 import dev.pnptracker.domain.games.GameTableView
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.model.ProductionStage
 import org.jetbrains.compose.resources.StringResource
 
 /**
@@ -49,4 +50,19 @@ fun viewNameOf(view: GameTableView): StringResource =
         GameTableView.ONGOING -> Strings.Table.viewOngoing
         GameTableView.COMPLETED -> Strings.Table.viewCompleted
         GameTableView.ALL -> Strings.Table.viewAll
+    }
+
+/**
+ * The Turkish name of one production stage.
+ *
+ * Named for the state the work is in rather than for the act, because that is
+ * how PLAN 7 and 8 write the pipelines out — `Basıldı`, not `Bas`. Printing and
+ * cutting are the same step in both pipelines and are named once.
+ */
+fun stageNameOf(stage: ProductionStage): StringResource =
+    when (stage) {
+        ProductionStage.PRINT -> Strings.Pool.stagePrint
+        ProductionStage.LAMINATE -> Strings.Pool.stageLaminate
+        ProductionStage.GLUE -> Strings.Pool.stageGlue
+        ProductionStage.CUT -> Strings.Pool.stageCut
     }

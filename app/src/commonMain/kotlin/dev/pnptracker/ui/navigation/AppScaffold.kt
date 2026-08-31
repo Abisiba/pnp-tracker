@@ -22,7 +22,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -36,6 +38,8 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.pnptracker.AppInfo
+import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.pools.PoolNavigationSummary
 import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.feature.colors.ColorCatalogueController
 import dev.pnptracker.ui.feature.colors.ColorCatalogueScreen
@@ -46,6 +50,8 @@ import dev.pnptracker.ui.feature.importreview.ImportController
 import dev.pnptracker.ui.feature.importworkspace.ImportConfirmationController
 import dev.pnptracker.ui.feature.importworkspace.ImportReviewController
 import dev.pnptracker.ui.feature.importworkspace.ImportSection
+import dev.pnptracker.ui.feature.pools.PoolControllers
+import dev.pnptracker.ui.feature.pools.PoolScreen
 import dev.pnptracker.ui.textsOf
 import dev.pnptracker.ui.theme.ThemeMode
 import org.jetbrains.compose.resources.stringResource
@@ -71,23 +77,42 @@ fun AppScaffold(
     confirmationController: ImportConfirmationController,
     gameTableController: GameTableController,
     colorCatalogueController: ColorCatalogueController,
+    poolControllers: PoolControllers,
     modifier: Modifier = Modifier,
 ) {
+    LaunchedEffect(poolControllers) { poolControllers.observeNavigationSummary() }
+    val summary = poolControllers.summary
+    // The Special pool can stop being offered while it is the section on screen:
+    // its last task deleted, or the game it was in removed. Standing on a section
+    // that is no longer there would leave a screen nothing can navigate away from
+    // by its own name, so the window moves to the 3D pool and says nothing more
+    // about it (PLAN 9 hides the pool; it does not explain the hiding).
+    LaunchedEffect(summary.showsSpecial, navigation.currentScreen) {
+        if (!summary.showsSpecial && navigation.currentScreen == Screen.Pool(PoolType.SPECIAL)) {
+            navigation.navigateTo(Screen.threeDPool)
+        }
+    }
+
     Surface(modifier = modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxSize()) {
             NavigationSidebar(
                 appInfo = appInfo,
                 navigation = navigation,
+                summary = summary,
                 themeMode = themeMode,
                 onToggleTheme = onToggleTheme,
             )
             VerticalDivider()
             Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                when (navigation.currentScreen) {
+                when (val screen = navigation.currentScreen) {
                     Screen.Home -> HomeScreen()
                     Screen.Games -> GameTableScreen(gameTableController)
                     Screen.Colors -> ColorCatalogueScreen(colorCatalogueController)
                     Screen.Import -> ImportSection(importController, reviewController, confirmationController)
+                    // Keyed by the pool, so moving between two of them starts the
+                    // new pool's reads and stops the old one's rather than
+                    // leaving both running.
+                    is Screen.Pool -> key(screen.poolType) { PoolScreen(poolControllers.of(screen.poolType)) }
                 }
             }
         }
@@ -98,6 +123,7 @@ fun AppScaffold(
 private fun NavigationSidebar(
     appInfo: AppInfo,
     navigation: AppNavigationState,
+    summary: PoolNavigationSummary,
     themeMode: ThemeMode,
     onToggleTheme: () -> Unit,
 ) {
@@ -137,10 +163,11 @@ private fun NavigationSidebar(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 20.dp, bottom = 8.dp),
                 )
-                Screen.all.forEach { screen ->
+                Screen.offered(summary).forEach { screen ->
                     NavigationEntry(
                         screen = screen,
                         selected = navigation.isCurrent(screen),
+                        activeCount = (screen as? Screen.Pool)?.let { summary.activeCountOf(it.poolType) },
                         onSelect = { navigation.navigateTo(screen) },
                     )
                 }
@@ -156,10 +183,18 @@ private fun NavigationSidebar(
 private fun NavigationEntry(
     screen: Screen,
     selected: Boolean,
+    activeCount: Int?,
     onSelect: () -> Unit,
 ) {
-    val stateText =
+    val selectionText =
         stringResource(if (selected) Strings.Accessibility.selected else Strings.Accessibility.notSelected)
+    // How much work a pool is holding is part of what the entry says, so a
+    // reader hears it without opening the pool. PLAN 9 keeps the Special pool
+    // showing `0 aktif` after its last task is finished, which is exactly the
+    // number this carries.
+    val stateText =
+        activeCount?.let { selectionText + ", " + stringResource(Strings.Pool.navActiveCount, it.toString()) }
+            ?: selectionText
     NavigationDrawerItem(
         selected = selected,
         onClick = onSelect,

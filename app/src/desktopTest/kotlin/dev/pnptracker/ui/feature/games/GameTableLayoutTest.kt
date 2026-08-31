@@ -23,6 +23,18 @@ class GameTableLayoutTest {
             .of("src/commonMain/kotlin/dev/pnptracker/ui/feature/games/GameTableScreen.kt")
             .let { Files.readString(it) }
 
+    /**
+     * The task editor, which the pools share with the table.
+     *
+     * It moved out of the screen when the pool screens arrived, because the two
+     * of them offer the same form over the same task (PLAN 12.10). What these
+     * tests ask of it is unchanged; only where it lives is.
+     */
+    private val editingSurface: String =
+        Path
+            .of("src/commonMain/kotlin/dev/pnptracker/ui/feature/tasks/TaskEditingSurface.kt")
+            .let { Files.readString(it) }
+
     @Test
     fun `every place these tests read the screen at is really in it`() {
         // Without this, renaming a composable turns a test into one that reads
@@ -38,7 +50,10 @@ class GameTableLayoutTest {
                 .toSet()
 
         anchors.forEach { anchor ->
-            assertTrue(anchor in source, "these tests read the screen at a place it no longer has: $anchor")
+            assertTrue(
+                anchor in source || anchor in editingSurface,
+                "these tests read the screen at a place it no longer has: $anchor",
+            )
         }
     }
 
@@ -337,7 +352,7 @@ class GameTableLayoutTest {
     @Test
     fun `the task panel is drawn in the cell and not over the window`() {
         // PLAN 12.6 rules out a full screen modal or a panel covering the window.
-        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun ColorList(")
+        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun sentenceOf(")
         listOf("Dialog", "AlertDialog", "Popup", "ModalBottomSheet", "fillMaxSize").forEach { overlay ->
             assertTrue(overlay !in panel, "the task panel opens a $overlay")
         }
@@ -352,7 +367,7 @@ class GameTableLayoutTest {
         assertTrue("saveTask()" in editor, "Ctrl+Enter does not save the task")
         assertTrue("event.isCtrlPressed" in editor, "there is no Ctrl+Enter at all")
         // The note is a note, so a plain Enter still makes a line in it.
-        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun ColorList(")
+        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun sentenceOf(")
         assertTrue("singleLine = false" in panel, "the note is one line, so Enter cannot break a line in it")
     }
 
@@ -360,7 +375,7 @@ class GameTableLayoutTest {
     fun `the panel's own keys work wherever the keyboard is inside it`() {
         // Handling them on one field only left Ctrl+Enter dead as soon as the
         // user was typing a note, which is exactly where they finish.
-        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun ColorList(")
+        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun sentenceOf(")
         val onTheColumn = panel.substringAfter("Column(").substringBefore(") {")
         assertTrue("onPreviewKeyEvent" in onTheColumn, "the panel's keys are caught by one field rather than the panel")
         assertTrue("controller.cancelTaskComposer()" in onTheColumn, "Escape does not close the panel from inside it")
@@ -380,17 +395,17 @@ class GameTableLayoutTest {
         val editor = source.substringAfter("private fun CellEditorSlot(").substringBefore("private fun CellEditorActions(")
         assertTrue("focusRecall" in editor, "the cell never takes the keyboard back")
         assertTrue("focus.requestFocus()" in editor, "the cell does not ask for the keyboard")
-        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun ColorList(")
+        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun sentenceOf(")
         assertTrue("LaunchedEffect(focusRecall)" in panel, "the panel never takes the keyboard back")
     }
 
     @Test
     fun `a colour is chosen from the catalogue and never typed as a value`() {
         // PLAN 5.7 keeps every colour a named record; this step creates none.
-        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun ColorList(")
+        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun sentenceOf(")
         assertTrue("Strings.CellTask.colorSearch" in panel, "the catalogue cannot be searched by name")
         assertTrue("Strings.Colors.hexLabel" !in panel, "the panel asks for a colour value")
-        val choices = source.substringAfter("private fun ColorList(").substringBefore("/** One line of explanation")
+        val choices = editingSurface.substringAfter("internal fun ColorList(").substringBefore("/** One line of explanation")
         assertTrue("color.canonicalName" in choices, "a swatch is offered without its written name")
         assertTrue("opaqueColorOf(color.hex)" in choices, "the swatch is not the colour it stands for")
         assertTrue("stateDescription = stateText" in choices, "which colour is chosen is carried by fill alone")
@@ -398,7 +413,7 @@ class GameTableLayoutTest {
 
     @Test
     fun `the panel asks how a task is tracked only where the pool leaves a choice`() {
-        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun ColorList(")
+        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun sentenceOf(")
         assertTrue("trackingModesOf(" in panel, "the tracking modes are not taken from the one place that decides them")
         assertTrue("trackingChoices.size > 1" in panel, "the user is asked a question that has only one answer")
     }
@@ -538,7 +553,7 @@ class GameTableLayoutTest {
         // label wrapped to one word per line and stretched the row.
         val panel = source.substringAfter("private fun CreationModeChoice(").substringBefore("private fun BatchTaskRow(")
         assertTrue("FlowRow(" in panel, "the modes are laid out in one line however narrow the cell is")
-        val tracking = source.substringAfter("private fun TrackingChoice(").substringBefore("private fun spokenContentOf(")
+        val tracking = editingSurface.substringAfter("internal fun TrackingChoice(").substringBefore("/**\n * The colours a task")
         assertTrue("FlowRow(" in tracking, "the tracking choices are laid out in one line")
     }
 
@@ -547,7 +562,7 @@ class GameTableLayoutTest {
         val fields =
             source
                 .substringAfter("private fun MulticolorFields(")
-                .substringBefore("private fun ChosenColorList(")
+                .substringBefore("private fun sentenceOf(")
         // PLAN 12.7 gives such a task one total and one counter, so there is one
         // of each field here and no row to repeat them in.
         listOf("quantityLabel", "notesLabel").forEach { field ->
@@ -563,7 +578,7 @@ class GameTableLayoutTest {
 
     @Test
     fun `the colours of a task are an ordered list that can be reordered by keyboard`() {
-        val list = source.substringAfter("private fun ChosenColorList(").substringBefore("private fun ColorList(")
+        val list = editingSurface.substringAfter("internal fun ChosenColorList(").substringBefore("internal fun ColorList(")
         // PLAN 5.10 makes the slot the user's own order and PLAN 17 wants every
         // action reachable from the keyboard, so this is buttons and not a drag.
         assertTrue("Strings.CellTask.colorSlot" in list, "an entry does not say which place it holds")
@@ -606,14 +621,14 @@ class GameTableLayoutTest {
 
     @Test
     fun `the panel says which row repeats a colour rather than only that one does`() {
-        val fields = source.substringAfter("private fun TaskRowFields(").substringBefore("private fun ColorList(")
+        val fields = source.substringAfter("private fun TaskRowFields(").substringBefore("private fun MulticolorFields(")
         assertTrue("isRepeatedColor" in fields, "a repeated colour is not marked on its own row")
         assertTrue("Strings.CellTask.rowDuplicate" in fields, "a repeated colour is not said in words")
     }
 
     @Test
     fun `a refusal about one row is said on that row`() {
-        val fields = source.substringAfter("private fun TaskRowFields(").substringBefore("private fun ColorList(")
+        val fields = source.substringAfter("private fun TaskRowFields(").substringBefore("private fun MulticolorFields(")
         assertTrue("composer.failureRow == row" in fields, "a refused row is not told which one it was")
     }
 
@@ -622,7 +637,7 @@ class GameTableLayoutTest {
         // The one thing that would quietly ruin a batch: a field wired to the
         // composer rather than to its row, so typing in the third task changed
         // the first. Every call carries the row it came from.
-        val fields = source.substringAfter("private fun TaskRowFields(").substringBefore("private fun ColorList(")
+        val fields = source.substringAfter("private fun TaskRowFields(").substringBefore("private fun MulticolorFields(")
         listOf("editTaskColorQuery", "chooseTaskColor", "editTaskQuantity", "editTaskNotes", "chooseTaskTracking")
             .forEach { call ->
                 assertTrue("controller.$call(row, " in fields, "$call does not say which row it is for")
@@ -639,7 +654,7 @@ class GameTableLayoutTest {
     fun `the menu offers what this step really has and nothing dead`() {
         // PLAN 12.5 also lists a shortage action; PLAN 18 gives shortages to a
         // later slice, so it is absent rather than present and dead.
-        val menu = source.substringAfter("private fun TaskMenuActions(").substringBefore("private fun TaskEditPanel(")
+        val menu = source.substringAfter("private fun TaskMenuActions(").substringBefore("private fun ConvertConfirmation(")
         assertTrue("Strings.TaskMenu.edit" in menu, "there is no way to edit a task")
         assertTrue("Strings.TaskMenu.convertToText" in menu, "there is no way to turn a task back into text")
         assertTrue("enabled = false" !in menu, "the menu carries a button that cannot do anything")
@@ -660,20 +675,20 @@ class GameTableLayoutTest {
 
     @Test
     fun `the edit panel asks for everything the task is, together`() {
-        val panel = source.substringAfter("private fun TaskEditPanel(").substringBefore("/**\n * Asking whether a task")
+        val panel = editingSurface.substringAfter("internal fun TaskEditPanel(").substringBefore("/** The tracking modes")
         assertTrue("Strings.TaskEdit.nameLabel" in panel, "the name cannot be changed")
         assertTrue("ColorList(" in panel, "the colour cannot be changed")
         assertTrue("Strings.CellTask.quantityLabel" in panel, "the total cannot be changed")
         assertTrue("Strings.CellTask.notesLabel" in panel, "the note cannot be changed")
-        assertTrue("controller.saveTaskEdit()" in panel, "nothing saves the panel")
+        assertTrue("host.saveTaskEdit()" in panel, "nothing saves the panel")
     }
 
     @Test
     fun `a task with several colours has its whole ordered list to work in`() {
-        val panel = source.substringAfter("private fun TaskEditPanel(").substringBefore("/**\n * Asking whether a task")
+        val panel = editingSurface.substringAfter("internal fun TaskEditPanel(").substringBefore("/** The tracking modes")
         assertTrue("editor.holdsSeveralColors" in panel, "a several-colour task is offered one colour box")
         assertTrue("ChosenColorList(" in panel, "the ordered list cannot be edited")
-        assertTrue("controller::moveTaskEditColorUp" in panel, "the colours cannot be reordered from the panel")
+        assertTrue("host::moveTaskEditColorUp" in panel, "the colours cannot be reordered from the panel")
         assertTrue("Strings.TaskEdit.colorFloor" in panel, "nothing says a several-colour task keeps two colours")
     }
 

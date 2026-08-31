@@ -1,5 +1,8 @@
 package dev.pnptracker.ui.navigation
 
+import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.pools.PoolCounts
+import dev.pnptracker.domain.pools.PoolNavigationSummary
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -65,7 +68,33 @@ class AppNavigationStateTest {
 
     @Test
     fun `the sidebar offers only the sections that have been built`() {
-        assertEquals(listOf(Screen.Home, Screen.Games, Screen.Import, Screen.Colors), Screen.all)
+        // PLAN 12.1's order, as far as it has been built: the pools sit between
+        // the table and the import section, and history and settings are absent
+        // rather than present and dead.
+        assertEquals(
+            listOf(
+                Screen.Home,
+                Screen.Games,
+                Screen.Pool(PoolType.THREE_D),
+                Screen.Pool(PoolType.CARD),
+                Screen.Pool(PoolType.BOARD),
+                Screen.Pool(PoolType.SPECIAL),
+                Screen.Import,
+                Screen.Colors,
+            ),
+            Screen.all,
+        )
+    }
+
+    @Test
+    fun `the special pool is offered only once there is special work`() {
+        // PLAN 9 hides it until the first special task and keeps it afterwards,
+        // so what decides this is how many exist rather than how many are left.
+        assertEquals(Screen.all - Screen.Pool(PoolType.SPECIAL), Screen.offered(PoolNavigationSummary.EMPTY))
+        assertEquals(
+            Screen.all,
+            Screen.offered(PoolNavigationSummary(mapOf(PoolType.SPECIAL to PoolCounts(activeCount = 0, taskCount = 1)))),
+        )
     }
 
     @Test

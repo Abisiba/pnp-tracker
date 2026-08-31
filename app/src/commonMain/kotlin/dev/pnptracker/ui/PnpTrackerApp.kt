@@ -11,6 +11,7 @@ import dev.pnptracker.ui.feature.games.GameTableController
 import dev.pnptracker.ui.feature.importreview.ImportController
 import dev.pnptracker.ui.feature.importworkspace.ImportConfirmationController
 import dev.pnptracker.ui.feature.importworkspace.ImportReviewController
+import dev.pnptracker.ui.feature.pools.PoolControllers
 import dev.pnptracker.ui.navigation.AppNavigationState
 import dev.pnptracker.ui.navigation.AppScaffold
 import dev.pnptracker.ui.theme.PnpTrackerTheme
@@ -32,6 +33,7 @@ fun PnpTrackerApp(
     confirmationController: ImportConfirmationController,
     gameTableController: GameTableController,
     colorCatalogueController: ColorCatalogueController,
+    poolControllers: PoolControllers,
 ) {
     val navigation = remember { AppNavigationState() }
     var themeMode by remember { mutableStateOf(ThemeMode.LIGHT) }
@@ -47,6 +49,7 @@ fun PnpTrackerApp(
             confirmationController = confirmationController,
             gameTableController = gameTableController,
             colorCatalogueController = colorCatalogueController,
+            poolControllers = poolControllers,
         )
     }
 }

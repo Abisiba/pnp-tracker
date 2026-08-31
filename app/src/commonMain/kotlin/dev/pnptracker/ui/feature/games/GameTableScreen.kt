@@ -28,13 +28,11 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -52,7 +50,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -62,7 +59,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -108,17 +104,22 @@ import dev.pnptracker.domain.games.GameTableRow
 import dev.pnptracker.domain.games.GameTableView
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
-import dev.pnptracker.domain.model.PoolType
-import dev.pnptracker.domain.model.TrackingMode
-import dev.pnptracker.domain.tasks.TaskEditFailure
 import dev.pnptracker.domain.tasks.TaskFromTextFailure
 import dev.pnptracker.domain.tasks.taskColorLayoutOf
 import dev.pnptracker.domain.tasks.trackingModesOf
-import dev.pnptracker.domain.text.graphemeBoundariesOf
 import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.columnNameOf
 import dev.pnptracker.ui.feature.colors.ColorPicker
 import dev.pnptracker.ui.feature.importworkspace.labelOf
+import dev.pnptracker.ui.feature.tasks.ChosenColorList
+import dev.pnptracker.ui.feature.tasks.ColorList
+import dev.pnptracker.ui.feature.tasks.NoteLine
+import dev.pnptracker.ui.feature.tasks.TaskEditPanel
+import dev.pnptracker.ui.feature.tasks.TrackingChoice
+import dev.pnptracker.ui.feature.tasks.focusOutline
+import dev.pnptracker.ui.feature.tasks.sentenceOf
+import dev.pnptracker.ui.feature.tasks.stillHasEvery
+import dev.pnptracker.ui.feature.tasks.taskEditMessageOf
 import dev.pnptracker.ui.theme.PnpStatus
 import dev.pnptracker.ui.theme.opaqueColorOf
 import dev.pnptracker.ui.theme.readableInkOn
@@ -1368,7 +1369,14 @@ private fun TaskPopover(
                             editor = work.editor,
                             colors = controller.colorsOffered(),
                             catalogue = state.colors,
-                            controller = controller,
+                            host = controller,
+                            newColorAction = { enabled ->
+                                NewColorButton(
+                                    target = NewColorTarget.EditedTask,
+                                    enabled = enabled,
+                                    controller = controller,
+                                )
+                            },
                         )
                     is CellWork.ConfirmingConvert -> ConvertConfirmation(work, controller)
                     else -> TaskMenuActions(menu, controller)
@@ -1412,158 +1420,6 @@ private fun TaskMenuActions(
         Text(text = convert, style = MaterialTheme.typography.labelMedium)
     }
     NoteLine(text = stringResource(Strings.TaskMenu.hint), isProblem = false)
-}
-
-/**
- * Changing what a task is, in the panel over its own word.
- *
- * Everything is saved together, because a name, its colours, a total and a note
- * are one answer to what the task is. A task made in one colour has that colour
- * replaced; a task made in several has the whole ordered list to work in — add,
- * take away, move — because PLAN 5.10 numbers those colours from the user's own
- * order and PLAN 12.7 draws the name split across them in it.
- *
- * What is not offered is turning one kind into the other. PLAN describes neither
- * crossing, so the panel does not put a control there that the transaction would
- * refuse.
- */
-@Composable
-private fun TaskEditPanel(
-    editor: TaskEditor,
-    colors: List<ColorSummary>,
-    catalogue: List<ColorSummary>,
-    controller: GameTableController,
-) {
-    val scope = rememberCoroutineScope()
-    val focus = remember { FocusRequester() }
-    LaunchedEffect(editor.taskId) { focus.requestFocus() }
-    val colorsAreThere = catalogue.stillHasEvery(editor.colorIds)
-    val save = { if (editor.canSave && colorsAreThere) scope.launch { controller.saveTaskEdit() } }
-
-    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text(text = stringResource(Strings.TaskEdit.title), style = MaterialTheme.typography.labelLarge)
-        OutlinedTextField(
-            value = editor.name,
-            onValueChange = controller::editTaskName,
-            enabled = !editor.isSaving,
-            singleLine = true,
-            isError = editor.name.isNotEmpty() && !editor.isNameUsable,
-            textStyle = MaterialTheme.typography.bodySmall,
-            label = { Text(stringResource(Strings.TaskEdit.nameLabel)) },
-            modifier = Modifier.fillMaxWidth().focusRequester(focus),
-        )
-        if (editor.name.isNotEmpty() && !editor.isNameUsable) {
-            NoteLine(text = stringResource(Strings.TaskEdit.nameInvalid), isProblem = true)
-        }
-
-        OutlinedTextField(
-            value = editor.colorQuery,
-            onValueChange = controller::editTaskEditColorQuery,
-            enabled = !editor.isSaving,
-            singleLine = true,
-            textStyle = MaterialTheme.typography.bodySmall,
-            label = { Text(stringResource(Strings.CellTask.colorSearch)) },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        ColorList(
-            colors = colors,
-            chosen = editor.colorIds,
-            enabled = !editor.isSaving,
-            emptyQuery = editor.colorQuery.isBlank(),
-            onChoose = controller::chooseTaskEditColor,
-        )
-        NewColorButton(
-            target = NewColorTarget.EditedTask,
-            enabled = !editor.isSaving,
-            controller = controller,
-        )
-        if (editor.holdsSeveralColors) {
-            // The whole ordered list, editable: PLAN 5.10 numbers these from the
-            // user's own order and PLAN 12.7 draws the name split across them in
-            // it, so the order is part of what the task is. A task made in
-            // several colours stays that way — it may not be emptied down to one
-            // here, because PLAN says nothing about what such a task would
-            // become.
-            ChosenColorList(
-                colorIds = editor.colorIds,
-                catalogue = catalogue,
-                name = editor.name,
-                enabled = !editor.isSaving,
-                leastColors = MulticolorDraft.LEAST_COLORS,
-                floorText = stringResource(Strings.TaskEdit.colorFloor),
-                failedSlot = editor.failureRow?.takeIf { it in editor.colorIds.indices },
-                failureText = editor.failure?.let { sentenceOf(it, editor.failureRow, editor.failureConflictsWith) },
-                onMoveUp = controller::moveTaskEditColorUp,
-                onMoveDown = controller::moveTaskEditColorDown,
-                onDrop = controller::chooseTaskEditColor,
-            )
-        }
-
-        OutlinedTextField(
-            value = editor.quantityText,
-            onValueChange = controller::editTaskEditQuantity,
-            enabled = !editor.isSaving,
-            singleLine = true,
-            isError = !editor.isQuantityUsable,
-            textStyle = MaterialTheme.typography.bodySmall,
-            label = { Text(stringResource(Strings.CellTask.quantityLabel)) },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        if (!editor.isQuantityUsable) {
-            NoteLine(text = stringResource(Strings.CellTask.quantityInvalid), isProblem = true)
-        }
-
-        val trackingChoices = trackingChoicesFor(editor)
-        if (trackingChoices.size > 1) {
-            TrackingChoice(
-                choices = trackingChoices,
-                chosen = editor.trackingMode,
-                onChoose = controller::chooseTaskEditTracking,
-            )
-        }
-
-        OutlinedTextField(
-            value = editor.notes,
-            onValueChange = controller::editTaskEditNotes,
-            enabled = !editor.isSaving,
-            singleLine = false,
-            minLines = 1,
-            maxLines = 3,
-            textStyle = MaterialTheme.typography.bodySmall,
-            label = { Text(stringResource(Strings.CellTask.notesLabel)) },
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            val saveLabel = stringResource(Strings.TaskEdit.save)
-            val discardLabel = stringResource(Strings.CellTask.discard)
-            Button(
-                onClick = { save() },
-                enabled = editor.canSave && colorsAreThere,
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = saveLabel },
-            ) {
-                Text(text = saveLabel, style = MaterialTheme.typography.labelMedium)
-            }
-            TextButton(
-                onClick = controller::closeInnermost,
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = discardLabel },
-            ) {
-                Text(text = discardLabel, style = MaterialTheme.typography.labelMedium)
-            }
-        }
-        val note =
-            when {
-                editor.isSaving -> stringResource(Strings.TaskEdit.saving)
-                editor.failure != null -> sentenceOf(editor.failure, editor.failureRow, editor.failureConflictsWith)
-                // Said in words, because a colour that is gone leaves nothing to
-                // look at: the row is still chosen, it just names nothing now.
-                !colorsAreThere -> stringResource(Strings.CellTask.colorGone)
-                else -> stringResource(Strings.TaskEdit.hint)
-            }
-        NoteLine(text = note, isProblem = editor.failure != null || !colorsAreThere)
-    }
 }
 
 /**
@@ -1616,47 +1472,7 @@ private fun ConvertConfirmation(
             Text(text = cancelLabel, style = MaterialTheme.typography.labelMedium)
         }
     }
-    work.failure?.let { NoteLine(text = stringResource(messageOf(it)), isProblem = true) }
-}
-
-/** The tracking modes this task's pool allows, in the order it lists them. */
-@Composable
-private fun trackingChoicesFor(editor: TaskEditor): List<TrackingMode> =
-    remember(editor.trackingMode) {
-        PoolType.entries
-            .firstOrNull { editor.trackingMode in trackingModesOf(it) }
-            ?.let { trackingModesOf(it) }
-            .orEmpty()
-    }
-
-@Composable
-private fun TrackingChoice(
-    choices: List<TrackingMode>,
-    chosen: TrackingMode?,
-    onChoose: (TrackingMode) -> Unit,
-) {
-    Text(
-        text = stringResource(Strings.Tasks.trackingLabel),
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-        modifier = Modifier.fillMaxWidth().selectableGroup(),
-    ) {
-        choices.forEach { mode ->
-            val isChosen = chosen == mode
-            val stateText =
-                stringResource(if (isChosen) Strings.Accessibility.selected else Strings.Accessibility.notSelected)
-            FilterChip(
-                selected = isChosen,
-                onClick = { onChoose(mode) },
-                label = { Text(stringResource(labelOf(mode)), style = MaterialTheme.typography.labelSmall) },
-                modifier = Modifier.focusOutline(ComposerShape).semantics { stateDescription = stateText },
-            )
-        }
-    }
+    work.failure?.let { NoteLine(text = stringResource(taskEditMessageOf(it)), isProblem = true) }
 }
 
 /**
@@ -1977,7 +1793,7 @@ private fun NewColorPanel(
             NoteLine(text = stringResource(Strings.Colors.saving), isProblem = false)
         }
         creator.failure?.let { failure ->
-            NoteLine(text = stringResource(messageOf(failure)), isProblem = true)
+            NoteLine(text = stringResource(colorMessageOf(failure)), isProblem = true)
         }
     }
 }
@@ -2338,216 +2154,6 @@ private fun MulticolorFields(
 }
 
 /**
- * The colours a task is made in, in the order they will be drawn.
- *
- * Numbered from one for the reader and moved with two buttons, so the order —
- * which is what PLAN 5.10 stores and PLAN 12.7 draws the name across — is both
- * visible and changeable without a gesture. A colour that has gone from the
- * catalogue while the panel was open is still listed and marked, because
- * dropping it silently would take away something the user chose.
- *
- * The line about a name shorter than the list is a statement of what will
- * happen, not a warning about a problem: those colours are drawn as swatches
- * beside the word (PLAN 12.7), and nothing is refused because of it.
- */
-@Composable
-private fun ChosenColorList(
-    colorIds: List<EntityId>,
-    catalogue: List<ColorSummary>,
-    name: String,
-    enabled: Boolean,
-    leastColors: Int,
-    floorText: String,
-    failedSlot: Int?,
-    failureText: String?,
-    onMoveUp: (Int) -> Unit,
-    onMoveDown: (Int) -> Unit,
-    onDrop: (EntityId) -> Unit,
-) {
-    Text(
-        text = stringResource(Strings.CellTask.colorOrderLabel),
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    if (colorIds.isEmpty()) {
-        NoteLine(text = stringResource(Strings.CellTask.colorNoneChosen), isProblem = false)
-    }
-    val unknown = stringResource(Strings.CellTask.colorUnknown)
-    colorIds.forEachIndexed { slot, colorId ->
-        val color = catalogue.firstOrNull { it.id == colorId }
-        val colorName = color?.canonicalName ?: unknown
-        val swatch = color?.let { opaqueColorOf(it.hex) }
-        // Wrapped rather than one line: three actions and a name do not fit
-        // across a table column, and given a weight the name was squeezed to
-        // nothing — leaving a swatch as the only thing saying which colour it
-        // was, which PLAN 17 does not allow. Here the actions drop to a line of
-        // their own instead, and in a wider panel they stay beside the name.
-        FlowRow(
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-            itemVerticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                if (swatch != null) {
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(14.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(swatch)
-                                .border(1.dp, visibleEdgeOn(swatch), RoundedCornerShape(3.dp)),
-                    )
-                }
-                Text(
-                    text = stringResource(Strings.CellTask.colorSlot, slot + 1, colorName),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (color == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            val upLabel = stringResource(Strings.CellTask.colorMoveUp, colorName)
-            val downLabel = stringResource(Strings.CellTask.colorMoveDown, colorName)
-            val dropLabel = stringResource(Strings.CellTask.colorDrop, colorName)
-            // The three actions travel together, as one thing to wrap. Left
-            // loose they broke apart mid-entry: one action beside the name and
-            // two on the line below, which reads as two entries.
-            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(
-                    onClick = { onMoveUp(slot) },
-                    enabled = enabled && slot > 0,
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                    modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = upLabel },
-                ) {
-                    Text(
-                        text = stringResource(Strings.CellTask.colorMoveUpShort),
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
-                TextButton(
-                    onClick = { onMoveDown(slot) },
-                    enabled = enabled && slot < colorIds.lastIndex,
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                    modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = downLabel },
-                ) {
-                    Text(
-                        text = stringResource(Strings.CellTask.colorMoveDownShort),
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
-                TextButton(
-                    onClick = { onDrop(colorId) },
-                    enabled = enabled,
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                    modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = dropLabel },
-                ) {
-                    Text(
-                        text = stringResource(Strings.CellTask.colorDropShort),
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
-            }
-        }
-        if (failedSlot == slot && failureText != null) {
-            // Said on the entry it is about: a list of colours with one message
-            // under all of them does not say which one went away.
-            NoteLine(text = failureText, isProblem = true)
-        }
-    }
-    if (colorIds.size < leastColors) {
-        NoteLine(text = floorText, isProblem = false)
-    }
-    // Worked out once for the name and the count rather than on every frame.
-    val characters = remember(name) { graphemeBoundariesOf(name).size - 1 }
-    if (colorIds.size > characters) {
-        NoteLine(text = stringResource(Strings.CellTask.colorOverflow), isProblem = false)
-    }
-}
-
-/**
- * The catalogue, narrowed by what has been typed, one entry per colour.
- *
- * Every entry carries the colour's written name beside its swatch, because PLAN
- * 17 does not let a colour be the only thing carrying a meaning, and which one
- * is chosen is said in words as well as by the fill. The swatch is edged for the
- * same reason a task is: white on a light list, or black on a dark one, would
- * otherwise be a square nobody can see.
- */
-@Composable
-private fun ColorList(
-    colors: List<ColorSummary>,
-    chosen: List<EntityId>,
-    enabled: Boolean,
-    emptyQuery: Boolean,
-    onChoose: (EntityId) -> Unit,
-) {
-    if (colors.isEmpty()) {
-        NoteLine(
-            text = stringResource(if (emptyQuery) Strings.CellTask.colorEmpty else Strings.CellTask.colorNone),
-            isProblem = false,
-        )
-        return
-    }
-    Column(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .heightIn(max = ColorListHeight)
-                .verticalScroll(rememberScrollState())
-                .selectableGroup(),
-    ) {
-        colors.forEach { color ->
-            val isChosen = color.id in chosen
-            val stateText =
-                stringResource(if (isChosen) Strings.Accessibility.selected else Strings.Accessibility.notSelected)
-            val swatch = opaqueColorOf(color.hex)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .selectable(selected = isChosen, enabled = enabled, onClick = { onChoose(color.id) })
-                        .background(if (isChosen) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
-                        .padding(horizontal = 4.dp, vertical = 3.dp)
-                        .semantics { stateDescription = stateText },
-            ) {
-                Box(
-                    modifier =
-                        Modifier
-                            .size(14.dp)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(swatch)
-                            .border(1.dp, visibleEdgeOn(swatch), RoundedCornerShape(3.dp)),
-                )
-                Text(
-                    text = color.canonicalName,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-    }
-}
-
-/** One line of explanation under a field, red when it is a problem. */
-@Composable
-private fun NoteLine(
-    text: String,
-    isProblem: Boolean,
-) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelSmall,
-        color = if (isProblem) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-}
-
-/**
  * What a refusal reads as, with the places it is about filled in.
  *
  * A duplicate colour is the one refusal that is about a pair, so it is the one
@@ -2563,18 +2169,6 @@ private fun sentenceOf(
 ): String =
     if (failure == TaskFromTextFailure.DUPLICATE_COLOR && row != null && conflictsWith != null) {
         stringResource(Strings.CellTask.errorDuplicateColor, conflictsWith + 1, row + 1)
-    } else {
-        stringResource(messageOf(failure))
-    }
-
-@Composable
-private fun sentenceOf(
-    failure: TaskEditFailure,
-    row: Int?,
-    conflictsWith: Int?,
-): String =
-    if (failure == TaskEditFailure.DUPLICATE_COLOR && row != null && conflictsWith != null) {
-        stringResource(Strings.TaskEdit.errorDuplicateColor, conflictsWith + 1, row + 1)
     } else {
         stringResource(messageOf(failure))
     }
@@ -2608,37 +2202,14 @@ private fun messageOf(failure: CellTextFailure) =
         CellTextFailure.COULD_NOT_SAVE -> Strings.Cell.errorCouldNotSave
     }
 
-/**
- * True when the catalogue still has every colour in [ids].
- *
- * A colour someone removed elsewhere leaves the draft exactly as the user built
- * it, so the panel has to ask this rather than assume: the choice is still
- * there, it just does not name anything any more.
- */
-private fun List<ColorSummary>.stillHasEvery(ids: List<EntityId>): Boolean = isEmpty() || ids.all { id -> any { it.id == id } }
-
 /** What to tell the user about a task that did not change. */
-private fun messageOf(failure: ColorSetupFailure) =
+private fun colorMessageOf(failure: ColorSetupFailure) =
     when (failure) {
         ColorSetupFailure.COULD_NOT_SAVE -> Strings.Colors.errorCouldNotSave
         ColorSetupFailure.NAME_ALREADY_USED -> Strings.Colors.errorNameUsed
         ColorSetupFailure.NAME_IS_ANOTHER_COLORS_ALIAS -> Strings.Colors.errorNameIsAlias
         ColorSetupFailure.COLOR_NO_LONGER_EXISTS -> Strings.Colors.errorColorGone
         ColorSetupFailure.COLOR_CHANGED_MEANWHILE -> Strings.Colors.errorChanged
-    }
-
-private fun messageOf(failure: TaskEditFailure) =
-    when (failure) {
-        TaskEditFailure.TASK_NOT_AVAILABLE -> Strings.TaskEdit.errorTaskGone
-        TaskEditFailure.TASK_NAME_EMPTY -> Strings.TaskEdit.errorNameEmpty
-        TaskEditFailure.NAME_CONTAINS_LINE_BREAK -> Strings.TaskEdit.errorNameLineBreak
-        TaskEditFailure.COLOR_NOT_AVAILABLE -> Strings.TaskEdit.errorColorGone
-        TaskEditFailure.DUPLICATE_COLOR -> Strings.TaskEdit.errorDuplicateColor
-        TaskEditFailure.COLOR_COUNT_NOT_CHANGEABLE -> Strings.TaskEdit.errorColorCount
-        TaskEditFailure.INVALID_REQUIRED_QUANTITY -> Strings.TaskEdit.errorQuantity
-        TaskEditFailure.QUANTITY_BELOW_PROGRESS -> Strings.TaskEdit.errorQuantityBelowProgress
-        TaskEditFailure.QUANTITY_LOCKED_BY_COMPLETION -> Strings.TaskEdit.errorQuantityLocked
-        TaskEditFailure.COULD_NOT_SAVE -> Strings.TaskEdit.errorCouldNotSave
     }
 
 /**
@@ -2703,17 +2274,4 @@ private fun Message(text: String) {
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-}
-
-/** Draws a ring around whatever holds keyboard focus, without moving anything. */
-@Composable
-private fun Modifier.focusOutline(shape: Shape): Modifier {
-    var focused by remember { mutableStateOf(false) }
-    return this
-        .onFocusEvent { focused = it.hasFocus }
-        .border(
-            width = 2.dp,
-            color = if (focused) MaterialTheme.colorScheme.primary else Color.Transparent,
-            shape = shape,
-        )
 }
