@@ -402,6 +402,15 @@ import dev.pnptracker.resources.table_cell_empty
 import dev.pnptracker.resources.table_cell_empty_description
 import dev.pnptracker.resources.table_cell_more
 import dev.pnptracker.resources.table_column_game
+import dev.pnptracker.resources.table_complete_game
+import dev.pnptracker.resources.table_complete_game_error_general
+import dev.pnptracker.resources.table_complete_game_error_gone
+import dev.pnptracker.resources.table_complete_game_error_stale
+import dev.pnptracker.resources.table_complete_game_hint
+import dev.pnptracker.resources.table_complete_game_no
+import dev.pnptracker.resources.table_complete_game_question
+import dev.pnptracker.resources.table_complete_game_unfinished
+import dev.pnptracker.resources.table_complete_game_yes
 import dev.pnptracker.resources.table_completed_mark
 import dev.pnptracker.resources.table_empty_completed
 import dev.pnptracker.resources.table_empty_completed_hint
@@ -409,6 +418,7 @@ import dev.pnptracker.resources.table_empty_library
 import dev.pnptracker.resources.table_empty_library_hint
 import dev.pnptracker.resources.table_empty_ongoing
 import dev.pnptracker.resources.table_empty_ongoing_hint
+import dev.pnptracker.resources.table_empty_tick
 import dev.pnptracker.resources.table_label
 import dev.pnptracker.resources.table_loading
 import dev.pnptracker.resources.table_row_completed
@@ -450,7 +460,6 @@ import dev.pnptracker.resources.task_menu_open
 import dev.pnptracker.resources.task_menu_reopen
 import dev.pnptracker.resources.task_menu_report_shortage
 import dev.pnptracker.resources.task_menu_resolve_shortage
-import dev.pnptracker.resources.task_progress_game_completed
 import dev.pnptracker.resources.task_progress_missing
 import dev.pnptracker.resources.task_state_completed
 import dev.pnptracker.resources.task_state_open
@@ -867,6 +876,24 @@ object Strings {
         /** Shown beside a finished game, so the green is never the only sign. */
         val completedMark = Res.string.table_completed_mark
 
+        /** The same place, on a game that is not finished: an empty box. */
+        val emptyTick = Res.string.table_empty_tick
+
+        /** The tick on a game row: what it does, said in words (PLAN 12.3). */
+        val completeGame = Res.string.table_complete_game
+
+        /** PLAN 12.9's question, word for word. */
+        val completeGameQuestion = Res.string.table_complete_game_question
+
+        /** Takes the game's name and how many of its tasks are unfinished. */
+        val completeGameUnfinished = Res.string.table_complete_game_unfinished
+        val completeGameYes = Res.string.table_complete_game_yes
+        val completeGameNo = Res.string.table_complete_game_no
+        val completeGameHint = Res.string.table_complete_game_hint
+        val completeGameErrorStale = Res.string.table_complete_game_error_stale
+        val completeGameErrorGone = Res.string.table_complete_game_error_gone
+        val completeGameErrorGeneral = Res.string.table_complete_game_error_general
+
         val addGame = Res.string.table_add_game
         val addGameHint = Res.string.table_add_game_hint
     }
@@ -1005,7 +1032,6 @@ object Strings {
         val reopen = Res.string.task_menu_reopen
         val reportShortage = Res.string.task_menu_report_shortage
         val resolveShortage = Res.string.task_menu_resolve_shortage
-        val gameCompleted = Res.string.task_progress_game_completed
     }
 
     /** Saying what came out short, and what has been made good again. */

@@ -23,6 +23,12 @@ class GameTableLayoutTest {
             .of("src/commonMain/kotlin/dev/pnptracker/ui/feature/games/GameTableScreen.kt")
             .let { Files.readString(it) }
 
+    /** Every word the application says, where a retired one has to stay retired. */
+    private val strings: String =
+        Path
+            .of("src/commonMain/composeResources/values/strings.xml")
+            .let { Files.readString(it) }
+
     /** The controller behind the screen, for the decisions that are not drawn. */
     private val controllerSource: String =
         Path
@@ -739,13 +745,72 @@ class GameTableLayoutTest {
     }
 
     @Test
-    fun `a task in a finished game is left alone rather than half reopened`() {
-        // PLAN 6.3 reopens the game in the same transaction; PLAN 18 gives
-        // finishing a game to a later slice, so this waits for it.
+    fun `the question about finishing a game hangs off the row that asked it`() {
+        // PLAN 12.9 asks it about one row, and PLAN 17 will not have a surface
+        // cover the screen: it is anchored to the tick, so the row stays visible
+        // while the decision is made and scrolling moves both together.
+        val popover = source.substringAfter("private fun GameCompletionPopover(").substringBefore("/**\n * How a task is drawn")
+        assertTrue("AnchoredAboveWord(gap)" in popover, "the question is placed at a remembered coordinate")
+        assertTrue("Strings.Table.completeGameQuestion" in popover, "PLAN 12.9's question is not asked")
+        assertTrue("completeGameUnfinished" in popover, "the user is not told how much they are agreeing to")
+        assertTrue("Strings.Table.completeGameYes" in popover && "Strings.Table.completeGameNo" in popover, "there is no answer to give")
+        // Escape closes one layer; Ctrl+Enter answers once; clicking away is
+        // never an answer, because closing is what `Hayır` does.
+        assertTrue("event.key == Key.Escape" in popover, "Escape does not close the question")
+        assertTrue("event.isCtrlPressed" in popover, "Ctrl+Enter cannot answer the question")
+        assertTrue("onDismissRequest = controller::closeInnermost" in popover, "clicking away writes something")
+        assertTrue("enabled = !confirming.isSaving" in popover, "one answer could be sent twice")
+    }
+
+    @Test
+    fun `the words a finished game used to be refused with are gone`() {
+        assertTrue("task_progress_game_completed" !in strings, "the message about work that is not built is still offered")
+        assertTrue("gameIsCompleted" !in source, "the screen still decides whether a game is finished")
+    }
+
+    @Test
+    fun `a task in a finished game is reported against like any other`() {
+        // PLAN 6.3 reopens the task and the game in one transaction, so nothing
+        // on this side holds the action back any more — and nothing on this side
+        // decides whether the game has to be reopened either. That is read from
+        // the database inside the write.
         val begin = controllerSource.substringAfter("fun beginReportShortage()").substringBefore("fun beginResolveShortage()")
-        assertTrue("menu.gameIsCompleted" in begin, "a shortage would reopen a task inside a finished game")
-        assertTrue("setManuallyCompleted" !in controllerSource, "the table finishes a game this step does not have")
-        assertTrue("Strings.TaskMenu.gameCompleted" in source, "the reason is never given")
+        assertTrue("gameIsCompleted" !in begin, "the form still refuses to open over a finished game")
+        val save = controllerSource.substringAfter("suspend fun saveShortage()").substringBefore("private fun isSavingShortage(")
+        assertTrue("gameIsCompleted" !in save, "the screen still decides whether a game is finished")
+        assertTrue("task_progress_game_completed" !in strings, "the message about work that is not built is still offered")
+    }
+
+    @Test
+    fun `a game row carries the one action a game has`() {
+        // PLAN 12.3 puts the completion tick in the game name column, and PLAN
+        // 12.9 makes it the whole of what a row can be asked to do. It is in that
+        // column and not in a column of its own, so it is reachable in a narrow
+        // window without scrolling the table sideways.
+        val cell = source.substringAfter("private fun GameNameCell(").substringBefore("private val TickSize")
+        assertTrue("GameCompletionTick(" in cell, "a game row has no way to be finished")
+        assertTrue("GameColumnWidth" in cell, "the tick moved out of the name column")
+        // Still five cell columns beside the name, so the tick cost the table no
+        // width and nothing moved out of reach in a narrow window.
+        assertTrue(
+            "GameColumnWidth + CellColumnWidth * CellColumnType.entries.size" in source,
+            "the table grew a column of its own for the tick",
+        )
+        val tick = source.substringAfter("private fun GameCompletionTick(").substringBefore("private fun GameCompletionPopover(")
+        // One stop and one thing said, so a reader hears the game once.
+        assertTrue("role = Role.Button" in tick, "the tick is not announced as something that can be pressed")
+        assertTrue("stateDescription = stateText" in tick, "the tick does not say how the game stands")
+        assertTrue("Key.Enter, Key.NumPadEnter, Key.Spacebar" in tick, "the tick cannot be pressed from the keyboard")
+        // A preview reaches the nodes above the one holding the keyboard, so a
+        // handler written below `clickable` never runs — and a `focusable` of
+        // its own beside it would make one control two tab stops. Both were
+        // written that way once and both were found only by pressing the key.
+        assertTrue(
+            tick.indexOf(".onPreviewKeyEvent") < tick.indexOf(".clickable("),
+            "the key handler sits below the control it is about, where no key reaches it",
+        )
+        assertTrue(".focusable()" !in tick, "the tick is two tab stops drawn as one")
+        assertTrue("if (row.isCompleted)" in tick, "a finished game is still offered a control that would un-finish it")
     }
 
     @Test

@@ -4,6 +4,7 @@ import dev.pnptracker.domain.colors.ColorSetupFailure
 import dev.pnptracker.domain.colors.ColorSummary
 import dev.pnptracker.domain.games.CellTextFailure
 import dev.pnptracker.domain.games.DocumentRun
+import dev.pnptracker.domain.games.GameCompletionSnapshot
 import dev.pnptracker.domain.games.GameSetupFailure
 import dev.pnptracker.domain.games.GameTableRow
 import dev.pnptracker.domain.games.GameTableView
@@ -149,15 +150,6 @@ sealed interface CellWork {
         val currentMissingQuantity: Int = 0,
         /** Which pool it is worked in, so a shortage form asks for the right detail. */
         val poolType: PoolType? = null,
-        /**
-         * Whether the game holding it has been marked finished.
-         *
-         * PLAN 6.3 has a shortage on a task in a finished game reopen the game
-         * too, in the same transaction. That transaction belongs to the slice
-         * that finishes games, so until then the action is offered but refused
-         * here rather than half applied.
-         */
-        val gameIsCompleted: Boolean = false,
         /** True while a finish or a reopen is being written. */
         val isWorking: Boolean = false,
         /** Why the last finish or reopen did not happen; cleared by the next try. */
@@ -276,6 +268,75 @@ sealed interface CellWork {
         override val parent: CellWork get() = from
         override val hasUnsavedChanges: Boolean get() = composer.isTouched
     }
+}
+
+/**
+ * The one thing the user is doing to a whole game row.
+ *
+ * Its own state beside [CellWork] rather than a case inside it. A [CellWork] is
+ * always in one cell — it names a column, and everything about it is anchored to
+ * a word written there — while finishing a game is about the row and no column
+ * of it. Pressing one into the other would mean inventing a column for something
+ * that has none, and every screen that reads the column would have to learn to
+ * distrust it.
+ *
+ * The two do not overlap in practice either: one thing happens at a time, and
+ * the controller refuses to open either over the other.
+ */
+sealed interface RowWork {
+    val gameId: EntityId
+
+    /** What closing this one goes back to, or null when it closes outright. */
+    val parent: RowWork? get() = null
+
+    /** True when there is something here that closing would throw away. */
+    val hasUnsavedChanges: Boolean get() = false
+
+    /**
+     * Asking whether a game's unfinished work really is finished (PLAN 12.9).
+     *
+     * Only ever open when there *is* unfinished work: a game with nothing left
+     * in it is finished without a question, and asking anyway would be a
+     * ceremony over an act that costs nothing.
+     *
+     * [expected] is the game the count was taken from. What the user is agreeing
+     * to is "finish these", so the answer is carried back to the transaction
+     * with the picture it was given and refused if the game has moved since.
+     */
+    data class ConfirmingGameCompletion(
+        override val gameId: EntityId,
+        val gameName: String,
+        val expected: GameCompletionSnapshot,
+        val isSaving: Boolean = false,
+        val failure: TaskProgressFailure? = null,
+    ) : RowWork {
+        init {
+            require(expected.needsConfirmation) {
+                "A game with nothing unfinished in it is finished without being asked about."
+            }
+        }
+
+        /** How many tasks the user is being asked to declare finished. */
+        val unfinishedCount: Int get() = expected.unfinishedCount
+    }
+}
+
+/**
+ * Where the keyboard goes when the row it was on leaves the open view.
+ *
+ * Finishing a game in `Devam Eden` takes its row out of the list, and focus on a
+ * row that is gone is focus nowhere — the keyboard falls out of the table
+ * altogether and the user has to reach for the mouse. So the next place is
+ * chosen while the row is still there to have neighbours.
+ */
+sealed interface RowFocusTarget {
+    /** Another game's row, named while it was still beside the one that left. */
+    data class Game(
+        val gameId: EntityId,
+    ) : RowFocusTarget
+
+    /** The view filter, when the row that left was the last one in the view. */
+    data object ViewFilter : RowFocusTarget
 }
 
 /**
@@ -716,6 +777,8 @@ data class GameTableScreenState(
     val failure: GameSetupFailure? = null,
     /** The one thing being done in one cell, or null when the table is only read. */
     val work: CellWork? = null,
+    /** The one thing being done to a whole row, or null. */
+    val rowWork: RowWork? = null,
     /** The whole colour catalogue, which the task panels pick from. */
     val colors: List<ColorSummary> = emptyList(),
     /** True when something was refused because a cell is still being worked in. */
@@ -732,6 +795,24 @@ data class GameTableScreenState(
     /** A colour that was saved while the draft it was for went away. */
     val savedColorNotice: SavedColorNotice? = null,
     /**
+     * Why a game could not be finished, and which one; cleared by the next try.
+     *
+     * Kept beside the confirmation rather than only inside it, because a game
+     * with nothing unfinished in it is never asked about — there is no surface
+     * open for the refusal to land on, and the row is where it belongs.
+     */
+    val gameCompletionFailure: Pair<EntityId, TaskProgressFailure>? = null,
+    /** Where the keyboard is to go now that a row has left the open view. */
+    val focusAfterRow: RowFocusTarget? = null,
+    /**
+     * Bumped with [focusAfterRow], so the same place can be asked for twice.
+     *
+     * Two games finished one after another can both send the keyboard to the
+     * same neighbour, and a target that had not changed would ask for nothing
+     * the second time.
+     */
+    val rowFocusRecall: Int = 0,
+    /**
      * Colours written from a panel that the catalogue stream has not shown yet.
      *
      * The write and the stream are two different journeys, and the second one is
@@ -741,6 +822,13 @@ data class GameTableScreenState(
      */
     val awaitedColorIds: Set<EntityId> = emptySet(),
 ) {
+    /** True while anything at all is open, in a cell or on a row. */
+    val isBusy: Boolean get() = work != null || rowWork != null
+
+    /** The confirmation open on this row, if there is one. */
+    fun confirmingCompletionOf(gameId: EntityId): RowWork.ConfirmingGameCompletion? =
+        (rowWork as? RowWork.ConfirmingGameCompletion)?.takeIf { it.gameId == gameId }
+
     /** The text editor open in this cell, whatever is layered over it. */
     fun writingIn(
         gameId: EntityId,

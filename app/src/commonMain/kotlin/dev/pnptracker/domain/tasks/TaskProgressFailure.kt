@@ -10,6 +10,20 @@ enum class TaskProgressFailure {
     /** There is no such task, or it has been deleted. */
     TASK_NOT_AVAILABLE,
 
+    /** There is no such game, or it has been deleted. */
+    GAME_NOT_AVAILABLE,
+
+    /**
+     * The game has moved since the question about finishing it was asked.
+     *
+     * PLAN 12.9 asks `Tüm görevler tamamlandı mı?` against the work standing at
+     * that moment, so an answer given to that question may only be applied to
+     * it. A task finished, reported short, added or deleted in between makes the
+     * answer one to a different question, and applying it would finish work the
+     * user was never shown.
+     */
+    STALE_GAME_COMPLETION,
+
     /**
      * The amount was not a number of pieces this could be about.
      *

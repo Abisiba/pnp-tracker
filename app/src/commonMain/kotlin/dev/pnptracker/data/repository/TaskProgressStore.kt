@@ -2,6 +2,7 @@ package dev.pnptracker.data.repository
 
 import androidx.sqlite.SQLiteException
 import dev.pnptracker.data.database.dao.TaskProgressDao
+import dev.pnptracker.domain.games.GameCompletionSnapshot
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.ProductionStage
@@ -30,9 +31,31 @@ interface TaskProgressing {
     /**
      * Takes the finished mark back, returning the task to its active pool.
      *
+     * The game it belongs to is left exactly as it is. PLAN 5.3 changes a game's
+     * mark by the user's own action or by a shortage being reported, and PLAN 3.5
+     * lets a finished game hold active tasks — so a task reopened by hand inside
+     * one is an ordinary state and not something to be tidied up.
+     *
      * @return true when this call was the one that reopened it.
      */
     suspend fun reopenTask(taskId: EntityId): TaskProgressOutcome
+
+    /**
+     * Finishes a whole game: everything unfinished in it, then the game (PLAN 12.9).
+     *
+     * One transaction, so a game is never left marked finished over work that is
+     * not — and never left with its work finished under a game that is not.
+     *
+     * @param expected the game as the confirmation was answered against, or null
+     *   when there was nothing to confirm. A game that has moved since is refused
+     *   rather than finished, so an answer about the work the user was shown is
+     *   never applied to work they were not.
+     * @return true when this call was the one that finished the game.
+     */
+    suspend fun completeGame(
+        gameId: EntityId,
+        expected: GameCompletionSnapshot? = null,
+    ): TaskProgressOutcome
 
     /**
      * Records pieces that came out missing or spoiled (PLAN 6.3).
@@ -120,15 +143,18 @@ sealed interface TaskProgressOutcome {
  * is added here is the clock, and turning a refusal into something a screen can
  * show without a caller having to catch anything.
  *
- * The event identity is *not* added here. It comes in from the caller, because
- * the whole point of naming an event before sending it is that the name outlives
- * a failed attempt: a store that generated one per call would make every retry a
- * new report. [IdGenerator] is kept only for the settling event a completion may
- * have to write, which no form asks the user about.
+ * The event identity is *not* added here for anything a form sends. It comes in
+ * from the caller, because the whole point of naming an event before sending it
+ * is that the name outlives a failed attempt: a store that generated one per call
+ * would make every retry a new report. The one exception is finishing a whole
+ * game, which may have to settle a debt on any number of its tasks — there is no
+ * fixed set of names for a caller to choose, and the game's own mark is what
+ * makes a retry a retry there.
  */
 class TaskProgressStore(
     private val taskProgressDao: TaskProgressDao,
     private val clock: Clock = Clock.System,
+    private val idGenerator: IdGenerator = IdGenerator.Random,
 ) : TaskProgressing {
     override suspend fun completeTask(
         taskId: EntityId,
@@ -145,6 +171,24 @@ class TaskProgressStore(
 
     override suspend fun reopenTask(taskId: EntityId): TaskProgressOutcome =
         outcomeOf { taskProgressDao.reopenTask(taskId = taskId, clock = clock) }
+
+    override suspend fun completeGame(
+        gameId: EntityId,
+        expected: GameCompletionSnapshot?,
+    ): TaskProgressOutcome =
+        outcomeOf {
+            // The settling events a bulk completion may have to write are named
+            // here and not by the caller, because there is no fixed number of
+            // them to ask for. What makes a retry safe is the game itself: the
+            // transaction either finished it or wrote nothing, and finishing a
+            // game that is already finished does nothing at all.
+            taskProgressDao.completeGame(
+                gameId = gameId,
+                clock = clock,
+                idGenerator = idGenerator,
+                expected = expected,
+            )
+        }
 
     override suspend fun reportFailure(
         eventId: EntityId,

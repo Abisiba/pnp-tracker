@@ -162,8 +162,18 @@
     <string name="table_row_completed">Tamamlandı</string>
     <string name="table_row_ongoing">Devam ediyor</string>
     <string name="table_completed_mark">✓</string>
+    <string name="table_empty_tick">☐</string>
     <string name="table_label">Oyun tablosu</string>
     <string name="table_row_description">%1$s — %2$s</string>
+    <string name="table_complete_game">Oyunu tamamla</string>
+    <string name="table_complete_game_question">Tüm görevler tamamlandı mı?</string>
+    <string name="table_complete_game_unfinished">%1$s oyununda bitmemiş %2$s görev var. Evet derseniz hepsi ve bütün üretim aşamaları tek işlemde tamamlanır.</string>
+    <string name="table_complete_game_yes">Evet, tamamla</string>
+    <string name="table_complete_game_no">Hayır</string>
+    <string name="table_complete_game_hint">Esc soruyu kapatır; hiçbir şey değişmez.</string>
+    <string name="table_complete_game_error_stale">Bu oyunun görevleri soru sorulduktan sonra değişti. Hiçbir şey yazılmadı; kapatıp yeniden deneyin.</string>
+    <string name="table_complete_game_error_gone">Bu oyun artık yok.</string>
+    <string name="table_complete_game_error_general">Oyun tamamlanamadı. Hiçbir şey değişmedi.</string>
 
     <!-- Game table: adding a game -->
     <string name="table_add_game">Oyun ekle</string>
@@ -199,7 +209,6 @@
     <string name="task_state_completed">tamamlandı</string>
     <string name="task_state_open">sürüyor</string>
     <string name="task_progress_missing">Eksik: %1$s</string>
-    <string name="task_progress_game_completed">Bu oyun tamamlanmış görünüyor. Eksik bildirimi oyunu da yeniden açar; bu henüz hazır değil.</string>
     <string name="shortage_report_title">Eksik/hatalı bildir</string>
     <string name="shortage_resolve_title">Eksik giderildi</string>
     <string name="shortage_report_hint">Bildirilen adet yeniden basılacaklara eklenir.</string>

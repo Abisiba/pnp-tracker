@@ -10,6 +10,7 @@ import dev.pnptracker.domain.colors.BaseColorRestorePlan
 import dev.pnptracker.domain.colors.ColorRemoval
 import dev.pnptracker.domain.colors.ColorSummary
 import dev.pnptracker.domain.colors.ColorUsage
+import dev.pnptracker.domain.games.GameCompletionSnapshot
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.PoolType
@@ -127,6 +128,11 @@ private class FakeProgress(
     ): TaskProgressOutcome = TaskProgressOutcome.Done
 
     override suspend fun reopenTask(taskId: EntityId): TaskProgressOutcome = TaskProgressOutcome.Done
+
+    override suspend fun completeGame(
+        gameId: EntityId,
+        expected: GameCompletionSnapshot?,
+    ): TaskProgressOutcome = TaskProgressOutcome.Done
 
     override suspend fun reportFailure(
         eventId: EntityId,

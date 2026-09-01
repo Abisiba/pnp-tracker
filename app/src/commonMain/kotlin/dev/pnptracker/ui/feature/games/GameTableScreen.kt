@@ -272,11 +272,18 @@ private fun TableControls(
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            GameTableView.entries.forEach { view ->
+            // The first chip is where the keyboard lands when a row it was on
+            // left the view and there was no other row left to give it to.
+            val filterFocus = remember { FocusRequester() }
+            LaunchedEffect(state.focusAfterRow, state.rowFocusRecall) {
+                if (state.focusAfterRow == RowFocusTarget.ViewFilter) runCatching { filterFocus.requestFocus() }
+            }
+            GameTableView.entries.forEachIndexed { index, view ->
                 ViewChip(
                     view = view,
                     selected = state.view == view,
                     onSelect = { controller.showView(view) },
+                    focus = filterFocus.takeIf { index == 0 },
                 )
             }
         }
@@ -339,6 +346,7 @@ private fun ViewChip(
     view: GameTableView,
     selected: Boolean,
     onSelect: () -> Unit,
+    focus: FocusRequester? = null,
 ) {
     val stateText =
         stringResource(if (selected) Strings.Accessibility.selected else Strings.Accessibility.notSelected)
@@ -353,6 +361,7 @@ private fun ViewChip(
         },
         modifier =
             Modifier
+                .then(focus?.let { Modifier.focusRequester(it) } ?: Modifier)
                 .focusOutline(ComposerShape)
                 .semantics { stateDescription = stateText },
     )
@@ -524,17 +533,14 @@ private fun TableRow(
         } else {
             MaterialTheme.colorScheme.surface
         }
-    Row(
-        modifier =
-            Modifier
-                .width(TableWidth)
-                .background(background)
-                .semantics {
-                    contentDescription = description
-                    stateDescription = stateText
-                },
-    ) {
-        GameNameCell(row = row, stateText = stateText)
+    Row(modifier = Modifier.width(TableWidth).background(background)) {
+        GameNameCell(
+            row = row,
+            stateText = stateText,
+            description = description,
+            state = state,
+            controller = controller,
+        )
         CellColumnType.entries.forEach { columnType ->
             val cell = row.cell(columnType)
             val writing = state.writingIn(row.gameId, columnType)
@@ -562,10 +568,28 @@ private fun TableRow(
     }
 }
 
+/**
+ * The game's name, and the tick that says the game is finished.
+ *
+ * The tick lives here rather than in a column of its own. The name column is the
+ * first one and is on screen whatever the table is scrolled to, so the one
+ * action a row has is reachable in a narrow window without going looking for it —
+ * and a sixth column would cost every row its width for a control the size of a
+ * character.
+ *
+ * The whole row is spoken from one node. PLAN 17 asks for the name, the state and
+ * the action to be reachable and to be heard once; a control announcing itself
+ * beside a row announcing the same thing would say everything twice. So the tick
+ * carries the name, the state and what pressing it does, and the name beside it
+ * is drawn and not spoken.
+ */
 @Composable
 private fun GameNameCell(
     row: GameTableRow,
     stateText: String,
+    description: String,
+    state: GameTableScreenState,
+    controller: GameTableController,
 ) {
     Column(
         modifier =
@@ -576,18 +600,22 @@ private fun GameNameCell(
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Top) {
-            if (row.isCompleted) {
-                Text(
-                    text = stringResource(Strings.Table.completedMark),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
+            GameCompletionTick(
+                row = row,
+                stateText = stateText,
+                description = description,
+                state = state,
+                controller = controller,
+            )
             Text(
                 text = row.gameName,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
+                // Said by the tick, which also says how the game stands and what
+                // can be done about it. Drawn here, and heard there.
+                modifier = Modifier.clearAndSetSemantics { },
             )
         }
         if (row.isCompleted) {
@@ -595,7 +623,222 @@ private fun GameNameCell(
                 text = stateText,
                 style = MaterialTheme.typography.labelSmall,
                 color = PnpStatus.colors.onCompletedContainer,
+                modifier = Modifier.clearAndSetSemantics { },
             )
+        }
+        state.gameCompletionFailure?.takeIf { it.first == row.gameId }?.let { (_, failure) ->
+            Text(
+                text = gameCompletionMessageOf(failure),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+    }
+}
+
+/** How wide the tick's own square is, so a long name keeps the rest of the column. */
+private val TickSize = 22.dp
+
+/**
+ * The one control a game row has: `Oyunu tamamla` (PLAN 12.3, 12.9).
+ *
+ * Finished, it is a plain mark and nothing more. PLAN describes finishing a game
+ * and describes a shortage reopening one; it describes no control that simply
+ * takes the mark back, and a box that untick(ed) itself would be answering a
+ * question nobody asked. So a finished row still speaks its name and its state —
+ * it is just not a button any more.
+ */
+@Composable
+private fun GameCompletionTick(
+    row: GameTableRow,
+    stateText: String,
+    description: String,
+    state: GameTableScreenState,
+    controller: GameTableController,
+) {
+    val scope = rememberCoroutineScope()
+    val confirming = state.confirmingCompletionOf(row.gameId)
+    val action = stringResource(Strings.Table.completeGame)
+    val focus = remember { FocusRequester() }
+    var focused by remember { mutableStateOf(false) }
+    val interactions = remember { MutableInteractionSource() }
+    val hovered by interactions.collectIsHoveredAsState()
+    // The keyboard is sent here when the row that had it left the open view, and
+    // when this row is the one named as its neighbour.
+    LaunchedEffect(state.focusAfterRow, state.rowFocusRecall) {
+        if (state.focusAfterRow == RowFocusTarget.Game(row.gameId)) runCatching { focus.requestFocus() }
+    }
+    val ring = MaterialTheme.colorScheme.primary
+    val hoverRing = MaterialTheme.colorScheme.outline
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier =
+            Modifier
+                .size(TickSize)
+                .then(
+                    if (row.isCompleted) {
+                        Modifier.semantics {
+                            contentDescription = description
+                            stateDescription = stateText
+                        }
+                    } else {
+                        Modifier
+                            .hoverable(interactions)
+                            .pointerHoverIcon(PointerIcon.Hand)
+                            .onFocusEvent { focused = it.isFocused }
+                            .focusRequester(focus)
+                            // Before the control it is about, and only once.
+                            // A preview reaches the nodes *above* the one that
+                            // has the keyboard, so a handler written below
+                            // `clickable` is never on the path and never runs;
+                            // and a `focusable` of its own beside `clickable`
+                            // would make the tick two tab stops that look like
+                            // one, with the keys landing on whichever of them
+                            // the user happened to reach.
+                            .onPreviewKeyEvent { event ->
+                                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                when (event.key) {
+                                    Key.Enter, Key.NumPadEnter, Key.Spacebar -> {
+                                        scope.launch { controller.completeGame(row.gameId) }
+                                        true
+                                    }
+
+                                    else -> false
+                                }
+                            }.clickable(onClickLabel = action) { scope.launch { controller.completeGame(row.gameId) } }
+                            .semantics {
+                                contentDescription = description
+                                role = Role.Button
+                                // Said as a state rather than folded into the
+                                // name, so a reader hears it change when the
+                                // game does.
+                                stateDescription = stateText
+                                customActions =
+                                    listOf(
+                                        CustomAccessibilityAction(action) {
+                                            scope.launch { controller.completeGame(row.gameId) }
+                                            true
+                                        },
+                                    )
+                            }
+                    },
+                ).drawBehind {
+                    if (focused || hovered) {
+                        drawRoundRect(
+                            color = if (focused) ring else hoverRing,
+                            cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx()),
+                            style = Stroke(width = if (focused) 2.dp.toPx() else 1.5.dp.toPx()),
+                        )
+                    }
+                },
+    ) {
+        Text(
+            text = stringResource(if (row.isCompleted) Strings.Table.completedMark else Strings.Table.emptyTick),
+            style = MaterialTheme.typography.bodyMedium,
+            color =
+                if (row.isCompleted) {
+                    PnpStatus.colors.onCompletedContainer
+                } else {
+                    MaterialTheme.colorScheme.outline
+                },
+        )
+        confirming?.let { GameCompletionPopover(confirming = it, controller = controller) }
+    }
+}
+
+/**
+ * PLAN 12.9's question, hanging off the tick that asked it.
+ *
+ * Anchored to the control rather than placed in the middle of the window, for
+ * the reason PLAN 17 gives about every other surface here: the row being decided
+ * about has to stay visible while the decision is made. Escape closes it and
+ * writes nothing, and so does clicking away — PLAN 12.9 has `Hayır` change
+ * nothing at all, and there is nothing typed in here to lose.
+ */
+@Composable
+private fun GameCompletionPopover(
+    confirming: RowWork.ConfirmingGameCompletion,
+    controller: GameTableController,
+) {
+    val gap = with(LocalDensity.current) { PopoverGap.roundToPx() }
+    val provider = remember(gap) { AnchoredAboveWord(gap) }
+    val focus = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(confirming.gameId) { runCatching { focus.requestFocus() } }
+    val confirm = { if (!confirming.isSaving) scope.launch { controller.confirmGameCompletion() } else Unit }
+    Popup(
+        popupPositionProvider = provider,
+        onDismissRequest = controller::closeInnermost,
+        properties = PopupProperties(focusable = true),
+    ) {
+        Surface(
+            shape = ComposerShape,
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            modifier =
+                Modifier
+                    .widthIn(max = PopoverWidth)
+                    .focusRequester(focus)
+                    .focusable()
+                    .onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        when {
+                            event.key == Key.Escape -> {
+                                controller.closeInnermost()
+                                true
+                            }
+
+                            event.isCtrlPressed && (event.key == Key.Enter || event.key == Key.NumPadEnter) -> {
+                                confirm()
+                                true
+                            }
+
+                            else -> false
+                        }
+                    },
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = stringResource(Strings.Table.completeGameQuestion),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                // The number is said as well as asked about: PLAN 17 wants a
+                // confirmation the user can give knowingly, and "how much am I
+                // declaring finished" is the whole of what they are deciding.
+                Text(
+                    text =
+                        stringResource(
+                            Strings.Table.completeGameUnfinished,
+                            confirming.gameName,
+                            confirming.unfinishedCount.toString(),
+                        ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                val yes = stringResource(Strings.Table.completeGameYes)
+                val no = stringResource(Strings.Table.completeGameNo)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = { confirm() },
+                        enabled = !confirming.isSaving,
+                        modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = yes },
+                    ) {
+                        Text(text = yes, style = MaterialTheme.typography.labelMedium)
+                    }
+                    TextButton(
+                        onClick = controller::closeInnermost,
+                        enabled = !confirming.isSaving,
+                        modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = no },
+                    ) {
+                        Text(text = no, style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+                confirming.failure?.let { NoteLine(text = gameCompletionMessageOf(it), isProblem = true) }
+                NoteLine(text = stringResource(Strings.Table.completeGameHint), isProblem = false)
+            }
         }
     }
 }
@@ -1669,7 +1912,7 @@ private fun ShortagePanel(
             }
         }
     }
-    failure?.let { NoteLine(text = shortageMessageOf(it, gameIsCompleted = false), isProblem = true) }
+    failure?.let { NoteLine(text = shortageMessageOf(it), isProblem = true) }
     val save = stringResource(Strings.Shortage.save)
     val cancel = stringResource(Strings.Shortage.cancel)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1719,24 +1962,32 @@ private fun StageChoice(
  * particular to say falls back on the general sentence rather than on silence.
  */
 @Composable
-private fun shortageMessageOf(
-    failure: TaskProgressFailure,
-    gameIsCompleted: Boolean,
-): String =
-    when {
-        // A task in a finished game is the one refusal with a reason of its own,
-        // and the reason is that the work to reopen the game is not built yet.
-        failure == TaskProgressFailure.TASK_NOT_AVAILABLE && gameIsCompleted ->
-            stringResource(Strings.TaskMenu.gameCompleted)
-
-        failure == TaskProgressFailure.INVALID_QUANTITY -> stringResource(Strings.Shortage.errorQuantity)
-        failure == TaskProgressFailure.MORE_RESOLVED_THAN_OUTSTANDING -> stringResource(Strings.Shortage.errorTooMany)
-        failure == TaskProgressFailure.TASK_NOT_AVAILABLE -> stringResource(Strings.Shortage.errorGone)
-        failure == TaskProgressFailure.EVENT_ID_ALREADY_USED -> stringResource(Strings.Shortage.errorEventUsed)
-        failure == TaskProgressFailure.CARD_REFERENCE_ONLY_FOR_CARDS -> stringResource(Strings.Shortage.errorDetail)
-        failure == TaskProgressFailure.STAGE_NOT_IN_PIPELINE -> stringResource(Strings.Shortage.errorDetail)
-        failure == TaskProgressFailure.TASK_HAS_NO_STAGES -> stringResource(Strings.Shortage.errorDetail)
+private fun shortageMessageOf(failure: TaskProgressFailure): String =
+    when (failure) {
+        TaskProgressFailure.INVALID_QUANTITY -> stringResource(Strings.Shortage.errorQuantity)
+        TaskProgressFailure.MORE_RESOLVED_THAN_OUTSTANDING -> stringResource(Strings.Shortage.errorTooMany)
+        TaskProgressFailure.TASK_NOT_AVAILABLE -> stringResource(Strings.Shortage.errorGone)
+        TaskProgressFailure.EVENT_ID_ALREADY_USED -> stringResource(Strings.Shortage.errorEventUsed)
+        TaskProgressFailure.CARD_REFERENCE_ONLY_FOR_CARDS -> stringResource(Strings.Shortage.errorDetail)
+        TaskProgressFailure.STAGE_NOT_IN_PIPELINE -> stringResource(Strings.Shortage.errorDetail)
+        TaskProgressFailure.TASK_HAS_NO_STAGES -> stringResource(Strings.Shortage.errorDetail)
         else -> stringResource(Strings.Shortage.errorGeneral)
+    }
+
+/**
+ * What a refused game completion is called, in the user's own terms.
+ *
+ * A picture that has gone stale gets a sentence of its own, because what to do
+ * about it is different from anything else here: nothing was written, and the
+ * answer is to look again rather than to try harder.
+ */
+@Composable
+private fun gameCompletionMessageOf(failure: TaskProgressFailure): String =
+    when (failure) {
+        TaskProgressFailure.STALE_GAME_COMPLETION -> stringResource(Strings.Table.completeGameErrorStale)
+        TaskProgressFailure.GAME_NOT_AVAILABLE -> stringResource(Strings.Table.completeGameErrorGone)
+        TaskProgressFailure.TASK_NOT_AVAILABLE -> stringResource(Strings.Table.completeGameErrorGone)
+        else -> stringResource(Strings.Table.completeGameErrorGeneral)
     }
 
 /**
@@ -1812,11 +2063,7 @@ private fun TaskMenuActions(
     ) {
         Text(text = convert, style = MaterialTheme.typography.labelMedium)
     }
-    // PLAN 6.3 has a shortage on a task in a finished game reopen the game in the
-    // same transaction. That transaction belongs to the slice that finishes
-    // games, so the reason is given in words rather than the action being half
-    // applied — and the words are about the work, not about the code.
-    menu.failure?.let { NoteLine(text = shortageMessageOf(it, menu.gameIsCompleted), isProblem = true) }
+    menu.failure?.let { NoteLine(text = shortageMessageOf(it), isProblem = true) }
     NoteLine(text = stringResource(Strings.TaskMenu.hint), isProblem = false)
 }
 

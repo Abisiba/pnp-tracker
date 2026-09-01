@@ -20,9 +20,11 @@ import dev.pnptracker.domain.games.CellTextException
 import dev.pnptracker.domain.games.CellTextFailure
 import dev.pnptracker.domain.games.DocumentChange
 import dev.pnptracker.domain.games.DocumentEditRefusal
+import dev.pnptracker.domain.games.GameCompletionSnapshot
 import dev.pnptracker.domain.games.GameSetupException
 import dev.pnptracker.domain.games.GameTableRow
 import dev.pnptracker.domain.games.GameTableView
+import dev.pnptracker.domain.games.GameTaskSnapshot
 import dev.pnptracker.domain.games.planDocumentChange
 import dev.pnptracker.domain.games.runsFrom
 import dev.pnptracker.domain.model.CellColumnType
@@ -91,7 +93,9 @@ class GameTableController(
             allRows = rows
             // Whatever has arrived is no longer being waited for.
             settleTick()
-            state = state.copy(rows = rowsFor(state.view), work = stillValid(state.work))
+            // The work is settled first, so a surface that has just closed does
+            // not hold its row in a view it no longer belongs to.
+            state = state.copy(work = stillValid(state.work), rowWork = stillValid(state.rowWork)).redrawn()
         }
     }
 
@@ -146,6 +150,19 @@ class GameTableController(
         return work.withMenu(freshMenu(work.menuOf() ?: return work, task))
     }
 
+    /**
+     * Closes a question about a game that is no longer there to be finished.
+     *
+     * The count in it and the picture it carries both belong to a row; with the
+     * row gone there is nothing left to answer about. A question about a game
+     * that is merely *different* now is not closed — that is what the picture is
+     * for, and the transaction refuses it with a reason the user can read.
+     */
+    private fun stillValid(work: RowWork?): RowWork? {
+        val row = work ?: return null
+        return row.takeIf { rowOf(it.gameId) != null }
+    }
+
     /** The menu this piece of work stands on, if it stands on one. */
     private fun CellWork.menuOf(): CellWork.TaskMenu? =
         when (this) {
@@ -178,7 +195,6 @@ class GameTableController(
             isCompleted = task.isCompletedTask,
             currentMissingQuantity = task.currentMissingQuantity,
             poolType = task.poolType ?: menu.poolType,
-            gameIsCompleted = rowOf(menu.gameId)?.isCompleted ?: menu.gameIsCompleted,
         )
 
     /**
@@ -190,12 +206,12 @@ class GameTableController(
      * worse: PLAN describes no automatic save.
      */
     fun showView(view: GameTableView) {
-        if (state.work != null) {
+        if (state.isBusy) {
             state = blockedByOpenWork()
             return
         }
         if (view == state.view) return
-        state = state.copy(view = view, rows = rowsFor(view), blockedByEditor = false)
+        state = state.copy(view = view, blockedByEditor = false).redrawn()
     }
 
     /**
@@ -216,8 +232,17 @@ class GameTableController(
      * once would take the user somewhere they did not ask to be.
      */
     override fun closeInnermost() {
+        state.rowWork?.let { row ->
+            // Nothing is written and nothing is thrown away: PLAN 12.9 has
+            // `Hayır` leave the game exactly as it was.
+            if (row is RowWork.ConfirmingGameCompletion && row.isSaving) return
+            state = state.copy(rowWork = row.parent, blockedByEditor = false, focusRecall = state.focusRecall + 1).redrawn()
+            return
+        }
         val work = state.work ?: return
-        state = state.copy(work = work.parent, blockedByEditor = false, focusRecall = state.focusRecall + 1)
+        // The row was being held in the view for the sake of what was open on
+        // it. With that closed it goes back where the filter puts it.
+        state = state.copy(work = work.parent, blockedByEditor = false, focusRecall = state.focusRecall + 1).redrawn()
     }
 
     // -------------------------------------------------------- writing a cell
@@ -239,7 +264,7 @@ class GameTableController(
         columnType: CellColumnType,
     ) {
         val existing = state.work
-        if (existing != null) {
+        if (existing != null || state.rowWork != null) {
             if (existing is CellWork.WritingText && existing.isOn(gameId, columnType)) return
             state = blockedByOpenWork()
             return
@@ -305,7 +330,7 @@ class GameTableController(
     }
 
     fun cancelEditing() {
-        state = state.copy(work = null, blockedByEditor = false)
+        state = state.copy(work = null, blockedByEditor = false).redrawn()
     }
 
     /**
@@ -973,7 +998,7 @@ class GameTableController(
         taskId: EntityId,
     ) {
         val existing = state.work
-        if (existing != null) {
+        if (existing != null || state.rowWork != null) {
             if (existing is CellWork.TaskMenu && existing.taskId == taskId) return
             state = blockedByOpenWork()
             return
@@ -1000,7 +1025,6 @@ class GameTableController(
             isCompleted = task.isCompletedTask,
             currentMissingQuantity = task.currentMissingQuantity,
             poolType = task.poolType ?: columnType.poolType,
-            gameIsCompleted = rowOf(gameId)?.isCompleted == true,
             completionEventId = idGenerator.newId(),
         )
 
@@ -1115,17 +1139,13 @@ class GameTableController(
     /**
      * Opens the form that says how many pieces came out missing or spoiled.
      *
-     * PLAN 6.3 has one action for both, so there is one form. A task in a
-     * finished game is left alone until the slice that reopens games arrives:
-     * reporting here would reopen the task and leave its game marked finished,
-     * which is the half applied state PLAN 6.3 writes as one transaction.
+     * PLAN 6.3 has one action for both, so there is one form. It is offered on a
+     * task inside a finished game exactly as on any other: PLAN 6.3 has the
+     * report reopen the task and the game together, and that is now one
+     * transaction rather than two halves a screen would have to hold apart.
      */
     fun beginReportShortage() {
         val menu = state.menu() ?: return
-        if (menu.gameIsCompleted) {
-            state = state.copy(work = state.work?.withMenu(menu.copy(failure = TaskProgressFailure.TASK_NOT_AVAILABLE)))
-            return
-        }
         state = state.copy(work = CellWork.ReportingShortage(from = menu.copy(failure = null), draft = newDraft()))
     }
 
@@ -1188,17 +1208,12 @@ class GameTableController(
                 else -> return
             }
         if (isSavingShortage(open)) return
-        // The rule that keeps the form from opening over a finished game, asked
-        // again where the write would happen. A game finished while the form
-        // stood open would otherwise let the report through and reopen the task
-        // inside it — the half applied state PLAN 6.3 writes as one transaction,
-        // arrived at by a slower route. Making good is not asked: a task that
-        // owes something was never finished, so settling what it owes cannot
-        // reopen anything.
-        if (open is CellWork.ReportingShortage && menu.gameIsCompleted) {
-            state = state.copy(work = failing(open, TaskProgressFailure.TASK_NOT_AVAILABLE))
-            return
-        }
+        // Whether the game has to be reopened along with the task is not asked
+        // here and is not carried from the form. PLAN 6.3 writes both in one
+        // transaction, and that transaction reads the game itself — so a game
+        // finished, or reopened, while this form stood open is answered by what
+        // is stored at the moment of writing rather than by what the screen was
+        // showing when the user started typing.
         val counted = draft.countedQuantity
         if (counted == null || counted <= 0) {
             state = state.copy(work = failing(open, TaskProgressFailure.INVALID_QUANTITY))
@@ -1266,6 +1281,144 @@ class GameTableController(
             is CellWork.ResolvingShortage -> work.copy(isSaving = false, failure = failure)
             else -> work
         }
+
+    // ------------------------------------------------------ finishing a game
+
+    /**
+     * The game as its row stands, which is what a confirmation is answered about.
+     *
+     * Built from the rows already collected rather than from a read of its own:
+     * PLAN 12.9 asks about the work the user can see, and everything the answer
+     * turns on is already drawn in front of them. What is written is decided
+     * again inside the transaction against this same picture, so a row that has
+     * gone stale is refused rather than acted on.
+     */
+    private fun snapshotOf(row: GameTableRow): GameCompletionSnapshot =
+        GameCompletionSnapshot(
+            isGameCompleted = row.isCompleted,
+            tasks =
+                row.cells.flatMap { cell ->
+                    cell.tasks.map { task ->
+                        GameTaskSnapshot(
+                            taskId = requireNotNull(task.taskId),
+                            isCompleted = task.isCompletedTask,
+                            currentMissingQuantity = task.currentMissingQuantity,
+                            requiredQuantity = task.requiredQuantity,
+                        )
+                    }
+                },
+        )
+
+    /**
+     * The tick on a game row (PLAN 12.3, 12.9).
+     *
+     * With nothing unfinished in the game — including a game with no tasks at
+     * all — it finishes it outright: PLAN 12.9 asks only where there is work to
+     * declare finished on the user's behalf. With unfinished work it opens the
+     * question instead and writes nothing until it is answered.
+     *
+     * A game that is already finished is left alone. PLAN describes finishing a
+     * game and describes it being reopened by a shortage; it describes no way of
+     * simply un-finishing one, and inventing a control for it here would be a
+     * decision made on the user's behalf.
+     */
+    suspend fun completeGame(gameId: EntityId) {
+        if (state.isBusy) {
+            state = blockedByOpenWork()
+            return
+        }
+        val row = rowOf(gameId) ?: return
+        if (row.isCompleted) return
+        val snapshot = snapshotOf(row)
+        if (snapshot.needsConfirmation) {
+            state =
+                state.copy(
+                    rowWork =
+                        RowWork.ConfirmingGameCompletion(
+                            gameId = gameId,
+                            gameName = row.gameName,
+                            expected = snapshot,
+                        ),
+                    blockedByEditor = false,
+                )
+            return
+        }
+        writeGameCompletion(gameId = gameId, expected = snapshot)
+    }
+
+    /**
+     * Answers `Evet` to the question PLAN 12.9 asks.
+     *
+     * Sent once. A second Enter arriving while the first is in flight finds the
+     * confirmation already saving and does nothing, so one answer cannot become
+     * two transactions.
+     */
+    suspend fun confirmGameCompletion() {
+        val confirming = state.rowWork as? RowWork.ConfirmingGameCompletion ?: return
+        if (confirming.isSaving) return
+        state = state.copy(rowWork = confirming.copy(isSaving = true, failure = null))
+        writeGameCompletion(gameId = confirming.gameId, expected = confirming.expected)
+    }
+
+    /**
+     * Finishes the game, and puts the keyboard somewhere it can still be used.
+     *
+     * A refusal leaves whatever surface asked for it standing, with the reason on
+     * it: the user has to be able to read what happened, and a question that
+     * vanished on being refused would take the answer with it.
+     */
+    private suspend fun writeGameCompletion(
+        gameId: EntityId,
+        expected: GameCompletionSnapshot,
+    ) {
+        val landing = nextFocusAfter(gameId)
+        val outcome = taskProgress.completeGame(gameId = gameId, expected = expected)
+        state =
+            when (outcome) {
+                // Done, or already so: either way the game is finished, which is
+                // what the user asked for, and the question has nothing left to
+                // ask.
+                is TaskProgressOutcome.Done, TaskProgressOutcome.AlreadySo ->
+                    state
+                        .copy(
+                            rowWork = null,
+                            blockedByEditor = false,
+                            focusAfterRow = landing ?: state.focusAfterRow,
+                            rowFocusRecall = if (landing == null) state.rowFocusRecall else state.rowFocusRecall + 1,
+                        ).redrawn()
+
+                is TaskProgressOutcome.Refused ->
+                    state.copy(
+                        rowWork =
+                            (state.rowWork as? RowWork.ConfirmingGameCompletion)
+                                ?.copy(isSaving = false, failure = outcome.failure),
+                        gameCompletionFailure = gameId to outcome.failure,
+                        focusRecall = state.focusRecall + 1,
+                    )
+            }
+    }
+
+    /**
+     * Where the keyboard goes once this row has left the view that is open.
+     *
+     * Null when it is not going anywhere: in `Tamamlanan` and `Tümü` a finished
+     * game stays exactly where it is, and moving the focus off a control that is
+     * still under the user's finger would be the surprising thing to do.
+     */
+    private fun nextFocusAfter(gameId: EntityId): RowFocusTarget? {
+        val visible = allRows.filter(state.view::includes)
+        val at = visible.indexOfFirst { it.gameId == gameId }
+        if (at < 0) return null
+        // Still shown afterwards, so nothing has to move.
+        if (state.view.includes(visible[at].copy(isCompleted = true))) return null
+        val next = visible.getOrNull(at + 1) ?: visible.getOrNull(at - 1)
+        return next?.let { RowFocusTarget.Game(it.gameId) } ?: RowFocusTarget.ViewFilter
+    }
+
+    /** Clears the word saying a game could not be finished. */
+    fun acknowledgeGameCompletionFailure() {
+        state = state.copy(gameCompletionFailure = null)
+    }
 
     /** Opens the panel that changes what the task is, over the same word. */
     fun beginTaskEdit() {
@@ -1488,15 +1641,35 @@ class GameTableController(
      * fresh list: a change to some other game must not disturb what is being
      * typed in this one, and a row that leaves the view keeps its editor open —
      * the user is still writing in it.
+     *
+     * Which is why the row it is open on is kept in the list. Every surface here
+     * is drawn inside its own row — the popover hangs off the word it belongs to
+     * — so a row filtered away takes the open surface off the screen with it
+     * while leaving it open, and the table then refuses everything else for the
+     * sake of something the user can neither see nor close. It happens for real:
+     * reporting a shortage on a task in a finished game reopens the game in the
+     * same transaction, so the row leaves `Tamamlanan` the moment the report
+     * lands, with the menu still standing on it.
+     *
+     * Closing the surface instead would be the other answer, and it is the wrong
+     * one: what is open may be half a sentence somebody is typing, and no filter
+     * changing underneath them is a reason to throw that away.
      */
-    private fun rowsFor(view: GameTableView): GameTableRowsState {
-        val visible = allRows.filter(view::includes)
+    private fun rowsFor(
+        view: GameTableView,
+        busyWith: Set<EntityId>,
+    ): GameTableRowsState {
+        val visible = allRows.filter { view.includes(it) || it.gameId in busyWith }
         return if (visible.isEmpty()) {
             GameTableRowsState.Empty(view = view, hasGamesInOtherViews = allRows.isNotEmpty())
         } else {
             GameTableRowsState.Content(visible)
         }
     }
+
+    /** The same state with the table drawn for whatever is open in it now. */
+    private fun GameTableScreenState.redrawn(): GameTableScreenState =
+        copy(rows = rowsFor(view, setOfNotNull(work?.gameId, rowWork?.gameId)))
 }
 
 /**

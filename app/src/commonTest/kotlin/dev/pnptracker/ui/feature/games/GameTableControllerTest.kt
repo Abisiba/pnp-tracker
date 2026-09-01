@@ -19,6 +19,7 @@ import dev.pnptracker.domain.games.CellSegmentPreview
 import dev.pnptracker.domain.games.CellSummary
 import dev.pnptracker.domain.games.CellTextException
 import dev.pnptracker.domain.games.CellTextFailure
+import dev.pnptracker.domain.games.GameCompletionSnapshot
 import dev.pnptracker.domain.games.GameSetupException
 import dev.pnptracker.domain.games.GameSetupFailure
 import dev.pnptracker.domain.games.GameSummary
@@ -198,6 +199,7 @@ class GameTableControllerTest {
     ) : TaskProgressing {
         val completed = mutableListOf<Pair<EntityId, EntityId>>()
         val reopened = mutableListOf<EntityId>()
+        val gamesCompleted = mutableListOf<Pair<EntityId, GameCompletionSnapshot?>>()
         val reported = mutableListOf<RecordedMovement>()
         val resolved = mutableListOf<RecordedMovement>()
 
@@ -230,6 +232,14 @@ class GameTableControllerTest {
 
         override suspend fun reopenTask(taskId: EntityId): TaskProgressOutcome {
             reopened += taskId
+            return answer()
+        }
+
+        override suspend fun completeGame(
+            gameId: EntityId,
+            expected: GameCompletionSnapshot?,
+        ): TaskProgressOutcome {
+            gamesCompleted += gameId to expected
             return answer()
         }
 
@@ -3729,6 +3739,360 @@ class GameTableControllerTest {
         return controller to job
     }
 
+    // ------------------------------------------------------ finishing a game
+
+    /** The confirmation open on a row, which is where PLAN 12.9's question lives. */
+    private fun confirmation(controller: GameTableController): RowWork.ConfirmingGameCompletion = assertIs(controller.state.rowWork)
+
+    /** A game holding [open] unfinished tasks and [done] finished ones. */
+    private fun gameOf(
+        open: Int,
+        done: Int = 0,
+        isCompleted: Boolean = false,
+        name: String = "Harmonies",
+    ): GameTableRow {
+        val pieces =
+            List(open) { taskPiece("Açık $it", quantity = 20) } +
+                List(done) { taskPiece("Bitmiş $it", quantity = 20, isCompleted = true) }
+        return row(name, isCompleted = isCompleted, cells = mapOf(CellColumnType.THREE_D to pieces))
+    }
+
+    /** A controller looking at some games, with what it was built from to hand. */
+    private class Looking(
+        val controller: GameTableController,
+        val job: Job,
+        val progress: FakeTaskProgress,
+        val table: FakeTable,
+    ) {
+        operator fun component1() = controller
+
+        operator fun component2() = job
+
+        operator fun component3() = progress
+    }
+
+    private suspend fun CoroutineScope.looking(
+        rows: List<GameTableRow>,
+        progress: FakeTaskProgress = FakeTaskProgress(),
+    ): Looking {
+        val table = FakeTable(rows)
+        val controller = controllerOf(table, taskProgress = progress)
+        return Looking(controller, collect(controller), progress, table)
+    }
+
+    @Test
+    fun `a game with nothing unfinished in it is finished without being asked about`() =
+        runBlocking<Unit> {
+            // PLAN 12.9: the question is only asked where there is work to
+            // declare finished on the user's behalf.
+            val game = gameOf(open = 0, done = 2)
+            val (controller, job, progress) = looking(listOf(game))
+
+            controller.completeGame(game.gameId)
+
+            assertNull(controller.state.rowWork, "a question was asked about a game with nothing left in it")
+            assertEquals(listOf(game.gameId), progress.gamesCompleted.map { it.first })
+            job.cancel()
+        }
+
+    @Test
+    fun `a game with no tasks at all is finished without being asked about`() =
+        runBlocking<Unit> {
+            val game = gameOf(open = 0)
+            val (controller, job, progress) = looking(listOf(game))
+
+            controller.completeGame(game.gameId)
+
+            assertNull(controller.state.rowWork)
+            assertEquals(1, progress.gamesCompleted.size)
+            job.cancel()
+        }
+
+    @Test
+    fun `a game with unfinished work asks before anything is written`() =
+        runBlocking<Unit> {
+            val game = gameOf(open = 3, done = 1)
+            val (controller, job, progress) = looking(listOf(game))
+
+            controller.completeGame(game.gameId)
+
+            val asked = confirmation(controller)
+            assertEquals(game.gameId, asked.gameId)
+            assertEquals("Harmonies", asked.gameName)
+            assertEquals(3, asked.unfinishedCount, "the user is told the wrong number of unfinished tasks")
+            assertTrue(progress.gamesCompleted.isEmpty(), "the question was asked after the writing")
+            job.cancel()
+        }
+
+    @Test
+    fun `saying no writes nothing and leaves the game alone`() =
+        runBlocking<Unit> {
+            val game = gameOf(open = 2)
+            val (controller, job, progress) = looking(listOf(game))
+            controller.completeGame(game.gameId)
+
+            controller.closeInnermost()
+
+            assertNull(controller.state.rowWork, "the question stayed open")
+            assertTrue(progress.gamesCompleted.isEmpty(), "`Hayır` wrote something")
+            job.cancel()
+        }
+
+    @Test
+    fun `saying yes sends the game and the picture it was asked about`() =
+        runBlocking<Unit> {
+            val game = gameOf(open = 2, done = 1)
+            val (controller, job, progress) = looking(listOf(game))
+            controller.completeGame(game.gameId)
+            val asked = confirmation(controller).expected
+
+            controller.confirmGameCompletion()
+
+            val (gameId, expected) = progress.gamesCompleted.single()
+            assertEquals(game.gameId, gameId)
+            assertEquals(asked, expected, "the answer was sent without the question it belonged to")
+            assertNull(controller.state.rowWork, "the question stayed open over a game that is finished")
+            job.cancel()
+        }
+
+    @Test
+    fun `the picture carries every task of every column of the row`() =
+        runBlocking<Unit> {
+            val game =
+                row(
+                    "Harmonies",
+                    cells =
+                        mapOf(
+                            CellColumnType.THREE_D to listOf(taskPiece("Token", quantity = 20, missing = 3)),
+                            CellColumnType.CARD to listOf(taskPiece("Kartlar", quantity = 40, isCompleted = true)),
+                        ),
+                )
+            val (controller, job, _) = looking(listOf(game))
+
+            controller.completeGame(game.gameId)
+
+            val expected = confirmation(controller).expected
+            assertEquals(2, expected.tasks.size, "a column's work was left out of what the user is agreeing to")
+            assertEquals(1, expected.unfinishedCount)
+            assertEquals(3, expected.tasks.single { !it.isCompleted }.currentMissingQuantity)
+            job.cancel()
+        }
+
+    @Test
+    fun `two answers arriving together make one transaction`() =
+        runBlocking<Unit> {
+            val game = gameOf(open = 2)
+            val progress = FakeTaskProgress()
+            val (controller, job, _) = looking(listOf(game), progress)
+            controller.completeGame(game.gameId)
+            // Where a second Enter really lands: the first has not answered yet.
+            progress.whileWorking = { controller.confirmGameCompletion() }
+
+            controller.confirmGameCompletion()
+
+            assertEquals(1, progress.gamesCompleted.size, "one answer became two transactions")
+            job.cancel()
+        }
+
+    @Test
+    fun `a refusal leaves the question standing with what happened on it`() =
+        runBlocking<Unit> {
+            val game = gameOf(open = 2)
+            val progress = FakeTaskProgress(TaskProgressOutcome.Refused(TaskProgressFailure.STALE_GAME_COMPLETION))
+            val (controller, job, _) = looking(listOf(game), progress)
+            controller.completeGame(game.gameId)
+
+            controller.confirmGameCompletion()
+
+            val standing = confirmation(controller)
+            assertEquals(TaskProgressFailure.STALE_GAME_COMPLETION, standing.failure)
+            assertFalse(standing.isSaving, "the question was left looking as though it were still sending")
+            job.cancel()
+        }
+
+    @Test
+    fun `a game refused without a question says so on its own row`() =
+        runBlocking<Unit> {
+            val game = gameOf(open = 0, done = 1)
+            val progress = FakeTaskProgress(TaskProgressOutcome.Refused(TaskProgressFailure.GAME_NOT_AVAILABLE))
+            val (controller, job, _) = looking(listOf(game), progress)
+
+            controller.completeGame(game.gameId)
+
+            assertEquals(game.gameId to TaskProgressFailure.GAME_NOT_AVAILABLE, controller.state.gameCompletionFailure)
+            controller.acknowledgeGameCompletionFailure()
+            assertNull(controller.state.gameCompletionFailure)
+            job.cancel()
+        }
+
+    @Test
+    fun `a game that is already finished is not offered the tick again`() =
+        runBlocking<Unit> {
+            // PLAN describes finishing a game and describes a shortage reopening
+            // one. It describes nothing that simply takes the mark back.
+            val game = gameOf(open = 1, isCompleted = true)
+            val (controller, job, progress) = looking(listOf(game))
+            controller.showView(GameTableView.ALL)
+
+            controller.completeGame(game.gameId)
+
+            assertTrue(progress.gamesCompleted.isEmpty(), "a finished game was written to again")
+            assertNull(controller.state.rowWork)
+            job.cancel()
+        }
+
+    @Test
+    fun `a question about a game that has gone closes with it`() =
+        runBlocking<Unit> {
+            val game = gameOf(open = 2)
+            val looking = looking(listOf(game))
+            val controller = looking.controller
+            controller.completeGame(game.gameId)
+            assertNotNull(controller.state.rowWork)
+
+            looking.table.rows.value = emptyList()
+            settle()
+
+            assertNull(controller.state.rowWork, "a question stayed open over a game that is no longer there")
+            looking.job.cancel()
+        }
+
+    @Test
+    fun `a fresh list does not close a question about a game that is still there`() =
+        runBlocking<Unit> {
+            val game = gameOf(open = 2)
+            val looking = looking(listOf(game))
+            val controller = looking.controller
+            controller.completeGame(game.gameId)
+            val asked = confirmation(controller)
+
+            looking.table.rows.value = listOf(game, gameOf(open = 1, name = "Wingspan"))
+            settle()
+
+            assertEquals(asked, confirmation(controller), "an unrelated change closed the question")
+            looking.job.cancel()
+        }
+
+    @Test
+    fun `finishing a game sends the keyboard to the next row it can still reach`() =
+        runBlocking<Unit> {
+            val first = gameOf(open = 0, done = 1, name = "Harmonies")
+            val second = gameOf(open = 0, done = 1, name = "Wingspan")
+            val (controller, job, _) = looking(listOf(first, second))
+
+            controller.completeGame(first.gameId)
+
+            assertEquals(RowFocusTarget.Game(second.gameId), controller.state.focusAfterRow)
+            job.cancel()
+        }
+
+    @Test
+    fun `finishing the last row sends the keyboard back to the filter`() =
+        runBlocking<Unit> {
+            val only = gameOf(open = 0, done = 1)
+            val (controller, job, _) = looking(listOf(only))
+
+            controller.completeGame(only.gameId)
+
+            assertEquals(RowFocusTarget.ViewFilter, controller.state.focusAfterRow)
+            job.cancel()
+        }
+
+    @Test
+    fun `finishing a game in a view it stays in moves nothing`() =
+        runBlocking<Unit> {
+            val game = gameOf(open = 0, done = 1)
+            val (controller, job, _) = looking(listOf(game))
+            controller.showView(GameTableView.ALL)
+
+            controller.completeGame(game.gameId)
+
+            assertNull(controller.state.focusAfterRow, "the keyboard was moved off a row that is still there")
+            job.cancel()
+        }
+
+    @Test
+    fun `a question about a game refuses every other surface while it is open`() =
+        runBlocking<Unit> {
+            val game = gameOf(open = 2)
+            val (controller, job, _) = looking(listOf(game))
+            controller.completeGame(game.gameId)
+
+            controller.beginEditing(game.gameId, CellColumnType.NOTES)
+
+            assertNull(controller.state.work, "a cell opened underneath an open question")
+            assertTrue(controller.state.blockedByEditor)
+            assertNotNull(controller.state.rowWork)
+            job.cancel()
+        }
+
+    @Test
+    fun `an open cell refuses the question rather than losing what is typed`() =
+        runBlocking<Unit> {
+            val game = gameOf(open = 2)
+            val (controller, job, progress) = looking(listOf(game))
+            controller.beginEditing(game.gameId, CellColumnType.THREE_D)
+
+            controller.completeGame(game.gameId)
+
+            assertNull(controller.state.rowWork, "a question opened over a cell being typed in")
+            assertTrue(controller.state.blockedByEditor)
+            assertTrue(progress.gamesCompleted.isEmpty())
+            job.cancel()
+        }
+
+    @Test
+    fun `a view cannot be changed out from under an open question`() =
+        runBlocking<Unit> {
+            val game = gameOf(open = 2)
+            val (controller, job, _) = looking(listOf(game))
+            controller.completeGame(game.gameId)
+
+            controller.showView(GameTableView.ALL)
+
+            assertEquals(GameTableView.ONGOING, controller.state.view)
+            assertNotNull(controller.state.rowWork)
+            job.cancel()
+        }
+
+    @Test
+    fun `a row keeps its place in the table while something is open on it`() =
+        runBlocking<Unit> {
+            // Every surface is drawn inside its own row, so a row filtered away
+            // takes what is open on it off the screen while leaving it open —
+            // and the table then refuses everything else for the sake of
+            // something the user can neither see nor close. It is reachable: a
+            // shortage on a task in a finished game reopens the game in the same
+            // transaction, and the row leaves `Tamamlanan` while the menu on it
+            // is still standing.
+            val fixture = progressFixture(isCompleted = true, gameCompleted = true)
+            val progress = FakeTaskProgress()
+            val controller = controllerOf(fixture.table, taskProgress = progress)
+            val job = collect(controller)
+            controller.showView(GameTableView.COMPLETED)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+
+            // The report lands and the game is reopened underneath the menu.
+            fixture.table.rows.value = listOf(fixture.gameRow.copy(isCompleted = false))
+            settle()
+
+            assertNotNull(controller.state.work, "the menu closed itself")
+            assertEquals(
+                listOf("Harmonies"),
+                visibleNames(controller),
+                "the row carrying the open menu was filtered away with the menu still on it",
+            )
+
+            controller.closeInnermost()
+
+            assertNull(controller.state.work)
+            assertIs<GameTableRowsState.Empty>(
+                controller.state.rows,
+                "the row stayed in a view it does not belong to after the menu closed",
+            )
+            job.cancel()
+        }
+
     private fun openMenu(controller: GameTableController): CellWork.TaskMenu = assertIs(controller.state.work)
 
     private fun reportingForm(controller: GameTableController): CellWork.ReportingShortage = assertIs(controller.state.work)
@@ -4195,21 +4559,21 @@ class GameTableControllerTest {
         }
 
     @Test
-    fun `a shortage on a task in a finished game is refused rather than half applied`() =
+    fun `a shortage may be reported on a task inside a finished game`() =
         runBlocking<Unit> {
-            // PLAN 6.3 reopens the game in the same transaction, and that
-            // transaction belongs to a later slice. Reopening only the task would
-            // leave a game marked finished with unfinished work inside it.
+            // PLAN 6.3 reopens the task and the game in one transaction, so the
+            // form is offered here exactly as anywhere else: what used to be a
+            // half applied state is now a single write.
             val fixture = progressFixture(gameCompleted = true)
             val progress = FakeTaskProgress()
             val (controller, job) = watching(fixture, progress)
             controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
 
             controller.beginReportShortage()
+            controller.editShortageQuantity("2")
+            controller.saveShortage()
 
-            assertIs<CellWork.TaskMenu>(controller.state.work, "the form opened over a finished game")
-            assertEquals(TaskProgressFailure.TASK_NOT_AVAILABLE, openMenu(controller).failure)
-            assertTrue(progress.reported.isEmpty(), "a shortage was written against a finished game")
+            assertEquals(2, progress.reported.single().quantity, "a shortage in a finished game was refused")
             job.cancel()
         }
 
@@ -4245,12 +4609,12 @@ class GameTableControllerTest {
         }
 
     @Test
-    fun `a form still open when its game is finished elsewhere does not go on to write`() =
+    fun `a form still open when its game is finished elsewhere still writes, and once`() =
         runBlocking<Unit> {
-            // Refusing to open the form is not the whole rule: the form may be
-            // standing open when the game it belongs to is finished. Sending it
-            // then would reopen the task inside a game still marked finished,
-            // which is exactly what refusing to open it prevents.
+            // The screen does not decide whether the game has to be reopened, so
+            // a game finished under an open form changes nothing about what is
+            // sent: the transaction reads the game itself and reopens it there.
+            // What must not happen is the form quietly dropping what was typed.
             val fixture = progressFixture()
             val progress = FakeTaskProgress()
             val (controller, job) = watching(fixture, progress)
@@ -4259,15 +4623,12 @@ class GameTableControllerTest {
             controller.editShortageQuantity("2")
             fixture.table.rows.value = listOf(fixture.gameRow.copy(isCompleted = true))
             settle()
-            assertTrue(reportingForm(controller).from.gameIsCompleted, "the fixture never finished the game")
+            assertEquals("2", reportingForm(controller).draft.quantity, "the finished game wiped the draft")
 
             controller.saveShortage()
 
-            assertTrue(progress.reported.isEmpty(), "a shortage was written against a finished game")
-            val refused = reportingForm(controller)
-            assertEquals(TaskProgressFailure.TASK_NOT_AVAILABLE, refused.failure)
-            assertEquals("2", refused.draft.quantity, "the refusal threw away what had been typed")
-            assertFalse(refused.isSaving, "the form was left looking as though it were still sending")
+            assertEquals(1, progress.reported.size, "one form sent more or less than one report")
+            assertEquals(fixture.taskId, progress.reported.single().taskId)
             job.cancel()
         }
 

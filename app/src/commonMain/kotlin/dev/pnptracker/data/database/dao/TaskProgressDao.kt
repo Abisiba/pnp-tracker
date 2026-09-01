@@ -5,9 +5,12 @@ import androidx.room3.Insert
 import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
 import androidx.room3.Transaction
+import dev.pnptracker.data.database.entity.GameEntity
 import dev.pnptracker.data.database.entity.ProgressEventEntity
 import dev.pnptracker.data.database.entity.TaskEntity
 import dev.pnptracker.data.database.entity.TaskStageEntity
+import dev.pnptracker.domain.games.GameCompletionSnapshot
+import dev.pnptracker.domain.games.GameTaskSnapshot
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.PoolType
@@ -82,6 +85,99 @@ abstract class TaskProgressDao {
     /** One task's stages, in the order they are worked in. */
     @Query("SELECT * FROM task_stages WHERE task_id = :taskId ORDER BY order_index")
     abstract suspend fun stagesOfTask(taskId: EntityId): List<TaskStageEntity>
+
+    /**
+     * The game a task is written in, if the game is still there.
+     *
+     * The same chain [workableTaskById] walks, read the other way round. PLAN
+     * 6.3 has a shortage reported on a task inside a finished game reopen the
+     * game as well, so the transaction that records the shortage has to know
+     * which game that is — and know it from the database rather than from
+     * whatever the screen believed when the form was opened.
+     */
+    @Query(
+        """
+        SELECT games.* FROM games
+        INNER JOIN game_cells ON game_cells.game_id = games.id
+        INNER JOIN cell_segments ON cell_segments.cell_id = game_cells.id
+        WHERE cell_segments.task_id = :taskId AND games.deleted_at IS NULL
+        """,
+    )
+    abstract suspend fun gameOfTask(taskId: EntityId): GameEntity?
+
+    /** The game, if it is still there. */
+    @Query("SELECT * FROM games WHERE id = :gameId AND deleted_at IS NULL")
+    abstract suspend fun activeGameById(gameId: EntityId): GameEntity?
+
+    /**
+     * Every task of one game that can still be worked on, finished ones included.
+     *
+     * One query for the whole game, ordered by identity. PLAN 12.9 finishes a
+     * game's work as one act, so the work is read as one thing: asking task by
+     * task would put a decision query in front of every row and make the cost of
+     * finishing a game grow with how much is in it.
+     *
+     * Ordered by `tasks.id` rather than by where the tasks are drawn, because
+     * nothing here is drawing them. It is the order that makes two reads of an
+     * unchanged game the same list.
+     */
+    @Query(
+        """
+        SELECT tasks.* FROM tasks
+        INNER JOIN cell_segments ON cell_segments.task_id = tasks.id
+        INNER JOIN game_cells ON game_cells.id = cell_segments.cell_id
+        INNER JOIN games ON games.id = game_cells.game_id
+        WHERE game_cells.game_id = :gameId
+          AND tasks.deleted_at IS NULL AND games.deleted_at IS NULL
+        ORDER BY tasks.id
+        """,
+    )
+    abstract suspend fun workableTasksOfGame(gameId: EntityId): List<TaskEntity>
+
+    /**
+     * Every stage of every task of one game, in pipeline order within each task.
+     *
+     * A join on the game rather than a list of task identifiers, so the query has
+     * one shape whatever the game holds. A generated `IN (?, ?, ...)` would grow
+     * a new statement for every different number of tasks — nothing SQLite could
+     * keep prepared — and would meet its parameter ceiling on a large game.
+     */
+    @Query(
+        """
+        SELECT task_stages.* FROM task_stages
+        INNER JOIN tasks ON tasks.id = task_stages.task_id
+        INNER JOIN cell_segments ON cell_segments.task_id = tasks.id
+        INNER JOIN game_cells ON game_cells.id = cell_segments.cell_id
+        INNER JOIN games ON games.id = game_cells.game_id
+        WHERE game_cells.game_id = :gameId
+          AND tasks.deleted_at IS NULL AND games.deleted_at IS NULL
+        ORDER BY task_stages.task_id, task_stages.order_index
+        """,
+    )
+    abstract suspend fun stagesOfGame(gameId: EntityId): List<TaskStageEntity>
+
+    /**
+     * What each of a game's tasks has had reported against it, in one read.
+     *
+     * The pair [failureTotalOf] and [resolvedTotalOf] answer for one task, which
+     * is two queries per task and the reason the whole-game check does not use
+     * them. Summed wide for the same reason they are: PLAN 6.4 lets what has been
+     * reported failed climb past what the task needs.
+     */
+    @Query(
+        """
+        SELECT progress_events.task_id AS taskId,
+               COALESCE(SUM(CASE WHEN progress_events.kind = 'FAILURE_REPORTED' THEN progress_events.quantity ELSE 0 END), 0) AS reported,
+               COALESCE(SUM(CASE WHEN progress_events.kind = 'SHORTAGE_RESOLVED' THEN progress_events.quantity ELSE 0 END), 0) AS settled
+        FROM progress_events
+        INNER JOIN tasks ON tasks.id = progress_events.task_id
+        INNER JOIN cell_segments ON cell_segments.task_id = tasks.id
+        INNER JOIN game_cells ON game_cells.id = cell_segments.cell_id
+        WHERE game_cells.game_id = :gameId AND tasks.deleted_at IS NULL
+        GROUP BY progress_events.task_id
+        """,
+    )
+    abstract suspend fun reportedTotalsOfGame(gameId: EntityId): List<TaskFailureTotals>
 
     /**
      * One task's whole history, oldest first.
@@ -197,6 +293,31 @@ abstract class TaskProgressDao {
         updatedAt: Instant,
     ): Int
 
+    /**
+     * Marks a game finished or takes the mark back, from inside a transaction.
+     *
+     * The same row [GameDao.setManuallyCompleted] writes, and written from here
+     * because PLAN 16 has the game's own mark and the completions below it land
+     * together or not at all. A transaction that could only reach the tasks would
+     * have to ask somebody else to write the game afterwards, which is exactly
+     * the half-applied game those rules forbid.
+     *
+     * @return 1 when the game was there and active, 0 otherwise.
+     */
+    @Query(
+        """
+        UPDATE games
+        SET is_manually_completed = :isCompleted, completed_at = :completedAt, updated_at = :updatedAt
+        WHERE id = :gameId AND deleted_at IS NULL
+        """,
+    )
+    protected abstract suspend fun writeGameCompletion(
+        gameId: EntityId,
+        isCompleted: Boolean,
+        completedAt: Instant?,
+        updatedAt: Instant,
+    ): Int
+
     // -------------------------------------------------------- transactions
 
     /**
@@ -223,40 +344,168 @@ abstract class TaskProgressDao {
         val task = workableTaskById(taskId) ?: refuse(TaskProgressFailure.TASK_NOT_AVAILABLE)
         if (task.isCompleted) return false
         val moment = clock.now()
+        val plan = completionOf(task)
 
-        if (task.currentMissingQuantity > 0) {
-            val settled =
-                insertEventIfNew(
-                    ProgressEventEntity(
-                        id = idGenerator.newId(),
-                        taskId = taskId,
-                        kind = ProgressEventKind.SHORTAGE_RESOLVED,
-                        quantity = task.currentMissingQuantity,
-                        recordedAt = moment,
-                    ),
-                )
+        if (plan.settles > 0) {
+            val settled = insertEventIfNew(settlingEvent(taskId, idGenerator.newId(), plan.settles, moment))
             // A generated name that was already taken is not a retry of anything;
             // it is an identifier collision, and settling silently without the
             // event would leave the counter unexplained.
             check(settled != -1L) { "The settling event for $taskId was given a name that was already taken." }
         }
-        task.requiredQuantity?.let { total ->
-            stagesOfTask(taskId).forEach { stage ->
-                if (stage.completedQuantity != total) writeStage(taskId, stage.stage, total, moment)
-            }
+        writeCompletion(task, plan, stagesOfTask(taskId), moment)
+        requireProgressHolds(taskId)
+        return true
+    }
+
+    /**
+     * Finishes a whole game: its work first, then the game's own mark.
+     *
+     * PLAN 12.9 in one transaction. The user is asked once, about the game, and
+     * what they agree to is that everything unfinished in it is finished — 3D
+     * tasks, the independent tasks a batch made, a task made in several colours,
+     * a card or board pipeline counted all the way up, a special task. Each one
+     * is finished by exactly what [completeTask] means by finishing it, because
+     * both go through [completionOf] and [writeCompletion] rather than through
+     * two accounts of the same rule that could drift apart.
+     *
+     * Everything is read before anything is written, and the whole game is read
+     * in three queries however much is in it: the game, its tasks, and their
+     * stages. Finishing a game of forty-two tasks writes forty-two rows, which is
+     * the work; it must not also ask forty-two questions to decide to.
+     *
+     * [expected] is the game as the confirmation was answered against. PLAN 12.9
+     * asks about unfinished work and then finishes it, and those are two moments;
+     * an answer given about three unfinished tasks is refused rather than applied
+     * to five. The check is made before the game's own mark is looked at, so a
+     * game somebody else finished in between is reported as the change it was
+     * rather than as nothing having happened.
+     *
+     * A game already finished is a no-op down to the clock: PLAN 5.3 has the mark
+     * mean the user's decision and the moment they made it, and rewriting
+     * `completedAt` would move a date they set to one they did not.
+     *
+     * @return true when this call was the one that finished the game.
+     * @throws TaskProgressException if the game is gone, or has moved since the
+     *   question was answered.
+     */
+    @Transaction
+    open suspend fun completeGame(
+        gameId: EntityId,
+        clock: Clock,
+        idGenerator: IdGenerator,
+        expected: GameCompletionSnapshot? = null,
+    ): Boolean {
+        val game = activeGameById(gameId) ?: refuse(TaskProgressFailure.GAME_NOT_AVAILABLE)
+        val tasks = workableTasksOfGame(gameId)
+        val stages = stagesOfGame(gameId).groupBy { it.taskId }
+        expected?.let { snapshot ->
+            if (!snapshot.matches(snapshotOf(game, tasks))) refuse(TaskProgressFailure.STALE_GAME_COMPLETION)
         }
-        writeProgress(
-            taskId = taskId,
-            isCompleted = true,
-            completedAt = moment,
+        if (game.isManuallyCompleted) return false
+
+        val unfinished = tasks.filterNot { it.isCompleted }
+        val plans = unfinished.map { it to completionOf(it) }
+        // Every name a write will need, made before the first of them lands. A
+        // generator that runs out on the second identifier would otherwise leave
+        // the first settling event written against work that never finished.
+        val settlings = plans.filter { (_, plan) -> plan.settles > 0 }.map { (task, plan) -> Triple(task, plan, idGenerator.newId()) }
+
+        val moment = clock.now()
+        settlings.forEach { (task, plan, eventId) ->
+            val settled = insertEventIfNew(settlingEvent(task.id, eventId, plan.settles, moment))
+            check(settled != -1L) { "The settling event for ${task.id} was given a name that was already taken." }
+        }
+        plans.forEach { (task, plan) -> writeCompletion(task, plan, stages[task.id].orEmpty(), moment) }
+        // Last, so that a game is never marked finished over work that did not
+        // finish: anything above taking the transaction down takes this with it.
+        writeGameCompletion(gameId = gameId, isCompleted = true, completedAt = moment, updatedAt = moment)
+        requireGameProgressHolds(gameId)
+        return true
+    }
+
+    /** The game and its tasks as this transaction found them. */
+    private fun snapshotOf(
+        game: GameEntity,
+        tasks: List<TaskEntity>,
+    ): GameCompletionSnapshot =
+        GameCompletionSnapshot(
+            isGameCompleted = game.isManuallyCompleted,
+            tasks =
+                tasks.map { task ->
+                    GameTaskSnapshot(
+                        taskId = task.id,
+                        isCompleted = task.isCompleted,
+                        currentMissingQuantity = task.currentMissingQuantity,
+                        requiredQuantity = task.requiredQuantity,
+                    )
+                },
+        )
+
+    /** What finishing one task comes to, worked out before anything is written. */
+    private data class Completion(
+        /** How much it owes, and so how much one settling event has to record. */
+        val settles: Int,
+        /** What its pipeline is counted up to, or null when it has no total. */
+        val stageTarget: Int?,
+        /** Whether it comes out of this with its print run recorded. */
+        val primaryBatchCompleted: Boolean,
+    )
+
+    /**
+     * What finishing this task means, for whichever path is finishing it.
+     *
+     * The one account of it. PLAN 12.9 has finishing a game finish its tasks, and
+     * "finish" there is the same word as on a task's own tick — so a second
+     * account of what that costs is a second thing to keep in step, and the two
+     * would come apart at the first change to either.
+     */
+    private fun completionOf(task: TaskEntity): Completion =
+        Completion(
+            settles = task.currentMissingQuantity,
+            // With no total there is nothing for a stage to be counted up to; a
+            // task like that is finished by hand and its pipeline left alone.
+            stageTarget = task.requiredQuantity,
             // Only the 3D pool counts a print run; for the others the flag is
             // not part of what being finished means.
             primaryBatchCompleted = task.primaryBatchCompleted || task.poolType == PoolType.THREE_D,
+        )
+
+    /** The event that explains a settled debt, so the history still adds up. */
+    private fun settlingEvent(
+        taskId: EntityId,
+        eventId: EntityId,
+        quantity: Int,
+        moment: Instant,
+    ): ProgressEventEntity =
+        ProgressEventEntity(
+            id = eventId,
+            taskId = taskId,
+            kind = ProgressEventKind.SHORTAGE_RESOLVED,
+            quantity = quantity,
+            recordedAt = moment,
+        )
+
+    /** Writes one task's pipeline and then the task, as finishing it means. */
+    private suspend fun writeCompletion(
+        task: TaskEntity,
+        plan: Completion,
+        stages: List<TaskStageEntity>,
+        moment: Instant,
+    ) {
+        plan.stageTarget?.let { total ->
+            stages.forEach { stage ->
+                if (stage.completedQuantity != total) writeStage(task.id, stage.stage, total, moment)
+            }
+        }
+        writeProgress(
+            taskId = task.id,
+            isCompleted = true,
+            completedAt = moment,
+            primaryBatchCompleted = plan.primaryBatchCompleted,
             currentMissingQuantity = 0,
             updatedAt = moment,
         )
-        requireProgressHolds(taskId)
-        return true
     }
 
     /**
@@ -338,6 +587,13 @@ abstract class TaskProgressDao {
      * and a report on a finished task bring it back into the active pool; both
      * happen here rather than being left for a caller to remember.
      *
+     * PLAN 6.3 goes one further: a report against a task inside a *finished game*
+     * reopens the game as well, in this transaction. The game is read here rather
+     * than taken from the caller, so a game finished while a form stood open is
+     * still reopened — the state the screen was showing is not what the write is
+     * decided from. Only the task reported on is reopened; PLAN 6.3 leaves the
+     * game's other finished tasks exactly as they are.
+     *
      * PLAN 6.4 keeps what is owed from rising above what the task needs in total,
      * while the failure total is free to go past it — a piece can be spoiled more
      * than once. That is why the two are different numbers.
@@ -386,6 +642,9 @@ abstract class TaskProgressDao {
         if (alreadyRecorded(event)) return false
         val moment = clock.now()
         if (!recordOnce(event.copy(recordedAt = moment))) return false
+        // Read here rather than at the top, so a retry that has nothing to do
+        // does not go looking for a game it is not going to write to.
+        val game = gameOfTask(taskId)
 
         // Added as a Long and only then brought back. PLAN 6.4 caps what a task
         // owes at what it needs, and the failure total is free to go past it —
@@ -407,6 +666,16 @@ abstract class TaskProgressDao {
             currentMissingQuantity = settled.toInt(),
             updatedAt = moment,
         )
+        // PLAN 6.3 and PLAN 16: a shortage on a task inside a finished game
+        // brings the game back to `Devam Eden` too, and does it here rather than
+        // in a second write a caller has to remember — the state where the task
+        // is open inside a game still claiming to be finished is exactly what
+        // one transaction exists to make unreachable. A game that is already
+        // open is left alone: there is nothing to take back, and writing anyway
+        // would move a row nobody changed.
+        if (game != null && game.isManuallyCompleted) {
+            writeGameCompletion(gameId = game.id, isCompleted = false, completedAt = null, updatedAt = moment)
+        }
         requireProgressHolds(taskId)
         return true
     }
@@ -717,6 +986,59 @@ abstract class TaskProgressDao {
      */
     private suspend fun requireProgressHolds(taskId: EntityId) {
         val task = checkNotNull(taskById(taskId)) { "The task $taskId disappeared while it was being worked on." }
+        requireTaskHolds(
+            task = task,
+            stages = stagesOfTask(taskId),
+            outstanding = failureTotalOf(taskId) - resolvedTotalOf(taskId),
+        )
+    }
+
+    /**
+     * The same check over a whole game, in a fixed number of reads.
+     *
+     * What [requireProgressHolds] asks of one task, asked of every task a bulk
+     * completion touched — and asked the same way, because both hand their rows
+     * to [requireTaskHolds]. Doing it task by task would put four reads behind
+     * every row of a game, which is the cost this transaction exists to avoid;
+     * doing it with a second set of rules would be a second thing to keep true.
+     *
+     * The game's own mark is checked too. PLAN 12.9 finishes the work and then
+     * the game, so a game left marked finished over work that is not is the one
+     * outcome this transaction must not be able to commit.
+     */
+    private suspend fun requireGameProgressHolds(gameId: EntityId) {
+        val game = checkNotNull(activeGameById(gameId)) { "The game $gameId disappeared while it was being finished." }
+        val tasks = workableTasksOfGame(gameId)
+        val stages = stagesOfGame(gameId).groupBy { it.taskId }
+        val reported = reportedTotalsOfGame(gameId).associateBy { it.taskId }
+        tasks.forEach { task ->
+            requireTaskHolds(
+                task = task,
+                stages = stages[task.id].orEmpty(),
+                outstanding = reported[task.id]?.let { it.reported - it.settled } ?: 0L,
+            )
+        }
+        check(game.isManuallyCompleted == (game.completedAt != null)) {
+            "The game $gameId is ${game.isManuallyCompleted} but finished at ${game.completedAt}."
+        }
+        check(!game.isManuallyCompleted || tasks.all { it.isCompleted }) {
+            "The game $gameId is finished with ${tasks.count { !it.isCompleted }} of its tasks unfinished."
+        }
+    }
+
+    /**
+     * Everything one task has to be able to say about itself, checked at once.
+     *
+     * Handed its rows rather than reading them, so the caller decides whether
+     * they came from one task's own queries or from a game-wide read. The rules
+     * are here and only here.
+     */
+    private fun requireTaskHolds(
+        task: TaskEntity,
+        stages: List<TaskStageEntity>,
+        outstanding: Long,
+    ) {
+        val taskId = task.id
         check(task.currentMissingQuantity >= 0) {
             "The task $taskId owes ${task.currentMissingQuantity}, which is less than nothing."
         }
@@ -732,11 +1054,9 @@ abstract class TaskProgressDao {
         // The cached counter has to be something the history can account for.
         // It may be lower — PLAN 6.4 caps it at the total while the failure
         // total is free to go past — but never higher.
-        val outstanding = failureTotalOf(taskId) - resolvedTotalOf(taskId)
         check(task.currentMissingQuantity <= outstanding) {
             "The task $taskId owes ${task.currentMissingQuantity} but its history accounts for $outstanding."
         }
-        val stages = stagesOfTask(taskId)
         stages.zipWithNext { earlier, later ->
             check(later.completedQuantity <= earlier.completedQuantity) {
                 "The task $taskId has ${later.stage} ahead of ${earlier.stage}."
@@ -770,3 +1090,16 @@ abstract class TaskProgressDao {
 
     private fun refuse(failure: TaskProgressFailure): Nothing = throw TaskProgressException(failure)
 }
+
+/**
+ * What one task's history adds up to, read for a whole game at once.
+ *
+ * Both sums are wide, for the reason [TaskProgressDao.failureTotalOf] gives:
+ * PLAN 6.4 lets what has been reported failed climb past what the task needs, so
+ * a long enough history would not fit the width one report does.
+ */
+data class TaskFailureTotals(
+    val taskId: EntityId,
+    val reported: Long,
+    val settled: Long,
+)
