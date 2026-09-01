@@ -20,6 +20,7 @@ import dev.pnptracker.domain.rules.normalizeColorTerm
 import dev.pnptracker.domain.tasks.StageSnapshot
 import dev.pnptracker.domain.tasks.TaskEditException
 import dev.pnptracker.domain.tasks.TaskProgressFailure
+import dev.pnptracker.domain.tasks.quantityDigitsOf
 import dev.pnptracker.domain.tasks.trackingModesOf
 import dev.pnptracker.ui.feature.games.TaskEditor
 import dev.pnptracker.ui.feature.tasks.TaskEditingHost
@@ -244,7 +245,7 @@ class PoolController(
         typed: String,
     ) = onStages { open ->
         open.copy(
-            draft = open.draft + (stage to typed.filter(Char::isDigit)),
+            draft = open.draft + (stage to quantityDigitsOf(typed)),
             failure = null,
             invalidStage = null,
         )

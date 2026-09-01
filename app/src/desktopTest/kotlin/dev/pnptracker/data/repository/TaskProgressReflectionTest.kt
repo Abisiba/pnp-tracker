@@ -13,6 +13,8 @@ import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.pools.PoolModel
+import dev.pnptracker.domain.pools.poolModelOf
 import dev.pnptracker.domain.tasks.StageSnapshot
 import dev.pnptracker.domain.tasks.TaskProgressException
 import kotlinx.coroutines.CoroutineScope
@@ -779,4 +781,111 @@ class TaskProgressReflectionTest {
 
             assertEquals(listOf(taskId), idsIn(PoolType.CARD), "a reopened card task did not come back once")
         }
+
+    // ---------------------------- what the pools add up to, read from Room
+
+    /** Two thirds of the way to what an Int holds, so two of them pass it. */
+    private val huge = 1_500_000_000
+
+    @Test
+    fun `a colour group read out of the database counts past what an Int holds`() =
+        runBlocking<Unit> {
+            val grey = palette(1).single()
+            task("Büyük bir", quantity = huge, colors = listOf(grey))
+            task("Büyük iki", quantity = huge, colors = listOf(grey))
+
+            val sections = threeDSections()
+
+            // Measured before the fix this was -1294967296: two real rows, a
+            // real query and a real projection, and a group of three billion
+            // shown to the user as a negative number.
+            assertEquals(3_000_000_000L, sections.singleColorGroups.single().requiredTotal)
+        }
+
+    @Test
+    fun `the section with no colour counts out of the database just as wide`() =
+        runBlocking<Unit> {
+            val a = task("Renksiz bir", quantity = huge)
+            val b = task("Renksiz iki", quantity = huge)
+            progress.reportFailure(ids.newId(), a, huge, clock)
+            progress.reportFailure(ids.newId(), b, huge, clock)
+
+            val awaiting = threeDSections().awaitingColor
+
+            assertEquals(3_000_000_000L, awaiting.requiredTotal)
+            assertEquals(3_000_000_000L, awaiting.missingTotal)
+            assertEquals(3_000_000_000L, awaiting.failureTotal)
+            assertTrue(awaiting.missingTotal <= awaiting.requiredTotal, "a section owed more than it needs")
+        }
+
+    @Test
+    fun `forty two large tasks read out of the database add up to what they are`() =
+        runBlocking<Unit> {
+            val grey = palette(1).single()
+            repeat(42) { index -> task("Büyük $index", quantity = huge, colors = listOf(grey)) }
+
+            assertEquals(63_000_000_000L, threeDSections().singleColorGroups.single().requiredTotal)
+        }
+
+    @Test
+    fun `what the history holds and what the task owes stay different numbers`() =
+        runBlocking<Unit> {
+            val grey = palette(1).single()
+            val taskId = task("Çok hatalı", quantity = 10, colors = listOf(grey))
+            repeat(3) { progress.reportFailure(ids.newId(), taskId, 2_000_000_000, clock) }
+
+            val group = threeDSections().singleColorGroups.single()
+            assertEquals(10L, group.requiredTotal)
+            assertEquals(10L, group.missingTotal, "the counter went past the total")
+            assertEquals(6_000_000_000L, group.failureTotal, "the history was narrowed to the counter")
+        }
+
+    @Test
+    fun `a large amount costs a report no more queries than a small one does`() =
+        runBlocking<Unit> {
+            val small = task("Küçük", quantity = Int.MAX_VALUE)
+            driver.start()
+            progress.reportFailure(ids.newId(), small, 1, clock)
+            val cheap = tally(driver.stop())
+
+            val large = task("Büyük", quantity = Int.MAX_VALUE)
+            driver.start()
+            progress.reportFailure(ids.newId(), large, Int.MAX_VALUE, clock)
+            val dear = tally(driver.stop())
+
+            assertEquals(cheap, dear, "how big the amount is changed what the transaction did")
+            assertEquals(1, dear["INSERT progress_events"], "one report was written as several events")
+            assertEquals(0, dear.filterKeys { "task_colors" in it }.values.sum(), "a report touched the colours")
+        }
+
+    @Test
+    fun `reading a pool costs the same whether its totals are large or small`() =
+        runBlocking<Unit> {
+            val grey = palette(1).single()
+            repeat(3) { index -> task("Küçük $index", quantity = 10, colors = listOf(grey)) }
+            driver.start()
+            threeDSections()
+            val cheap = queriesIn(driver.stop())
+
+            repeat(3) { index -> task("Büyük $index", quantity = huge, colors = listOf(grey)) }
+            driver.start()
+            val sections = threeDSections()
+            val dear = queriesIn(driver.stop())
+
+            assertEquals(cheap, dear, "counting wide cost the pool an extra query")
+            assertEquals(mapOf("SELECT tasks" to 1, "SELECT task_colors" to 1, "SELECT progress_events" to 1), dear)
+            // Three small tasks and three large ones, added exactly and well past
+            // what an Int holds.
+            assertEquals(4_500_000_030L, sections.singleColorGroups.single().requiredTotal)
+        }
+
+    /**
+     * What a read really asked the database, without the settings a connection
+     * puts to it when it is opened — a pool read opens its own, so those say
+     * nothing about the reading itself.
+     */
+    private fun queriesIn(recorded: List<String>): Map<String, Int> = tally(recorded).filterKeys { !it.startsWith("PRAGMA") }
+
+    /** The 3D pool as the screen lays it out, read through the real projection. */
+    private suspend fun threeDSections() = (poolModelOf(pools.observePool(PoolType.THREE_D).first()) as PoolModel.ThreeD).sections
 }

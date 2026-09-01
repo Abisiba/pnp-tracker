@@ -1958,6 +1958,74 @@ class TaskProgressTest {
 
             assertEquals(TaskProgressFailure.REQUIRED_QUANTITY_UNKNOWN, refusal.failure)
         }
+
+    // ------------------------------------ the whole range an amount may be
+
+    @Test
+    fun `everything a task can owe can be made good in one movement`() =
+        runBlocking<Unit> {
+            // A task owing the very most it may owe. Making that good has to be
+            // one movement, not one the user has to split because the field or
+            // the transaction cannot hold the number.
+            val taskId = aTaskIn(PoolType.THREE_D, requiredQuantity = Int.MAX_VALUE)
+            progress.reportFailure(ids.newId(), taskId, Int.MAX_VALUE, clock)
+            assertEquals(Int.MAX_VALUE, taskOf(taskId).currentMissingQuantity)
+
+            assertTrue(progress.resolveShortage(ids.newId(), taskId, Int.MAX_VALUE, clock))
+
+            assertEquals(0, taskOf(taskId).currentMissingQuantity)
+            // Made good is a new movement, never the removal of an old one, so
+            // what went wrong is still on the record.
+            assertEquals(Int.MAX_VALUE.toLong(), progress.failureTotalOf(taskId))
+            assertEquals(Int.MAX_VALUE.toLong(), progress.resolvedTotalOf(taskId))
+            assertEquals(2, progress.progressEventsOfTask(taskId).size, "one movement was written as several")
+        }
+
+    @Test
+    fun `a large amount made good writes one event and no more`() =
+        runBlocking<Unit> {
+            val taskId = aTaskIn(PoolType.THREE_D, requiredQuantity = 2_000_000_000)
+            progress.reportFailure(ids.newId(), taskId, 2_000_000_000, clock)
+
+            assertTrue(progress.resolveShortage(ids.newId(), taskId, 1_999_999_999, clock))
+
+            assertEquals(1, taskOf(taskId).currentMissingQuantity)
+            assertEquals(
+                listOf(ProgressEventKind.FAILURE_REPORTED, ProgressEventKind.SHORTAGE_RESOLVED),
+                progress.progressEventsOfTask(taskId).map { it.kind },
+            )
+        }
+
+    @Test
+    fun `more than everything owed is still refused when everything is a great deal`() =
+        runBlocking<Unit> {
+            val taskId = aTaskIn(PoolType.THREE_D, requiredQuantity = Int.MAX_VALUE)
+            progress.reportFailure(ids.newId(), taskId, 1_000_000_000, clock)
+
+            assertEquals(
+                TaskProgressFailure.MORE_RESOLVED_THAN_OUTSTANDING,
+                assertFailsWith<TaskProgressException> {
+                    progress.resolveShortage(ids.newId(), taskId, Int.MAX_VALUE, clock)
+                }.failure,
+            )
+
+            assertEquals(1_000_000_000, taskOf(taskId).currentMissingQuantity, "a refused settling wrote anyway")
+            assertEquals(1, progress.progressEventsOfTask(taskId).size)
+        }
+
+    @Test
+    fun `the history holds amounts that together pass what one of them could be`() =
+        runBlocking<Unit> {
+            // PLAN 6.4 lets the failure total go past what the task needs: a
+            // piece can be spoiled again and again. The sum is therefore wider
+            // than any single report, and the counter saturates while it does not.
+            val taskId = aTaskIn(PoolType.THREE_D, requiredQuantity = 10)
+            repeat(3) { progress.reportFailure(ids.newId(), taskId, 2_000_000_000, clock) }
+
+            assertEquals(6_000_000_000L, progress.failureTotalOf(taskId))
+            assertEquals(10, taskOf(taskId).currentMissingQuantity, "the counter went past the total")
+            assertEquals(3, progress.progressEventsOfTask(taskId).size)
+        }
 }
 
 /** What the pipeline fixtures below count up to, unless one says otherwise. */

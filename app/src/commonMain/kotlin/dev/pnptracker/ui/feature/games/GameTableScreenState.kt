@@ -18,6 +18,8 @@ import dev.pnptracker.domain.tasks.CellTextSelection
 import dev.pnptracker.domain.tasks.TaskEditFailure
 import dev.pnptracker.domain.tasks.TaskFromTextFailure
 import dev.pnptracker.domain.tasks.TaskProgressFailure
+import dev.pnptracker.domain.tasks.countedQuantityOf
+import dev.pnptracker.domain.tasks.isUnusableQuantity
 import dev.pnptracker.ui.feature.colors.ColorComposer
 
 /** Where the table is. */
@@ -301,14 +303,11 @@ data class ShortageDraft(
     val isTouched: Boolean
         get() = quantity.isNotBlank() || note.isNotBlank() || cardReference.isNotBlank() || stage != null
 
-    /**
-     * The amount as a number, or null when what is typed is not one.
-     *
-     * Only digits count. A minus sign is not a number of pieces the user could
-     * have meant, and reading one would turn a slip into a movement backwards.
-     */
-    val countedQuantity: Int?
-        get() = quantity.takeIf { it.isNotEmpty() && it.all(Char::isDigit) }?.toIntOrNull()
+    /** The amount as a number, or null when what is typed is not one. */
+    val countedQuantity: Int? get() = countedQuantityOf(quantity)
+
+    /** True once the field holds something that is not an amount, so it can say so. */
+    val isQuantityUnusable: Boolean get() = isUnusableQuantity(quantity)
 
     /** The note with nothing in it treated as no note at all. */
     val writtenNote: String? get() = note.trim().takeIf { it.isNotEmpty() }

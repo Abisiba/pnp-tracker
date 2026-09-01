@@ -500,4 +500,116 @@ class PoolScreenModelTest {
         assertTrue(!PoolNavigationSummary.EMPTY.showsSpecial)
         assertEquals(0, PoolNavigationSummary.EMPTY.activeCountOf(PoolType.THREE_D))
     }
+
+    // ------------------------------------------- what a section adds up to
+
+    /** Two thirds of the way to what an Int holds, so two of them pass it. */
+    private val huge = 1_500_000_000
+
+    @Test
+    fun `a colour group counts past what one task could ever be`() {
+        val sections = threeD(task(quantity = huge, colors = listOf(red)), task(quantity = huge, colors = listOf(red)))
+
+        val group = sections.singleColorGroups.single()
+        // Added narrow this came back as -1294967296, which the screen would
+        // have shown as a group needing a negative number of pieces.
+        assertEquals(3_000_000_000L, group.requiredTotal)
+        assertEquals(2, group.taskCount, "counting the tasks is not counting the pieces")
+    }
+
+    @Test
+    fun `what a colour group still owes counts just as wide`() {
+        val sections =
+            threeD(
+                task(quantity = huge, missing = huge, colors = listOf(red)),
+                task(quantity = huge, missing = huge, colors = listOf(red)),
+            )
+
+        val group = sections.singleColorGroups.single()
+        assertEquals(3_000_000_000L, group.missingTotal)
+        assertTrue(group.missingTotal <= group.requiredTotal, "a group owed more than it needs")
+    }
+
+    @Test
+    fun `the section with no colour yet counts as wide as any group`() {
+        val sections = threeD(task(quantity = huge, missing = huge), task(quantity = huge, missing = huge))
+
+        assertEquals(3_000_000_000L, sections.awaitingColor.requiredTotal)
+        assertEquals(3_000_000_000L, sections.awaitingColor.missingTotal)
+        assertEquals(2, sections.awaitingColor.taskCount)
+    }
+
+    @Test
+    fun `forty two large tasks add up to what they really are`() {
+        val many = List(42) { task(quantity = huge, missing = huge, colors = listOf(red)) }
+        val sections = threeD(*many.toTypedArray())
+
+        val group = sections.singleColorGroups.single()
+        // Well past what an Int holds, and past what two of them make: a total
+        // that wrapped would land somewhere else entirely.
+        assertEquals(63_000_000_000L, group.requiredTotal)
+        assertEquals(63_000_000_000L, group.missingTotal)
+        assertTrue(group.requiredTotal > 0, "a large group came out negative")
+    }
+
+    @Test
+    fun `two totals that each fill an Int add up without wrapping`() {
+        val sections =
+            threeD(
+                task(quantity = Int.MAX_VALUE, missing = Int.MAX_VALUE, colors = listOf(red)),
+                task(quantity = Int.MAX_VALUE, missing = Int.MAX_VALUE, colors = listOf(red)),
+            )
+
+        val group = sections.singleColorGroups.single()
+        assertEquals(4_294_967_294L, group.requiredTotal)
+        assertEquals(4_294_967_294L, group.missingTotal)
+    }
+
+    @Test
+    fun `a task with no total of its own adds nothing rather than something`() {
+        val sections = threeD(task(quantity = null, colors = listOf(red)), task(quantity = huge, colors = listOf(red)))
+
+        assertEquals(huge.toLong(), sections.singleColorGroups.single().requiredTotal)
+    }
+
+    @Test
+    fun `what has gone wrong is counted apart from what is owed`() {
+        val sections =
+            threeD(
+                task(quantity = huge, missing = 4, failures = 3_000_000_000L, colors = listOf(red)),
+                task(quantity = huge, missing = 6, failures = 3_000_000_000L, colors = listOf(red)),
+            )
+
+        val group = sections.singleColorGroups.single()
+        // Three numbers about the same two tasks, and none of them is any of the
+        // others: what was asked for, what is still owed, what went wrong.
+        assertEquals(3_000_000_000L, group.requiredTotal)
+        assertEquals(10L, group.missingTotal)
+        assertEquals(6_000_000_000L, group.failureTotal)
+    }
+
+    @Test
+    fun `an empty section adds up to nothing at all`() {
+        val sections = threeD(task(quantity = huge, colors = listOf(red)))
+
+        assertEquals(0L, sections.awaitingColor.requiredTotal)
+        assertEquals(0L, sections.awaitingColor.missingTotal)
+        assertEquals(0L, sections.awaitingColor.failureTotal)
+        assertTrue(sections.awaitingColor.isEmpty)
+    }
+
+    @Test
+    fun `a multi colour task is counted once in each group it is shown in`() {
+        val sections =
+            threeD(
+                task(quantity = huge, colors = listOf(red, black)),
+                task(quantity = huge, colors = listOf(red, black)),
+            )
+
+        // The pool shows a two-colour task under both colours (PLAN 12.10), so
+        // each group's total is about the tasks that group lists.
+        sections.multicolorGroups.forEach { group ->
+            assertEquals(3_000_000_000L, group.requiredTotal, "${group.color.canonicalName} added up narrow")
+        }
+    }
 }

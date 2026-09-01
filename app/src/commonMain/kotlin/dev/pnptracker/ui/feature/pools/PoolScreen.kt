@@ -238,8 +238,8 @@ private fun SectionTitle(text: String) {
 private fun SectionHeading(
     title: String,
     taskCount: Int,
-    requiredTotal: Int,
-    missingTotal: Int,
+    requiredTotal: Long,
+    missingTotal: Long,
     failureTotal: Long,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -259,8 +259,8 @@ private fun SectionHeading(
 @Composable
 private fun Summary(
     taskCount: Int,
-    requiredTotal: Int,
-    missingTotal: Int,
+    requiredTotal: Long,
+    missingTotal: Long,
     failureTotal: Long,
 ) {
     Text(

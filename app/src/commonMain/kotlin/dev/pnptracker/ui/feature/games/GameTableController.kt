@@ -38,21 +38,12 @@ import dev.pnptracker.domain.tasks.TaskFromTextException
 import dev.pnptracker.domain.tasks.TaskFromTextFailure
 import dev.pnptracker.domain.tasks.TaskProgressFailure
 import dev.pnptracker.domain.tasks.onlyTrackingModeOf
+import dev.pnptracker.domain.tasks.quantityDigitsOf
 import dev.pnptracker.domain.tasks.splitForTaskName
 import dev.pnptracker.ui.feature.colors.ColorComposer
 import dev.pnptracker.ui.feature.colors.baseColorsIn
 import dev.pnptracker.ui.feature.tasks.TaskEditingHost
 import kotlinx.coroutines.flow.collect
-
-/**
- * The most digits a shortage amount may be typed in.
- *
- * Nine of them cannot reach the top of an `Int`, so the number the user typed is
- * always the number that arrives. What is too much for the task is still refused
- * by the transaction — this only keeps the field from collecting something that
- * could not be read back as what it says.
- */
-private const val SHORTAGE_DIGITS = 9
 
 /**
  * The game table: which games it shows, what is being written in it, and what is
@@ -1148,7 +1139,15 @@ class GameTableController(
     /** A fresh draft, with the name its movement will be written under already chosen. */
     private fun newDraft(): ShortageDraft = ShortageDraft(eventId = idGenerator.newId())
 
-    fun editShortageQuantity(text: String) = onDraft { it.copy(quantity = text.filter(Char::isDigit).take(SHORTAGE_DIGITS)) }
+    /**
+     * Types into the amount box.
+     *
+     * Digits only, and nothing cut short. The largest amount there is has ten
+     * digits, so a box that stopped at nine would refuse a number a task is
+     * allowed to owe — and would refuse it by dropping a digit rather than by
+     * saying so. What will not fit is kept and refused where it can be seen.
+     */
+    fun editShortageQuantity(text: String) = onDraft { it.copy(quantity = quantityDigitsOf(text)) }
 
     fun editShortageNote(text: String) = onDraft { it.copy(note = text) }
 

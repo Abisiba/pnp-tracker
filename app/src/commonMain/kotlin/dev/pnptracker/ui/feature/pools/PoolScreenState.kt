@@ -7,6 +7,8 @@ import dev.pnptracker.domain.pools.PoolModel
 import dev.pnptracker.domain.pools.PoolTask
 import dev.pnptracker.domain.tasks.StageSnapshot
 import dev.pnptracker.domain.tasks.TaskProgressFailure
+import dev.pnptracker.domain.tasks.countedQuantityOf
+import dev.pnptracker.domain.tasks.isUnusableQuantity
 import dev.pnptracker.ui.feature.games.TaskEditor
 
 /** Where a pool is. */
@@ -139,12 +141,7 @@ sealed interface PoolWork {
 
         /** What each step would stand at, or null when one of them is not a count. */
         val targets: Map<ProductionStage, Int>?
-            get() =
-                steps
-                    .associateWith { stage ->
-                        draft[stage]?.takeIf { it.isNotEmpty() && it.all(Char::isDigit) }?.toIntOrNull()
-                            ?: return null
-                    }
+            get() = steps.associateWith { stage -> countedQuantityOf(draft[stage].orEmpty()) ?: return null }
 
         /**
          * The first step whose box does not hold a usable count, for the keyboard.
@@ -155,18 +152,10 @@ sealed interface PoolWork {
          * one refusal the user is least likely to have expected.
          */
         val firstUnusableStage: ProductionStage?
-            get() =
-                steps.firstOrNull { stage ->
-                    val typed = draft[stage]
-                    typed.isNullOrEmpty() || !typed.all(Char::isDigit) || typed.toIntOrNull() == null
-                }
+            get() = steps.firstOrNull { stage -> countedQuantityOf(draft[stage].orEmpty()) == null }
 
         /** Whether one box holds something that is not a count this step could stand at. */
-        fun isUnusable(stage: ProductionStage): Boolean {
-            val typed = draft[stage] ?: return false
-            if (typed.isEmpty()) return false
-            return !typed.all(Char::isDigit) || typed.toIntOrNull() == null
-        }
+        fun isUnusable(stage: ProductionStage): Boolean = isUnusableQuantity(draft[stage].orEmpty())
 
         /**
          * Whether the draft as it stands describes a pipeline that cannot have

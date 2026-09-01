@@ -67,8 +67,14 @@ data class PoolColorGroup(
     val tasks: List<PoolTask>,
 ) {
     val taskCount: Int get() = tasks.size
-    val requiredTotal: Int get() = tasks.sumOf { it.requiredQuantity ?: 0 }
-    val missingTotal: Int get() = tasks.sumOf { it.currentMissingQuantity }
+
+    // Counted wide, and wide from the first task rather than at the end. One
+    // task's total is an Int and the schema keeps it one, but a group holds as
+    // many tasks as the user cares to put in it, and two large ones already pass
+    // what an Int holds: adding them up narrow and widening the answer showed a
+    // group of three billion as a negative number.
+    val requiredTotal: Long get() = tasks.sumOf { (it.requiredQuantity ?: 0).toLong() }
+    val missingTotal: Long get() = tasks.sumOf { it.currentMissingQuantity.toLong() }
     val failureTotal: Long get() = tasks.sumOf { it.failureTotal }
 }
 
@@ -84,8 +90,12 @@ data class PoolAwaitingColorSection(
     val tasks: List<PoolTask>,
 ) {
     val taskCount: Int get() = tasks.size
-    val requiredTotal: Int get() = tasks.sumOf { it.requiredQuantity ?: 0 }
-    val missingTotal: Int get() = tasks.sumOf { it.currentMissingQuantity }
+
+    // Wide for the same reason a colour group's totals are: this section holds
+    // however many tasks have no colour, and what they add up to is not bounded
+    // by what one of them may be.
+    val requiredTotal: Long get() = tasks.sumOf { (it.requiredQuantity ?: 0).toLong() }
+    val missingTotal: Long get() = tasks.sumOf { it.currentMissingQuantity.toLong() }
     val failureTotal: Long get() = tasks.sumOf { it.failureTotal }
     val isEmpty: Boolean get() = tasks.isEmpty()
 }

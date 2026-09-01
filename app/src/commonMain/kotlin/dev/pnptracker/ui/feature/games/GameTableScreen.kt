@@ -1614,6 +1614,10 @@ private fun ShortagePanel(
         value = draft.quantity,
         onValueChange = controller::editShortageQuantity,
         label = { Text(text = quantityLabel) },
+        // Said as it is typed rather than only when the save comes back: a run
+        // of digits too long to be an amount is refused where it was written,
+        // and nothing of it is thrown away in the meantime.
+        isError = draft.isQuantityUnusable,
         singleLine = true,
         modifier =
             Modifier

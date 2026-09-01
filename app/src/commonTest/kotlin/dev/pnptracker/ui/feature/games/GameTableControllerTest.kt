@@ -4429,4 +4429,173 @@ class GameTableControllerTest {
             assertNull(controller.busyTaskId, "a tick was left waiting for a row that will never come")
             job.cancel()
         }
+
+    // ------------------------------------ the whole range an amount may be
+
+    @Test
+    fun `the amount field holds the largest amount there is`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.beginReportShortage()
+
+            // Ten digits. The field used to stop at nine, so this arrived as
+            // 214748364 — a tenth of what was typed, written without a word.
+            controller.editShortageQuantity(Int.MAX_VALUE.toString())
+
+            assertEquals("2147483647", reportingForm(controller).draft.quantity)
+            assertFalse(reportingForm(controller).draft.isQuantityUnusable)
+            controller.saveShortage()
+            assertEquals(Int.MAX_VALUE, progress.reported.single().quantity)
+            job.cancel()
+        }
+
+    @Test
+    fun `an amount that will not fit stays where it was typed and is refused`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.beginReportShortage()
+            val tooLarge =
+                Int.MAX_VALUE
+                    .toLong()
+                    .plus(1)
+                    .toString()
+
+            controller.editShortageQuantity(tooLarge)
+
+            assertEquals(tooLarge, reportingForm(controller).draft.quantity, "what was typed was trimmed")
+            assertTrue(reportingForm(controller).draft.isQuantityUnusable, "the box did not say it will not do")
+
+            controller.saveShortage()
+
+            assertTrue(progress.reported.isEmpty(), "a number that is not an amount reached the database")
+            assertEquals(TaskProgressFailure.INVALID_QUANTITY, reportingForm(controller).failure)
+            assertEquals(tooLarge, reportingForm(controller).draft.quantity, "the refusal threw the draft away")
+            job.cancel()
+        }
+
+    @Test
+    fun `hundreds of digits are refused rather than thrown over`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.beginReportShortage()
+            val absurd = "9".repeat(400)
+
+            controller.editShortageQuantity(absurd)
+            controller.saveShortage()
+
+            assertEquals(absurd, reportingForm(controller).draft.quantity)
+            assertEquals(TaskProgressFailure.INVALID_QUANTITY, reportingForm(controller).failure)
+            assertTrue(progress.reported.isEmpty())
+            job.cancel()
+        }
+
+    @Test
+    fun `nothing at all is refused where the user can see it`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.beginReportShortage()
+
+            // Nothing typed, and then nothing meaning nothing: neither is a
+            // movement, and neither may pass silently.
+            controller.saveShortage()
+            assertEquals(TaskProgressFailure.INVALID_QUANTITY, reportingForm(controller).failure)
+
+            controller.editShortageQuantity("0")
+            controller.saveShortage()
+            assertEquals(TaskProgressFailure.INVALID_QUANTITY, reportingForm(controller).failure)
+            assertEquals("0", reportingForm(controller).draft.quantity, "the zero the user typed vanished")
+            assertTrue(progress.reported.isEmpty())
+            job.cancel()
+        }
+
+    @Test
+    fun `zeros written in front of an amount neither lose it nor change it`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.beginReportShortage()
+
+            controller.editShortageQuantity("0042")
+            controller.saveShortage()
+
+            assertEquals(42, progress.reported.single().quantity)
+            job.cancel()
+        }
+
+    @Test
+    fun `an amount refused for its size keeps the name the movement would be written under`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.beginReportShortage()
+            val named = reportingForm(controller).draft.eventId
+
+            controller.editShortageQuantity(
+                Int.MAX_VALUE
+                    .toLong()
+                    .plus(1)
+                    .toString(),
+            )
+            controller.saveShortage()
+            assertEquals(named, reportingForm(controller).draft.eventId, "a refusal renamed the movement")
+
+            // Corrected and sent: still the same movement, because it is still
+            // the same form and the user still means one report.
+            controller.editShortageQuantity(Int.MAX_VALUE.toString())
+            controller.saveShortage()
+
+            assertEquals(named, progress.reported.single().eventId)
+            job.cancel()
+        }
+
+    @Test
+    fun `a large amount sent twice in a row is sent once`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture()
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.beginReportShortage()
+            controller.editShortageQuantity(Int.MAX_VALUE.toString())
+            progress.whileWorking = { controller.saveShortage() }
+
+            controller.saveShortage()
+
+            assertEquals(1, progress.reported.size, "one report was sent twice")
+            job.cancel()
+        }
+
+    @Test
+    fun `the whole of what a task owes can be made good in one go`() =
+        runBlocking<Unit> {
+            val fixture = progressFixture(missing = 3)
+            val progress = FakeTaskProgress()
+            val (controller, job) = watching(fixture, progress)
+            controller.openTaskMenu(fixture.gameId, CellColumnType.THREE_D, fixture.taskId)
+            controller.beginResolveShortage()
+
+            controller.editShortageQuantity(Int.MAX_VALUE.toString())
+
+            assertEquals("2147483647", resolvingForm(controller).draft.quantity)
+            controller.saveShortage()
+
+            assertEquals(Int.MAX_VALUE, progress.resolved.single().quantity)
+            job.cancel()
+        }
 }

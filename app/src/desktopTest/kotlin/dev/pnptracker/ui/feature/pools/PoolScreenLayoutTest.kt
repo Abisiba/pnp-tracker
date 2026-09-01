@@ -17,6 +17,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -497,8 +498,25 @@ class PoolScreenLayoutTest {
         // be one this screen invented, and the form that sets the total has
         // none: it takes what is typed and says whether it is a count.
         assertTrue("take(" !in controller.substringAfter("fun editStageDraft("), "a count is cut short as it is typed")
-        assertTrue("STAGE_DIGITS" !in controller, "the panel keeps a length limit of its own")
         assertTrue("isError = isUnusable" in screen, "a box holding no count does not say so")
+        // One account of what a count is, shared with every other field that
+        // asks for one. Two constants and two parsers is how the limits came to
+        // disagree with each other and with what a count can be.
+        assertTrue("quantityDigitsOf" in controller, "the panel reads what was typed its own way")
+        listOf("STAGE_DIGITS", "SHORTAGE_DIGITS").forEach {
+            assertTrue(it !in controller, "the panel keeps $it, a length limit of its own")
+        }
+    }
+
+    @Test
+    fun `no field anywhere keeps a length limit of its own`() {
+        val quantities = read("src/commonMain/kotlin/dev/pnptracker/domain/tasks/QuantityText.kt")
+
+        // The largest amount there is has ten digits; the limits that used to
+        // stand here were nine, and they cut what was typed without a word.
+        assertTrue("take(" !in quantities, "the one account of an amount cuts what was typed short")
+        assertTrue("toIntOrNull" in quantities, "amounts are parsed a way that can throw")
+        assertTrue("toInt()" !in quantities, "amounts are parsed a way that can throw")
     }
 
     @Test
@@ -539,5 +557,43 @@ class PoolScreenLayoutTest {
         listOf("setManuallyCompleted", "setGameCompleted", "reportFailure", "resolveShortage").forEach {
             assertTrue(it !in screen && it !in controller, "the pool offers $it, which belongs to a later step")
         }
+    }
+
+    @Test
+    fun `a total past what an Int holds is written out in full`() {
+        // Long is handed to the catalogue as text, so what appears is the exact
+        // number: no %d against a platform type, no rounding, no exponent.
+        listOf(2_147_483_647L, 3_000_000_000L, 4_294_967_294L, 63_000_000_000L).forEach { total ->
+            val said = textOf(Strings.Pool.groupSummary, "42", total.toString())
+
+            assertTrue(said.contains(total.toString()), "$total was not written out: $said")
+            assertFalse(said.contains("E"), "$total was written in exponents: $said")
+            assertFalse(said.contains("-"), "$total came out negative: $said")
+        }
+    }
+
+    @Test
+    fun `what a section owes and what went wrong are written out in full too`() {
+        val owed = textOf(Strings.Pool.groupMissing, 3_000_000_000L.toString())
+        val wrong = textOf(Strings.Pool.groupFailures, 6_000_000_000L.toString())
+
+        assertTrue(owed.contains("3000000000"), "a large debt was not written out: $owed")
+        assertTrue(wrong.contains("6000000000"), "a large history was not written out: $wrong")
+    }
+
+    @Test
+    fun `the pool summary counts pieces wide and tasks narrow`() {
+        val model = read("src/commonMain/kotlin/dev/pnptracker/domain/pools/PoolScreenModel.kt")
+
+        // How many tasks there are is bounded by how many rows a person can
+        // make; how many pieces they add up to is not.
+        assertTrue("val taskCount: Int get() = tasks.size" in model, "the tasks are counted wide for no reason")
+        listOf("requiredTotal", "missingTotal").forEach {
+            assertTrue("val $it: Long" in model, "$it is still counted narrow")
+            assertTrue("val $it: Int" !in model, "$it is still counted narrow somewhere")
+        }
+        // Wide from the first task rather than at the end: adding narrow and
+        // widening the answer is how three billion came out negative.
+        assertTrue(".toLong() }" in model, "the sums are widened after the fact rather than taken wide")
     }
 }
