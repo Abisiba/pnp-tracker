@@ -232,14 +232,47 @@ class PoolScreenLayoutTest {
 
     @Test
     fun `the stage details are a control of their own with a name`() {
-        val badge = screen.substringAfter("private fun StageBadge(").substringBefore("/**\n * Everything a reader")
+        val badge = screen.substringAfter("private fun StageBadge(").substringBefore("/**\n * The three counters")
 
         assertTrue("contentDescription = toggle" in badge, "the disclosure has no accessible name")
         assertTrue("controller.toggleStageDetails" in badge)
-        // Reading only in this step: nothing here writes a counter.
-        listOf("completePrimaryBatch", "reportFailure", "Checkbox", "onValueChange").forEach {
+        assertTrue("controller.beginStageEdit(card)" in badge, "the counters cannot be opened to be changed")
+        // Everything below is a later step's and would be a dead control here.
+        listOf("completePrimaryBatch", "reportFailure", "setManuallyCompleted", "Checkbox").forEach {
             assertTrue(it !in badge, "the badge offers $it, which belongs to a later step")
         }
+    }
+
+    @Test
+    fun `the pipeline is saved as one and never a step at a time`() {
+        val panel = screen.substringAfter("private fun StagePanel(").substringBefore("/** One step: what it is called")
+        val row = screen.substringAfter("private fun StageRow(").substringBefore("/** What a refused pipeline")
+
+        assertTrue("controller.saveStages()" in panel, "the panel does not send the pipeline")
+        assertTrue("Strings.Pool.stageSave" in panel && "Strings.Pool.stageCancel" in panel)
+        assertTrue("isCtrlPressed" in panel, "Ctrl+Enter does not reach the save")
+        // The panel has the keyboard while it is open, so Escape has to be
+        // answered here or it reaches nothing at all.
+        assertTrue("Key.Escape" in panel, "Escape does not close the panel")
+        assertTrue("controller.closeInnermost()" in panel, "Escape closes something other than the panel")
+        // The arrows move the draft. A button that wrote as it was pressed would
+        // make three saves out of one change of mind.
+        assertTrue("controller.stepStageDraft(stage, -1)" in row && "controller.stepStageDraft(stage, 1)" in row)
+        assertTrue("saveStages" !in row, "an arrow writes straight to the database")
+        assertTrue("setStageQuantity(" !in screen, "the screen saves one step at a time")
+    }
+
+    @Test
+    fun `every step of the pipeline is named to a reader and to the keyboard`() {
+        val row = screen.substringAfter("private fun StageRow(").substringBefore("/** What a refused pipeline")
+
+        assertTrue("Strings.Pool.stageDecrease" in row && "Strings.Pool.stageIncrease" in row, "an arrow has no name")
+        assertTrue("Strings.Pool.stageField" in row, "the box does not say what it is or what it counts up to")
+        assertEquals(
+            3,
+            Regex("""contentDescription = (down|up|spoken)""").findAll(row).count(),
+            "the two arrows and the box are not each named exactly once",
+        )
     }
 
     @Test
@@ -311,7 +344,16 @@ class PoolScreenLayoutTest {
             "import dev.pnptracker.ui.feature.tasks.TaskEditPanel" in screen,
             "the form is not the shared one",
         )
-        assertTrue("OutlinedTextField(" !in screen, "the pool grew a field of its own beside the shared form")
+        // The pool has fields of its own only inside the pipeline panel, where
+        // they count pieces. A field anywhere else would be a second place to
+        // type what the shared form already asks for.
+        val row = screen.substringAfter("private fun StageRow(").substringBefore("/** What a refused pipeline")
+        assertEquals(
+            1,
+            Regex("""OutlinedTextField\(""").findAll(screen).count(),
+            "the pool grew a field of its own beside the shared form",
+        )
+        assertTrue("OutlinedTextField(" in row, "the only field the pool has is not the step counter")
     }
 
     @Test
@@ -366,5 +408,46 @@ class PoolScreenLayoutTest {
             "poolControllers.of(" in scaffold,
             "the sidebar builds a pool controller rather than being handed one",
         )
+    }
+
+    @Test
+    fun `only a pool that runs through steps is offered any`() {
+        // The badge is drawn from the task's own stage rows, which a 3D or
+        // special task simply has none of, so there is no pool named here to
+        // fall out of step with the template the rows are built from.
+        assertTrue("if (task.stages.isNotEmpty())" in screen, "the badge is offered without asking for steps")
+        val badge = screen.substringAfter("private fun StageBadge(").substringBefore("/**\n * The three counters")
+        listOf("PoolType.THREE_D", "PoolType.SPECIAL", "PoolType.CARD", "PoolType.BOARD").forEach {
+            assertTrue(it !in badge, "the badge names $it instead of reading the task's own steps")
+        }
+    }
+
+    @Test
+    fun `the steps are drawn in the order they are worked in`() {
+        // From the rows, which the query returns by `order_index`, rather than
+        // from a list written out again here that could disagree with them.
+        assertTrue(
+            "val steps: List<ProductionStage> get() = task.stages.map { it.stage }" in state,
+            "the panel decides the order of the steps for itself",
+        )
+    }
+
+    @Test
+    fun `the badge says which step is next, how far it has got and what is left`() {
+        val badge = screen.substringAfter("private fun StageBadge(").substringBefore("/**\n * The three counters")
+
+        assertTrue("Strings.Pool.stageBadgeOf" in badge, "the badge does not say how far the step has got")
+        assertTrue("task.firstUnfinishedStage" in badge, "the badge does not name the step that is next")
+        assertTrue("Strings.Pool.stageDone" in badge, "a finished pipeline is not said to be finished")
+        assertTrue("Strings.Pool.stageBadgeUnknown" in badge, "a task with no total is shown a count anyway")
+        assertTrue("Strings.Pool.stageEditTask" in badge, "a task with no total is not sent anywhere to be given one")
+        assertTrue("(total - at)" in badge, "the badge does not say what is left of the step")
+    }
+
+    @Test
+    fun `the pool still offers nothing that belongs to a later step`() {
+        listOf("setManuallyCompleted", "setGameCompleted", "reportFailure", "resolveShortage").forEach {
+            assertTrue(it !in screen && it !in controller, "the pool offers $it, which belongs to a later step")
+        }
     }
 }

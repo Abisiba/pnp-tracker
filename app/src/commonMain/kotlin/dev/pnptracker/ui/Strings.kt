@@ -295,11 +295,30 @@ import dev.pnptracker.resources.pool_special_counted
 import dev.pnptracker.resources.pool_special_game
 import dev.pnptracker.resources.pool_special_remaining
 import dev.pnptracker.resources.pool_stage_badge
+import dev.pnptracker.resources.pool_stage_badge_of
+import dev.pnptracker.resources.pool_stage_badge_unknown
+import dev.pnptracker.resources.pool_stage_broken
+import dev.pnptracker.resources.pool_stage_cancel
 import dev.pnptracker.resources.pool_stage_count
 import dev.pnptracker.resources.pool_stage_count_of
+import dev.pnptracker.resources.pool_stage_decrease
 import dev.pnptracker.resources.pool_stage_details_close
 import dev.pnptracker.resources.pool_stage_details_open
 import dev.pnptracker.resources.pool_stage_done
+import dev.pnptracker.resources.pool_stage_edit
+import dev.pnptracker.resources.pool_stage_edit_task
+import dev.pnptracker.resources.pool_stage_field
+import dev.pnptracker.resources.pool_stage_hint
+import dev.pnptracker.resources.pool_stage_increase
+import dev.pnptracker.resources.pool_stage_invalid
+import dev.pnptracker.resources.pool_stage_no_total
+import dev.pnptracker.resources.pool_stage_of_total
+import dev.pnptracker.resources.pool_stage_order
+import dev.pnptracker.resources.pool_stage_over_total
+import dev.pnptracker.resources.pool_stage_panel_title
+import dev.pnptracker.resources.pool_stage_save
+import dev.pnptracker.resources.pool_stage_stale
+import dev.pnptracker.resources.pool_stage_unavailable
 import dev.pnptracker.resources.pool_task_color_current
 import dev.pnptracker.resources.pool_task_colors
 import dev.pnptracker.resources.pool_task_failures
@@ -693,6 +712,25 @@ object Strings {
         val stageDetailsClose = Res.string.pool_stage_details_close
         val stageCount = Res.string.pool_stage_count
         val stageCountOf = Res.string.pool_stage_count_of
+        val stageBadgeOf = Res.string.pool_stage_badge_of
+        val stageBadgeUnknown = Res.string.pool_stage_badge_unknown
+        val stageEdit = Res.string.pool_stage_edit
+        val stageEditTask = Res.string.pool_stage_edit_task
+        val stagePanelTitle = Res.string.pool_stage_panel_title
+        val stageField = Res.string.pool_stage_field
+        val stageDecrease = Res.string.pool_stage_decrease
+        val stageIncrease = Res.string.pool_stage_increase
+        val stageOfTotal = Res.string.pool_stage_of_total
+        val stageSave = Res.string.pool_stage_save
+        val stageCancel = Res.string.pool_stage_cancel
+        val stageHint = Res.string.pool_stage_hint
+        val stageInvalid = Res.string.pool_stage_invalid
+        val stageOverTotal = Res.string.pool_stage_over_total
+        val stageOrder = Res.string.pool_stage_order
+        val stageStale = Res.string.pool_stage_stale
+        val stageUnavailable = Res.string.pool_stage_unavailable
+        val stageNoTotal = Res.string.pool_stage_no_total
+        val stageBroken = Res.string.pool_stage_broken
         val checklist = Res.string.pool_special_checklist
         val counted = Res.string.pool_special_counted
         val remaining = Res.string.pool_special_remaining

@@ -16,11 +16,13 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,11 +49,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.pools.PoolColor
 import dev.pnptracker.domain.pools.PoolColorGroup
 import dev.pnptracker.domain.pools.PoolModel
 import dev.pnptracker.domain.pools.PoolTask
+import dev.pnptracker.domain.tasks.TaskProgressFailure
 import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.feature.games.AnchoredAboveWord
 import dev.pnptracker.ui.feature.tasks.NoteLine
@@ -349,7 +353,9 @@ private fun TaskCard(
     val spoken = spokenTaskOf(task, card)
     val focus = remember { FocusRequester() }
     val state = controller.state
-    val isOpenHere = state.work != null && state.focusCard == card
+    // The pipeline panel is drawn inside the card, under the badge it belongs
+    // to, so it is not one of the things the popover offers.
+    val isOpenHere = state.work != null && state.work !is PoolWork.EditingStages && state.focusCard == card
     // The keyboard comes back to the card the surface was opened from, not to
     // the first card that names the same task: a multi-colour task is on several
     // of them and the user only pressed one.
@@ -412,7 +418,7 @@ private fun TaskCard(
                 }
                 TaskFacts(task)
                 if (task.stages.isNotEmpty()) {
-                    StageBadge(task = task, controller = controller)
+                    StageBadge(task = task, card = card, controller = controller)
                 }
                 if (task.trackingMode == TrackingMode.CHECKLIST || task.trackingMode == TrackingMode.COUNTED) {
                     SpecialFacts(task)
@@ -527,13 +533,20 @@ private fun SpecialFacts(task: PoolTask) {
     }
 }
 
+/** How wide a step's name is given, so the three boxes line up under each other. */
+private val STAGE_LABEL_WIDTH = 96.dp
+
+/** Room for a count of pieces, not for a sentence. */
+private val STAGE_FIELD_WIDTH = 84.dp
+
 /**
- * The stage the work has reached, and its counters when asked for.
+ * The stage the work has reached, its counters when asked for, and the panel
+ * that changes them (PLAN 7.3, 12.11).
  *
- * PLAN 12.11 puts the first unfinished stage on the badge, or `Tamamlandı` when
- * there is none left. Expanding it shows what each stage stands at and nothing
- * more: changing a counter belongs to a later slice, so there is no control here
- * that would write one, and opening this asks the database nothing.
+ * The badge names the first step that is not finished and how far it has got,
+ * because that is the one thing the user is about to work on. When they all are,
+ * it says so instead. A task nobody has given a total to has nothing for a step
+ * to count up to (PLAN 7.2), so it is told that rather than shown `0/0`.
  *
  * Its own named control rather than part of the card, so the keyboard reaches
  * the task and the detail separately instead of one swallowing the other.
@@ -541,13 +554,28 @@ private fun SpecialFacts(task: PoolTask) {
 @Composable
 private fun StageBadge(
     task: PoolTask,
+    card: PoolCardKey,
     controller: PoolController,
 ) {
     val showing = controller.isShowingStages(task.taskId)
+    val editing = controller.state.work as? PoolWork.EditingStages
+    val editingHere = editing?.task?.taskId == task.taskId
+    val total = task.requiredQuantity
     val label =
-        task.firstUnfinishedStage
-            ?.let { stringResource(Strings.Pool.stageBadge, stringResource(stageNameOf(it))) }
-            ?: stringResource(Strings.Pool.stageDone)
+        when {
+            total == null -> stringResource(Strings.Pool.stageBadgeUnknown)
+            else ->
+                task.firstUnfinishedStage?.let { stage ->
+                    val at = task.stages.firstOrNull { it.stage == stage }?.completedQuantity ?: 0
+                    stringResource(
+                        Strings.Pool.stageBadgeOf,
+                        stringResource(stageNameOf(stage)),
+                        at.toString(),
+                        total.toString(),
+                        (total - at).toString(),
+                    )
+                } ?: stringResource(Strings.Pool.stageDone)
+        }
     val toggle =
         stringResource(
             if (showing) Strings.Pool.stageDetailsClose else Strings.Pool.stageDetailsOpen,
@@ -561,30 +589,217 @@ private fun StageBadge(
         ) {
             Text(text = label, style = MaterialTheme.typography.labelMedium)
         }
-        if (showing) {
-            task.stages.forEach { stage ->
-                Text(
-                    text =
-                        task.requiredQuantity?.let {
-                            stringResource(
-                                Strings.Pool.stageCountOf,
-                                stringResource(stageNameOf(stage.stage)),
-                                stage.completedQuantity.toString(),
-                                it.toString(),
-                            )
-                        } ?: stringResource(
-                            Strings.Pool.stageCount,
+        if (!showing) return@Column
+        if (editingHere && editing != null) {
+            StagePanel(open = editing, controller = controller)
+            return@Column
+        }
+        task.stages.forEach { stage ->
+            Text(
+                text =
+                    total?.let {
+                        stringResource(
+                            Strings.Pool.stageCountOf,
                             stringResource(stageNameOf(stage.stage)),
                             stage.completedQuantity.toString(),
-                        ),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 8.dp),
-                )
+                            it.toString(),
+                        )
+                    } ?: stringResource(
+                        Strings.Pool.stageCount,
+                        stringResource(stageNameOf(stage.stage)),
+                        stage.completedQuantity.toString(),
+                    ),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+        // A task with no total is sent to the form that asks for one rather than
+        // being offered counters with nothing to count up to (PLAN 7.2). It is
+        // the same form the menu opens; there is not a second one.
+        if (total == null) {
+            TextButton(
+                onClick = { controller.beginTaskEditFor(card) },
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                modifier = Modifier.focusOutline(CardShape),
+            ) {
+                Text(text = stringResource(Strings.Pool.stageEditTask), style = MaterialTheme.typography.labelMedium)
+            }
+        } else {
+            TextButton(
+                onClick = { controller.beginStageEdit(card) },
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                modifier = Modifier.focusOutline(CardShape),
+            ) {
+                Text(text = stringResource(Strings.Pool.stageEdit), style = MaterialTheme.typography.labelMedium)
             }
         }
     }
 }
+
+/**
+ * The three counters of one pipeline, open to be changed together.
+ *
+ * Together, because PLAN 7.3 puts them in front of the user together and because
+ * a state they describe as a whole may pass through orderings the rule forbids
+ * on the way to being typed. Nothing is written until Kaydet: the arrows move
+ * the draft, not the database.
+ */
+@Composable
+private fun StagePanel(
+    open: PoolWork.EditingStages,
+    controller: PoolController,
+) {
+    val scope = rememberCoroutineScope()
+    val total = open.task.requiredQuantity ?: return
+    val first = remember { FocusRequester() }
+    // The keyboard lands on the first box, and is called back to whichever one
+    // the refusal was about when a save will not do.
+    LaunchedEffect(open.invalidStage) { runCatching { first.requestFocus() } }
+    val save: () -> Unit = { scope.launch { controller.saveStages() } }
+    Column(
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier =
+            Modifier
+                .padding(start = 8.dp, top = 4.dp)
+                .onPreviewKeyEvent { event ->
+                    when {
+                        event.type != KeyEventType.KeyDown -> false
+                        event.key == Key.Enter && event.isCtrlPressed -> {
+                            save()
+                            true
+                        }
+
+                        // Only this panel: the card underneath stays expanded,
+                        // so leaving the counters does not also fold away what
+                        // the user opened to look at.
+                        event.key == Key.Escape -> {
+                            controller.closeInnermost()
+                            true
+                        }
+
+                        else -> false
+                    }
+                },
+    ) {
+        Text(
+            text = stringResource(Strings.Pool.stagePanelTitle),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        // The one box the keyboard is owed: the step a refusal named, or the
+        // first when there is none. Only that row carries the requester, so
+        // there is never a second claim on the focus.
+        val wanted = open.invalidStage ?: open.steps.firstOrNull()
+        open.steps.forEach { stage ->
+            StageRow(
+                stage = stage,
+                typed = open.draft[stage].orEmpty(),
+                total = total,
+                controller = controller,
+                enabled = !open.isSaving,
+                focus = first.takeIf { stage == wanted },
+            )
+        }
+        open.failure?.let { failure ->
+            Text(
+                text = stringResource(stageMessageOf(failure)),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = save, enabled = !open.isSaving, modifier = Modifier.focusOutline(CardShape)) {
+                Text(text = stringResource(Strings.Pool.stageSave))
+            }
+            TextButton(
+                onClick = controller::closeInnermost,
+                enabled = !open.isSaving,
+                modifier = Modifier.focusOutline(CardShape),
+            ) {
+                Text(text = stringResource(Strings.Pool.stageCancel))
+            }
+        }
+        Text(
+            text = stringResource(Strings.Pool.stageHint),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** One step: what it is called, what it stands at, and the two ways to move it. */
+@Composable
+private fun StageRow(
+    stage: ProductionStage,
+    typed: String,
+    total: Int,
+    controller: PoolController,
+    enabled: Boolean,
+    focus: FocusRequester?,
+) {
+    val name = stringResource(stageNameOf(stage))
+    val down = stringResource(Strings.Pool.stageDecrease, name)
+    val up = stringResource(Strings.Pool.stageIncrease, name)
+    // The whole row said once: the step, where it stands and what it counts up
+    // to. Without it a reader hears three unnamed numbers and two arrows.
+    val spoken = stringResource(Strings.Pool.stageField, name, typed.ifEmpty { "0" }, total.toString())
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = name,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.width(STAGE_LABEL_WIDTH),
+        )
+        TextButton(
+            onClick = { controller.stepStageDraft(stage, -1) },
+            enabled = enabled && controller.stageStepAllowed(stage, -1),
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+            modifier = Modifier.focusOutline(CardShape).semantics { contentDescription = down },
+        ) {
+            Text(text = "−", style = MaterialTheme.typography.labelLarge)
+        }
+        OutlinedTextField(
+            value = typed,
+            onValueChange = { typedNow -> controller.editStageDraft(stage, typedNow) },
+            enabled = enabled,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.labelMedium,
+            modifier =
+                Modifier
+                    .width(STAGE_FIELD_WIDTH)
+                    .then(focus?.let { Modifier.focusRequester(it) } ?: Modifier)
+                    .semantics { contentDescription = spoken },
+        )
+        TextButton(
+            onClick = { controller.stepStageDraft(stage, 1) },
+            enabled = enabled && controller.stageStepAllowed(stage, 1),
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+            modifier = Modifier.focusOutline(CardShape).semantics { contentDescription = up },
+        ) {
+            Text(text = "+", style = MaterialTheme.typography.labelLarge)
+        }
+        Text(
+            text = stringResource(Strings.Pool.stageOfTotal, total.toString()),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** What a refused pipeline is told to the user, in their own words. */
+private fun stageMessageOf(failure: TaskProgressFailure) =
+    when (failure) {
+        TaskProgressFailure.INVALID_QUANTITY -> Strings.Pool.stageInvalid
+        TaskProgressFailure.STAGE_QUANTITY_EXCEEDS_REQUIRED -> Strings.Pool.stageOverTotal
+        TaskProgressFailure.STAGE_ORDER_VIOLATED -> Strings.Pool.stageOrder
+        TaskProgressFailure.STALE_STAGE_PROGRESS -> Strings.Pool.stageStale
+        TaskProgressFailure.REQUIRED_QUANTITY_UNKNOWN -> Strings.Pool.stageNoTotal
+        TaskProgressFailure.STAGE_PIPELINE_BROKEN -> Strings.Pool.stageBroken
+        else -> Strings.Pool.stageUnavailable
+    }
 
 /**
  * Everything a reader hears about one card, once.
@@ -688,6 +903,9 @@ private fun TaskPopover(controller: PoolController) {
                         )
 
                     is PoolWork.ConfirmingConvert -> ConvertConfirmation(work, controller)
+                    // Drawn in the card rather than over it; the popover is
+                    // never opened on it.
+                    is PoolWork.EditingStages -> Unit
                 }
             }
         }

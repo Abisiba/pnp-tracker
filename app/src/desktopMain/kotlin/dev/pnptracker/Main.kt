@@ -67,6 +67,10 @@ fun main() {
     // One catalogue behind both the colour section and the task panel, so a
     // colour the user adds is offered by the panel without a second read.
     val colorCatalogue = ColorCatalogueStore(database.colorDao())
+    // One progress store behind the table and the pools alike: PLAN 12.10 has a
+    // write started from a pool happen on the very same task, through the very
+    // same transaction, as one started from the table.
+    val taskProgress = TaskProgressStore(database.taskProgressDao())
     val gameTableController =
         GameTableController(
             table = GameTableStore(database.gameDao(), database.gameCellDao(), database.gameTableDao()),
@@ -75,7 +79,7 @@ fun main() {
             colors = colorCatalogue,
             taskCreation = TaskFromTextStore(database.taskFromTextDao()),
             taskEditing = TaskEditStore(database.taskEditDao()),
-            taskProgress = TaskProgressStore(database.taskProgressDao()),
+            taskProgress = taskProgress,
         )
     val colorCatalogueController = ColorCatalogueController(colorCatalogue)
     // The pools read the same tasks the table reads and write through the same
@@ -86,6 +90,7 @@ fun main() {
             pools = PoolStore(database.poolDao()),
             colors = colorCatalogue,
             taskEditing = TaskEditStore(database.taskEditDao()),
+            taskProgress = taskProgress,
         )
 
     application {

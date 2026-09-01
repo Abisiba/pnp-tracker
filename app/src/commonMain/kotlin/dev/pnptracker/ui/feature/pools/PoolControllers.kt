@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import dev.pnptracker.data.repository.ColorCatalogue
 import dev.pnptracker.data.repository.PoolSource
 import dev.pnptracker.data.repository.TaskEditing
+import dev.pnptracker.data.repository.TaskProgressing
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.pools.PoolNavigationSummary
 import kotlinx.coroutines.flow.collect
@@ -27,10 +28,17 @@ class PoolControllers(
     private val pools: PoolSource,
     private val colors: ColorCatalogue,
     private val taskEditing: TaskEditing,
+    private val taskProgress: TaskProgressing,
 ) {
     private val controllers: Map<PoolType, PoolController> =
         PoolType.entries.associateWith { poolType ->
-            PoolController(poolType = poolType, pools = pools, colors = colors, taskEditing = taskEditing)
+            PoolController(
+                poolType = poolType,
+                pools = pools,
+                colors = colors,
+                taskEditing = taskEditing,
+                taskProgress = taskProgress,
+            )
         }
 
     var summary: PoolNavigationSummary by mutableStateOf(PoolNavigationSummary.EMPTY)

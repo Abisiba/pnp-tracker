@@ -479,18 +479,9 @@ abstract class TaskProgressDao {
     /**
      * Sets how many pieces have been through one step of a pipeline.
      *
-     * The bound PLAN 7.2 writes as `0 <= cut <= laminated <= printed <= total` is
-     * checked in both directions: a step cannot pass the one before it, and it
-     * cannot be pulled back below the one after it. Either would leave the
-     * pipeline describing an order of work that cannot have happened.
-     *
-     * A total that nobody has given is refused rather than guessed. PLAN 7.2 asks
-     * the user for it first, since without it there is nothing for a step to
-     * count up to and no way to say whether the task is done.
-     *
-     * Every step reaching the total finishes the task; a step dropping back below
-     * it reopens the task, because PLAN 6.4 does not let the finished mark stand
-     * against counters that disagree with it.
+     * The one-step way of asking for [setStageQuantities], and nothing more: the
+     * rules live there, so there is a single account of what a pipeline may look
+     * like rather than two that could drift.
      *
      * @return true when the count changed.
      * @throws TaskProgressException if the task, the pool, the stage or the
@@ -502,36 +493,93 @@ abstract class TaskProgressDao {
         stage: ProductionStage,
         completedQuantity: Int,
         clock: Clock,
+    ): Boolean = setStageQuantities(taskId, mapOf(stage to completedQuantity), clock)
+
+    /**
+     * Sets how far several steps of a pipeline have got, all at once.
+     *
+     * PLAN 7.3 puts the whole pipeline in front of the user at once, so the whole
+     * pipeline is what is checked and written. Saving a step at a time would
+     * refuse orderings that are perfectly good on the way to a state the user
+     * described — raising the print run before the cut has been lowered — and
+     * would leave the first steps written when a later one turned out not to fit.
+     *
+     * Nothing is moved that the user did not move. PLAN 7.2's rule is checked
+     * against the state they asked for as a whole; a target that breaks it is
+     * refused entirely rather than repaired by pulling the steps after it down,
+     * which would throw away counts they never touched.
+     *
+     * [expectedStages] is the pipeline as it stood when the panel was opened.
+     * When it is given and the database no longer agrees, the save is refused
+     * rather than applied: a panel left open while the work moved on would
+     * otherwise put back the numbers it was opened with.
+     *
+     * Every step reaching the total finishes the task, and a step dropping back
+     * below it reopens the task, because PLAN 6.4 does not let the finished mark
+     * stand against counters that disagree with it.
+     *
+     * @param targets what each named step should stand at; steps left out keep
+     *   what they have.
+     * @return true when anything changed.
+     * @throws TaskProgressException if the task, the pool, the steps or the
+     *   amounts will not have it.
+     */
+    @Transaction
+    open suspend fun setStageQuantities(
+        taskId: EntityId,
+        targets: Map<ProductionStage, Int>,
+        clock: Clock,
+        expectedStages: Map<ProductionStage, Int>? = null,
     ): Boolean {
         val task = workableTaskById(taskId) ?: refuse(TaskProgressFailure.TASK_NOT_AVAILABLE)
         if (!task.poolType.hasStages) refuse(TaskProgressFailure.TASK_HAS_NO_STAGES)
         val pipeline = stagesOf(task.poolType)
-        val position = pipeline.indexOf(stage)
-        if (position < 0) refuse(TaskProgressFailure.STAGE_NOT_IN_PIPELINE)
+        targets.keys.forEach { stage ->
+            if (stage !in pipeline) refuse(TaskProgressFailure.STAGE_NOT_IN_PIPELINE)
+        }
         val total = task.requiredQuantity ?: refuse(TaskProgressFailure.REQUIRED_QUANTITY_UNKNOWN)
-        if (completedQuantity < 0 || completedQuantity > total) {
-            refuse(TaskProgressFailure.STAGE_ORDER_VIOLATED)
+
+        // Read once, in the order the steps are worked in, and check that what
+        // came back really is this pool's pipeline. Everything below counts on
+        // position, so a row missing or doubled would make the ordering rule
+        // check something other than what it says it checks.
+        val stages = stagesOfTask(taskId)
+        if (stages.map { it.stage } != pipeline) refuse(TaskProgressFailure.STAGE_PIPELINE_BROKEN)
+
+        expectedStages?.let { expected ->
+            val standing = stages.associate { it.stage to it.completedQuantity }
+            if (expected != standing) refuse(TaskProgressFailure.STALE_STAGE_PROGRESS)
         }
 
-        val stages = stagesOfTask(taskId)
-        val current = stages.firstOrNull { it.stage == stage } ?: refuse(TaskProgressFailure.STAGE_NOT_IN_PIPELINE)
-        val before = stages.firstOrNull { it.orderIndex == current.orderIndex - 1 }
-        val after = stages.firstOrNull { it.orderIndex == current.orderIndex + 1 }
-        if (before != null && completedQuantity > before.completedQuantity) {
-            refuse(TaskProgressFailure.STAGE_ORDER_VIOLATED)
+        // What each amount is on its own, before any of them is put into a row:
+        // a stage row will not hold less than nothing, so building one first
+        // would answer a negative amount with a programming error rather than
+        // with something the screen can say.
+        targets.values.forEach { amount ->
+            if (amount < 0) refuse(TaskProgressFailure.INVALID_QUANTITY)
+            if (amount > total) refuse(TaskProgressFailure.STAGE_QUANTITY_EXCEEDS_REQUIRED)
         }
-        if (after != null && completedQuantity < after.completedQuantity) {
-            refuse(TaskProgressFailure.STAGE_ORDER_VIOLATED)
+
+        // The whole pipeline as the user asked for it, built before anything is
+        // written so the rule is read off one picture rather than off a sequence
+        // of half-applied ones.
+        val wanted =
+            stages.map { row -> targets[row.stage]?.let { row.copy(completedQuantity = it) } ?: row }
+        wanted.zipWithNext { earlier, later ->
+            if (later.completedQuantity > earlier.completedQuantity) {
+                refuse(TaskProgressFailure.STAGE_ORDER_VIOLATED)
+            }
         }
-        if (current.completedQuantity == completedQuantity) return false
+
+        val changed = wanted.filterIndexed { index, row -> row.completedQuantity != stages[index].completedQuantity }
+        if (changed.isEmpty()) return false
 
         val moment = clock.now()
-        writeStage(taskId, stage, completedQuantity, moment)
-        val worked = stages.map { if (it.stage == stage) it.copy(completedQuantity = completedQuantity) else it }
+        changed.forEach { row -> writeStage(taskId, row.stage, row.completedQuantity, moment) }
         // A pipeline counted all the way up still does not finish a task that
         // owes a reprint: PLAN 6.4 will not have the finished mark stand against
         // a counter saying work is left.
-        val finished = task.currentMissingQuantity == 0 && readyToFinish(task, worked)
+        val finished = task.currentMissingQuantity == 0 && readyToFinish(task, wanted)
         writeProgress(
             taskId = taskId,
             isCompleted = finished,

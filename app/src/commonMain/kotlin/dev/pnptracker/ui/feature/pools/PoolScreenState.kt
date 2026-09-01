@@ -2,8 +2,10 @@ package dev.pnptracker.ui.feature.pools
 
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.pools.PoolModel
 import dev.pnptracker.domain.pools.PoolTask
+import dev.pnptracker.domain.tasks.TaskProgressFailure
 import dev.pnptracker.ui.feature.games.TaskEditor
 
 /** Where a pool is. */
@@ -90,6 +92,56 @@ sealed interface PoolWork {
         override val parent: PoolWork get() = from
         override val hasUnsavedChanges: Boolean get() = false
     }
+
+    /**
+     * The pipeline of one card or board task, open to be changed (PLAN 7.3).
+     *
+     * The whole pipeline rather than one step, because that is how PLAN 7.3 puts
+     * it in front of the user, and because a target the user describes as a whole
+     * may pass through states the ordering rule forbids on the way to being
+     * typed. Nothing is written until it is saved.
+     *
+     * This one has no menu behind it. The badge is its own control on the card,
+     * so closing it goes back to the card rather than into a menu the user never
+     * opened.
+     */
+    data class EditingStages(
+        override val card: PoolCardKey,
+        override val task: PoolTask,
+        /**
+         * What the pipeline said when this was opened.
+         *
+         * Sent back with the save so a panel left open while the work moved on
+         * is refused rather than allowed to put back what it was opened with.
+         */
+        val expected: Map<ProductionStage, Int>,
+        /** What the user has typed for each step, as typed. */
+        val draft: Map<ProductionStage, String>,
+        val isSaving: Boolean = false,
+        val failure: TaskProgressFailure? = null,
+        /** The step the refusal is about, so the keyboard can be sent to it. */
+        val invalidStage: ProductionStage? = null,
+    ) : PoolWork {
+        override val parent: PoolWork? get() = null
+        override val hasUnsavedChanges: Boolean
+            get() = draft.any { (stage, typed) -> typed != expected[stage]?.toString() }
+
+        /** The steps in the order they are worked in, as the card must draw them. */
+        val steps: List<ProductionStage> get() = task.stages.map { it.stage }
+
+        /** What each step would stand at, or null when one of them is not a count. */
+        val targets: Map<ProductionStage, Int>?
+            get() =
+                steps
+                    .associateWith { stage ->
+                        draft[stage]?.takeIf { it.isNotEmpty() && it.all(Char::isDigit) }?.toIntOrNull()
+                            ?: return null
+                    }
+
+        /** The first step whose box does not hold a number, for the keyboard. */
+        val firstUntypedStage: ProductionStage?
+            get() = steps.firstOrNull { draft[it].isNullOrEmpty() || draft[it]?.all(Char::isDigit) != true }
+    }
 }
 
 /**
@@ -120,6 +172,7 @@ data class PoolScreenState(
             when (val open = work) {
                 is PoolWork.Editing -> open.editor.isSaving
                 is PoolWork.ConfirmingConvert -> open.isSaving
+                is PoolWork.EditingStages -> open.isSaving
                 else -> false
             }
 

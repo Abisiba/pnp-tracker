@@ -64,6 +64,23 @@ interface TaskProgressing {
         note: String? = null,
         cardReference: String? = null,
     ): TaskProgressOutcome
+
+    /**
+     * Sets how far the steps of a card or board pipeline have got (PLAN 7.2, 8).
+     *
+     * The whole pipeline at once, because PLAN 7.3 puts the whole pipeline in
+     * front of the user at once: a target that breaks the ordering rule is
+     * refused entirely rather than reached through states that break it.
+     *
+     * @param expectedStages the counts the panel was opened on. A save is
+     *   refused when the database no longer agrees, so a panel left open while
+     *   the work moved on cannot put back what it was opened with.
+     */
+    suspend fun setStageQuantities(
+        taskId: EntityId,
+        targets: Map<ProductionStage, Int>,
+        expectedStages: Map<ProductionStage, Int>? = null,
+    ): TaskProgressOutcome
 }
 
 /**
@@ -162,6 +179,20 @@ class TaskProgressStore(
                 clock = clock,
                 note = note,
                 cardReference = cardReference,
+            )
+        }
+
+    override suspend fun setStageQuantities(
+        taskId: EntityId,
+        targets: Map<ProductionStage, Int>,
+        expectedStages: Map<ProductionStage, Int>?,
+    ): TaskProgressOutcome =
+        outcomeOf {
+            taskProgressDao.setStageQuantities(
+                taskId = taskId,
+                targets = targets,
+                clock = clock,
+                expectedStages = expectedStages,
             )
         }
 

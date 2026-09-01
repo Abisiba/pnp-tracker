@@ -745,16 +745,22 @@ class TaskProgressTest {
     @Test
     fun `a stage cannot pass the total, or go below nothing`() =
         runBlocking<Unit> {
+            // Two different things are wrong and the screen has to say which:
+            // one amount is more than the task needs, the other is not a count
+            // of anything. Answering both with the ordering rule would tell the
+            // user to reorder steps that are in perfectly good order.
             val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 10, name = "Bird Cards")
 
-            listOf(11, -1).forEach { quantity ->
-                assertEquals(
-                    TaskProgressFailure.STAGE_ORDER_VIOLATED,
-                    assertFailsWith<TaskProgressException> {
-                        progress.setStageQuantity(taskId, ProductionStage.PRINT, quantity, clock)
-                    }.failure,
-                )
-            }
+            mapOf(11 to TaskProgressFailure.STAGE_QUANTITY_EXCEEDS_REQUIRED, -1 to TaskProgressFailure.INVALID_QUANTITY)
+                .forEach { (quantity, expected) ->
+                    assertEquals(
+                        expected,
+                        assertFailsWith<TaskProgressException> {
+                            progress.setStageQuantity(taskId, ProductionStage.PRINT, quantity, clock)
+                        }.failure,
+                        "an amount of $quantity was refused for the wrong reason",
+                    )
+                }
             assertEquals(0, progress.stagesOfTask(taskId).first().completedQuantity)
         }
 
@@ -1314,5 +1320,348 @@ class TaskProgressTest {
             val recorded = progress.progressEventsOfTask(taskId).single()
             assertEquals(recorded.quantity, taskOf(taskId).currentMissingQuantity, "the counter lost track")
             assertEquals(recorded.quantity.toLong(), progress.failureTotalOf(taskId))
+        }
+
+    // ---------------------------------------- the whole pipeline, saved at once
+
+    /** What the pipeline stands at, in the order it is worked in. */
+    private suspend fun pipelineOf(taskId: EntityId): List<Int> = progress.stagesOfTask(taskId).map { it.completedQuantity }
+
+    private suspend fun aCardAt(
+        print: Int,
+        laminate: Int,
+        cut: Int,
+        total: Int = 20,
+    ): EntityId {
+        val taskId = aTaskIn(PoolType.CARD, requiredQuantity = total, name = "Bird Cards")
+        progress.setStageQuantities(
+            taskId,
+            mapOf(ProductionStage.PRINT to print, ProductionStage.LAMINATE to laminate, ProductionStage.CUT to cut),
+            clock,
+        )
+        return taskId
+    }
+
+    @Test
+    fun `a card pipeline is written in one go`() =
+        runBlocking<Unit> {
+            val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 20, name = "Bird Cards")
+
+            val changed =
+                progress.setStageQuantities(
+                    taskId,
+                    mapOf(
+                        ProductionStage.PRINT to 15,
+                        ProductionStage.LAMINATE to 10,
+                        ProductionStage.CUT to 5,
+                    ),
+                    clock,
+                )
+
+            assertTrue(changed)
+            assertEquals(listOf(15, 10, 5), pipelineOf(taskId))
+            // One act, one moment: three saves would stamp three times.
+            assertEquals(1, clock.reads, "the pipeline was written as more than one act")
+            assertTrue(progress.progressEventsOfTask(taskId).isEmpty(), "counting a step wrote an event")
+        }
+
+    @Test
+    fun `a board pipeline is written in one go`() =
+        runBlocking<Unit> {
+            val taskId = aTaskIn(PoolType.BOARD, requiredQuantity = 20, name = "Plaj tile")
+
+            progress.setStageQuantities(
+                taskId,
+                mapOf(ProductionStage.PRINT to 16, ProductionStage.GLUE to 12, ProductionStage.CUT to 8),
+                clock,
+            )
+
+            assertEquals(listOf(16, 12, 8), pipelineOf(taskId))
+            assertEquals(1, clock.reads)
+        }
+
+    @Test
+    fun `a pipeline that reaches the total by a route of its own is still allowed`() =
+        runBlocking<Unit> {
+            // Lowering the print run and the cut together describes a state the
+            // rule allows; saving a step at a time would refuse it on the way,
+            // because the cut would stand above the print run in between.
+            val taskId = aCardAt(20, 20, 20)
+
+            progress.setStageQuantities(
+                taskId,
+                mapOf(ProductionStage.PRINT to 8, ProductionStage.LAMINATE to 8, ProductionStage.CUT to 8),
+                clock,
+            )
+
+            assertEquals(listOf(8, 8, 8), pipelineOf(taskId))
+        }
+
+    @Test
+    fun `a target that breaks the order writes none of its steps`() =
+        runBlocking<Unit> {
+            val taskId = aCardAt(15, 10, 5)
+            val before = clock.reads
+
+            val refusal =
+                assertFailsWith<TaskProgressException> {
+                    progress.setStageQuantities(
+                        taskId,
+                        mapOf(ProductionStage.PRINT to 8),
+                        clock,
+                    )
+                }
+
+            assertEquals(TaskProgressFailure.STAGE_ORDER_VIOLATED, refusal.failure)
+            assertEquals(listOf(15, 10, 5), pipelineOf(taskId), "a refused save moved a counter")
+            assertEquals(before, clock.reads, "a refused save read the clock")
+        }
+
+    @Test
+    fun `a second step that will not do takes the first one down with it`() =
+        runBlocking<Unit> {
+            val taskId = aCardAt(15, 10, 5)
+
+            assertFailsWith<TaskProgressException> {
+                progress.setStageQuantities(
+                    taskId,
+                    mapOf(ProductionStage.PRINT to 18, ProductionStage.LAMINATE to 19),
+                    clock,
+                )
+            }
+
+            assertEquals(listOf(15, 10, 5), pipelineOf(taskId), "the first step was written before the second was read")
+        }
+
+    @Test
+    fun `a third step that will not do takes the first two down with it`() =
+        runBlocking<Unit> {
+            val taskId = aCardAt(15, 10, 5)
+
+            assertFailsWith<TaskProgressException> {
+                progress.setStageQuantities(
+                    taskId,
+                    mapOf(
+                        ProductionStage.PRINT to 18,
+                        ProductionStage.LAMINATE to 16,
+                        ProductionStage.CUT to 21,
+                    ),
+                    clock,
+                )
+            }
+
+            assertEquals(listOf(15, 10, 5), pipelineOf(taskId))
+        }
+
+    @Test
+    fun `only the steps that really moved are written`() =
+        runBlocking<Unit> {
+            val taskId = aCardAt(15, 10, 5)
+            val stamped = progress.stagesOfTask(taskId).associate { it.stage to it.updatedAt }
+
+            progress.setStageQuantities(taskId, mapOf(ProductionStage.CUT to 9), clock)
+
+            val after = progress.stagesOfTask(taskId).associate { it.stage to it.updatedAt }
+            assertEquals(stamped[ProductionStage.PRINT], after[ProductionStage.PRINT], "an untouched step was written")
+            assertEquals(stamped[ProductionStage.LAMINATE], after[ProductionStage.LAMINATE])
+            assertTrue(after.getValue(ProductionStage.CUT) > stamped.getValue(ProductionStage.CUT))
+        }
+
+    @Test
+    fun `a pipeline saved at what it already says does nothing at all`() =
+        runBlocking<Unit> {
+            val taskId = aCardAt(15, 10, 5)
+            val before = clock.reads
+
+            val changed =
+                progress.setStageQuantities(
+                    taskId,
+                    mapOf(
+                        ProductionStage.PRINT to 15,
+                        ProductionStage.LAMINATE to 10,
+                        ProductionStage.CUT to 5,
+                    ),
+                    clock,
+                )
+
+            assertFalse(changed, "saving what was already there was taken for a change")
+            assertEquals(before, clock.reads, "a save with nothing to do read the clock")
+        }
+
+    @Test
+    fun `an amount is refused for what is really wrong with it`() =
+        runBlocking<Unit> {
+            val taskId = aCardAt(0, 0, 0)
+
+            mapOf(
+                -1 to TaskProgressFailure.INVALID_QUANTITY,
+                21 to TaskProgressFailure.STAGE_QUANTITY_EXCEEDS_REQUIRED,
+            ).forEach { (amount, expected) ->
+                val refusal =
+                    assertFailsWith<TaskProgressException> {
+                        progress.setStageQuantities(taskId, mapOf(ProductionStage.PRINT to amount), clock)
+                    }
+                assertEquals(expected, refusal.failure, "an amount of $amount was refused for the wrong reason")
+            }
+            assertEquals(listOf(0, 0, 0), pipelineOf(taskId))
+        }
+
+    @Test
+    fun `a pipeline counted all the way up finishes the task`() =
+        runBlocking<Unit> {
+            val taskId = aCardAt(20, 20, 20)
+
+            val task = checkNotNull(progress.taskById(taskId))
+            assertTrue(task.isCompleted)
+            assertNotNull(task.completedAt)
+            assertTrue(progress.progressEventsOfTask(taskId).isEmpty())
+        }
+
+    @Test
+    fun `pulling a finished pipeline back opens the task again`() =
+        runBlocking<Unit> {
+            val taskId = aCardAt(20, 20, 20)
+
+            progress.setStageQuantities(taskId, mapOf(ProductionStage.CUT to 19), clock)
+
+            val task = checkNotNull(progress.taskById(taskId))
+            assertFalse(task.isCompleted)
+            assertNull(task.completedAt)
+            assertEquals(listOf(20, 20, 19), pipelineOf(taskId))
+        }
+
+    @Test
+    fun `a full pipeline does not finish a task that still owes a reprint`() =
+        runBlocking<Unit> {
+            val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 20, name = "Bird Cards")
+            progress.reportFailure(ids.newId(), taskId, 4, clock)
+
+            progress.setStageQuantities(
+                taskId,
+                mapOf(
+                    ProductionStage.PRINT to 20,
+                    ProductionStage.LAMINATE to 20,
+                    ProductionStage.CUT to 20,
+                ),
+                clock,
+            )
+
+            assertFalse(checkNotNull(progress.taskById(taskId)).isCompleted, "a task finished while it owed a reprint")
+
+            progress.resolveShortage(ids.newId(), taskId, 4, clock)
+
+            assertTrue(checkNotNull(progress.taskById(taskId)).isCompleted, "making good the last of it did not finish it")
+            assertEquals(listOf(20, 20, 20), pipelineOf(taskId), "settling the debt moved the pipeline")
+        }
+
+    @Test
+    fun `a pipeline saved against counts that have since moved is refused`() =
+        runBlocking<Unit> {
+            // What a panel left open would do: it carries the counts it was
+            // opened on, and putting its own numbers back would undo whatever
+            // happened in between without anybody being told.
+            val taskId = aCardAt(15, 10, 5)
+            val opened =
+                mapOf(ProductionStage.PRINT to 15, ProductionStage.LAMINATE to 10, ProductionStage.CUT to 5)
+            progress.setStageQuantities(taskId, mapOf(ProductionStage.CUT to 9), clock)
+
+            val refusal =
+                assertFailsWith<TaskProgressException> {
+                    progress.setStageQuantities(
+                        taskId,
+                        mapOf(ProductionStage.PRINT to 16),
+                        clock,
+                        expectedStages = opened,
+                    )
+                }
+
+            assertEquals(TaskProgressFailure.STALE_STAGE_PROGRESS, refusal.failure)
+            assertEquals(listOf(15, 10, 9), pipelineOf(taskId), "a stale save wrote anyway")
+        }
+
+    @Test
+    fun `of two panels over one task the first to save wins`() =
+        runBlocking<Unit> {
+            val taskId = aCardAt(15, 10, 5)
+            val opened =
+                mapOf(ProductionStage.PRINT to 15, ProductionStage.LAMINATE to 10, ProductionStage.CUT to 5)
+
+            progress.setStageQuantities(taskId, mapOf(ProductionStage.PRINT to 18), clock, expectedStages = opened)
+
+            val refusal =
+                assertFailsWith<TaskProgressException> {
+                    progress.setStageQuantities(
+                        taskId,
+                        mapOf(ProductionStage.PRINT to 12),
+                        clock,
+                        expectedStages = opened,
+                    )
+                }
+
+            assertEquals(TaskProgressFailure.STALE_STAGE_PROGRESS, refusal.failure)
+            assertEquals(listOf(18, 10, 5), pipelineOf(taskId), "the second panel overwrote the first")
+        }
+
+    @Test
+    fun `a pipeline saved against the counts it was opened on goes through`() =
+        runBlocking<Unit> {
+            val taskId = aCardAt(15, 10, 5)
+
+            val changed =
+                progress.setStageQuantities(
+                    taskId,
+                    mapOf(ProductionStage.CUT to 9),
+                    clock,
+                    expectedStages =
+                        mapOf(
+                            ProductionStage.PRINT to 15,
+                            ProductionStage.LAMINATE to 10,
+                            ProductionStage.CUT to 5,
+                        ),
+                )
+
+            assertTrue(changed)
+            assertEquals(listOf(15, 10, 9), pipelineOf(taskId))
+        }
+
+    @Test
+    fun `a pipeline is refused on every task that has none of its own`() =
+        runBlocking<Unit> {
+            listOf(PoolType.THREE_D, PoolType.SPECIAL).forEach { pool ->
+                val taskId = aTaskIn(pool, requiredQuantity = 20, name = "Token")
+                val refusal =
+                    assertFailsWith<TaskProgressException> {
+                        progress.setStageQuantities(taskId, mapOf(ProductionStage.PRINT to 1), clock)
+                    }
+                assertEquals(TaskProgressFailure.TASK_HAS_NO_STAGES, refusal.failure, "$pool was given a pipeline")
+            }
+        }
+
+    @Test
+    fun `a step belonging to the other pipeline is refused`() =
+        runBlocking<Unit> {
+            val card = aTaskIn(PoolType.CARD, requiredQuantity = 20, name = "Bird Cards")
+            val board = aTaskIn(PoolType.BOARD, requiredQuantity = 20, name = "Plaj tile")
+
+            listOf(card to ProductionStage.GLUE, board to ProductionStage.LAMINATE).forEach { (taskId, stage) ->
+                val refusal =
+                    assertFailsWith<TaskProgressException> {
+                        progress.setStageQuantities(taskId, mapOf(stage to 1), clock)
+                    }
+                assertEquals(TaskProgressFailure.STAGE_NOT_IN_PIPELINE, refusal.failure)
+            }
+        }
+
+    @Test
+    fun `a pipeline with no total behind it is refused rather than guessed at`() =
+        runBlocking<Unit> {
+            val taskId = aTaskIn(PoolType.CARD, requiredQuantity = null, name = "Bird Cards")
+
+            val refusal =
+                assertFailsWith<TaskProgressException> {
+                    progress.setStageQuantities(taskId, mapOf(ProductionStage.PRINT to 1), clock)
+                }
+
+            assertEquals(TaskProgressFailure.REQUIRED_QUANTITY_UNKNOWN, refusal.failure)
         }
 }

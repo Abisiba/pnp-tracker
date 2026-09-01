@@ -38,12 +38,37 @@ enum class TaskProgressFailure {
     REQUIRED_QUANTITY_UNKNOWN,
 
     /**
-     * A stage was asked to go further than the stage before it, or past the total.
+     * A stage was asked to go further than the stage before it.
      *
      * PLAN 7.2 writes the rule as `0 <= cut <= laminated <= printed <= total`;
-     * a piece cannot be cut before it is printed.
+     * a piece cannot be cut before it is printed. Kept apart from
+     * [STAGE_QUANTITY_EXCEEDS_REQUIRED] and [INVALID_QUANTITY] because what the
+     * user has to do about each is different: reorder the steps, lower the
+     * amount, or type a number at all.
      */
     STAGE_ORDER_VIOLATED,
+
+    /** A stage was asked to count further than the task needs in total. */
+    STAGE_QUANTITY_EXCEEDS_REQUIRED,
+
+    /**
+     * The task's pipeline is not the one its pool describes.
+     *
+     * A row missing, doubled, or belonging to some other pool's pipeline. Not
+     * something a user can have caused, but refusing is still better than
+     * writing a counter into a shape nothing else in the application expects.
+     */
+    STAGE_PIPELINE_BROKEN,
+
+    /**
+     * The stages have moved since the panel showing them was opened.
+     *
+     * The panel carries the counts it was opened on, and a save is refused
+     * unless the database still says the same. Without it a panel left open
+     * while the work moved elsewhere would put back the numbers it was opened
+     * with, quietly undoing whatever happened in between.
+     */
+    STALE_STAGE_PROGRESS,
 
     /**
      * More was reported made good than was still owed.

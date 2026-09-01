@@ -576,4 +576,129 @@ class TaskProgressReflectionTest {
                 assertEquals(0, counted.filterKeys { "task_colors" in it }.values.sum(), "$name touched the colours")
             }
         }
+
+    // ------------------------------------------- what a pipeline change costs
+
+    private suspend fun cardTask(
+        name: String,
+        colors: List<EntityId> = emptyList(),
+        history: Int = 0,
+    ): EntityId {
+        val id = task(name, pool = PoolType.CARD, quantity = 1000, colors = colors)
+        repeat(history) {
+            progress.reportFailure(ids.newId(), id, 1, clock)
+            progress.resolveShortage(ids.newId(), id, 1, clock)
+        }
+        return id
+    }
+
+    private suspend fun pipelineCost(
+        taskId: EntityId,
+        targets: Map<ProductionStage, Int>,
+    ): Map<String, Int> {
+        driver.start()
+        progress.setStageQuantities(taskId, targets, clock)
+        return tally(driver.stop())
+    }
+
+    private val threeSteps
+        get() =
+            mapOf(
+                ProductionStage.PRINT to 30,
+                ProductionStage.LAMINATE to 20,
+                ProductionStage.CUT to 10,
+            )
+
+    @Test
+    fun `changing a pipeline costs the same however many tasks are around it`() =
+        runBlocking<Unit> {
+            val alone = pipelineCost(cardTask("Yalnız"), threeSteps)
+            repeat(42) { index -> cardTask("Kalabalık $index") }
+            val crowded = pipelineCost(cardTask("Kalabalıkta"), threeSteps)
+
+            assertEquals(alone, crowded, "a pipeline grew with the tasks around it")
+            assertEquals(3, alone["UPDATE task_stages"], "three steps moved and were not three writes")
+            assertEquals(1, alone["UPDATE tasks"], "the task was written more than once")
+            assertEquals(null, alone["INSERT progress_events"], "counting a step wrote an event")
+            assertEquals(0, alone.filterKeys { "task_colors" in it }.values.sum(), "a pipeline touched the colours")
+        }
+
+    @Test
+    fun `changing a pipeline costs the same however long the history behind it`() =
+        runBlocking<Unit> {
+            val fresh = pipelineCost(cardTask("Yeni"), threeSteps)
+            val busy = pipelineCost(cardTask("Geçmişli", history = 42), threeSteps)
+
+            assertEquals(fresh, busy, "a pipeline grew with the history behind it")
+        }
+
+    @Test
+    fun `changing a pipeline costs the same however many colours the task is made in`() =
+        runBlocking<Unit> {
+            val plain = pipelineCost(cardTask("Tek"), threeSteps)
+            val coloured = pipelineCost(cardTask("Üç", colors = palette(3)), threeSteps)
+
+            assertEquals(plain, coloured, "a pipeline grew with the colours of the task")
+            assertEquals(0, coloured.filterKeys { "task_colors" in it }.values.sum())
+        }
+
+    @Test
+    fun `a board pipeline costs what a card pipeline does`() =
+        runBlocking<Unit> {
+            val card = pipelineCost(cardTask("Kart"), threeSteps)
+            val boardId = task("Tahta", pool = PoolType.BOARD, quantity = 1000)
+            val board =
+                pipelineCost(
+                    boardId,
+                    mapOf(
+                        ProductionStage.PRINT to 30,
+                        ProductionStage.GLUE to 20,
+                        ProductionStage.CUT to 10,
+                    ),
+                )
+
+            assertEquals(card, board, "one pool's pipeline costs more than the other's")
+        }
+
+    @Test
+    fun `only the steps that moved are written, and a pipeline that moved none writes nothing`() =
+        runBlocking<Unit> {
+            val taskId = cardTask("Token")
+            progress.setStageQuantities(taskId, threeSteps, clock)
+
+            val one = pipelineCost(taskId, mapOf(ProductionStage.CUT to 15))
+            assertEquals(1, one["UPDATE task_stages"], "moving one step wrote more than one: $one")
+
+            val none = pipelineCost(taskId, threeSteps + (ProductionStage.CUT to 15))
+            assertEquals(0, none.filterKeys { it.startsWith("UPDATE") }.values.sum(), "a no-op wrote: $none")
+            assertEquals(0, none.filterKeys { it.startsWith("INSERT") }.values.sum())
+        }
+
+    @Test
+    fun `a task of three colours is one card with one pipeline`() =
+        runBlocking<Unit> {
+            val three = palette(3)
+            val taskId = task("Üç renkli", pool = PoolType.CARD, quantity = 20, colors = three)
+            progress.setStageQuantities(
+                taskId,
+                mapOf(
+                    ProductionStage.PRINT to 20,
+                    ProductionStage.LAMINATE to 20,
+                    ProductionStage.CUT to 20,
+                ),
+                clock,
+            )
+
+            // The card pool is a flat list (PLAN 12.11), so a task made in three
+            // colours is one card and not three, and finishing it takes that one
+            // card away.
+            assertTrue(idsIn(PoolType.CARD).isEmpty(), "a finished card task stayed in its pool")
+            assertEquals(3, progress.stagesOfTask(taskId).size, "the pipeline was multiplied by the colours")
+            assertEquals(20, checkNotNull(progress.taskById(taskId)).requiredQuantity, "the total was multiplied")
+            assertTrue(progress.progressEventsOfTask(taskId).isEmpty())
+
+            progress.reopenTask(taskId, clock)
+
+            assertEquals(listOf(taskId), idsIn(PoolType.CARD), "a reopened card task did not come back once")
+        }
 }

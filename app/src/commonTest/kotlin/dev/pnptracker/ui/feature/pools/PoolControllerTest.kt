@@ -3,6 +3,8 @@ package dev.pnptracker.ui.feature.pools
 import dev.pnptracker.data.repository.ColorCatalogue
 import dev.pnptracker.data.repository.PoolSource
 import dev.pnptracker.data.repository.TaskEditing
+import dev.pnptracker.data.repository.TaskProgressOutcome
+import dev.pnptracker.data.repository.TaskProgressing
 import dev.pnptracker.domain.colors.BaseColorRestore
 import dev.pnptracker.domain.colors.BaseColorRestorePlan
 import dev.pnptracker.domain.colors.ColorRemoval
@@ -21,6 +23,7 @@ import dev.pnptracker.domain.pools.PoolStage
 import dev.pnptracker.domain.pools.PoolTask
 import dev.pnptracker.domain.tasks.TaskEditException
 import dev.pnptracker.domain.tasks.TaskEditFailure
+import dev.pnptracker.domain.tasks.TaskProgressFailure
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -108,6 +111,59 @@ private class FakeEditing : TaskEditing {
     }
 }
 
+/** Records what the pipeline panel asked of the database; nothing reaches one. */
+private class FakeProgress(
+    var outcome: TaskProgressOutcome = TaskProgressOutcome.Done,
+) : TaskProgressing {
+    val staged = mutableListOf<StagedSave>()
+
+    /** Run once, in the middle of the next save: where a second press lands. */
+    var whileSaving: (suspend () -> Unit)? = null
+
+    override suspend fun completeTask(
+        taskId: EntityId,
+        eventId: EntityId,
+    ): TaskProgressOutcome = TaskProgressOutcome.Done
+
+    override suspend fun reopenTask(taskId: EntityId): TaskProgressOutcome = TaskProgressOutcome.Done
+
+    override suspend fun reportFailure(
+        eventId: EntityId,
+        taskId: EntityId,
+        quantity: Int,
+        note: String?,
+        cardReference: String?,
+        stage: ProductionStage?,
+    ): TaskProgressOutcome = TaskProgressOutcome.Done
+
+    override suspend fun resolveShortage(
+        eventId: EntityId,
+        taskId: EntityId,
+        quantity: Int,
+        note: String?,
+        cardReference: String?,
+    ): TaskProgressOutcome = TaskProgressOutcome.Done
+
+    override suspend fun setStageQuantities(
+        taskId: EntityId,
+        targets: Map<ProductionStage, Int>,
+        expectedStages: Map<ProductionStage, Int>?,
+    ): TaskProgressOutcome {
+        staged += StagedSave(taskId, targets, expectedStages)
+        whileSaving?.let {
+            whileSaving = null
+            it()
+        }
+        return outcome
+    }
+}
+
+private data class StagedSave(
+    val taskId: EntityId,
+    val targets: Map<ProductionStage, Int>,
+    val expected: Map<ProductionStage, Int>?,
+)
+
 /**
  * What a pool screen does, without a database or a window.
  *
@@ -116,17 +172,25 @@ private class FakeEditing : TaskEditing {
  * groups is one task with one menu, and a change begun from a pool lands on that
  * task through the same transaction the table uses.
  */
+
 class PoolControllerTest {
     private val pools = FakePools()
     private val colors = FakeColors()
     private val editing = FakeEditing()
+    private val progress = FakeProgress()
 
     private val red = PoolColor(IdGenerator.Random.newId(), "Kırmızı", "#E53935", sortOrder = 4)
     private val yellow = PoolColor(IdGenerator.Random.newId(), "Sarı", "#FDD835", sortOrder = 5)
     private val black = PoolColor(IdGenerator.Random.newId(), "Siyah", "#111111", sortOrder = 1)
 
     private fun controllerFor(poolType: PoolType = PoolType.THREE_D) =
-        PoolController(poolType = poolType, pools = pools, colors = colors, taskEditing = editing)
+        PoolController(
+            poolType = poolType,
+            pools = pools,
+            colors = colors,
+            taskEditing = editing,
+            taskProgress = progress,
+        )
 
     private fun task(
         name: String = "Yarasa",
@@ -522,4 +586,283 @@ class PoolControllerTest {
 
     private fun summaryOf(color: PoolColor) =
         ColorSummary(id = color.colorId, canonicalName = color.canonicalName, hex = color.hex, sortOrder = color.sortOrder)
+
+    // ------------------------------------------------------- the pipeline panel
+
+    private val cardPipeline =
+        listOf(
+            PoolStage(ProductionStage.PRINT, 15),
+            PoolStage(ProductionStage.LAMINATE, 10),
+            PoolStage(ProductionStage.CUT, 5),
+        )
+
+    private fun cardTask(
+        quantity: Int? = 20,
+        stages: List<PoolStage> = cardPipeline,
+    ) = task(name = "Bird Cards", quantity = quantity, stages = stages, tracking = TrackingMode.PIPELINE)
+
+    private fun withCardPool(
+        task: PoolTask = cardTask(),
+        body: suspend (PoolController, PoolCardKey) -> Unit,
+    ) = withPool(poolType = PoolType.CARD, tasks = listOf(task)) { controller ->
+        body(controller, controller.everyCard().first())
+    }
+
+    private fun stagePanel(controller: PoolController): PoolWork.EditingStages = assertIs(controller.state.work)
+
+    @Test
+    fun `opening the pipeline keeps the counts it was opened on`() =
+        withCardPool { controller, card ->
+            controller.beginStageEdit(card)
+
+            val open = stagePanel(controller)
+            assertEquals(mapOf(ProductionStage.PRINT to 15, ProductionStage.LAMINATE to 10, ProductionStage.CUT to 5), open.expected)
+            assertEquals(mapOf(ProductionStage.PRINT to "15", ProductionStage.LAMINATE to "10", ProductionStage.CUT to "5"), open.draft)
+            assertEquals(listOf(ProductionStage.PRINT, ProductionStage.LAMINATE, ProductionStage.CUT), open.steps)
+            assertTrue(controller.isShowingStages(card.taskId), "opening the panel folded the card away")
+        }
+
+    @Test
+    fun `a task with no total has no pipeline to open`() =
+        withCardPool(task = cardTask(quantity = null)) { controller, card ->
+            controller.beginStageEdit(card)
+
+            assertNull(controller.state.work, "a pipeline opened with nothing to count up to")
+        }
+
+    @Test
+    fun `only one pipeline may be open at a time`() =
+        withPool(poolType = PoolType.CARD, tasks = listOf(cardTask(), cardTask())) { controller ->
+            val cards = controller.everyCard()
+            controller.beginStageEdit(cards[0])
+
+            controller.beginStageEdit(cards[1])
+
+            assertEquals(cards[0].taskId, stagePanel(controller).task.taskId, "a second panel took over the first")
+        }
+
+    @Test
+    fun `the steps hold digits and nothing else`() =
+        withCardPool { controller, card ->
+            controller.beginStageEdit(card)
+
+            controller.editStageDraft(ProductionStage.PRINT, "1a2 x")
+
+            assertEquals("12", stagePanel(controller).draft[ProductionStage.PRINT])
+        }
+
+    @Test
+    fun `the arrows move the draft and nothing else`() =
+        withCardPool { controller, card ->
+            controller.beginStageEdit(card)
+
+            controller.stepStageDraft(ProductionStage.CUT, 1)
+            controller.stepStageDraft(ProductionStage.CUT, 1)
+            controller.stepStageDraft(ProductionStage.LAMINATE, -1)
+
+            assertEquals("7", stagePanel(controller).draft[ProductionStage.CUT])
+            assertEquals("9", stagePanel(controller).draft[ProductionStage.LAMINATE])
+            assertTrue(progress.staged.isEmpty(), "an arrow wrote straight to the database")
+        }
+
+    @Test
+    fun `an arrow that would describe an impossible pipeline is not offered`() =
+        withCardPool { controller, card ->
+            controller.beginStageEdit(card)
+
+            // The cut may not pass the lamination, and the print run may not fall
+            // below it; both are the same rule read from its two ends.
+            controller.editStageDraft(ProductionStage.CUT, "10")
+            assertFalse(controller.stageStepAllowed(ProductionStage.CUT, 1), "the cut was offered a step past the lamination")
+            controller.editStageDraft(ProductionStage.PRINT, "10")
+            assertFalse(controller.stageStepAllowed(ProductionStage.PRINT, -1), "the print run was offered a step below it")
+            assertTrue(controller.stageStepAllowed(ProductionStage.PRINT, 1))
+        }
+
+    @Test
+    fun `an arrow stops at nothing and at the total`() =
+        withCardPool(
+            task =
+                cardTask(
+                    stages =
+                        listOf(
+                            PoolStage(ProductionStage.PRINT, 0),
+                            PoolStage(ProductionStage.LAMINATE, 0),
+                            PoolStage(ProductionStage.CUT, 0),
+                        ),
+                ),
+        ) { controller, card ->
+            controller.beginStageEdit(card)
+
+            assertFalse(controller.stageStepAllowed(ProductionStage.CUT, -1), "a step was offered below nothing")
+            controller.editStageDraft(ProductionStage.PRINT, "20")
+            assertFalse(controller.stageStepAllowed(ProductionStage.PRINT, 1), "a step was offered past the total")
+        }
+
+    @Test
+    fun `the whole pipeline is sent as one, with the counts it was opened on`() =
+        withCardPool { controller, card ->
+            controller.beginStageEdit(card)
+            controller.editStageDraft(ProductionStage.CUT, "9")
+
+            controller.saveStages()
+
+            val sent = progress.staged.single()
+            assertEquals(
+                mapOf(ProductionStage.PRINT to 15, ProductionStage.LAMINATE to 10, ProductionStage.CUT to 9),
+                sent.targets,
+                "the save did not carry the whole pipeline",
+            )
+            assertEquals(
+                mapOf(ProductionStage.PRINT to 15, ProductionStage.LAMINATE to 10, ProductionStage.CUT to 5),
+                sent.expected,
+                "the save did not carry what the panel was opened on",
+            )
+            assertNull(controller.state.work, "the panel stayed open after it landed")
+        }
+
+    @Test
+    fun `a step left empty never reaches the database`() =
+        withCardPool { controller, card ->
+            controller.beginStageEdit(card)
+            controller.editStageDraft(ProductionStage.LAMINATE, "")
+
+            controller.saveStages()
+
+            assertTrue(progress.staged.isEmpty(), "a pipeline with a blank step was sent")
+            val open = stagePanel(controller)
+            assertEquals(TaskProgressFailure.INVALID_QUANTITY, open.failure)
+            assertEquals(ProductionStage.LAMINATE, open.invalidStage, "the keyboard was not sent to the empty step")
+        }
+
+    @Test
+    fun `a refused save keeps the panel, the draft and the counts it was opened on`() =
+        withCardPool { controller, card ->
+            progress.outcome = TaskProgressOutcome.Refused(TaskProgressFailure.STAGE_ORDER_VIOLATED)
+            controller.beginStageEdit(card)
+            controller.editStageDraft(ProductionStage.PRINT, "8")
+
+            controller.saveStages()
+
+            val open = stagePanel(controller)
+            assertEquals("8", open.draft[ProductionStage.PRINT], "the refusal threw away what had been typed")
+            assertEquals(mapOf(ProductionStage.PRINT to 15, ProductionStage.LAMINATE to 10, ProductionStage.CUT to 5), open.expected)
+            assertEquals(TaskProgressFailure.STAGE_ORDER_VIOLATED, open.failure)
+            assertFalse(open.isSaving)
+        }
+
+    @Test
+    fun `a refusal names the step it is about`() =
+        withCardPool { controller, card ->
+            controller.beginStageEdit(card)
+            progress.outcome = TaskProgressOutcome.Refused(TaskProgressFailure.STAGE_ORDER_VIOLATED)
+            controller.editStageDraft(ProductionStage.PRINT, "8")
+            controller.saveStages()
+            assertEquals(
+                ProductionStage.LAMINATE,
+                stagePanel(controller).invalidStage,
+                "the step that passed the one before it was not named",
+            )
+
+            progress.outcome = TaskProgressOutcome.Refused(TaskProgressFailure.STAGE_QUANTITY_EXCEEDS_REQUIRED)
+            controller.editStageDraft(ProductionStage.PRINT, "25")
+            controller.saveStages()
+            assertEquals(ProductionStage.PRINT, stagePanel(controller).invalidStage)
+
+            // A pipeline that moved underneath the panel is about all of them at
+            // once, so no box is singled out.
+            progress.outcome = TaskProgressOutcome.Refused(TaskProgressFailure.STALE_STAGE_PROGRESS)
+            controller.editStageDraft(ProductionStage.PRINT, "16")
+            controller.saveStages()
+            assertNull(stagePanel(controller).invalidStage, "a stale pipeline blamed one step")
+            assertEquals(TaskProgressFailure.STALE_STAGE_PROGRESS, stagePanel(controller).failure)
+        }
+
+    @Test
+    fun `a list arriving from the database leaves the draft and its counts alone`() =
+        withCardPool { controller, card ->
+            controller.beginStageEdit(card)
+            controller.editStageDraft(ProductionStage.CUT, "9")
+
+            pools.snapshots.value =
+                PoolSnapshot(
+                    PoolType.CARD,
+                    listOf(
+                        cardTask(
+                            stages =
+                                listOf(
+                                    PoolStage(ProductionStage.PRINT, 18),
+                                    PoolStage(ProductionStage.LAMINATE, 12),
+                                    PoolStage(ProductionStage.CUT, 7),
+                                ),
+                        ).copy(taskId = card.taskId),
+                    ),
+                )
+            controller.show(pools.observePool(PoolType.CARD).first())
+
+            val open = stagePanel(controller)
+            assertEquals("9", open.draft[ProductionStage.CUT], "the row that arrived rewrote the draft")
+            assertEquals(
+                mapOf(ProductionStage.PRINT to 15, ProductionStage.LAMINATE to 10, ProductionStage.CUT to 5),
+                open.expected,
+                "the row that arrived rewrote what the save is checked against",
+            )
+        }
+
+    @Test
+    fun `a task that leaves the pool takes its pipeline panel with it`() =
+        withCardPool { controller, card ->
+            controller.beginStageEdit(card)
+
+            pools.snapshots.value = PoolSnapshot(PoolType.CARD, emptyList())
+            controller.show(pools.observePool(PoolType.CARD).first())
+
+            assertNull(controller.state.work, "a panel was left over a task that has gone")
+        }
+
+    @Test
+    fun `two saves racing out of one panel are one save`() =
+        withCardPool { controller, card ->
+            controller.beginStageEdit(card)
+            controller.editStageDraft(ProductionStage.CUT, "9")
+            progress.whileSaving = { controller.saveStages() }
+
+            controller.saveStages()
+
+            assertEquals(1, progress.staged.size, "one panel sent its pipeline twice")
+        }
+
+    @Test
+    fun `closing the pipeline panel goes back to the card it was opened on`() =
+        withCardPool { controller, card ->
+            controller.beginStageEdit(card)
+            controller.editStageDraft(ProductionStage.CUT, "9")
+
+            controller.closeInnermost()
+
+            assertNull(controller.state.work)
+            assertTrue(controller.isShowingStages(card.taskId), "closing the panel folded the card away too")
+            assertTrue(progress.staged.isEmpty(), "closing the panel wrote what was in it")
+        }
+
+    @Test
+    fun `an open pipeline panel says it is holding something unsaved`() =
+        withCardPool { controller, card ->
+            controller.beginStageEdit(card)
+            assertFalse(assertIs<PoolWork.EditingStages>(controller.state.work).hasUnsavedChanges)
+
+            controller.editStageDraft(ProductionStage.CUT, "9")
+
+            assertTrue(assertIs<PoolWork.EditingStages>(controller.state.work).hasUnsavedChanges)
+        }
+
+    @Test
+    fun `a task with no total is sent to the form that asks for one`() =
+        withCardPool(task = cardTask(quantity = null)) { controller, card ->
+            controller.beginTaskEditFor(card)
+
+            val editing = assertIs<PoolWork.Editing>(controller.state.work)
+            assertEquals(card.taskId, editing.task.taskId)
+            assertTrue(progress.staged.isEmpty(), "asking for a total wrote a pipeline")
+        }
 }

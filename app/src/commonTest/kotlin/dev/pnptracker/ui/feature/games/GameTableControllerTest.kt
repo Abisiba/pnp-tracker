@@ -200,6 +200,9 @@ class GameTableControllerTest {
         val reported = mutableListOf<RecordedMovement>()
         val resolved = mutableListOf<RecordedMovement>()
 
+        /** The table has no pipeline surface; this is here to prove nothing calls it. */
+        val staged = mutableListOf<EntityId>()
+
         /**
          * Run once, in the middle of the next call.
          *
@@ -238,6 +241,15 @@ class GameTableControllerTest {
             stage: ProductionStage?,
         ): TaskProgressOutcome {
             reported += RecordedMovement(eventId, taskId, quantity, note, cardReference, stage)
+            return answer()
+        }
+
+        override suspend fun setStageQuantities(
+            taskId: EntityId,
+            targets: Map<ProductionStage, Int>,
+            expectedStages: Map<ProductionStage, Int>?,
+        ): TaskProgressOutcome {
+            staged += taskId
             return answer()
         }
 

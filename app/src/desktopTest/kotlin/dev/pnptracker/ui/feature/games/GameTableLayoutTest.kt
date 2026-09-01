@@ -670,11 +670,11 @@ class GameTableLayoutTest {
         assertTrue("Strings.TaskMenu.convertToText" in menu, "there is no way to turn a task back into text")
         assertTrue("Strings.TaskMenu.reportShortage" in menu, "there is no way to say something came out short")
         assertTrue("enabled = false" !in menu, "the menu carries a button that cannot do anything")
-        // Still nothing here for the work that has not been done: moving a
-        // pipeline counter is the next slice's, and finishing a whole game the
-        // one after that.
-        listOf("setStageQuantity", "completePrimaryBatch", "setManuallyCompleted").forEach { later ->
-            assertTrue(later !in source, "the table offers a $later this step does not have")
+        // A pipeline is worked on from its pool card (PLAN 12.11), not from the
+        // cell, and finishing a whole game is a later slice's. Neither belongs
+        // in the table.
+        listOf("setStageQuantity", "completePrimaryBatch", "setManuallyCompleted", "StageBadge", "stageBadge").forEach { later ->
+            assertTrue(later !in source, "the table offers a $later that is not the cell's to offer")
         }
     }
 

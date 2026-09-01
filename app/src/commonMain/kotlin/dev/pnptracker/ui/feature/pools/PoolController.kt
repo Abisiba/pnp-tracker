@@ -6,15 +6,19 @@ import androidx.compose.runtime.setValue
 import dev.pnptracker.data.repository.ColorCatalogue
 import dev.pnptracker.data.repository.PoolSource
 import dev.pnptracker.data.repository.TaskEditing
+import dev.pnptracker.data.repository.TaskProgressOutcome
+import dev.pnptracker.data.repository.TaskProgressing
 import dev.pnptracker.domain.colors.ColorSummary
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.pools.PoolModel
 import dev.pnptracker.domain.pools.PoolTask
 import dev.pnptracker.domain.pools.poolModelOf
 import dev.pnptracker.domain.rules.normalizeColorTerm
 import dev.pnptracker.domain.tasks.TaskEditException
+import dev.pnptracker.domain.tasks.TaskProgressFailure
 import dev.pnptracker.domain.tasks.trackingModesOf
 import dev.pnptracker.ui.feature.games.TaskEditor
 import dev.pnptracker.ui.feature.tasks.TaskEditingHost
@@ -42,6 +46,7 @@ class PoolController(
     private val pools: PoolSource,
     private val colors: ColorCatalogue,
     private val taskEditing: TaskEditing,
+    private val taskProgress: TaskProgressing,
 ) : TaskEditingHost {
     var state: PoolScreenState by mutableStateOf(PoolScreenState(poolType = poolType))
         private set
@@ -131,6 +136,12 @@ class PoolController(
             // rewrite a draft.
             is PoolWork.Editing -> copy(from = from.copy(task = task))
             is PoolWork.ConfirmingConvert -> copy(from = from.copy(task = task))
+            // The facts follow the task; the draft, the counts it was opened on
+            // and whether it is being sent do not. What the user typed is theirs,
+            // and the counts it was opened on are the proof the save is checked
+            // against — replacing either would turn a stale save into a silent
+            // overwrite of whatever arrived.
+            is PoolWork.EditingStages -> copy(task = task)
         }
 
     /** The task by that identity as the pool now holds it, or null when it is gone. */
@@ -162,6 +173,183 @@ class PoolController(
     }
 
     fun isShowingStages(taskId: EntityId): Boolean = taskId in state.expandedStages
+
+    /**
+     * Opens the pipeline of one task to be changed (PLAN 7.3).
+     *
+     * The counts it opens on are kept as they are, not merely shown: they are
+     * what the save is checked against, so a panel left open while the work moved
+     * on is refused rather than allowed to put back what it was opened with.
+     *
+     * Refused while something else is open, the same as the menu is: two panels
+     * over two tasks would be two places to look at once. A task with no total
+     * has nothing for a step to count up to (PLAN 7.2), so there is nothing here
+     * to open.
+     */
+    fun beginStageEdit(card: PoolCardKey) {
+        if (state.work != null) return
+        val task = taskOf(card.taskId) ?: return
+        if (task.requiredQuantity == null || task.stages.isEmpty()) return
+        val standing = task.stages.associate { it.stage to it.completedQuantity }
+        cardToFocus = card
+        state =
+            state.copy(
+                work =
+                    PoolWork.EditingStages(
+                        card = card,
+                        task = task,
+                        expected = standing,
+                        draft = standing.mapValues { (_, count) -> count.toString() },
+                    ),
+                // Opening it to be changed leaves it open to be read too, so
+                // closing the panel does not fold the card away underneath it.
+                expandedStages = state.expandedStages + card.taskId,
+                focusRecall = state.focusRecall + 1,
+            )
+    }
+
+    /** Types into one step's box. Digits only, so nothing else can be sent. */
+    fun editStageDraft(
+        stage: ProductionStage,
+        typed: String,
+    ) = onStages { open ->
+        open.copy(
+            draft = open.draft + (stage to typed.filter(Char::isDigit).take(STAGE_DIGITS)),
+            failure = null,
+            invalidStage = null,
+        )
+    }
+
+    /**
+     * Moves one step by one, up or down.
+     *
+     * The draft only. PLAN 7.3 has the whole pipeline saved together, so a
+     * button that wrote as it was pressed would make three saves out of one
+     * change of mind — and could not reach a state the ordering rule forbids
+     * only on the way there.
+     */
+    fun stepStageDraft(
+        stage: ProductionStage,
+        by: Int,
+    ) = onStages { open ->
+        val total = open.task.requiredQuantity ?: return@onStages open
+        val at = open.draft[stage]?.toIntOrNull() ?: 0
+        val moved = (at + by).coerceIn(0, total)
+        open.copy(draft = open.draft + (stage to moved.toString()), failure = null, invalidStage = null)
+    }
+
+    /**
+     * Whether moving a step that way would describe a pipeline that cannot have
+     * happened, so the button saying so can be turned off rather than refused.
+     */
+    fun stageStepAllowed(
+        stage: ProductionStage,
+        by: Int,
+    ): Boolean {
+        val open = state.work as? PoolWork.EditingStages ?: return false
+        val total = open.task.requiredQuantity ?: return false
+        val at = open.draft[stage]?.toIntOrNull() ?: return true
+        val moved = at + by
+        if (moved < 0 || moved > total) return false
+        val steps = open.steps
+        val position = steps.indexOf(stage)
+        val before = steps.getOrNull(position - 1)?.let { open.draft[it]?.toIntOrNull() }
+        val after = steps.getOrNull(position + 1)?.let { open.draft[it]?.toIntOrNull() }
+        if (before != null && moved > before) return false
+        if (after != null && moved < after) return false
+        return true
+    }
+
+    private fun onStages(change: (PoolWork.EditingStages) -> PoolWork.EditingStages) {
+        val open = state.work as? PoolWork.EditingStages ?: return
+        if (open.isSaving) return
+        state = state.copy(work = change(open))
+    }
+
+    /**
+     * Sends the pipeline as the user has described it.
+     *
+     * One call for all three steps, so a target that breaks the ordering rule is
+     * refused whole: saving them one at a time would write the first before
+     * finding out the third would not do.
+     */
+    suspend fun saveStages() {
+        val open = state.work as? PoolWork.EditingStages ?: return
+        if (open.isSaving) return
+        val targets = open.targets
+        if (targets == null) {
+            state =
+                state.copy(
+                    work =
+                        open.copy(
+                            failure = TaskProgressFailure.INVALID_QUANTITY,
+                            invalidStage = open.firstUntypedStage,
+                        ),
+                )
+            return
+        }
+        state = state.copy(work = open.copy(isSaving = true, failure = null, invalidStage = null))
+        val outcome =
+            taskProgress.setStageQuantities(
+                taskId = open.task.taskId,
+                targets = targets,
+                expectedStages = open.expected,
+            )
+        val current = state.work as? PoolWork.EditingStages ?: return
+        state =
+            when (outcome) {
+                // Done, or already standing at what was asked for: either way the
+                // pipeline says what the user wanted, so the panel has finished
+                // its job and closing shows them the card as it now is. A task
+                // finished by the save has left the pool, and the list arriving
+                // closes the panel on its own.
+                is TaskProgressOutcome.Done, TaskProgressOutcome.AlreadySo ->
+                    state.copy(work = null, focusRecall = state.focusRecall + 1)
+
+                // What was typed stays exactly as typed, and so do the counts the
+                // panel was opened on: trying again is the same save, not one
+                // aimed at a picture nobody has seen.
+                is TaskProgressOutcome.Refused ->
+                    state.copy(
+                        work =
+                            current.copy(
+                                isSaving = false,
+                                failure = outcome.failure,
+                                invalidStage = stageBlamedFor(outcome.failure, current),
+                            ),
+                    )
+            }
+    }
+
+    /**
+     * Which step a refusal is about, so the keyboard can be sent to it.
+     *
+     * Only the refusals that are about one step name one. A pipeline that has
+     * moved underneath the panel is about all of them at once, and sending the
+     * keyboard into a box would suggest the answer were there.
+     */
+    private fun stageBlamedFor(
+        failure: TaskProgressFailure,
+        open: PoolWork.EditingStages,
+    ): ProductionStage? =
+        when (failure) {
+            TaskProgressFailure.INVALID_QUANTITY -> open.firstUntypedStage ?: open.steps.firstOrNull()
+            TaskProgressFailure.STAGE_QUANTITY_EXCEEDS_REQUIRED ->
+                open.task.requiredQuantity?.let { total ->
+                    open.steps.firstOrNull { (open.draft[it]?.toIntOrNull() ?: 0) > total }
+                }
+
+            TaskProgressFailure.STAGE_ORDER_VIOLATED ->
+                open.steps
+                    .zipWithNext()
+                    .firstOrNull { (earlier, later) ->
+                        val before = open.draft[earlier]?.toIntOrNull() ?: 0
+                        val after = open.draft[later]?.toIntOrNull() ?: 0
+                        after > before
+                    }?.second
+
+            else -> null
+        }
 
     // ----------------------------------------------------- working on a task
 
@@ -237,11 +425,37 @@ class PoolController(
             )
     }
 
+    /**
+     * Opens the task's own form straight from a card.
+     *
+     * The same form the menu opens, entered without the menu in between. PLAN
+     * 7.2 sends a task with no total here to be given one, and offering a second
+     * form for that would be two places to type the same thing.
+     */
+    fun beginTaskEditFor(card: PoolCardKey) {
+        if (state.work != null) return
+        val task = taskOf(card.taskId) ?: return
+        val snapshot = editingSnapshotOf(task.taskId) ?: return
+        cardToFocus = card
+        state =
+            state.copy(
+                work =
+                    PoolWork.Editing(
+                        from = PoolWork.Menu(card = card, task = task),
+                        editor = editorOf(snapshot),
+                    ),
+                focusRecall = state.focusRecall + 1,
+            )
+    }
+
     private fun PoolScreenState.menu(): PoolWork.Menu? =
         when (val open = work) {
             is PoolWork.Menu -> open
             is PoolWork.Editing -> open.from
             is PoolWork.ConfirmingConvert -> open.from
+            // The pipeline panel is its own control on the card, opened without
+            // a menu ever being shown, so there is none behind it.
+            is PoolWork.EditingStages -> null
             null -> null
         }
 
@@ -423,3 +637,6 @@ private fun <T> List<T>.movedUp(at: Int): List<T> =
     } else {
         toMutableList().apply { add(at - 1, removeAt(at)) }
     }
+
+/** How long a step count may be typed. A pipeline counts pieces, not populations. */
+private const val STAGE_DIGITS = 9
