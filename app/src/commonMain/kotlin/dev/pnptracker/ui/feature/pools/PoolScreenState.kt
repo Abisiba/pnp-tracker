@@ -5,6 +5,7 @@ import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.pools.PoolModel
 import dev.pnptracker.domain.pools.PoolTask
+import dev.pnptracker.domain.tasks.StageSnapshot
 import dev.pnptracker.domain.tasks.TaskProgressFailure
 import dev.pnptracker.ui.feature.games.TaskEditor
 
@@ -109,12 +110,16 @@ sealed interface PoolWork {
         override val card: PoolCardKey,
         override val task: PoolTask,
         /**
-         * What the pipeline said when this was opened.
+         * What the pipeline and the total said when this was opened.
          *
          * Sent back with the save so a panel left open while the work moved on
          * is refused rather than allowed to put back what it was opened with.
+         * It is also what the panel itself counts against: the boxes, the arrows
+         * and the `/ N` beside them all describe the picture the user is typing
+         * into, and quietly re-pointing them at a total that arrived afterwards
+         * would change what their half-typed target meant without telling them.
          */
-        val expected: Map<ProductionStage, Int>,
+        val expected: StageSnapshot,
         /** What the user has typed for each step, as typed. */
         val draft: Map<ProductionStage, String>,
         val isSaving: Boolean = false,
@@ -124,7 +129,10 @@ sealed interface PoolWork {
     ) : PoolWork {
         override val parent: PoolWork? get() = null
         override val hasUnsavedChanges: Boolean
-            get() = draft.any { (stage, typed) -> typed != expected[stage]?.toString() }
+            get() = draft.any { (stage, typed) -> typed != expected.stages[stage]?.toString() }
+
+        /** What every step counts up to, from the moment this was opened. */
+        val total: Int? get() = expected.requiredQuantity
 
         /** The steps in the order they are worked in, as the card must draw them. */
         val steps: List<ProductionStage> get() = task.stages.map { it.stage }
@@ -138,9 +146,44 @@ sealed interface PoolWork {
                             ?: return null
                     }
 
-        /** The first step whose box does not hold a number, for the keyboard. */
-        val firstUntypedStage: ProductionStage?
-            get() = steps.firstOrNull { draft[it].isNullOrEmpty() || draft[it]?.all(Char::isDigit) != true }
+        /**
+         * The first step whose box does not hold a usable count, for the keyboard.
+         *
+         * Empty and not-a-number are both here, and so is a number too large to
+         * be one: a run of digits past what a count can hold is no more usable
+         * than a word, and leaving it out would send the keyboard nowhere on the
+         * one refusal the user is least likely to have expected.
+         */
+        val firstUnusableStage: ProductionStage?
+            get() =
+                steps.firstOrNull { stage ->
+                    val typed = draft[stage]
+                    typed.isNullOrEmpty() || !typed.all(Char::isDigit) || typed.toIntOrNull() == null
+                }
+
+        /** Whether one box holds something that is not a count this step could stand at. */
+        fun isUnusable(stage: ProductionStage): Boolean {
+            val typed = draft[stage] ?: return false
+            if (typed.isEmpty()) return false
+            return !typed.all(Char::isDigit) || typed.toIntOrNull() == null
+        }
+
+        /**
+         * Whether the draft as it stands describes a pipeline that cannot have
+         * happened, a later step standing further on than an earlier one.
+         *
+         * Said while it is being typed rather than only when the save comes
+         * back, because the arrows are allowed to pass through it: reaching
+         * `10/10/5` from `8/10/5` means moving the first step twice, and the
+         * halfway point is a state the finished target is not.
+         */
+        val isOutOfOrder: Boolean
+            get() =
+                steps.zipWithNext().any { (earlier, later) ->
+                    val before = draft[earlier]?.toIntOrNull() ?: return@any false
+                    val after = draft[later]?.toIntOrNull() ?: return@any false
+                    after > before
+                }
     }
 }
 

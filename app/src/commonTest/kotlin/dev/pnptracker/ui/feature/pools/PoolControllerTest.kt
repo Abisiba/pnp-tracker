@@ -21,6 +21,7 @@ import dev.pnptracker.domain.pools.PoolNavigationSummary
 import dev.pnptracker.domain.pools.PoolSnapshot
 import dev.pnptracker.domain.pools.PoolStage
 import dev.pnptracker.domain.pools.PoolTask
+import dev.pnptracker.domain.tasks.StageSnapshot
 import dev.pnptracker.domain.tasks.TaskEditException
 import dev.pnptracker.domain.tasks.TaskEditFailure
 import dev.pnptracker.domain.tasks.TaskProgressFailure
@@ -147,9 +148,9 @@ private class FakeProgress(
     override suspend fun setStageQuantities(
         taskId: EntityId,
         targets: Map<ProductionStage, Int>,
-        expectedStages: Map<ProductionStage, Int>?,
+        expected: StageSnapshot?,
     ): TaskProgressOutcome {
-        staged += StagedSave(taskId, targets, expectedStages)
+        staged += StagedSave(taskId, targets, expected)
         whileSaving?.let {
             whileSaving = null
             it()
@@ -161,7 +162,7 @@ private class FakeProgress(
 private data class StagedSave(
     val taskId: EntityId,
     val targets: Map<ProductionStage, Int>,
-    val expected: Map<ProductionStage, Int>?,
+    val expected: StageSnapshot?,
 )
 
 /**
@@ -596,8 +597,15 @@ class PoolControllerTest {
             PoolStage(ProductionStage.CUT, 5),
         )
 
+    /** The three steps of a card pipeline, in the order they are worked in. */
+    private fun at(
+        print: Int,
+        laminate: Int,
+        cut: Int,
+    ) = mapOf(ProductionStage.PRINT to print, ProductionStage.LAMINATE to laminate, ProductionStage.CUT to cut)
+
     private fun cardTask(
-        quantity: Int? = 20,
+        quantity: Int? = CARD_TOTAL,
         stages: List<PoolStage> = cardPipeline,
     ) = task(name = "Bird Cards", quantity = quantity, stages = stages, tracking = TrackingMode.PIPELINE)
 
@@ -616,7 +624,7 @@ class PoolControllerTest {
             controller.beginStageEdit(card)
 
             val open = stagePanel(controller)
-            assertEquals(mapOf(ProductionStage.PRINT to 15, ProductionStage.LAMINATE to 10, ProductionStage.CUT to 5), open.expected)
+            assertEquals(StageSnapshot(CARD_TOTAL, at(15, 10, 5)), open.expected)
             assertEquals(mapOf(ProductionStage.PRINT to "15", ProductionStage.LAMINATE to "10", ProductionStage.CUT to "5"), open.draft)
             assertEquals(listOf(ProductionStage.PRINT, ProductionStage.LAMINATE, ProductionStage.CUT), open.steps)
             assertTrue(controller.isShowingStages(card.taskId), "opening the panel folded the card away")
@@ -665,18 +673,374 @@ class PoolControllerTest {
             assertTrue(progress.staged.isEmpty(), "an arrow wrote straight to the database")
         }
 
+    // ------------------------------------------------ what a box will take
+
     @Test
-    fun `an arrow that would describe an impossible pipeline is not offered`() =
+    fun `a count is not cut short at nine digits`() =
         withCardPool { controller, card ->
             controller.beginStageEdit(card)
+            // Ten digits, because the largest count there is has ten. A box that
+            // stopped at nine would refuse a number the task's own total is
+            // allowed to be, and would refuse it by quietly dropping a digit.
+            controller.editStageDraft(ProductionStage.PRINT, Int.MAX_VALUE.toString())
 
-            // The cut may not pass the lamination, and the print run may not fall
-            // below it; both are the same rule read from its two ends.
-            controller.editStageDraft(ProductionStage.CUT, "10")
-            assertFalse(controller.stageStepAllowed(ProductionStage.CUT, 1), "the cut was offered a step past the lamination")
-            controller.editStageDraft(ProductionStage.PRINT, "10")
-            assertFalse(controller.stageStepAllowed(ProductionStage.PRINT, -1), "the print run was offered a step below it")
+            assertEquals(Int.MAX_VALUE.toString(), stagePanel(controller).draft[ProductionStage.PRINT])
+        }
+
+    @Test
+    fun `the largest count there is goes through when the task counts that high`() =
+        withCardPool(
+            task =
+                cardTask(
+                    quantity = Int.MAX_VALUE,
+                    stages =
+                        listOf(
+                            PoolStage(ProductionStage.PRINT, 0),
+                            PoolStage(ProductionStage.LAMINATE, 0),
+                            PoolStage(ProductionStage.CUT, 0),
+                        ),
+                ),
+        ) { controller, card ->
+            controller.beginStageEdit(card)
+            controller.editStageDraft(ProductionStage.PRINT, Int.MAX_VALUE.toString())
+
+            controller.saveStages()
+
+            assertEquals(Int.MAX_VALUE, progress.staged.single().targets[ProductionStage.PRINT])
+        }
+
+    @Test
+    fun `a count too large to be one is refused where it was typed rather than trimmed`() =
+        withCardPool { controller, card ->
+            controller.beginStageEdit(card)
+            val tooLarge =
+                Int.MAX_VALUE
+                    .toLong()
+                    .plus(1)
+                    .toString()
+            controller.editStageDraft(ProductionStage.PRINT, tooLarge)
+
+            assertEquals(tooLarge, stagePanel(controller).draft[ProductionStage.PRINT], "what was typed was trimmed")
+            assertTrue(stagePanel(controller).isUnusable(ProductionStage.PRINT), "the box did not say it will not do")
+
+            controller.saveStages()
+
+            val open = stagePanel(controller)
+            assertTrue(progress.staged.isEmpty(), "a number that is not a count reached the database")
+            assertEquals(TaskProgressFailure.INVALID_QUANTITY, open.failure)
+            assertEquals(ProductionStage.PRINT, open.invalidStage, "the keyboard was not sent to the box at fault")
+        }
+
+    @Test
+    fun `a very long run of digits is refused rather than thrown over`() =
+        withCardPool { controller, card ->
+            controller.beginStageEdit(card)
+            val absurd = "9".repeat(400)
+
+            // Parsing this must not throw: it is a thing a user can hold a key
+            // down and produce, and it is the panel's job to say no to it.
+            controller.editStageDraft(ProductionStage.PRINT, absurd)
+            controller.saveStages()
+
+            assertEquals(absurd, stagePanel(controller).draft[ProductionStage.PRINT])
+            assertEquals(TaskProgressFailure.INVALID_QUANTITY, stagePanel(controller).failure)
+            assertTrue(progress.staged.isEmpty())
+        }
+
+    @Test
+    fun `zeros written in front of a count neither lose it nor change it`() =
+        withCardPool { controller, card ->
+            controller.beginStageEdit(card)
+            controller.editStageDraft(ProductionStage.PRINT, "0015")
+            controller.editStageDraft(ProductionStage.LAMINATE, "0000")
+            controller.editStageDraft(ProductionStage.CUT, "0")
+
+            assertFalse(stagePanel(controller).isUnusable(ProductionStage.PRINT))
+            controller.saveStages()
+
+            assertEquals(at(15, 0, 0), progress.staged.single().targets)
+        }
+
+    @Test
+    fun `nothing typed at all is not a count`() =
+        withCardPool { controller, card ->
+            controller.beginStageEdit(card)
+            controller.editStageDraft(ProductionStage.LAMINATE, "")
+
+            controller.saveStages()
+
+            assertTrue(progress.staged.isEmpty())
+            assertEquals(ProductionStage.LAMINATE, stagePanel(controller).invalidStage)
+        }
+
+    // ------------------------------------------------- two presses, one save
+
+    @Test
+    fun `pressing save twice in a row runs one save`() =
+        withCardPool { controller, card ->
+            controller.beginStageEdit(card)
+            controller.editStageDraft(ProductionStage.CUT, "4")
+            // The second press lands while the first is still with the database,
+            // which is where a real second click lands.
+            progress.whileSaving = { controller.saveStages() }
+
+            controller.saveStages()
+
+            assertEquals(1, progress.staged.size, "the same change was sent twice")
+        }
+
+    @Test
+    fun `a list arriving mid-save does not let a second press through`() =
+        withCardPool { controller, card ->
+            controller.beginStageEdit(card)
+            controller.editStageDraft(ProductionStage.CUT, "4")
+            progress.whileSaving = {
+                // A row arriving is not a reason to think the save has finished.
+                controller.show(pools.observePool(PoolType.CARD).first())
+                controller.saveStages()
+            }
+
+            controller.saveStages()
+
+            assertEquals(1, progress.staged.size, "a row arriving mid-save let a second one through")
+        }
+
+    @Test
+    fun `a total changing mid-save does not change what the save was checked against`() =
+        withCardPool { controller, card ->
+            controller.beginStageEdit(card)
+            controller.editStageDraft(ProductionStage.CUT, "4")
+            progress.whileSaving = {
+                pools.snapshots.value =
+                    PoolSnapshot(PoolType.CARD, listOf(cardTask(quantity = 30).copy(taskId = card.taskId)))
+                controller.show(pools.observePool(PoolType.CARD).first())
+            }
+
+            controller.saveStages()
+
+            // What went to the database is the picture the user described, total
+            // and all. The database compares it with what is really there and
+            // refuses it; the panel does not quietly re-aim at the new total.
+            assertEquals(StageSnapshot(CARD_TOTAL, at(15, 10, 5)), progress.staged.single().expected)
+        }
+
+    @Test
+    fun `a refused save can be sent again once`() =
+        withCardPool { controller, card ->
+            progress.outcome = TaskProgressOutcome.Refused(TaskProgressFailure.STALE_STAGE_PROGRESS)
+            controller.beginStageEdit(card)
+            controller.editStageDraft(ProductionStage.CUT, "4")
+
+            controller.saveStages()
+            assertFalse(stagePanel(controller).isSaving, "a refusal left the panel sending for ever")
+            controller.saveStages()
+
+            assertEquals(2, progress.staged.size, "the panel would not try again after a refusal")
+            assertEquals("4", stagePanel(controller).draft[ProductionStage.CUT], "the refusal threw the draft away")
+        }
+
+    @Test
+    fun `a stale panel closed and opened again is checked against what is there now`() =
+        withCardPool { controller, card ->
+            progress.outcome = TaskProgressOutcome.Refused(TaskProgressFailure.STALE_STAGE_PROGRESS)
+            controller.beginStageEdit(card)
+            controller.saveStages()
+            assertEquals(TaskProgressFailure.STALE_STAGE_PROGRESS, stagePanel(controller).failure)
+
+            controller.closeInnermost()
+            // What was really there all along, arriving the way a row does.
+            pools.snapshots.value =
+                PoolSnapshot(
+                    PoolType.CARD,
+                    listOf(
+                        cardTask(
+                            stages =
+                                listOf(
+                                    PoolStage(ProductionStage.PRINT, 18),
+                                    PoolStage(ProductionStage.LAMINATE, 12),
+                                    PoolStage(ProductionStage.CUT, 7),
+                                ),
+                        ).copy(taskId = card.taskId),
+                    ),
+                )
+            controller.show(pools.observePool(PoolType.CARD).first())
+            progress.outcome = TaskProgressOutcome.Done
+            controller.beginStageEdit(card)
+
+            val reopened = stagePanel(controller)
+            assertEquals(StageSnapshot(CARD_TOTAL, at(18, 12, 7)), reopened.expected, "the panel opened on the old picture")
+            assertEquals("18", reopened.draft[ProductionStage.PRINT])
+            assertNull(reopened.failure, "the old refusal came back with the new panel")
+            assertNull(reopened.invalidStage)
+        }
+
+    @Test
+    fun `a task that leaves the pool mid-save closes the panel and is not written twice`() =
+        withCardPool { controller, card ->
+            controller.beginStageEdit(card)
+            controller.editStageDraft(ProductionStage.CUT, "4")
+            progress.whileSaving = {
+                pools.snapshots.value = PoolSnapshot(PoolType.CARD, emptyList())
+                controller.show(pools.observePool(PoolType.CARD).first())
+            }
+
+            controller.saveStages()
+
+            assertNull(controller.state.work, "the panel stayed open over a task that had gone")
+            assertEquals(1, progress.staged.size)
+        }
+
+    // -------------------------------------------- what an expansion is about
+
+    @Test
+    fun `a card that leaves the pool takes its expansion with it`() =
+        withCardPool { controller, card ->
+            controller.beginStageEdit(card)
+            assertTrue(controller.isShowingStages(card.taskId))
+
+            // Finished from the panel: the pool no longer has it.
+            pools.snapshots.value = PoolSnapshot(PoolType.CARD, emptyList())
+            controller.show(pools.observePool(PoolType.CARD).first())
+
+            assertFalse(controller.isShowingStages(card.taskId), "the card kept an expansion with nothing to expand")
+            assertNull(controller.state.work)
+        }
+
+    @Test
+    fun `a card reopened from elsewhere comes back folded away`() =
+        withCardPool { controller, card ->
+            controller.toggleStageDetails(card.taskId)
+            pools.snapshots.value = PoolSnapshot(PoolType.CARD, emptyList())
+            controller.show(pools.observePool(PoolType.CARD).first())
+
+            // Reopened from the table, and back in the pool. The user asked for
+            // it to be worked on again, not for its counters to be shown.
+            pools.snapshots.value = PoolSnapshot(PoolType.CARD, listOf(cardTask().copy(taskId = card.taskId)))
+            controller.show(pools.observePool(PoolType.CARD).first())
+
+            assertFalse(controller.isShowingStages(card.taskId), "the card came back already open")
+        }
+
+    @Test
+    fun `one card leaving leaves every other card as it was`() =
+        runBlocking {
+            val staying = cardTask()
+            val going = cardTask()
+            pools.snapshots.value = PoolSnapshot(PoolType.CARD, listOf(staying, going))
+            val controller = controllerFor(PoolType.CARD)
+            controller.show(pools.observePool(PoolType.CARD).first())
+            controller.toggleStageDetails(staying.taskId)
+            controller.toggleStageDetails(going.taskId)
+
+            pools.snapshots.value = PoolSnapshot(PoolType.CARD, listOf(staying))
+            controller.show(pools.observePool(PoolType.CARD).first())
+
+            assertTrue(controller.isShowingStages(staying.taskId), "a card that never moved was folded away")
+            assertFalse(controller.isShowingStages(going.taskId))
+        }
+
+    @Test
+    fun `a read that failed folds nothing away`() =
+        withCardPool { controller, card ->
+            controller.toggleStageDetails(card.taskId)
+
+            controller.show(PoolContentState.Failed)
+
+            // A read that failed says nothing about which tasks there are, so it
+            // may not take an expansion away on the strength of it.
+            assertTrue(controller.isShowingStages(card.taskId), "a failed read folded the card away")
+        }
+
+    // -------------------------------------- a task with nothing to count up to
+
+    @Test
+    fun `a task with no total is sent to the form and comes back with a panel`() =
+        withCardPool(task = cardTask(quantity = null)) { controller, card ->
+            // There is nothing for a step to count up to, so there is no panel
+            // to open — only the form that gives the task a total.
+            controller.beginStageEdit(card)
+            assertNull(controller.state.work, "a panel opened over a task with nothing to count up to")
+
+            controller.beginTaskEditFor(card)
+            assertIs<PoolWork.Editing>(controller.state.work)
+            assertFalse(controller.isShowingStages(card.taskId), "the form opened the counters as well")
+
+            // Out of the form and out of the menu behind it, the way closing it
+            // for good goes.
+            while (controller.state.work != null) controller.closeInnermost()
+            // The total arriving the way a saved edit does.
+            pools.snapshots.value =
+                PoolSnapshot(
+                    PoolType.CARD,
+                    listOf(
+                        cardTask(
+                            quantity = 30,
+                            stages =
+                                listOf(
+                                    PoolStage(ProductionStage.PRINT, 0),
+                                    PoolStage(ProductionStage.LAMINATE, 0),
+                                    PoolStage(ProductionStage.CUT, 0),
+                                ),
+                        ).copy(taskId = card.taskId),
+                    ),
+                )
+            controller.show(pools.observePool(PoolType.CARD).first())
+            controller.beginStageEdit(card)
+
+            val open = stagePanel(controller)
+            assertEquals(30, open.total, "the panel opened on something other than the total just given")
+            assertEquals(mapOf(ProductionStage.PRINT to "0", ProductionStage.LAMINATE to "0", ProductionStage.CUT to "0"), open.draft)
             assertTrue(controller.stageStepAllowed(ProductionStage.PRINT, 1))
+        }
+
+    @Test
+    fun `an arrow keeps working while the draft is out of order`() =
+        withCardPool { controller, card ->
+            controller.beginStageEdit(card)
+            // The print run behind the lamination: the state PLAN 7.2 will not
+            // have saved, and the one a user typing towards 10 or 20 for all
+            // three has to pass through.
+            controller.editStageDraft(ProductionStage.PRINT, "8")
+
+            val open = stagePanel(controller)
+            assertTrue(open.isOutOfOrder, "a print run behind the lamination was not noticed")
+            // Both arrows still move it. Asking the ordering rule here took both
+            // of them away — every single step left the picture just as wrong —
+            // and left a user working by keyboard with nowhere to go.
+            assertTrue(controller.stageStepAllowed(ProductionStage.PRINT, 1), "the way out was taken away")
+            assertTrue(controller.stageStepAllowed(ProductionStage.PRINT, -1), "the way back was taken away")
+        }
+
+    @Test
+    fun `the keyboard alone climbs out of an order the pipeline may not be saved in`() =
+        withCardPool { controller, card ->
+            controller.beginStageEdit(card)
+            controller.editStageDraft(ProductionStage.PRINT, "8")
+
+            // Nothing but the arrow, the way a user with no mouse would do it.
+            repeat(2) {
+                assertTrue(controller.stageStepAllowed(ProductionStage.PRINT, 1))
+                controller.stepStageDraft(ProductionStage.PRINT, 1)
+            }
+
+            val open = stagePanel(controller)
+            assertEquals("10", open.draft[ProductionStage.PRINT])
+            assertFalse(open.isOutOfOrder, "the arrows could not reach a pipeline that may be saved")
+
+            controller.saveStages()
+            assertEquals(at(10, 10, 5), progress.staged.single().targets)
+        }
+
+    @Test
+    fun `an out of order draft is said to be so before it is ever sent`() =
+        withCardPool { controller, card ->
+            controller.beginStageEdit(card)
+            assertFalse(stagePanel(controller).isOutOfOrder)
+
+            controller.editStageDraft(ProductionStage.CUT, "11")
+
+            assertTrue(stagePanel(controller).isOutOfOrder, "the cut passing the lamination went unremarked")
+            assertTrue(progress.staged.isEmpty(), "noticing it wrote to the database")
         }
 
     @Test
@@ -714,9 +1078,9 @@ class PoolControllerTest {
                 "the save did not carry the whole pipeline",
             )
             assertEquals(
-                mapOf(ProductionStage.PRINT to 15, ProductionStage.LAMINATE to 10, ProductionStage.CUT to 5),
+                StageSnapshot(CARD_TOTAL, at(15, 10, 5)),
                 sent.expected,
-                "the save did not carry what the panel was opened on",
+                "the save did not carry the counts and the total it was opened on",
             )
             assertNull(controller.state.work, "the panel stayed open after it landed")
         }
@@ -746,7 +1110,7 @@ class PoolControllerTest {
 
             val open = stagePanel(controller)
             assertEquals("8", open.draft[ProductionStage.PRINT], "the refusal threw away what had been typed")
-            assertEquals(mapOf(ProductionStage.PRINT to 15, ProductionStage.LAMINATE to 10, ProductionStage.CUT to 5), open.expected)
+            assertEquals(StageSnapshot(CARD_TOTAL, at(15, 10, 5)), open.expected)
             assertEquals(TaskProgressFailure.STAGE_ORDER_VIOLATED, open.failure)
             assertFalse(open.isSaving)
         }
@@ -803,7 +1167,7 @@ class PoolControllerTest {
             val open = stagePanel(controller)
             assertEquals("9", open.draft[ProductionStage.CUT], "the row that arrived rewrote the draft")
             assertEquals(
-                mapOf(ProductionStage.PRINT to 15, ProductionStage.LAMINATE to 10, ProductionStage.CUT to 5),
+                StageSnapshot(CARD_TOTAL, at(15, 10, 5)),
                 open.expected,
                 "the row that arrived rewrote what the save is checked against",
             )
@@ -866,3 +1230,6 @@ class PoolControllerTest {
             assertTrue(progress.staged.isEmpty(), "asking for a total wrote a pipeline")
         }
 }
+
+/** What a card pipeline in these fixtures counts up to, unless one says otherwise. */
+private const val CARD_TOTAL = 20

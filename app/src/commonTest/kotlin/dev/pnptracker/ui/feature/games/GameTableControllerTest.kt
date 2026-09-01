@@ -32,6 +32,7 @@ import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.tasks.CellTextSelection
+import dev.pnptracker.domain.tasks.StageSnapshot
 import dev.pnptracker.domain.tasks.TaskDraft
 import dev.pnptracker.domain.tasks.TaskEditException
 import dev.pnptracker.domain.tasks.TaskEditFailure
@@ -247,7 +248,7 @@ class GameTableControllerTest {
         override suspend fun setStageQuantities(
             taskId: EntityId,
             targets: Map<ProductionStage, Int>,
-            expectedStages: Map<ProductionStage, Int>?,
+            expected: StageSnapshot?,
         ): TaskProgressOutcome {
             staged += taskId
             return answer()

@@ -123,11 +123,26 @@ class PoolScreenLayoutTest {
 
     @Test
     fun `opening and folding the stage details are described differently`() {
-        val open = textOf(Strings.Pool.stageDetailsOpen, "Yarasa")
-        val close = textOf(Strings.Pool.stageDetailsClose, "Yarasa")
+        val open = textOf(Strings.Pool.stageDetailsOpen, "Basıldı: 15/20 · 5 eksik", "Yarasa")
+        val close = textOf(Strings.Pool.stageDetailsClose, "Basıldı: 15/20 · 5 eksik", "Yarasa")
 
         assertTrue(open != close, "the control says the same thing whichever way it will go")
-        listOf(open, close).forEach { assertTrue(it.contains("Yarasa"), "the control does not say which task: $it") }
+        listOf(open, close).forEach {
+            assertTrue(it.contains("Yarasa"), "the control does not say which task: $it")
+            // Where the steps have got to is part of the name, not only part of
+            // the picture: without it a reader is offered a control and never
+            // told what it currently says.
+            assertTrue(it.contains("Basıldı: 15/20 · 5 eksik"), "the control does not say where the steps stand: $it")
+        }
+    }
+
+    @Test
+    fun `a pipeline counted all the way up is spoken of as steps and not as a finished task`() {
+        val done = textOf(Strings.Pool.stageDone)
+        val spoken = textOf(Strings.Pool.stageAllDone)
+
+        assertTrue(spoken != done, "a reader hears exactly what a finished task says")
+        assertTrue(spoken.contains("aşama", ignoreCase = true), "what a reader hears does not say it is about the steps")
     }
 
     @Test
@@ -439,9 +454,84 @@ class PoolScreenLayoutTest {
         assertTrue("Strings.Pool.stageBadgeOf" in badge, "the badge does not say how far the step has got")
         assertTrue("task.firstUnfinishedStage" in badge, "the badge does not name the step that is next")
         assertTrue("Strings.Pool.stageDone" in badge, "a finished pipeline is not said to be finished")
+        // The word on the badge stays PLAN 7.3's. What it is called out loud
+        // does not: "Tamamlandı" alone is what a finished task says, and this
+        // control is only ever about the steps.
+        assertTrue("Strings.Pool.stageAllDone" in badge, "a reader is told the task is done, not the steps")
         assertTrue("Strings.Pool.stageBadgeUnknown" in badge, "a task with no total is shown a count anyway")
         assertTrue("Strings.Pool.stageEditTask" in badge, "a task with no total is not sent anywhere to be given one")
-        assertTrue("(total - at)" in badge, "the badge does not say what is left of the step")
+        // What is left is worked out rather than guessed at: the total less how
+        // far the step has got, whatever the total is called where it is read.
+        assertTrue("- at)" in badge, "the badge does not say what is left of the step")
+    }
+
+    @Test
+    fun `a pipeline refused for having moved says the total may have moved too`() {
+        val said = textOf(Strings.Pool.stageStale)
+
+        // The counts are one half of what the save is checked against and the
+        // total is the other, so a message naming only the steps sends a user
+        // whose total changed looking for a change that never happened.
+        assertTrue(said.contains("adedi", ignoreCase = true), "the message does not admit the total may have moved: $said")
+        assertTrue(said.contains("aşama", ignoreCase = true), "the message does not mention the steps: $said")
+        listOf("stale", "SQL", "transaction", "Exception").forEach {
+            assertTrue(it !in said, "the message says $it, which is not the user's word: $said")
+        }
+    }
+
+    @Test
+    fun `the panel holds the keyboard itself so its shortcut always lands`() {
+        val panel = screen.substringAfter("private fun StagePanel(").substringBefore("/** One step:")
+
+        // A box drawn below the fold cannot take the keyboard, and the request
+        // is deliberately allowed to fail rather than crash. Without somewhere
+        // else for it to go, Ctrl+Enter reached nothing at all.
+        assertTrue("panel.requestFocus()" in panel, "the panel never asks for the keyboard itself")
+        assertTrue(".focusRequester(panel)" in panel && ".focusable()" in panel, "the panel cannot hold the keyboard")
+        assertTrue("onPreviewKeyEvent" in panel, "the panel answers no keys")
+    }
+
+    @Test
+    fun `no box in the panel cuts a count short`() {
+        // The largest count there is has ten digits. A limit written here would
+        // be one this screen invented, and the form that sets the total has
+        // none: it takes what is typed and says whether it is a count.
+        assertTrue("take(" !in controller.substringAfter("fun editStageDraft("), "a count is cut short as it is typed")
+        assertTrue("STAGE_DIGITS" !in controller, "the panel keeps a length limit of its own")
+        assertTrue("isError = isUnusable" in screen, "a box holding no count does not say so")
+    }
+
+    @Test
+    fun `an arrow asks only what a count may be, never what the pipeline may be`() {
+        val allowed = controller.substringAfter("fun stageStepAllowed(").substringBefore("private fun onStages")
+
+        // Asking the ordering rule here took both arrows off the one step that
+        // had to move, which is a dead end for anybody working by keyboard.
+        assertTrue("moved in 0..total" in allowed, "an arrow is not bounded by what a count may be")
+        listOf("zipWithNext", "indexOf", "getOrNull").forEach {
+            assertTrue(it !in allowed, "an arrow asks $it, which is a question about the whole pipeline")
+        }
+    }
+
+    @Test
+    fun `what the panel counts against is the picture it was opened on`() {
+        // Not whatever has arrived since. The draft was typed against one total,
+        // the save is checked against that total, and showing another would put
+        // a number in front of the user that nothing they are doing is measured
+        // by.
+        assertTrue("val total = open.total ?: return" in screen, "the panel counts against a total that may have moved")
+        assertTrue("val total: Int? get() = expected.requiredQuantity" in state, "the snapshot has no total in it")
+        assertTrue("StageSnapshot(requiredQuantity = task.requiredQuantity" in controller, "the panel opens without a total")
+    }
+
+    @Test
+    fun `a card that has left the pool does not keep its counters open`() {
+        val show = controller.substringAfter("fun show(content: PoolContentState)").substringBefore("/** Follows the catalogue")
+
+        assertTrue("expandedStages" in show, "a list arriving says nothing about which cards are still expanded")
+        assertTrue("taskNamed(it) != null" in show, "an expansion is kept over a task the pool no longer has")
+        // A read that failed is not evidence that a card has gone.
+        assertTrue("?: state.expandedStages" in show, "a failed read folds every card away")
     }
 
     @Test

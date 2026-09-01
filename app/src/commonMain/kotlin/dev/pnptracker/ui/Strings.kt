@@ -294,6 +294,7 @@ import dev.pnptracker.resources.pool_special_checklist
 import dev.pnptracker.resources.pool_special_counted
 import dev.pnptracker.resources.pool_special_game
 import dev.pnptracker.resources.pool_special_remaining
+import dev.pnptracker.resources.pool_stage_all_done
 import dev.pnptracker.resources.pool_stage_badge
 import dev.pnptracker.resources.pool_stage_badge_of
 import dev.pnptracker.resources.pool_stage_badge_unknown
@@ -708,6 +709,7 @@ object Strings {
         val currentColor = Res.string.pool_task_color_current
         val stageBadge = Res.string.pool_stage_badge
         val stageDone = Res.string.pool_stage_done
+        val stageAllDone = Res.string.pool_stage_all_done
         val stageDetailsOpen = Res.string.pool_stage_details_open
         val stageDetailsClose = Res.string.pool_stage_details_close
         val stageCount = Res.string.pool_stage_count

@@ -17,6 +17,7 @@ import dev.pnptracker.domain.pools.PoolModel
 import dev.pnptracker.domain.pools.PoolTask
 import dev.pnptracker.domain.pools.poolModelOf
 import dev.pnptracker.domain.rules.normalizeColorTerm
+import dev.pnptracker.domain.tasks.StageSnapshot
 import dev.pnptracker.domain.tasks.TaskEditException
 import dev.pnptracker.domain.tasks.TaskProgressFailure
 import dev.pnptracker.domain.tasks.trackingModesOf
@@ -93,7 +94,22 @@ class PoolController(
      * rather than at every call site.
      */
     fun show(content: PoolContentState) {
-        state = state.copy(content = content, work = stillOpen(content, state.work))
+        // A read that failed says nothing about any task, so it takes nothing
+        // away; a list that arrived is the whole truth about which cards there
+        // are, so an expansion over a task that has left it has nothing to be
+        // about any more. Dropping it here is what stops a task finished from
+        // the panel and reopened from the table coming back already open, with
+        // the counters showing, when the user only asked for it to be worked on
+        // again. Every other card keeps whatever it was showing.
+        val model = (content as? PoolContentState.Content)?.model
+        state =
+            state.copy(
+                content = content,
+                work = stillOpen(content, state.work),
+                expandedStages =
+                    model?.let { shown -> state.expandedStages.filterTo(mutableSetOf()) { shown.taskNamed(it) != null } }
+                        ?: state.expandedStages,
+            )
     }
 
     /** Follows the catalogue, which only the editor uses. */
@@ -163,9 +179,9 @@ class PoolController(
     /**
      * Shows or hides one task's stage counters.
      *
-     * Reading only. PLAN 12.11 has the counters edited from the badge in a later
-     * slice; this step shows what they are and offers nothing that would change
-     * one, so nothing here writes and nothing is asked of the database.
+     * Reading only, and asking the database nothing: the counts arrived with the
+     * pool. Changing one is [beginStageEdit]'s job, and opening that leaves this
+     * showing underneath it so closing the panel does not fold the card away.
      */
     fun toggleStageDetails(taskId: EntityId) {
         val open = state.expandedStages
@@ -198,7 +214,12 @@ class PoolController(
                     PoolWork.EditingStages(
                         card = card,
                         task = task,
-                        expected = standing,
+                        // The total belongs to the picture as much as the counts
+                        // do: a target of 15/10/5 is most of a task of twenty and
+                        // impossible for a task of twelve, so a total that moves
+                        // while this is open must refuse the save rather than
+                        // quietly change what the user described.
+                        expected = StageSnapshot(requiredQuantity = task.requiredQuantity, stages = standing),
                         draft = standing.mapValues { (_, count) -> count.toString() },
                     ),
                 // Opening it to be changed leaves it open to be read too, so
@@ -208,13 +229,22 @@ class PoolController(
             )
     }
 
-    /** Types into one step's box. Digits only, so nothing else can be sent. */
+    /**
+     * Types into one step's box. Digits only, so nothing else can be sent.
+     *
+     * Nothing is cut short. A count is an [Int] and the largest one is ten
+     * digits, so a box that stopped at nine would refuse a number the task's own
+     * total is allowed to be — and would refuse it by quietly dropping what was
+     * typed rather than by saying so. What will not fit is kept as it was typed
+     * and refused where the user can see it instead, which is the same answer
+     * the form that sets the total gives.
+     */
     fun editStageDraft(
         stage: ProductionStage,
         typed: String,
     ) = onStages { open ->
         open.copy(
-            draft = open.draft + (stage to typed.filter(Char::isDigit).take(STAGE_DIGITS)),
+            draft = open.draft + (stage to typed.filter(Char::isDigit)),
             failure = null,
             invalidStage = null,
         )
@@ -232,32 +262,35 @@ class PoolController(
         stage: ProductionStage,
         by: Int,
     ) = onStages { open ->
-        val total = open.task.requiredQuantity ?: return@onStages open
+        val total = open.total ?: return@onStages open
         val at = open.draft[stage]?.toIntOrNull() ?: 0
         val moved = (at + by).coerceIn(0, total)
         open.copy(draft = open.draft + (stage to moved.toString()), failure = null, invalidStage = null)
     }
 
     /**
-     * Whether moving a step that way would describe a pipeline that cannot have
-     * happened, so the button saying so can be turned off rather than refused.
+     * Whether an arrow has anywhere to move its step to.
+     *
+     * Only what a count can be: never below nothing, never past the total. The
+     * ordering rule is deliberately **not** asked here, because it is a rule
+     * about the pipeline the user ends up describing and not about every state
+     * they pass through on the way. Asking it here locked the arrows: with the
+     * print run behind the lamination the step that had to move was the one
+     * whose every move made the picture no better on its own, so both of its
+     * arrows went out and a user working by keyboard had nowhere left to go. The
+     * whole target is checked once, when it is sent.
      */
     fun stageStepAllowed(
         stage: ProductionStage,
         by: Int,
     ): Boolean {
         val open = state.work as? PoolWork.EditingStages ?: return false
-        val total = open.task.requiredQuantity ?: return false
+        val total = open.total ?: return false
+        // A box holding something that is not a count has not said where it
+        // stands, so an arrow may still put a count in it.
         val at = open.draft[stage]?.toIntOrNull() ?: return true
         val moved = at + by
-        if (moved < 0 || moved > total) return false
-        val steps = open.steps
-        val position = steps.indexOf(stage)
-        val before = steps.getOrNull(position - 1)?.let { open.draft[it]?.toIntOrNull() }
-        val after = steps.getOrNull(position + 1)?.let { open.draft[it]?.toIntOrNull() }
-        if (before != null && moved > before) return false
-        if (after != null && moved < after) return false
-        return true
+        return moved in 0..total
     }
 
     private fun onStages(change: (PoolWork.EditingStages) -> PoolWork.EditingStages) {
@@ -283,7 +316,7 @@ class PoolController(
                     work =
                         open.copy(
                             failure = TaskProgressFailure.INVALID_QUANTITY,
-                            invalidStage = open.firstUntypedStage,
+                            invalidStage = open.firstUnusableStage,
                         ),
                 )
             return
@@ -293,7 +326,7 @@ class PoolController(
             taskProgress.setStageQuantities(
                 taskId = open.task.taskId,
                 targets = targets,
-                expectedStages = open.expected,
+                expected = open.expected,
             )
         val current = state.work as? PoolWork.EditingStages ?: return
         state =
@@ -333,9 +366,9 @@ class PoolController(
         open: PoolWork.EditingStages,
     ): ProductionStage? =
         when (failure) {
-            TaskProgressFailure.INVALID_QUANTITY -> open.firstUntypedStage ?: open.steps.firstOrNull()
+            TaskProgressFailure.INVALID_QUANTITY -> open.firstUnusableStage ?: open.steps.firstOrNull()
             TaskProgressFailure.STAGE_QUANTITY_EXCEEDS_REQUIRED ->
-                open.task.requiredQuantity?.let { total ->
+                open.total?.let { total ->
                     open.steps.firstOrNull { (open.draft[it]?.toIntOrNull() ?: 0) > total }
                 }
 
@@ -639,4 +672,3 @@ private fun <T> List<T>.movedUp(at: Int): List<T> =
     }
 
 /** How long a step count may be typed. A pipeline counts pieces, not populations. */
-private const val STAGE_DIGITS = 9

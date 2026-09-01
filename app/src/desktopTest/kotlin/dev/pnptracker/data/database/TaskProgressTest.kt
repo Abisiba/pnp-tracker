@@ -1,11 +1,13 @@
 package dev.pnptracker.data.database
 
+import androidx.room3.useWriterConnection
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.model.ProgressEventKind
 import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.tasks.StageSnapshot
 import dev.pnptracker.domain.tasks.TaskProgressException
 import dev.pnptracker.domain.tasks.TaskProgressFailure
 import kotlinx.coroutines.Dispatchers
@@ -1327,11 +1329,300 @@ class TaskProgressTest {
     /** What the pipeline stands at, in the order it is worked in. */
     private suspend fun pipelineOf(taskId: EntityId): List<Int> = progress.stagesOfTask(taskId).map { it.completedQuantity }
 
+    /** The whole pipeline as a snapshot of the moment it was read. */
+    private suspend fun snapshotOf(taskId: EntityId): StageSnapshot =
+        StageSnapshot(
+            requiredQuantity = taskOf(taskId).requiredQuantity,
+            stages = progress.stagesOfTask(taskId).associate { it.stage to it.completedQuantity },
+        )
+
+    /** Changes what a task is counted up to, through the form that really does it. */
+    private suspend fun changeTotalOf(
+        taskId: EntityId,
+        total: Int?,
+    ) {
+        val task = taskOf(taskId)
+        database.taskEditDao().editTask(
+            taskId = taskId,
+            name = task.name,
+            colorIds = emptyList(),
+            requiredQuantity = total,
+            notes = task.notes,
+            trackingMode = task.trackingMode,
+            clock = clock,
+        )
+    }
+
+    // ------------------------------------------- a pipeline that moved underneath
+
+    @Test
+    fun `a total raised under an open panel refuses the save it was opened for`() =
+        runBlocking<Unit> {
+            val taskId = aCardAt(15, 10, 5)
+            val opened = snapshotOf(taskId)
+            changeTotalOf(taskId, 30)
+
+            val refusal =
+                assertFailsWith<TaskProgressException> {
+                    progress.setStageQuantities(taskId, mapOf(ProductionStage.PRINT to 18), clock, expected = opened)
+                }
+
+            // Not "that will not fit" — 18 fits perfectly well in 30. What went
+            // wrong is that the picture the user described has been replaced.
+            assertEquals(TaskProgressFailure.STALE_STAGE_PROGRESS, refusal.failure)
+            assertEquals(listOf(15, 10, 5), pipelineOf(taskId), "a stale save wrote anyway")
+            assertEquals(30, taskOf(taskId).requiredQuantity, "the save undid the new total")
+        }
+
+    @Test
+    fun `a total lowered under an open panel is refused as stale and not as too large`() =
+        runBlocking<Unit> {
+            // Low enough that the total may really be brought down to twelve:
+            // the form will not take a total below the furthest step.
+            val taskId = aCardAt(8, 8, 5)
+            val opened = snapshotOf(taskId)
+            changeTotalOf(taskId, 12)
+
+            val refusal =
+                assertFailsWith<TaskProgressException> {
+                    progress.setStageQuantities(
+                        taskId,
+                        mapOf(ProductionStage.PRINT to 15, ProductionStage.LAMINATE to 10, ProductionStage.CUT to 5),
+                        clock,
+                        expected = opened,
+                    )
+                }
+
+            // Fifteen is indeed past twelve, and saying so would send the user
+            // to correct a number that was right when they typed it. The reason
+            // the save cannot stand is that the task is no longer the one they
+            // typed it against.
+            assertEquals(TaskProgressFailure.STALE_STAGE_PROGRESS, refusal.failure)
+            assertEquals(listOf(8, 8, 5), pipelineOf(taskId))
+            assertEquals(12, taskOf(taskId).requiredQuantity)
+        }
+
+    @Test
+    fun `a total taken away under an open panel is refused as stale`() =
+        runBlocking<Unit> {
+            val taskId = aCardAt(8, 8, 5)
+            val opened = snapshotOf(taskId)
+            changeTotalOf(taskId, null)
+
+            val refusal =
+                assertFailsWith<TaskProgressException> {
+                    progress.setStageQuantities(taskId, mapOf(ProductionStage.CUT to 6), clock, expected = opened)
+                }
+
+            assertEquals(TaskProgressFailure.STALE_STAGE_PROGRESS, refusal.failure)
+            assertEquals(listOf(8, 8, 5), pipelineOf(taskId))
+        }
+
+    @Test
+    fun `renaming or noting a task does not refuse a pipeline saved against it`() =
+        runBlocking<Unit> {
+            val taskId = aCardAt(15, 10, 5)
+            val opened = snapshotOf(taskId)
+            val task = taskOf(taskId)
+            database.taskEditDao().editTask(
+                taskId = taskId,
+                name = "Kuş kartları",
+                colorIds = emptyList(),
+                requiredQuantity = task.requiredQuantity,
+                notes = "ikinci baskı",
+                trackingMode = task.trackingMode,
+                clock = clock,
+            )
+
+            // None of that is anything the steps are counted against, so none of
+            // it may refuse a save that is still true.
+            assertTrue(progress.setStageQuantities(taskId, mapOf(ProductionStage.CUT to 9), clock, expected = opened))
+            assertEquals(listOf(15, 10, 9), pipelineOf(taskId))
+        }
+
+    @Test
+    fun `an expected pipeline missing a step is refused`() =
+        runBlocking<Unit> {
+            val taskId = aCardAt(15, 10, 5)
+            val opened =
+                StageSnapshot(CARD_TOTAL, mapOf(ProductionStage.PRINT to 15, ProductionStage.LAMINATE to 10))
+
+            val refusal =
+                assertFailsWith<TaskProgressException> {
+                    progress.setStageQuantities(taskId, mapOf(ProductionStage.CUT to 4), clock, expected = opened)
+                }
+
+            assertEquals(TaskProgressFailure.STALE_STAGE_PROGRESS, refusal.failure)
+            assertEquals(listOf(15, 10, 5), pipelineOf(taskId))
+        }
+
+    @Test
+    fun `an expected pipeline with a step too many is refused`() =
+        runBlocking<Unit> {
+            val taskId = aCardAt(15, 10, 5)
+            val opened =
+                StageSnapshot(
+                    CARD_TOTAL,
+                    mapOf(
+                        ProductionStage.PRINT to 15,
+                        ProductionStage.LAMINATE to 10,
+                        ProductionStage.CUT to 5,
+                        ProductionStage.GLUE to 0,
+                    ),
+                )
+
+            val refusal =
+                assertFailsWith<TaskProgressException> {
+                    progress.setStageQuantities(taskId, mapOf(ProductionStage.CUT to 4), clock, expected = opened)
+                }
+
+            // The stored pipeline is perfectly sound, so this is not a broken
+            // one: what does not add up is the picture that was handed back.
+            assertEquals(TaskProgressFailure.STALE_STAGE_PROGRESS, refusal.failure)
+            assertEquals(listOf(15, 10, 5), pipelineOf(taskId))
+        }
+
+    @Test
+    fun `a pipeline whose rows have been reordered is refused as broken`() =
+        runBlocking<Unit> {
+            val taskId = aCardAt(15, 10, 5)
+            // The steps are read in the order they are worked in, so turning the
+            // order upside down is a pipeline that is no longer a card's.
+            reorderStages(taskId, listOf(ProductionStage.CUT to 0, ProductionStage.LAMINATE to 1, ProductionStage.PRINT to 2))
+
+            val refusal =
+                assertFailsWith<TaskProgressException> {
+                    progress.setStageQuantities(taskId, mapOf(ProductionStage.CUT to 4), clock)
+                }
+
+            assertEquals(TaskProgressFailure.STAGE_PIPELINE_BROKEN, refusal.failure)
+        }
+
+    @Test
+    fun `a pipeline with a row gone is refused as broken and not as stale`() =
+        runBlocking<Unit> {
+            val taskId = aCardAt(15, 10, 5)
+            deleteStage(taskId, ProductionStage.LAMINATE)
+
+            val refusal =
+                assertFailsWith<TaskProgressException> {
+                    progress.setStageQuantities(
+                        taskId,
+                        mapOf(ProductionStage.CUT to 4),
+                        clock,
+                        expected = StageSnapshot(CARD_TOTAL, mapOf(ProductionStage.PRINT to 15, ProductionStage.CUT to 5)),
+                    )
+                }
+
+            // Broken beats stale: what is wrong is the record itself, and telling
+            // the user to close the panel and open it again would send them round
+            // a loop that cannot end.
+            assertEquals(TaskProgressFailure.STAGE_PIPELINE_BROKEN, refusal.failure)
+        }
+
+    @Test
+    fun `a card's snapshot cannot be saved onto a board task`() =
+        runBlocking<Unit> {
+            val boardId = aTaskIn(PoolType.BOARD, requiredQuantity = CARD_TOTAL)
+
+            val refusal =
+                assertFailsWith<TaskProgressException> {
+                    progress.setStageQuantities(
+                        boardId,
+                        mapOf(ProductionStage.PRINT to 4, ProductionStage.LAMINATE to 4),
+                        clock,
+                        expected = StageSnapshot(CARD_TOTAL, mapOf(ProductionStage.PRINT to 0, ProductionStage.LAMINATE to 0)),
+                    )
+                }
+
+            assertEquals(TaskProgressFailure.STAGE_NOT_IN_PIPELINE, refusal.failure)
+            assertEquals(listOf(0, 0, 0), pipelineOf(boardId))
+        }
+
+    @Test
+    fun `a save that changes nothing is still refused when the pipeline moved`() =
+        runBlocking<Unit> {
+            val taskId = aCardAt(15, 10, 5)
+            val opened = snapshotOf(taskId)
+            progress.setStageQuantities(taskId, mapOf(ProductionStage.PRINT to 18), clock)
+            val readsBefore = clock.reads
+
+            // Nothing has changed as far as the panel knows: it is sending back
+            // exactly what it was opened with. As far as the database is
+            // concerned that would undo a change somebody else made, so being
+            // stale has to be noticed before being a no-op is.
+            val refusal =
+                assertFailsWith<TaskProgressException> {
+                    progress.setStageQuantities(
+                        taskId,
+                        mapOf(ProductionStage.PRINT to 15, ProductionStage.LAMINATE to 10, ProductionStage.CUT to 5),
+                        clock,
+                        expected = opened,
+                    )
+                }
+
+            assertEquals(TaskProgressFailure.STALE_STAGE_PROGRESS, refusal.failure)
+            assertEquals(listOf(18, 10, 5), pipelineOf(taskId), "a stale no-op put back what it was opened with")
+            assertEquals(readsBefore, clock.reads, "a refused save read the clock")
+        }
+
+    @Test
+    fun `a save that changes nothing against the pipeline as it stands writes nothing`() =
+        runBlocking<Unit> {
+            val taskId = aCardAt(15, 10, 5)
+            val opened = snapshotOf(taskId)
+            val readsBefore = clock.reads
+
+            val changed =
+                progress.setStageQuantities(
+                    taskId,
+                    mapOf(ProductionStage.PRINT to 15, ProductionStage.LAMINATE to 10, ProductionStage.CUT to 5),
+                    clock,
+                    expected = opened,
+                )
+
+            assertFalse(changed)
+            assertEquals(readsBefore, clock.reads, "a no-op read the clock")
+            assertEquals(listOf(15, 10, 5), pipelineOf(taskId))
+        }
+
+    /** Rewrites the order the steps are worked in, which nothing in production does. */
+    private suspend fun reorderStages(
+        taskId: EntityId,
+        order: List<Pair<ProductionStage, Int>>,
+    ) = database.useWriterConnection { transactor ->
+        // Moved out of the way first. The unique index over (task, order) will
+        // not have two steps in one place even for an instant, which is itself
+        // worth knowing: the order these are read in cannot be doubled up.
+        listOf(true, false).forEach { parking ->
+            order.forEach { (stage, index) ->
+                transactor.usePrepared("UPDATE task_stages SET order_index = ? WHERE task_id = ? AND stage = ?") {
+                    it.bindLong(1, if (parking) (index + PARKED_ORDER).toLong() else index.toLong())
+                    it.bindText(2, taskId.toString())
+                    it.bindText(3, stage.name)
+                    it.step()
+                }
+            }
+        }
+    }
+
+    /** Takes one step out of a pipeline, which nothing in production does either. */
+    private suspend fun deleteStage(
+        taskId: EntityId,
+        stage: ProductionStage,
+    ) = database.useWriterConnection { transactor ->
+        transactor.usePrepared("DELETE FROM task_stages WHERE task_id = ? AND stage = ?") {
+            it.bindText(1, taskId.toString())
+            it.bindText(2, stage.name)
+            it.step()
+        }
+    }
+
     private suspend fun aCardAt(
         print: Int,
         laminate: Int,
         cut: Int,
-        total: Int = 20,
+        total: Int = CARD_TOTAL,
     ): EntityId {
         val taskId = aTaskIn(PoolType.CARD, requiredQuantity = total, name = "Bird Cards")
         progress.setStageQuantities(
@@ -1571,7 +1862,7 @@ class TaskProgressTest {
                         taskId,
                         mapOf(ProductionStage.PRINT to 16),
                         clock,
-                        expectedStages = opened,
+                        expected = StageSnapshot(CARD_TOTAL, opened),
                     )
                 }
 
@@ -1586,7 +1877,7 @@ class TaskProgressTest {
             val opened =
                 mapOf(ProductionStage.PRINT to 15, ProductionStage.LAMINATE to 10, ProductionStage.CUT to 5)
 
-            progress.setStageQuantities(taskId, mapOf(ProductionStage.PRINT to 18), clock, expectedStages = opened)
+            progress.setStageQuantities(taskId, mapOf(ProductionStage.PRINT to 18), clock, expected = StageSnapshot(CARD_TOTAL, opened))
 
             val refusal =
                 assertFailsWith<TaskProgressException> {
@@ -1594,7 +1885,7 @@ class TaskProgressTest {
                         taskId,
                         mapOf(ProductionStage.PRINT to 12),
                         clock,
-                        expectedStages = opened,
+                        expected = StageSnapshot(CARD_TOTAL, opened),
                     )
                 }
 
@@ -1612,11 +1903,14 @@ class TaskProgressTest {
                     taskId,
                     mapOf(ProductionStage.CUT to 9),
                     clock,
-                    expectedStages =
-                        mapOf(
-                            ProductionStage.PRINT to 15,
-                            ProductionStage.LAMINATE to 10,
-                            ProductionStage.CUT to 5,
+                    expected =
+                        StageSnapshot(
+                            CARD_TOTAL,
+                            mapOf(
+                                ProductionStage.PRINT to 15,
+                                ProductionStage.LAMINATE to 10,
+                                ProductionStage.CUT to 5,
+                            ),
                         ),
                 )
 
@@ -1665,3 +1959,9 @@ class TaskProgressTest {
             assertEquals(TaskProgressFailure.REQUIRED_QUANTITY_UNKNOWN, refusal.failure)
         }
 }
+
+/** What the pipeline fixtures below count up to, unless one says otherwise. */
+private const val CARD_TOTAL = 20
+
+/** Far enough past any real step that a pipeline can be rewritten through it. */
+private const val PARKED_ORDER = 100

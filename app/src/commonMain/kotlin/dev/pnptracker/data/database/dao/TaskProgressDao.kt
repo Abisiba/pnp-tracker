@@ -15,6 +15,7 @@ import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.model.ProgressEventKind
 import dev.pnptracker.domain.model.hasStages
 import dev.pnptracker.domain.model.stagesOf
+import dev.pnptracker.domain.tasks.StageSnapshot
 import dev.pnptracker.domain.tasks.TaskProgressException
 import dev.pnptracker.domain.tasks.TaskProgressFailure
 import kotlin.time.Clock
@@ -509,10 +510,15 @@ abstract class TaskProgressDao {
      * refused entirely rather than repaired by pulling the steps after it down,
      * which would throw away counts they never touched.
      *
-     * [expectedStages] is the pipeline as it stood when the panel was opened.
-     * When it is given and the database no longer agrees, the save is refused
-     * rather than applied: a panel left open while the work moved on would
-     * otherwise put back the numbers it was opened with.
+     * [expected] is the pipeline as it stood when the panel was opened, total
+     * and all. When it is given and the database no longer agrees, the save is
+     * refused rather than applied: a panel left open while the work moved on
+     * would otherwise put back the numbers it was opened with. The total is part
+     * of it because a target means nothing without one — `15/10/5` is most of a
+     * task of twenty and impossible for a task of twelve — and it is checked
+     * before the total is put to any other use, so a task whose total shrank is
+     * answered with what actually happened rather than with a complaint about a
+     * number the user typed against the old one.
      *
      * Every step reaching the total finishes the task, and a step dropping back
      * below it reopens the task, because PLAN 6.4 does not let the finished mark
@@ -520,6 +526,8 @@ abstract class TaskProgressDao {
      *
      * @param targets what each named step should stand at; steps left out keep
      *   what they have.
+     * @param expected the pipeline and total the target was described against,
+     *   or null to write against whatever is there.
      * @return true when anything changed.
      * @throws TaskProgressException if the task, the pool, the steps or the
      *   amounts will not have it.
@@ -529,7 +537,7 @@ abstract class TaskProgressDao {
         taskId: EntityId,
         targets: Map<ProductionStage, Int>,
         clock: Clock,
-        expectedStages: Map<ProductionStage, Int>? = null,
+        expected: StageSnapshot? = null,
     ): Boolean {
         val task = workableTaskById(taskId) ?: refuse(TaskProgressFailure.TASK_NOT_AVAILABLE)
         if (!task.poolType.hasStages) refuse(TaskProgressFailure.TASK_HAS_NO_STAGES)
@@ -537,7 +545,6 @@ abstract class TaskProgressDao {
         targets.keys.forEach { stage ->
             if (stage !in pipeline) refuse(TaskProgressFailure.STAGE_NOT_IN_PIPELINE)
         }
-        val total = task.requiredQuantity ?: refuse(TaskProgressFailure.REQUIRED_QUANTITY_UNKNOWN)
 
         // Read once, in the order the steps are worked in, and check that what
         // came back really is this pool's pipeline. Everything below counts on
@@ -546,10 +553,18 @@ abstract class TaskProgressDao {
         val stages = stagesOfTask(taskId)
         if (stages.map { it.stage } != pipeline) refuse(TaskProgressFailure.STAGE_PIPELINE_BROKEN)
 
-        expectedStages?.let { expected ->
+        // Before the total is read for anything else, so a task whose total moved
+        // under an open panel is answered with the move rather than with a
+        // complaint about a number that was perfectly good when it was typed.
+        expected?.let { snapshot ->
+            if (snapshot.requiredQuantity != task.requiredQuantity) {
+                refuse(TaskProgressFailure.STALE_STAGE_PROGRESS)
+            }
             val standing = stages.associate { it.stage to it.completedQuantity }
-            if (expected != standing) refuse(TaskProgressFailure.STALE_STAGE_PROGRESS)
+            if (snapshot.stages != standing) refuse(TaskProgressFailure.STALE_STAGE_PROGRESS)
         }
+
+        val total = task.requiredQuantity ?: refuse(TaskProgressFailure.REQUIRED_QUANTITY_UNKNOWN)
 
         // What each amount is on its own, before any of them is put into a row:
         // a stage row will not hold less than nothing, so building one first

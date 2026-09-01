@@ -5,6 +5,7 @@ import dev.pnptracker.data.database.dao.TaskProgressDao
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.ProductionStage
+import dev.pnptracker.domain.tasks.StageSnapshot
 import dev.pnptracker.domain.tasks.TaskProgressException
 import dev.pnptracker.domain.tasks.TaskProgressFailure
 import kotlin.time.Clock
@@ -72,14 +73,15 @@ interface TaskProgressing {
      * front of the user at once: a target that breaks the ordering rule is
      * refused entirely rather than reached through states that break it.
      *
-     * @param expectedStages the counts the panel was opened on. A save is
+     * @param expected the counts and total the panel was opened on. A save is
      *   refused when the database no longer agrees, so a panel left open while
-     *   the work moved on cannot put back what it was opened with.
+     *   the work moved on cannot put back what it was opened with — nor write a
+     *   target against a total the task no longer has.
      */
     suspend fun setStageQuantities(
         taskId: EntityId,
         targets: Map<ProductionStage, Int>,
-        expectedStages: Map<ProductionStage, Int>? = null,
+        expected: StageSnapshot? = null,
     ): TaskProgressOutcome
 }
 
@@ -185,14 +187,14 @@ class TaskProgressStore(
     override suspend fun setStageQuantities(
         taskId: EntityId,
         targets: Map<ProductionStage, Int>,
-        expectedStages: Map<ProductionStage, Int>?,
+        expected: StageSnapshot?,
     ): TaskProgressOutcome =
         outcomeOf {
             taskProgressDao.setStageQuantities(
                 taskId = taskId,
                 targets = targets,
                 clock = clock,
-                expectedStages = expectedStages,
+                expected = expected,
             )
         }
 

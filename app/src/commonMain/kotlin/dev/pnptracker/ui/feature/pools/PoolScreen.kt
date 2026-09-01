@@ -561,24 +561,39 @@ private fun StageBadge(
     val editing = controller.state.work as? PoolWork.EditingStages
     val editingHere = editing?.task?.taskId == task.taskId
     val total = task.requiredQuantity
+    val unfinished =
+        total?.let { count ->
+            task.firstUnfinishedStage?.let { stage ->
+                val at = task.stages.firstOrNull { it.stage == stage }?.completedQuantity ?: 0
+                stringResource(
+                    Strings.Pool.stageBadgeOf,
+                    stringResource(stageNameOf(stage)),
+                    at.toString(),
+                    count.toString(),
+                    (count - at).toString(),
+                )
+            }
+        }
+    // What the badge shows keeps PLAN 7.3's word for a pipeline that is all the
+    // way up. What it is *called* does not: "Tamamlandı" on its own is what a
+    // finished task says, and a reader who heard only that over a task still
+    // owing a reprint would be told the opposite of the truth by a control that
+    // never claimed to be about the task at all. So the spoken form names the
+    // steps, and what is owed stays where it is, said separately by the card.
     val label =
         when {
             total == null -> stringResource(Strings.Pool.stageBadgeUnknown)
-            else ->
-                task.firstUnfinishedStage?.let { stage ->
-                    val at = task.stages.firstOrNull { it.stage == stage }?.completedQuantity ?: 0
-                    stringResource(
-                        Strings.Pool.stageBadgeOf,
-                        stringResource(stageNameOf(stage)),
-                        at.toString(),
-                        total.toString(),
-                        (total - at).toString(),
-                    )
-                } ?: stringResource(Strings.Pool.stageDone)
+            else -> unfinished ?: stringResource(Strings.Pool.stageDone)
+        }
+    val state =
+        when {
+            total == null -> stringResource(Strings.Pool.stageBadgeUnknown)
+            else -> unfinished ?: stringResource(Strings.Pool.stageAllDone)
         }
     val toggle =
         stringResource(
             if (showing) Strings.Pool.stageDetailsClose else Strings.Pool.stageDetailsOpen,
+            state,
             task.name,
         )
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -590,7 +605,7 @@ private fun StageBadge(
             Text(text = label, style = MaterialTheme.typography.labelMedium)
         }
         if (!showing) return@Column
-        if (editingHere && editing != null) {
+        if (editing != null && editingHere) {
             StagePanel(open = editing, controller = controller)
             return@Column
         }
@@ -651,10 +666,22 @@ private fun StagePanel(
     controller: PoolController,
 ) {
     val scope = rememberCoroutineScope()
-    val total = open.task.requiredQuantity ?: return
+    // The total the panel was opened on, not whatever has arrived since. It is
+    // what the draft was typed against and what the save will be checked
+    // against, so showing anything else would put a number in front of the user
+    // that no part of what they are doing is measured by.
+    val total = open.total ?: return
+    val panel = remember { FocusRequester() }
     val first = remember { FocusRequester() }
-    // The keyboard lands on the first box, and is called back to whichever one
-    // the refusal was about when a save will not do.
+    // The panel takes the keyboard first, and only then hands it to a box. A box
+    // that is not on screen yet cannot take it — a panel opened near the bottom
+    // of the list is drawn below the fold — and when that request came back
+    // empty the keyboard was left outside the panel altogether, so Ctrl+Enter
+    // reached nothing and a save the user had asked for quietly did not happen.
+    // Holding it here first means the shortcut always has somewhere to land.
+    LaunchedEffect(Unit) { runCatching { panel.requestFocus() } }
+    // Then the first box, and whichever one the refusal was about when a save
+    // will not do.
     LaunchedEffect(open.invalidStage) { runCatching { first.requestFocus() } }
     val save: () -> Unit = { scope.launch { controller.saveStages() } }
     Column(
@@ -680,7 +707,8 @@ private fun StagePanel(
 
                         else -> false
                     }
-                },
+                }.focusRequester(panel)
+                .focusable(),
     ) {
         Text(
             text = stringResource(Strings.Pool.stagePanelTitle),
@@ -696,14 +724,22 @@ private fun StagePanel(
                 stage = stage,
                 typed = open.draft[stage].orEmpty(),
                 total = total,
+                isUnusable = open.isUnusable(stage),
                 controller = controller,
                 enabled = !open.isSaving,
                 focus = first.takeIf { stage == wanted },
             )
         }
-        open.failure?.let { failure ->
+        // What the save said, or — before there is one — what it would say. The
+        // arrows may walk the draft through an order the finished pipeline may
+        // not be in, so the panel says so while it is happening rather than
+        // letting the user find out only when Kaydet comes back.
+        val notice =
+            open.failure?.let { stageMessageOf(it) }
+                ?: Strings.Pool.stageOrder.takeIf { open.isOutOfOrder }
+        notice?.let {
             Text(
-                text = stringResource(stageMessageOf(failure)),
+                text = stringResource(it),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.error,
             )
@@ -734,6 +770,7 @@ private fun StageRow(
     stage: ProductionStage,
     typed: String,
     total: Int,
+    isUnusable: Boolean,
     controller: PoolController,
     enabled: Boolean,
     focus: FocusRequester?,
@@ -765,6 +802,10 @@ private fun StageRow(
             value = typed,
             onValueChange = { typedNow -> controller.editStageDraft(stage, typedNow) },
             enabled = enabled,
+            // Said as it is typed rather than only when the save comes back: a
+            // run of digits too long to be a count is refused where it was
+            // written, and nothing of it is thrown away in the meantime.
+            isError = isUnusable,
             singleLine = true,
             textStyle = MaterialTheme.typography.labelMedium,
             modifier =
@@ -818,13 +859,27 @@ private fun spokenTaskOf(
         task.requiredQuantity?.let { stringResource(Strings.Pool.quantity, it.toString()) }
             ?: stringResource(Strings.Pool.quantityUnknown)
     val head = stringResource(Strings.Pool.spokenTask, task.name, task.gameName, quantity)
-    if (task.colors.isEmpty()) return head
-    val colors = stringResource(Strings.Pool.colors, task.colors.joinToString { it.canonicalName })
+    val colors =
+        task.colors
+            .takeIf { it.isNotEmpty() }
+            ?.let { stringResource(Strings.Pool.colors, it.joinToString { color -> color.canonicalName }) }
     val current =
         card.colorId
             ?.let { id -> task.colors.firstOrNull { it.colorId == id } }
             ?.let { stringResource(Strings.Pool.currentColor, it.canonicalName) }
-    return listOfNotNull(head, colors, current).joinToString(" ")
+    // What is owed and what has gone wrong are said here, in their own words,
+    // and not left to the stage badge. A pipeline counted all the way up is
+    // still a task owing a reprint, and the two are different facts: a reader
+    // given only the first would hear a finished piece of work.
+    val missing =
+        task.currentMissingQuantity
+            .takeIf { it > 0 }
+            ?.let { stringResource(Strings.Pool.missing, it.toString()) }
+    val failures =
+        task.failureTotal
+            .takeIf { it > 0 }
+            ?.let { stringResource(Strings.Pool.failures, it.toString()) }
+    return listOfNotNull(head, colors, current, missing, failures).joinToString(" ")
 }
 
 /**

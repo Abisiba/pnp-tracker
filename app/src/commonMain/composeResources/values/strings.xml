@@ -520,8 +520,9 @@
     <string name="pool_task_color_current">Bu grubun rengi: %1$s</string>
     <string name="pool_stage_badge">Sıradaki aşama: %1$s</string>
     <string name="pool_stage_done">Tamamlandı</string>
-    <string name="pool_stage_details_open">%1$s görevinin aşama ayrıntılarını göster</string>
-    <string name="pool_stage_details_close">%1$s görevinin aşama ayrıntılarını gizle</string>
+    <string name="pool_stage_details_open">%1$s. %2$s görevinin aşama ayrıntılarını göster</string>
+    <string name="pool_stage_details_close">%1$s. %2$s görevinin aşama ayrıntılarını gizle</string>
+    <string name="pool_stage_all_done">Bütün aşamalar tamamlandı</string>
     <string name="pool_stage_count">%1$s: %2$s</string>
     <string name="pool_stage_count_of">%1$s: %2$s / %3$s</string>
     <string name="pool_stage_badge_of">%1$s: %2$s/%3$s · %4$s eksik</string>
@@ -539,7 +540,7 @@
     <string name="pool_stage_invalid">Aşama sayısı olarak bir adet yazın.</string>
     <string name="pool_stage_over_total">Bir aşama görevin toplam adedini geçemez.</string>
     <string name="pool_stage_order">Sonraki aşama önceki aşamayı geçemez.</string>
-    <string name="pool_stage_stale">Bu görevin aşamaları başka bir işlemle değişti. Paneli kapatıp yeniden açın.</string>
+    <string name="pool_stage_stale">Bu görevin adedi veya aşamaları başka bir işlemle değişti. Paneli kapatıp yeniden açın.</string>
     <string name="pool_stage_unavailable">Bu görev artık burada değil.</string>
     <string name="pool_stage_no_total">Aşama sayaçları için önce görevin toplam adedi gerekiyor.</string>
     <string name="pool_stage_broken">Bu görevin aşamaları okunamadı.</string>

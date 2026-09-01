@@ -13,6 +13,8 @@ import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.tasks.StageSnapshot
+import dev.pnptracker.domain.tasks.TaskProgressException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
@@ -24,6 +26,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -673,6 +676,81 @@ class TaskProgressReflectionTest {
             assertEquals(0, none.filterKeys { it.startsWith("UPDATE") }.values.sum(), "a no-op wrote: $none")
             assertEquals(0, none.filterKeys { it.startsWith("INSERT") }.values.sum())
         }
+
+    /** The whole pipeline as it stands, plus what it counts up to. */
+    private suspend fun snapshotOf(taskId: EntityId): StageSnapshot =
+        StageSnapshot(
+            requiredQuantity = checkNotNull(progress.taskById(taskId)).requiredQuantity,
+            stages = progress.stagesOfTask(taskId).associate { it.stage to it.completedQuantity },
+        )
+
+    /** What one refused save costs, and what it leaves behind. */
+    private suspend fun refusedCost(
+        taskId: EntityId,
+        targets: Map<ProductionStage, Int>,
+        expected: StageSnapshot,
+    ): Map<String, Int> {
+        driver.start()
+        assertFailsWith<TaskProgressException> {
+            progress.setStageQuantities(taskId, targets, clock, expected = expected)
+        }
+        return tally(driver.stop())
+    }
+
+    @Test
+    fun `a save refused for a pipeline that moved writes nothing at all`() =
+        runBlocking<Unit> {
+            val taskId = cardTask("Kayan")
+            progress.setStageQuantities(taskId, threeSteps, clock)
+            val opened = snapshotOf(taskId)
+            progress.setStageQuantities(taskId, mapOf(ProductionStage.CUT to 15), clock)
+
+            val cost = refusedCost(taskId, mapOf(ProductionStage.PRINT to 40), opened)
+
+            assertEquals(0, cost.filterKeys { it.startsWith("UPDATE") }.values.sum(), "a refusal wrote: $cost")
+            assertEquals(0, cost.filterKeys { it.startsWith("INSERT") }.values.sum(), "a refusal wrote: $cost")
+            assertEquals(0, cost.filterKeys { "task_colors" in it }.values.sum(), "a refusal read the colours")
+        }
+
+    @Test
+    fun `a save refused for a total that moved writes nothing and does not grow with the pool`() =
+        runBlocking<Unit> {
+            val alone = cardTask("Yalnız")
+            progress.setStageQuantities(alone, threeSteps, clock)
+            val openedAlone = snapshotOf(alone)
+            retotal(alone, 2000)
+            val single = refusedCost(alone, mapOf(ProductionStage.PRINT to 40), openedAlone)
+
+            repeat(42) { index -> cardTask("Kalabalık $index") }
+            val three = palette(3)
+            val crowded = cardTask("Kalabalıkta", colors = three, history = 42)
+            progress.setStageQuantities(crowded, threeSteps, clock)
+            val openedCrowded = snapshotOf(crowded)
+            retotal(crowded, 2000, three)
+            val many = refusedCost(crowded, mapOf(ProductionStage.PRINT to 40), openedCrowded)
+
+            assertEquals(single, many, "noticing the total had moved grew with the tasks, history or colours")
+            assertEquals(0, single.filterKeys { it.startsWith("UPDATE") }.values.sum(), "a refusal wrote: $single")
+            assertEquals(0, single.filterKeys { "task_colors" in it }.values.sum(), "a refusal read the colours")
+        }
+
+    /** Gives a task a different total, through the form that really does it. */
+    private suspend fun retotal(
+        taskId: EntityId,
+        total: Int,
+        colorIds: List<EntityId> = emptyList(),
+    ) {
+        val task = checkNotNull(progress.taskById(taskId))
+        database.taskEditDao().editTask(
+            taskId = taskId,
+            name = task.name,
+            colorIds = colorIds,
+            requiredQuantity = total,
+            notes = task.notes,
+            trackingMode = task.trackingMode,
+            clock = clock,
+        )
+    }
 
     @Test
     fun `a task of three colours is one card with one pipeline`() =
