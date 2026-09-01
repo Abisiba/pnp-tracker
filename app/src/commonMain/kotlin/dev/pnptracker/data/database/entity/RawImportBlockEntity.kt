@@ -23,6 +23,13 @@ import kotlin.time.Instant
  * [HintDecision.PENDING] hint for the user to decide on.
  *
  * Row and column indexes are zero based, matching [ImportBatchEntity].
+ *
+ * [completionTargetGameId] is the game the user picked when they accepted a
+ * green cell. It lives on the row rather than in the screen's memory because
+ * PLAN 11.4.3 lets a draft be closed and reopened, and a decision that only
+ * existed on screen would be gone the next time. There is no way to work it out
+ * again either: the green cell is in the game-name column, which produces no
+ * task draft, so nothing else points at a game.
  */
 @Entity(
     tableName = "raw_import_blocks",
@@ -37,10 +44,21 @@ import kotlin.time.Instant
             onDelete = ForeignKey.CASCADE,
             onUpdate = ForeignKey.RESTRICT,
         ),
+        ForeignKey(
+            entity = GameEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["completion_target_game_id"],
+            // The user's answer to a hint is not something a delete may erase
+            // on its way past; the same RESTRICT that holds an imported game
+            // holds the game an answer names.
+            onDelete = ForeignKey.RESTRICT,
+            onUpdate = ForeignKey.RESTRICT,
+        ),
     ],
     indices = [
         Index(value = ["import_batch_id"]),
         Index(value = ["is_processed"]),
+        Index(value = ["completion_target_game_id"]),
         Index(
             value = ["import_batch_id", "sheet_name", "row_index", "column_index"],
             unique = true,
@@ -69,6 +87,9 @@ data class RawImportBlockEntity(
     val fillColorArgb: Int? = null,
     @ColumnInfo(name = "game_completion_hint", defaultValue = "'NONE'")
     val gameCompletionHint: HintDecision = HintDecision.NONE,
+    /** The game an accepted green cell was said to be about, chosen by the user. */
+    @ColumnInfo(name = "completion_target_game_id")
+    val completionTargetGameId: EntityId? = null,
     @ColumnInfo(name = "is_processed", defaultValue = "0")
     val isProcessed: Boolean = false,
     @ColumnInfo(name = "created_at")
@@ -79,6 +100,15 @@ data class RawImportBlockEntity(
     init {
         require(rowIndex >= 0 && columnIndex >= 0) {
             "Cell coordinates are zero based, so they cannot be negative: row $rowIndex, column $columnIndex"
+        }
+        // One direction only, and on purpose. A target that is not attached to
+        // an acceptance would be an answer to a question nobody said yes to, so
+        // that is refused here. The other direction is left to the writing path:
+        // a version 5 database can hold a row accepted before there was anywhere
+        // to record which game it meant, and such a row has to stay readable so
+        // the user can be asked rather than have their answer thrown away.
+        require(completionTargetGameId == null || gameCompletionHint == HintDecision.ACCEPTED) {
+            "A completion target belongs to an accepted hint, but this one is $gameCompletionHint."
         }
     }
 }

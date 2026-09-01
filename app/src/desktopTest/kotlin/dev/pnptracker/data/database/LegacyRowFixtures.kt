@@ -397,3 +397,173 @@ fun insertVersion4DraftTask(
             statement.step()
         }
 }
+
+// ---------------------------------------------------------------------------
+// Version 5 rows. Version 5 added completion, what is still owed, the pipelines
+// and the history, so the walk to version 6 has to be shown carrying all of it
+// across untouched — it adds columns and a table and rewrites nothing.
+// ---------------------------------------------------------------------------
+
+fun insertVersion5Task(
+    connection: SQLiteConnection,
+    taskId: EntityId,
+    poolType: String,
+    trackingMode: String,
+    name: String,
+    requiredQuantity: Int? = null,
+    notes: String? = null,
+    isCompleted: Boolean = false,
+    primaryBatchCompleted: Boolean = false,
+    currentMissingQuantity: Int = 0,
+    deleted: Boolean = false,
+    sourceRawImportBlockId: EntityId? = null,
+) {
+    connection
+        .prepare(
+            "INSERT INTO tasks (id, pool_type, tracking_mode, name, required_quantity, notes, " +
+                "is_completed, completed_at, primary_batch_completed, current_missing_quantity, " +
+                "created_at, updated_at, deleted_at, source_raw_import_block_id) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ).use { statement ->
+            statement.bindText(1, taskId.toString())
+            statement.bindText(2, poolType)
+            statement.bindText(3, trackingMode)
+            statement.bindText(4, name)
+            if (requiredQuantity == null) statement.bindNull(5) else statement.bindInt(5, requiredQuantity)
+            if (notes == null) statement.bindNull(6) else statement.bindText(6, notes)
+            statement.bindInt(7, if (isCompleted) 1 else 0)
+            if (isCompleted) statement.bindLong(8, EPOCH_MILLISECONDS_UPDATED) else statement.bindNull(8)
+            statement.bindInt(9, if (primaryBatchCompleted) 1 else 0)
+            statement.bindInt(10, currentMissingQuantity)
+            statement.bindLong(11, EPOCH_MILLISECONDS_CREATED)
+            statement.bindLong(12, EPOCH_MILLISECONDS_UPDATED)
+            if (deleted) statement.bindLong(13, EPOCH_MILLISECONDS_DELETED) else statement.bindNull(13)
+            if (sourceRawImportBlockId == null) {
+                statement.bindNull(14)
+            } else {
+                statement.bindText(14, sourceRawImportBlockId.toString())
+            }
+            statement.step()
+        }
+}
+
+fun insertVersion5TaskStage(
+    connection: SQLiteConnection,
+    taskId: EntityId,
+    stage: String,
+    orderIndex: Int,
+    completedQuantity: Int,
+) {
+    connection
+        .prepare(
+            "INSERT INTO task_stages (task_id, stage, order_index, completed_quantity, created_at, updated_at) " +
+                "VALUES (?, ?, ?, ?, ?, ?)",
+        ).use { statement ->
+            statement.bindText(1, taskId.toString())
+            statement.bindText(2, stage)
+            statement.bindInt(3, orderIndex)
+            statement.bindInt(4, completedQuantity)
+            statement.bindLong(5, EPOCH_MILLISECONDS_CREATED)
+            statement.bindLong(6, EPOCH_MILLISECONDS_UPDATED)
+            statement.step()
+        }
+}
+
+fun insertVersion5ProgressEvent(
+    connection: SQLiteConnection,
+    eventId: EntityId,
+    taskId: EntityId,
+    kind: String,
+    quantity: Int,
+    note: String? = null,
+) {
+    connection
+        .prepare(
+            "INSERT INTO progress_events (id, task_id, kind, quantity, note, card_reference, stage, recorded_at) " +
+                "VALUES (?, ?, ?, ?, ?, NULL, NULL, ?)",
+        ).use { statement ->
+            statement.bindText(1, eventId.toString())
+            statement.bindText(2, taskId.toString())
+            statement.bindText(3, kind)
+            statement.bindInt(4, quantity)
+            if (note == null) statement.bindNull(5) else statement.bindText(5, note)
+            statement.bindLong(6, EPOCH_MILLISECONDS_UPDATED)
+            statement.step()
+        }
+}
+
+/** A version 5 import, whose status a test picks so both a draft and a confirmed one can be built. */
+fun insertVersion5ImportBatch(
+    connection: SQLiteConnection,
+    batchId: EntityId,
+    fileName: String = "Kitap1(1).xlsx",
+    sha256: String = "0".repeat(64),
+    status: String = "DRAFT",
+    createdTaskCount: Int = 0,
+) {
+    connection
+        .prepare(
+            "INSERT INTO import_batches (id, file_name, sha256, source_format, sheet_name, " +
+                "start_row_index, end_row_index, start_column_index, end_column_index, " +
+                "created_game_count, raw_block_count, created_task_count, status, imported_at, updated_at) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ).use { statement ->
+            statement.bindText(1, batchId.toString())
+            statement.bindText(2, fileName)
+            statement.bindText(3, sha256)
+            statement.bindText(4, "XLSX")
+            statement.bindText(5, "Sayfa1")
+            statement.bindInt(6, 0)
+            statement.bindInt(7, 9)
+            statement.bindInt(8, 0)
+            statement.bindInt(9, 6)
+            statement.bindInt(10, 0)
+            statement.bindInt(11, 1)
+            statement.bindInt(12, createdTaskCount)
+            statement.bindText(13, status)
+            statement.bindLong(14, EPOCH_MILLISECONDS_CREATED)
+            statement.bindLong(15, EPOCH_MILLISECONDS_UPDATED)
+            statement.step()
+        }
+}
+
+/**
+ * A version 5 raw cell, whose hint answer a test picks.
+ *
+ * Version 5 could record that a green cell had been accepted but had nowhere to
+ * put the game it was about, so `ACCEPTED` here is exactly the legacy row the
+ * walk to version 6 has to carry across without correcting.
+ */
+fun insertVersion5RawImportBlock(
+    connection: SQLiteConnection,
+    blockId: EntityId,
+    batchId: EntityId,
+    rawText: String = "15 KIRMIZI**\nBıçak ve kabza ayrı",
+    sourceColumnType: String = "CARD",
+    gameCompletionHint: String = "NONE",
+    rowIndex: Int = 3,
+    columnIndex: Int = 2,
+    fillColorArgb: Int? = null,
+    isProcessed: Boolean = false,
+) {
+    connection
+        .prepare(
+            "INSERT INTO raw_import_blocks (id, import_batch_id, raw_text, sheet_name, row_index, " +
+                "column_index, source_column_type, fill_color_argb, game_completion_hint, is_processed, " +
+                "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ).use { statement ->
+            statement.bindText(1, blockId.toString())
+            statement.bindText(2, batchId.toString())
+            statement.bindText(3, rawText)
+            statement.bindText(4, "Sayfa1")
+            statement.bindInt(5, rowIndex)
+            statement.bindInt(6, columnIndex)
+            statement.bindText(7, sourceColumnType)
+            if (fillColorArgb == null) statement.bindNull(8) else statement.bindInt(8, fillColorArgb)
+            statement.bindText(9, gameCompletionHint)
+            statement.bindInt(10, if (isProcessed) 1 else 0)
+            statement.bindLong(11, EPOCH_MILLISECONDS_CREATED)
+            statement.bindLong(12, EPOCH_MILLISECONDS_UPDATED)
+            statement.step()
+        }
+}

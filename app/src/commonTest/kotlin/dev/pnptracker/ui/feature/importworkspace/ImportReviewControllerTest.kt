@@ -101,6 +101,19 @@ private class FakeReview(
                 draftTasks = current.draftTasks + ReviewDraftTask(IdGenerator.Random.newId(), blockId, name),
             )
     }
+
+    // 18A stores these; no controller reaches them yet, so the double only has
+    // to exist rather than pretend to do the work.
+    override suspend fun setDraftColors(
+        draftTaskId: EntityId,
+        colorIds: List<EntityId>,
+    ): Boolean = throw UnsupportedOperationException("no review controller chooses colours yet")
+
+    override suspend fun setGameCompletionDecision(
+        blockId: EntityId,
+        decision: HintDecision,
+        targetGameId: EntityId?,
+    ): Boolean = throw UnsupportedOperationException("no review controller answers the green hint yet")
 }
 
 class ImportReviewWorkspaceEditabilityTest {

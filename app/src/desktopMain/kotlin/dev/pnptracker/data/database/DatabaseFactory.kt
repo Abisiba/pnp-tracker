@@ -7,6 +7,7 @@ import dev.pnptracker.data.database.migration.Migration1To2
 import dev.pnptracker.data.database.migration.Migration2To3
 import dev.pnptracker.data.database.migration.Migration3To4
 import dev.pnptracker.data.database.migration.Migration4To5
+import dev.pnptracker.data.database.migration.Migration5To6
 import kotlinx.coroutines.Dispatchers
 import java.nio.file.Path
 import kotlin.coroutines.CoroutineContext
@@ -36,7 +37,7 @@ class DatabaseFactory(
             .databaseBuilder<AppDatabase>(name = databaseFile.toAbsolutePath().toString())
             .setDriver(driver)
             .setQueryCoroutineContext(queryCoroutineContext)
-            .addMigrations(Migration1To2, Migration2To3, Migration3To4, Migration4To5)
+            .addMigrations(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6)
             .addCallback(SeedColorsCallback)
             .build()
 }

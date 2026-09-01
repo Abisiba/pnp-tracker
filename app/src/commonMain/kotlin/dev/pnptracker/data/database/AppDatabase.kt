@@ -21,6 +21,7 @@ import dev.pnptracker.data.database.dao.TaskProgressDao
 import dev.pnptracker.data.database.entity.CellSegmentEntity
 import dev.pnptracker.data.database.entity.ColorAliasEntity
 import dev.pnptracker.data.database.entity.ColorEntity
+import dev.pnptracker.data.database.entity.DraftTaskColorEntity
 import dev.pnptracker.data.database.entity.DraftTaskEntity
 import dev.pnptracker.data.database.entity.GameCellEntity
 import dev.pnptracker.data.database.entity.GameEntity
@@ -45,8 +46,9 @@ import dev.pnptracker.data.database.entity.TaskStageEntity
         ImportBatchEntity::class,
         RawImportBlockEntity::class,
         DraftTaskEntity::class,
+        DraftTaskColorEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 @ColumnTypeConverters(DatabaseConverters::class)

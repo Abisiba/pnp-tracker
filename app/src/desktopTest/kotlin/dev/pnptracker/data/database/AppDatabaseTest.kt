@@ -73,7 +73,7 @@ class AppDatabaseTest {
                         statement.getLong(0)
                     }
                 }
-            assertEquals(5L, version)
+            assertEquals(6L, version)
         }
 
     @Test

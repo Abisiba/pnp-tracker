@@ -139,7 +139,7 @@ class Migration4To5Test {
     }
 
     @Test
-    fun `a used version 4 database reaches version 5 with every row still there`() {
+    fun `a used version 4 database reaches the current version with every row still there`() {
         createUsedVersion4Database()
         assertEquals(4L, version(), "the fixture is not a version 4 database")
 
@@ -150,7 +150,7 @@ class Migration4To5Test {
             database.close()
         }
 
-        assertEquals(5L, version())
+        assertEquals(6L, version())
         assertEquals(1, rows("games"))
         assertEquals(5, rows("game_cells"))
         assertEquals(8, rows("cell_segments"))
@@ -308,7 +308,7 @@ class Migration4To5Test {
         }
 
     @Test
-    fun `a database created straight at version 5 opens and reopens`() =
+    fun `a database created straight at the current version opens and reopens`() =
         runBlocking<Unit> {
             val first = DatabaseFactory().open(directory.databaseFile)
             val seeded =
@@ -318,7 +318,7 @@ class Migration4To5Test {
                     first.close()
                 }
             assertEquals(12, seeded.size)
-            assertEquals(5L, version())
+            assertEquals(6L, version())
 
             val second = DatabaseFactory().open(directory.databaseFile)
             try {
@@ -327,7 +327,7 @@ class Migration4To5Test {
             } finally {
                 second.close()
             }
-            assertEquals(5L, version())
+            assertEquals(6L, version())
         }
 
     @Test
@@ -345,7 +345,7 @@ class Migration4To5Test {
                 database.close()
             }
 
-            assertEquals(5L, version())
+            assertEquals(6L, version())
             assertEquals(0, rows("task_stages"))
             assertEquals(0, rows("progress_events"))
         }

@@ -111,6 +111,10 @@ data class DraftTaskEntity(
         require(requiredQuantity == null || requiredQuantity > 0) {
             "A required quantity is either unknown (null) or greater than zero, was: $requiredQuantity"
         }
+        // The same rule the column suggestion these flags come from already
+        // holds: a cell is in the missing column or the borrowed one, never in
+        // both, so a draft claiming both could not have come from a file.
+        require(!(isMissing && isBorrowed)) { "A draft task is either missing or borrowed, never both." }
         require((selectionStartIndex == null) == (selectionEndIndex == null)) {
             "A text selection has both ends or neither, was: $selectionStartIndex..$selectionEndIndex"
         }

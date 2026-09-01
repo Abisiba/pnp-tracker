@@ -13,6 +13,10 @@ import dev.pnptracker.domain.model.TrackingMode
  * [rawText] is carried through untouched — line breaks, `**` markers, leading and
  * trailing spaces and all — because the whole point of the left pane is to show
  * the user what the file really said.
+ *
+ * [completionTargetGameId] is the game an accepted green cell was said to be
+ * about. It comes back from the database rather than from anywhere on screen, so
+ * closing the review and opening it again finds the same answer.
  */
 data class ReviewRawBlock(
     val id: EntityId,
@@ -23,8 +27,19 @@ data class ReviewRawBlock(
     val sourceColumnType: SourceColumnType,
     val fillColorArgb: Int? = null,
     val gameCompletionHint: HintDecision = HintDecision.NONE,
+    val completionTargetGameId: EntityId? = null,
     val isProcessed: Boolean = false,
-)
+) {
+    /**
+     * True for an acceptance that does not say which game it is about.
+     *
+     * The one shape a version 5 database can hand over: it recorded that the
+     * user said yes but had nowhere to put the game they meant. Reported as a
+     * question still open rather than quietly turned back into a no.
+     */
+    val needsCompletionTarget: Boolean
+        get() = gameCompletionHint == HintDecision.ACCEPTED && completionTargetGameId == null
+}
 
 /**
  * One task draft as the review screen sees it.
@@ -33,6 +48,11 @@ data class ReviewRawBlock(
  * needed before the draft can become a real task, and the screen shows which are
  * still missing. [materializedTaskId] is set once a confirmation has turned this
  * draft into a task, which is also what makes the draft read only.
+ *
+ * [colorIds] is in the user's own order, which is the order a single-item
+ * multi-colour task is drawn in (PLAN 5.10). An empty list is a real answer, not
+ * an unanswered question: PLAN 11.6 leaves a task colourless when the source
+ * text never said which colour it meant.
  */
 data class ReviewDraftTask(
     val id: EntityId,
@@ -43,6 +63,7 @@ data class ReviewDraftTask(
     val targetCellId: EntityId? = null,
     val selectedPoolType: PoolType? = null,
     val selectedTrackingMode: TrackingMode? = null,
+    val colorIds: List<EntityId> = emptyList(),
     val materializedTaskId: EntityId? = null,
 ) {
     /** True when the draft has everything a task needs. */

@@ -48,9 +48,15 @@ class ImportDraftTest {
     private suspend fun insertBatchWithBlock(
         rawText: String = "15 KIRMIZI** 19 YEŞİL**",
         status: ImportBatchStatus = ImportBatchStatus.DRAFT,
+        sourceColumnType: SourceColumnType = SourceColumnType.THREE_D,
     ): RawImportBlockEntity {
         val batch = anImportBatch(status = status)
-        val block = aRawImportBlock(importBatchId = batch.id, rawText = rawText)
+        val block =
+            aRawImportBlock(
+                importBatchId = batch.id,
+                rawText = rawText,
+                sourceColumnType = sourceColumnType,
+            )
         database.importDao().insertBatch(batch)
         database.importDao().insertRawBlock(block)
         return block
@@ -262,14 +268,21 @@ class ImportDraftTest {
     @Test
     fun `no hint is accepted until the user says so`() =
         runBlocking<Unit> {
-            val block = insertBatchWithBlock()
+            // The game name column, because PLAN 11.5 puts the green cell there
+            // and nowhere else can answer for a game.
+            val block = insertBatchWithBlock(rawText = "Harmonies", sourceColumnType = SourceColumnType.GAME)
             val draft = aDraftTask(block.id)
             database.importDao().addDraftTask(draft)
 
             assertEquals(HintDecision.NONE, assertNotNull(database.importDao().rawBlockById(block.id)).gameCompletionHint)
             assertEquals(HintDecision.NONE, assertNotNull(database.importDao().draftTaskById(draft.id)).completionHint)
 
-            database.importDao().updateGameCompletionHint(block.id, HintDecision.PENDING, updatedAt)
+            database.importDao().setGameCompletionDecisionUnderReview(
+                block.id,
+                HintDecision.PENDING,
+                targetGameId = null,
+                clock = StoppedClock(updatedAt),
+            )
             database.importDao().updateDraftCompletionHint(draft.id, HintDecision.PENDING, updatedAt)
 
             assertEquals(
@@ -453,10 +466,18 @@ class ImportDraftTest {
                 aRawImportBlock(
                     importBatchId = batch.id,
                     sheetName = "",
-                    sourceColumnType = SourceColumnType.BOARD,
+                    // The game name column, because that is the only one a green
+                    // cell hint can be about and the hint is one of the four
+                    // enums this is reading back.
+                    sourceColumnType = SourceColumnType.GAME,
                 )
             database.importDao().insertRawBlock(block)
-            database.importDao().updateGameCompletionHint(block.id, HintDecision.PENDING, updatedAt)
+            database.importDao().setGameCompletionDecisionUnderReview(
+                block.id,
+                HintDecision.PENDING,
+                targetGameId = null,
+                clock = StoppedClock(updatedAt),
+            )
 
             val stored =
                 database.useReaderConnection { transactor ->
@@ -472,7 +493,7 @@ class ImportDraftTest {
                 }
 
             assertEquals(
-                listOf("text", "DRAFT", "text", "CSV", "text", "BOARD", "text", "PENDING"),
+                listOf("text", "DRAFT", "text", "CSV", "text", "GAME", "text", "PENDING"),
                 stored.mapIndexed { index, value -> if (index % 2 == 0) value.lowercase() else value },
             )
         }

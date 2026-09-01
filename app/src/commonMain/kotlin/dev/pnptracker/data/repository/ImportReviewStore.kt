@@ -10,6 +10,7 @@ import dev.pnptracker.domain.importreview.ImportReviewWorkspace
 import dev.pnptracker.domain.importreview.ReviewDraftTask
 import dev.pnptracker.domain.importreview.ReviewRawBlock
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.HintDecision
 import dev.pnptracker.domain.model.IdGenerator
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -58,6 +59,39 @@ interface ImportReview {
         blockId: EntityId,
         name: String,
     )
+
+    /**
+     * Replaces the colours of one draft with exactly [colorIds], in that order.
+     *
+     * The whole list, because the order is part of the answer and an empty list
+     * is a valid one (PLAN 5.10). Giving the list the draft already has changes
+     * nothing and moves no timestamp.
+     *
+     * @return true when this call changed something.
+     * @throws ImportReviewException if the draft is gone, its import is no
+     *   longer a draft, a colour was named twice, or a colour is not in the
+     *   catalogue; nothing is written in any of those cases.
+     */
+    suspend fun setDraftColors(
+        draftTaskId: EntityId,
+        colorIds: List<EntityId>,
+    ): Boolean
+
+    /**
+     * Records what the user answered to a green game cell, and which game it was
+     * about. Storing the answer only; the game itself is not finished here.
+     *
+     * @return true when this call changed something.
+     * @throws ImportReviewException if the cell is gone, its import is no longer
+     *   a draft, the cell cannot carry such a hint, an acceptance named no game,
+     *   a game was named for something other than an acceptance, or the game is
+     *   gone; nothing is written in any of those cases.
+     */
+    suspend fun setGameCompletionDecision(
+        blockId: EntityId,
+        decision: HintDecision,
+        targetGameId: EntityId?,
+    ): Boolean
 }
 
 class ImportReviewStore(
@@ -75,15 +109,22 @@ class ImportReviewStore(
             importDao.observeBatch(batchId),
             importDao.observeRawBlocksOfBatch(batchId),
             importDao.observeDraftTasksOfBatch(batchId),
-        ) { batch, blocks, drafts ->
+            // One stream for the whole import's colours, not one per draft: a
+            // flow behind every row would make opening a batch of forty drafts
+            // cost forty subscriptions to answer one question.
+            importDao.observeDraftColorsOfBatch(batchId),
+        ) { batch, blocks, drafts, colors ->
             batch ?: return@combine null
+            val chosen = colors.groupBy { it.draftTaskId }
             ImportReviewWorkspace(
                 batchId = batch.id,
                 fileName = batch.fileName,
                 sheetName = batch.sheetName,
                 status = batch.status,
                 rawBlocks = blocks.map { it.toReviewBlock() },
-                draftTasks = drafts.map { it.toReviewDraft() },
+                // Already ordered by slot from the query; grouping keeps that
+                // order, so nothing here re-sorts the user's own choice.
+                draftTasks = drafts.map { draft -> draft.toReviewDraft(chosen[draft.id].orEmpty().map { it.colorId }) },
             )
         }
 
@@ -120,6 +161,29 @@ class ImportReviewStore(
             throw ImportReviewException(ImportReviewFailure.COULD_NOT_SAVE, cause)
         }
     }
+
+    override suspend fun setDraftColors(
+        draftTaskId: EntityId,
+        colorIds: List<EntityId>,
+    ): Boolean =
+        // A refusal the DAO already named travels out as it is; only a storage
+        // failure has to be turned into something to say here.
+        try {
+            importDao.setDraftColorsUnderReview(draftTaskId, colorIds, clock)
+        } catch (cause: SQLiteException) {
+            throw ImportReviewException(ImportReviewFailure.COULD_NOT_SAVE, cause)
+        }
+
+    override suspend fun setGameCompletionDecision(
+        blockId: EntityId,
+        decision: HintDecision,
+        targetGameId: EntityId?,
+    ): Boolean =
+        try {
+            importDao.setGameCompletionDecisionUnderReview(blockId, decision, targetGameId, clock)
+        } catch (cause: SQLiteException) {
+            throw ImportReviewException(ImportReviewFailure.COULD_NOT_SAVE, cause)
+        }
 }
 
 private fun RawImportBlockEntity.toReviewBlock(): ReviewRawBlock =
@@ -132,10 +196,11 @@ private fun RawImportBlockEntity.toReviewBlock(): ReviewRawBlock =
         sourceColumnType = sourceColumnType,
         fillColorArgb = fillColorArgb,
         gameCompletionHint = gameCompletionHint,
+        completionTargetGameId = completionTargetGameId,
         isProcessed = isProcessed,
     )
 
-private fun DraftTaskEntity.toReviewDraft(): ReviewDraftTask =
+private fun DraftTaskEntity.toReviewDraft(colorIds: List<EntityId>): ReviewDraftTask =
     ReviewDraftTask(
         id = id,
         rawImportBlockId = rawImportBlockId,
@@ -145,5 +210,6 @@ private fun DraftTaskEntity.toReviewDraft(): ReviewDraftTask =
         targetCellId = targetCellId,
         selectedPoolType = selectedPoolType,
         selectedTrackingMode = selectedTrackingMode,
+        colorIds = colorIds,
         materializedTaskId = materializedTaskId,
     )

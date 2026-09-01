@@ -87,6 +87,18 @@ data class TaskEntity(
     /** The imported cell this task was built from, or null when it was typed by hand. */
     @ColumnInfo(name = "source_raw_import_block_id")
     val sourceRawImportBlockId: EntityId? = null,
+    /** PLAN 10: came from the `Eksik` column. A note about the work, not a shortage. */
+    @ColumnInfo(name = "is_missing", defaultValue = "0")
+    val isMissing: Boolean = false,
+    /** PLAN 10: came from the `Ödünç Parçalar` column. */
+    @ColumnInfo(name = "is_borrowed", defaultValue = "0")
+    val isBorrowed: Boolean = false,
+    /** PLAN 11.7: something the work needs is still unknown. */
+    @ColumnInfo(name = "needs_info", defaultValue = "0")
+    val needsInfo: Boolean = false,
+    /** PLAN 10: the pool was the user's own decision rather than the column's. */
+    @ColumnInfo(name = "needs_classification", defaultValue = "0")
+    val needsClassification: Boolean = false,
 ) {
     init {
         require(name.isNotBlank()) { "A task needs a name." }
@@ -104,5 +116,10 @@ data class TaskEntity(
         require(isCompleted == (completedAt != null)) {
             "A task is finished exactly when it has a time it was finished at, was: $isCompleted / $completedAt"
         }
+        // PLAN 10 gives `Eksik` and `Ödünç Parçalar` a column each, and a cell
+        // is in one of them. The same rule already stands on the column
+        // suggestion the flags come from and on the draft that carries them
+        // here, so a task holding both could only be a defect.
+        require(!(isMissing && isBorrowed)) { "A task is either missing or borrowed, never both." }
     }
 }

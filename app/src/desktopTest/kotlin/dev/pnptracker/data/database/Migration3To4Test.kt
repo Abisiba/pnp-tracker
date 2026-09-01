@@ -109,7 +109,7 @@ class Migration3To4Test {
                 // Room opens the file on first use, so the migration has not run
                 // until something is actually read.
                 assertEquals(emptyList(), database.taskDao().allTasksIncludingDeleted())
-                assertEquals(5L, version())
+                assertEquals(6L, version())
             } finally {
                 database.close()
             }
@@ -238,7 +238,7 @@ class Migration3To4Test {
             assertNull(draft.targetCellId, "a target survived that can no longer be meant")
             assertNull(draft.materializedTaskId)
 
-            assertEquals(5, version())
+            assertEquals(6, version())
             assertEquals(12, rows("colors"))
             assertEquals(0, rows("game_cells"))
             assertEquals(0, rows("cell_segments"))
@@ -313,7 +313,7 @@ class Migration3To4Test {
                 } finally {
                     first.close()
                 }
-            assertEquals(5L, version())
+            assertEquals(6L, version())
 
             val second = DatabaseFactory().open(directory.databaseFile)
             try {

@@ -2,6 +2,7 @@ package dev.pnptracker.data.repository
 
 import dev.pnptracker.data.database.dao.ImportDao
 import dev.pnptracker.data.database.entity.CellSegmentEntity
+import dev.pnptracker.data.database.entity.DraftTaskColorEntity
 import dev.pnptracker.data.database.entity.DraftTaskEntity
 import dev.pnptracker.data.database.entity.ImportBatchEntity
 import dev.pnptracker.data.database.entity.RawImportBlockEntity
@@ -96,12 +97,6 @@ class CountingImportDao(
         updatedAt: Instant,
     ): Int = real.markRawBlockProcessed(id, isProcessed, updatedAt)
 
-    override suspend fun updateGameCompletionHint(
-        id: EntityId,
-        decision: HintDecision,
-        updatedAt: Instant,
-    ): Int = real.updateGameCompletionHint(id, decision, updatedAt)
-
     override suspend fun updateDraftCompletionHint(
         id: EntityId,
         decision: HintDecision,
@@ -110,6 +105,32 @@ class CountingImportDao(
 
     // Room keeps these to itself, so they cannot be handed on. Summarising never
     // asks for them; anything that does has outgrown this double.
+    override suspend fun draftColorsOf(draftTaskId: EntityId): List<DraftTaskColorEntity> = real.draftColorsOf(draftTaskId)
+
+    override fun observeDraftColorsOfBatch(batchId: EntityId): Flow<List<DraftTaskColorEntity>> = real.observeDraftColorsOfBatch(batchId)
+
+    override suspend fun draftColorsOfBatch(batchId: EntityId): List<DraftTaskColorEntity> = real.draftColorsOfBatch(batchId)
+
+    override suspend fun allColorIds(): List<EntityId> = real.allColorIds()
+
+    override suspend fun activeGameCount(gameId: EntityId): Int = real.activeGameCount(gameId)
+
+    override suspend fun updateGameCompletionDecision(
+        id: EntityId,
+        decision: HintDecision,
+        targetGameId: EntityId?,
+        updatedAt: Instant,
+    ): Int = outOfReach("updateGameCompletionDecision")
+
+    override suspend fun insertDraftColor(row: DraftTaskColorEntity): Unit = outOfReach("insertDraftColor")
+
+    override suspend fun deleteDraftColor(row: DraftTaskColorEntity): Unit = outOfReach("deleteDraftColor")
+
+    override suspend fun touchDraftTask(
+        id: EntityId,
+        updatedAt: Instant,
+    ): Int = outOfReach("touchDraftTask")
+
     override suspend fun insertDraftTaskRow(draft: DraftTaskEntity): Unit = outOfReach("insertDraftTaskRow")
 
     override suspend fun updateDraftTaskRow(draft: DraftTaskEntity): Int = outOfReach("updateDraftTaskRow")

@@ -1,12 +1,14 @@
 package dev.pnptracker.data.database.dao
 
 import androidx.room3.Dao
+import androidx.room3.Delete
 import androidx.room3.Insert
 import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
 import androidx.room3.Transaction
 import androidx.room3.Update
 import dev.pnptracker.data.database.entity.CellSegmentEntity
+import dev.pnptracker.data.database.entity.DraftTaskColorEntity
 import dev.pnptracker.data.database.entity.DraftTaskEntity
 import dev.pnptracker.data.database.entity.ImportBatchEntity
 import dev.pnptracker.data.database.entity.RawImportBlockEntity
@@ -16,15 +18,19 @@ import dev.pnptracker.data.database.entity.stageRowsFor
 import dev.pnptracker.data.database.projection.CellColumnRow
 import dev.pnptracker.domain.importconfirm.ImportConfirmationException
 import dev.pnptracker.domain.importconfirm.ImportConfirmationFailure
+import dev.pnptracker.domain.importreview.ImportReviewException
+import dev.pnptracker.domain.importreview.ImportReviewFailure
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.HintDecision
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.ImportBatchStatus
 import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.model.SourceColumnType
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.rules.requireAllowedTrackingMode
 import kotlinx.coroutines.flow.Flow
+import kotlin.time.Clock
 import kotlin.time.Instant
 
 /**
@@ -163,10 +169,25 @@ abstract class ImportDao {
         updatedAt: Instant,
     ): Int
 
-    @Query("UPDATE raw_import_blocks SET game_completion_hint = :decision, updated_at = :updatedAt WHERE id = :id")
-    abstract suspend fun updateGameCompletionHint(
+    /**
+     * Writes a hint answer and the game it names, with nothing checked.
+     *
+     * Protected, because on its own it can write a combination that is not a
+     * decision: an acceptance with no game, or a game attached to a rejection.
+     * [setGameCompletionDecisionUnderReview] is the way in, and it checks both
+     * before this runs.
+     */
+    @Query(
+        """
+        UPDATE raw_import_blocks
+        SET game_completion_hint = :decision, completion_target_game_id = :targetGameId, updated_at = :updatedAt
+        WHERE id = :id
+        """,
+    )
+    protected abstract suspend fun updateGameCompletionDecision(
         id: EntityId,
         decision: HintDecision,
+        targetGameId: EntityId?,
         updatedAt: Instant,
     ): Int
 
@@ -277,6 +298,196 @@ abstract class ImportDao {
         }
         deleteDraftBatchRow(id)
     }
+
+    // ------------------------------------------- the colours of a draft task
+
+    /** One draft's chosen colours, in the order the user picked them. */
+    @Query("SELECT * FROM draft_task_colors WHERE draft_task_id = :draftTaskId ORDER BY slot_index")
+    abstract suspend fun draftColorsOf(draftTaskId: EntityId): List<DraftTaskColorEntity>
+
+    /**
+     * Every chosen colour of a whole import, in one query.
+     *
+     * The workspace shows all of a batch's drafts at once, so asking each draft
+     * for its own colours would put a query behind every row of the screen and a
+     * flow behind every row of the workspace. Ordered by draft and then by slot,
+     * so the caller groups rather than sorts: the order the colours are drawn in
+     * is the user's own and must not be left to however SQLite returns them.
+     */
+    @Query(
+        """
+        SELECT draft_task_colors.* FROM draft_task_colors
+        JOIN draft_tasks ON draft_tasks.id = draft_task_colors.draft_task_id
+        JOIN raw_import_blocks ON raw_import_blocks.id = draft_tasks.raw_import_block_id
+        WHERE raw_import_blocks.import_batch_id = :batchId
+        ORDER BY draft_task_colors.draft_task_id, draft_task_colors.slot_index
+        """,
+    )
+    abstract fun observeDraftColorsOfBatch(batchId: EntityId): Flow<List<DraftTaskColorEntity>>
+
+    /** The same, read once rather than watched. */
+    @Query(
+        """
+        SELECT draft_task_colors.* FROM draft_task_colors
+        JOIN draft_tasks ON draft_tasks.id = draft_task_colors.draft_task_id
+        JOIN raw_import_blocks ON raw_import_blocks.id = draft_tasks.raw_import_block_id
+        WHERE raw_import_blocks.import_batch_id = :batchId
+        ORDER BY draft_task_colors.draft_task_id, draft_task_colors.slot_index
+        """,
+    )
+    abstract suspend fun draftColorsOfBatch(batchId: EntityId): List<DraftTaskColorEntity>
+
+    /**
+     * The whole colour catalogue, as identities.
+     *
+     * PLAN 5.2 makes colour the one exception to the tombstone rule, so every
+     * row here is a colour that still exists and there is no filter to apply.
+     * Read once for a whole list of chosen colours rather than asked about each
+     * of them: the answer is the same either way, and a query per colour would
+     * make choosing five colours cost five round trips.
+     */
+    @Query("SELECT id FROM colors")
+    abstract suspend fun allColorIds(): List<EntityId>
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    protected abstract suspend fun insertDraftColor(row: DraftTaskColorEntity)
+
+    @Delete
+    protected abstract suspend fun deleteDraftColor(row: DraftTaskColorEntity)
+
+    /**
+     * Replaces the colours of one draft with exactly [colorIds], in that order.
+     *
+     * The whole list at once rather than one colour at a time, because what has
+     * to stay true is a property of the list: the slots are `0..N-1` with no
+     * gaps, and no colour appears twice. Adding and removing separately would
+     * leave a moment between two writes when neither held.
+     *
+     * Everything is checked before anything is written, and everything written
+     * is written in one transaction, so a colour that turns out to have been
+     * deleted leaves the draft with the list it had rather than with half a new
+     * one. An empty list is a real answer — PLAN 5.10 makes no colour a valid
+     * state — and so is a list with the same colours in a different order.
+     *
+     * Giving the list the draft already has is nothing at all: no write, no new
+     * timestamp, and [clock] is not read, so saving twice cannot move a moment.
+     *
+     * @return true when this call changed something.
+     * @throws ImportReviewException if the draft is gone, its import is no longer
+     *   a draft, a colour was named twice, or a colour is not in the catalogue;
+     *   nothing is written in any of those cases.
+     */
+    @Transaction
+    open suspend fun setDraftColorsUnderReview(
+        draftTaskId: EntityId,
+        colorIds: List<EntityId>,
+        clock: Clock,
+    ): Boolean {
+        val draft = draftTaskById(draftTaskId) ?: refuseReview(ImportReviewFailure.DRAFT_TASK_NOT_FOUND)
+        requireDraftBatch(draft)
+
+        // Which colour was named twice, found before anything is read: a
+        // duplicate costs no query and certainly no write.
+        if (colorIds.toSet().size != colorIds.size) refuseReview(ImportReviewFailure.DUPLICATE_COLOR)
+
+        val existing = draftColorsOf(draftTaskId)
+        // The same colours in the same places is the same answer. Compared
+        // against the stored slots rather than against the list's own order, so
+        // a stored list that had somehow drifted is still put right.
+        if (existing.map { it.colorId } == colorIds && existing.withIndex().all { (at, row) -> row.slotIndex == at }) {
+            return false
+        }
+
+        if (colorIds.isNotEmpty()) {
+            val catalogue = allColorIds().toSet()
+            if (colorIds.any { it !in catalogue }) refuseReview(ImportReviewFailure.COLOR_NOT_AVAILABLE)
+        }
+
+        // Out of the way first: renumbering in place would collide with the
+        // unique slot index the moment one colour moved onto a place another
+        // still held. Deleting the whole old list is simpler and, inside one
+        // transaction, indistinguishable from moving the rows.
+        existing.forEach { deleteDraftColor(it) }
+        colorIds.forEachIndexed { slot, colorId ->
+            insertDraftColor(DraftTaskColorEntity(draftTaskId = draftTaskId, colorId = colorId, slotIndex = slot))
+        }
+        touchDraftTask(draftTaskId, clock.now())
+        return true
+    }
+
+    @Query("UPDATE draft_tasks SET updated_at = :updatedAt WHERE id = :id")
+    protected abstract suspend fun touchDraftTask(
+        id: EntityId,
+        updatedAt: Instant,
+    ): Int
+
+    // --------------------------------------- the game an accepted hint names
+
+    /** 1 while the game is there and has not been deleted. */
+    @Query("SELECT COUNT(*) FROM games WHERE id = :gameId AND deleted_at IS NULL")
+    abstract suspend fun activeGameCount(gameId: EntityId): Int
+
+    /**
+     * Records what the user answered to a green cell, and which game they meant.
+     *
+     * The answer and the game are one decision, so they are written together: an
+     * acceptance without a game would be a yes to a question with no subject, and
+     * a game left behind on a rejection would be an answer nobody gave. Taking
+     * the acceptance back therefore clears the game in the same statement.
+     *
+     * This does **not** finish the game. PLAN 5.3 has an accepted import hint
+     * change a game's completion, but that is a write to the game and belongs to
+     * confirming the import; all that is stored here is the decision, so it
+     * survives the review being closed and reopened (PLAN 11.4.3).
+     *
+     * Answering what has already been answered, about the same game, is nothing
+     * at all: no write, no new timestamp, and [clock] is not read.
+     *
+     * @return true when this call changed something.
+     * @throws ImportReviewException if the cell is gone, its import is no longer
+     *   a draft, the cell is not one such a hint can be about, an acceptance
+     *   named no game, a game was named for something other than an acceptance,
+     *   or the game is gone; nothing is written in any of those cases.
+     */
+    @Transaction
+    open suspend fun setGameCompletionDecisionUnderReview(
+        blockId: EntityId,
+        decision: HintDecision,
+        targetGameId: EntityId?,
+        clock: Clock,
+    ): Boolean {
+        val block = rawBlockById(blockId) ?: refuseReview(ImportReviewFailure.RAW_BLOCK_NOT_FOUND)
+        val batch = batchById(block.importBatchId) ?: refuseReview(ImportReviewFailure.RAW_BLOCK_NOT_FOUND)
+        if (batch.status != ImportBatchStatus.DRAFT) refuseReview(ImportReviewFailure.BATCH_NOT_A_DRAFT)
+        // PLAN 11.5 puts the green cell in the game name column, so no other
+        // cell can carry this answer whatever it was coloured.
+        if (block.sourceColumnType != SourceColumnType.GAME) {
+            refuseReview(ImportReviewFailure.BLOCK_CANNOT_CARRY_GAME_COMPLETION)
+        }
+        if (decision == HintDecision.ACCEPTED) {
+            if (targetGameId == null) refuseReview(ImportReviewFailure.COMPLETION_TARGET_REQUIRED)
+            if (activeGameCount(targetGameId) != 1) {
+                refuseReview(ImportReviewFailure.COMPLETION_TARGET_GAME_NOT_AVAILABLE)
+            }
+        } else if (targetGameId != null) {
+            refuseReview(ImportReviewFailure.COMPLETION_TARGET_NOT_ALLOWED)
+        }
+
+        if (block.gameCompletionHint == decision && block.completionTargetGameId == targetGameId) return false
+
+        val changed = updateGameCompletionDecision(blockId, decision, targetGameId, clock.now())
+        check(changed == 1) { "The raw cell $blockId disappeared while its hint was being answered." }
+        return true
+    }
+
+    /** The import a draft belongs to, refusing unless it is still being reviewed. */
+    private suspend fun requireDraftBatch(draft: DraftTaskEntity) {
+        val block = rawBlockById(draft.rawImportBlockId) ?: refuseReview(ImportReviewFailure.RAW_BLOCK_NOT_FOUND)
+        val batch = batchById(block.importBatchId) ?: refuseReview(ImportReviewFailure.RAW_BLOCK_NOT_FOUND)
+        if (batch.status != ImportBatchStatus.DRAFT) refuseReview(ImportReviewFailure.BATCH_NOT_A_DRAFT)
+    }
+
+    private fun refuseReview(failure: ImportReviewFailure): Nothing = throw ImportReviewException(failure)
 
     private suspend fun requireSelectionFitsRawText(draft: DraftTaskEntity) {
         val start = draft.selectionStartIndex
