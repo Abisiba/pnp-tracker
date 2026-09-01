@@ -1,24 +1,46 @@
 package dev.pnptracker.domain.games
 
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.ProductionStage
+
+/**
+ * One step of one task's pipeline, as the question about the game found it.
+ *
+ * The stage names the row: `task_stages` is keyed by the task and the stage
+ * together, so a stage that has gone, one that has appeared, and one whose count
+ * has moved are all differences in this list. [orderIndex] is here because a
+ * pipeline is an order as well as a set — PLAN 7.2 checks each step against the
+ * one before it — so a pipeline reordered under an open question is not the
+ * pipeline the answer was given about.
+ */
+data class GameStageSnapshot(
+    val stage: ProductionStage,
+    val orderIndex: Int,
+    val completedQuantity: Int,
+)
 
 /**
  * One task of a game, as far as finishing the whole game is concerned.
  *
- * Three facts and no more, because these are exactly the three that decide what
- * a bulk completion will do to this task (PLAN 12.9): whether there is anything
- * to finish, whether a debt has to be settled and recorded, and what number its
- * pipeline is to be counted up to. A stage's own count is deliberately not here
- * — every stage ends at the total whatever it stood at — so putting it in would
- * make the question "has anything changed" answer yes to work that changes
- * nothing about the outcome.
+ * Everything the bulk completion's outcome turns on and nothing else: whether
+ * there is anything to finish, whether a debt has to be settled and recorded,
+ * what number its pipeline is to be counted up to, and the pipeline itself.
+ *
+ * The stages are here because they are what the transaction writes. Leaving them
+ * out was a real gap rather than a tidy simplification: a card standing at
+ * `15/10/5` and the same card at `9/0/0` are identical in every other field, so
+ * an answer given about the one was quietly applied to the other.
  */
 data class GameTaskSnapshot(
     val taskId: EntityId,
     val isCompleted: Boolean,
     val currentMissingQuantity: Int,
     val requiredQuantity: Int?,
-)
+    val stages: List<GameStageSnapshot> = emptyList(),
+) {
+    /** The same task with its pipeline in a fixed order. */
+    internal fun ordered(): GameTaskSnapshot = copy(stages = stages.sortedBy { it.stage.ordinal })
+}
 
 /**
  * A game and its tasks as they stood when the user was asked about them.
@@ -55,5 +77,12 @@ data class GameCompletionSnapshot(
     /** True when [other] is the same game in the same state, however it was read. */
     fun matches(other: GameCompletionSnapshot): Boolean = isGameCompleted == other.isGameCompleted && ordered() == other.ordered()
 
-    private fun ordered(): List<GameTaskSnapshot> = tasks.sortedBy { it.taskId.toString() }
+    /**
+     * The same tasks and the same pipelines in a fixed order.
+     *
+     * Both levels, because both come back in whatever order they were read in:
+     * SQLite is free to hand rows over however it likes, and comparing two
+     * honest readings of one unchanged game must not depend on that.
+     */
+    private fun ordered(): List<GameTaskSnapshot> = tasks.map { it.ordered() }.sortedBy { it.taskId.toString() }
 }

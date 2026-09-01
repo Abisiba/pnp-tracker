@@ -24,7 +24,6 @@ import dev.pnptracker.domain.games.GameCompletionSnapshot
 import dev.pnptracker.domain.games.GameSetupException
 import dev.pnptracker.domain.games.GameTableRow
 import dev.pnptracker.domain.games.GameTableView
-import dev.pnptracker.domain.games.GameTaskSnapshot
 import dev.pnptracker.domain.games.planDocumentChange
 import dev.pnptracker.domain.games.runsFrom
 import dev.pnptracker.domain.model.CellColumnType
@@ -1285,31 +1284,6 @@ class GameTableController(
     // ------------------------------------------------------ finishing a game
 
     /**
-     * The game as its row stands, which is what a confirmation is answered about.
-     *
-     * Built from the rows already collected rather than from a read of its own:
-     * PLAN 12.9 asks about the work the user can see, and everything the answer
-     * turns on is already drawn in front of them. What is written is decided
-     * again inside the transaction against this same picture, so a row that has
-     * gone stale is refused rather than acted on.
-     */
-    private fun snapshotOf(row: GameTableRow): GameCompletionSnapshot =
-        GameCompletionSnapshot(
-            isGameCompleted = row.isCompleted,
-            tasks =
-                row.cells.flatMap { cell ->
-                    cell.tasks.map { task ->
-                        GameTaskSnapshot(
-                            taskId = requireNotNull(task.taskId),
-                            isCompleted = task.isCompletedTask,
-                            currentMissingQuantity = task.currentMissingQuantity,
-                            requiredQuantity = task.requiredQuantity,
-                        )
-                    }
-                },
-        )
-
-    /**
      * The tick on a game row (PLAN 12.3, 12.9).
      *
      * With nothing unfinished in the game — including a game with no tasks at
@@ -1329,7 +1303,16 @@ class GameTableController(
         }
         val row = rowOf(gameId) ?: return
         if (row.isCompleted) return
-        val snapshot = snapshotOf(row)
+        // Read rather than taken from the row. The pipelines a bulk completion
+        // writes are not drawn in a game row, so a picture built from the screen
+        // could not tell a card at `15/10/5` from the same card at `9/0/0` — and
+        // the answer to a question about the one would be applied to the other.
+        // One read, whatever the game holds.
+        val snapshot = taskProgress.gameCompletion(gameId)
+        if (snapshot == null) {
+            state = state.copy(gameCompletionFailure = gameId to TaskProgressFailure.GAME_NOT_AVAILABLE)
+            return
+        }
         if (snapshot.needsConfirmation) {
             state =
                 state.copy(

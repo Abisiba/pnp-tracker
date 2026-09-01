@@ -25,6 +25,7 @@ import dev.pnptracker.domain.games.GameSetupFailure
 import dev.pnptracker.domain.games.GameSummary
 import dev.pnptracker.domain.games.GameTableRow
 import dev.pnptracker.domain.games.GameTableView
+import dev.pnptracker.domain.games.GameTaskSnapshot
 import dev.pnptracker.domain.games.TaskColorPreview
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
@@ -200,6 +201,9 @@ class GameTableControllerTest {
         val completed = mutableListOf<Pair<EntityId, EntityId>>()
         val reopened = mutableListOf<EntityId>()
         val gamesCompleted = mutableListOf<Pair<EntityId, GameCompletionSnapshot?>>()
+
+        /** What the database would say about each game, when it is asked. */
+        var completions: Map<EntityId, GameCompletionSnapshot> = emptyMap()
         val reported = mutableListOf<RecordedMovement>()
         val resolved = mutableListOf<RecordedMovement>()
 
@@ -234,6 +238,8 @@ class GameTableControllerTest {
             reopened += taskId
             return answer()
         }
+
+        override suspend fun gameCompletion(gameId: EntityId): GameCompletionSnapshot? = completions[gameId]
 
         override suspend fun completeGame(
             gameId: EntityId,
@@ -3771,11 +3777,37 @@ class GameTableControllerTest {
         operator fun component3() = progress
     }
 
+    /**
+     * What the database would say about a game, built from the row shown for it.
+     *
+     * The fake stands in for the read the controller now makes, so the test says
+     * what that read finds. The pipelines are empty here because a game row does
+     * not carry them and these tests are not about them; what a pipeline moving
+     * under an open question does is settled against a real database in
+     * `GameCompletionTest`.
+     */
+    private fun completionOf(row: GameTableRow): GameCompletionSnapshot =
+        GameCompletionSnapshot(
+            isGameCompleted = row.isCompleted,
+            tasks =
+                row.cells.flatMap { cell ->
+                    cell.tasks.map { task ->
+                        GameTaskSnapshot(
+                            taskId = requireNotNull(task.taskId),
+                            isCompleted = task.isCompletedTask,
+                            currentMissingQuantity = task.currentMissingQuantity,
+                            requiredQuantity = task.requiredQuantity,
+                        )
+                    }
+                },
+        )
+
     private suspend fun CoroutineScope.looking(
         rows: List<GameTableRow>,
         progress: FakeTaskProgress = FakeTaskProgress(),
     ): Looking {
         val table = FakeTable(rows)
+        progress.completions = rows.associate { it.gameId to completionOf(it) }
         val controller = controllerOf(table, taskProgress = progress)
         return Looking(controller, collect(controller), progress, table)
     }

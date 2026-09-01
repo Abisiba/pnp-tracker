@@ -47,6 +47,12 @@ class GameTableLayoutTest {
             .of("src/commonMain/kotlin/dev/pnptracker/ui/feature/tasks/TaskEditingSurface.kt")
             .let { Files.readString(it) }
 
+    /** One named stretch of the screen's source, for the guards that read it. */
+    private fun sourceOf(
+        from: String,
+        until: String,
+    ): String = source.substringAfter(from).substringBefore(until)
+
     @Test
     fun `every place these tests read the screen at is really in it`() {
         // Without this, renaming a composable turns a test into one that reads
@@ -314,13 +320,35 @@ class GameTableLayoutTest {
         val handle = source.substringAfter("private fun TaskHandle(").substringBefore("private fun CellEditorSlot(")
         assertTrue("PointerIcon.Hand" in handle, "a task does not take the hand cursor")
         assertTrue("hoverable(" in handle, "a task does not respond to being hovered")
-        assertTrue(".focusable()" in handle, "a task cannot take the keyboard")
         assertTrue("Key.Spacebar" in handle, "Space does not open a task's menu")
         assertTrue("Key.Enter" in handle, "Enter does not open a task's menu")
         assertTrue("role = Role.Button" in handle, "a task does not say it is something to press")
         assertTrue("controller.openTaskMenu(" in handle, "pressing a task does nothing")
+        // The keyboard comes from `clickable` and from nothing beside it. A
+        // `focusable` of its own made the word two focus targets, and Tab landed
+        // on the one no key handler sat above — Enter and Space then did nothing
+        // at all. `TaskChipKeyboardTest` presses the keys for real; this keeps
+        // the shape that lets them arrive.
+        assertTrue(".focusable()" !in handle, "the word is two focus targets drawn as one")
+        assertTrue(
+            handle.indexOf(".onPreviewKeyEvent") < handle.indexOf(".clickable("),
+            "the key handler sits below the control it is about, where no key reaches it",
+        )
         // A ring rather than a wash: the colour underneath is the information.
         assertTrue("style = Stroke(" in handle, "hovering a task covers the colour it is telling the user about")
+    }
+
+    @Test
+    fun `the cell asks about a key last, so a task inside it answers first`() {
+        // A preview above everything in the cell reached the cell *before* the
+        // task the keyboard was really on: Enter opened the cell's editor and
+        // the task never saw the key. Bubbling asks the cell only for what
+        // nothing inside it claimed.
+        val cell = sourceOf("private fun CellSlot(", "private fun tickContentOf(")
+        assertTrue(".onKeyEvent {" in cell, "the cell no longer answers Enter at all")
+        assertTrue(".onPreviewKeyEvent" !in cell, "the cell takes the key before whatever is really focused")
+        assertTrue(cell.indexOf(".onKeyEvent {") < cell.indexOf(".focusable()"), "the cell's own key never reaches its handler")
+        assertTrue("Key.F2" in cell, "F2 no longer opens the cell")
     }
 
     @Test
@@ -545,8 +573,11 @@ class GameTableLayoutTest {
         assertTrue("boxes.forEachIndexed" in handle, "only part of a wrapped name is a control")
         // One control, several shapes: the keyboard stops at a task once, a
         // reader is told about it once, and the popover hangs off the line the
-        // word starts on rather than off each piece of it.
-        assertEquals(1, Regex("""\.focusable\(\)""").findAll(handle).count(), "a wrapped name takes the keyboard twice")
+        // word starts on rather than off each piece of it. The later lines
+        // answer the pointer through a tap detector, which takes no focus —
+        // `clickable` there would be a stop of its own per line.
+        assertEquals(1, Regex("""\.clickable\(""").findAll(handle).count(), "a wrapped name takes the keyboard once a line")
+        assertTrue("detectTapGestures" in handle, "the later lines of a wrapped name cannot be clicked")
         assertTrue("leading && menu != null" in handle, "a wrapped name would open two popovers")
         assertTrue("clearAndSetSemantics" in handle, "a wrapped name is announced once for each line")
     }

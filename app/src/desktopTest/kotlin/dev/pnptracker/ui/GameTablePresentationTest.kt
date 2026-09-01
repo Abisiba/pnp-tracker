@@ -79,9 +79,47 @@ class GameTablePresentationTest {
                     Strings.Table.completedMark,
                     Strings.Table.addGame,
                     Strings.Table.addGameHint,
+                    Strings.Table.emptyTick,
+                    Strings.Table.completeGame,
+                    Strings.Table.completeGameQuestion,
+                    Strings.Table.completeGameYes,
+                    Strings.Table.completeGameNo,
+                    Strings.Table.completeGameHint,
+                    Strings.Table.completeGameErrorStale,
+                    Strings.Table.completeGameErrorGone,
+                    Strings.Table.completeGameErrorGeneral,
                 )
 
         texts.forEach { assertTrue(textOf(it).isNotBlank(), "a table text is missing or empty") }
+    }
+
+    @Test
+    fun `a game whose work moved under the question is told what happened`() {
+        // PLAN 17: the words are about the work, never about SQL or a failure's
+        // own name — and this one has to say that nothing was written, because
+        // that is the whole of what the user needs to know before looking again.
+        val said = textOf(Strings.Table.completeGameErrorStale)
+
+        assertTrue("değişti" in said, "the message does not say the game moved: $said")
+        assertTrue("yazılmadı" in said, "the message does not say nothing was written: $said")
+        listOf("STALE", "SQL", "Exception", "null").forEach {
+            assertTrue(it !in said, "the message shows the machinery: $said")
+        }
+    }
+
+    @Test
+    fun `the question about finishing a game is asked in the plan's own words`() {
+        // PLAN 12.9 writes the question out; it is not paraphrased here.
+        assertEquals("Tüm görevler tamamlandı mı?", textOf(Strings.Table.completeGameQuestion))
+        assertEquals("Oyunu tamamla", textOf(Strings.Table.completeGame))
+    }
+
+    @Test
+    fun `the question says how much is being agreed to`() {
+        val said = textOf(Strings.Table.completeGameUnfinished, "Harmonies", "6")
+
+        assertTrue("Harmonies" in said, "the game is not named: $said")
+        assertTrue("6" in said, "how many tasks are unfinished is not said: $said")
     }
 
     @Test

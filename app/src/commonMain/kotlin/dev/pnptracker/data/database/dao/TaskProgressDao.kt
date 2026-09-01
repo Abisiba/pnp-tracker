@@ -10,6 +10,7 @@ import dev.pnptracker.data.database.entity.ProgressEventEntity
 import dev.pnptracker.data.database.entity.TaskEntity
 import dev.pnptracker.data.database.entity.TaskStageEntity
 import dev.pnptracker.domain.games.GameCompletionSnapshot
+import dev.pnptracker.domain.games.GameStageSnapshot
 import dev.pnptracker.domain.games.GameTaskSnapshot
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
@@ -400,7 +401,7 @@ abstract class TaskProgressDao {
         val tasks = workableTasksOfGame(gameId)
         val stages = stagesOfGame(gameId).groupBy { it.taskId }
         expected?.let { snapshot ->
-            if (!snapshot.matches(snapshotOf(game, tasks))) refuse(TaskProgressFailure.STALE_GAME_COMPLETION)
+            if (!snapshot.matches(snapshotOf(game, tasks, stages))) refuse(TaskProgressFailure.STALE_GAME_COMPLETION)
         }
         if (game.isManuallyCompleted) return false
 
@@ -424,10 +425,27 @@ abstract class TaskProgressDao {
         return true
     }
 
-    /** The game and its tasks as this transaction found them. */
+    /**
+     * The game exactly as a question about finishing it would find it.
+     *
+     * The same three reads a bulk completion makes, and no more: PLAN 12.9 asks
+     * the user about work the transaction is then going to do, so the picture
+     * they answer and the picture it writes against have to be the same picture
+     * taken the same way.
+     *
+     * @return null when there is no such game to ask about.
+     */
+    @Transaction
+    open suspend fun gameCompletionSnapshot(gameId: EntityId): GameCompletionSnapshot? {
+        val game = activeGameById(gameId) ?: return null
+        return snapshotOf(game, workableTasksOfGame(gameId), stagesOfGame(gameId).groupBy { it.taskId })
+    }
+
+    /** The game, its tasks and their pipelines as this read found them. */
     private fun snapshotOf(
         game: GameEntity,
         tasks: List<TaskEntity>,
+        stages: Map<EntityId, List<TaskStageEntity>>,
     ): GameCompletionSnapshot =
         GameCompletionSnapshot(
             isGameCompleted = game.isManuallyCompleted,
@@ -438,6 +456,16 @@ abstract class TaskProgressDao {
                         isCompleted = task.isCompleted,
                         currentMissingQuantity = task.currentMissingQuantity,
                         requiredQuantity = task.requiredQuantity,
+                        // From the one whole-game read the transaction already
+                        // makes; never a query of its own per task.
+                        stages =
+                            stages[task.id].orEmpty().map { row ->
+                                GameStageSnapshot(
+                                    stage = row.stage,
+                                    orderIndex = row.orderIndex,
+                                    completedQuantity = row.completedQuantity,
+                                )
+                            },
                     )
                 },
         )

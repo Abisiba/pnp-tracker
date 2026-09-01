@@ -72,6 +72,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerIcon
@@ -1118,16 +1119,16 @@ private fun CellSlot(
                 .heightIn(min = 64.dp)
                 .cellBorder(focused)
                 .onFocusEvent { focused = it.isFocused }
-                .focusable()
-                .combinedClickable(
-                    onClickLabel = editLabel,
-                    // A single click only takes the focus; the double click is
-                    // what opens the editor, so passing over a cell on the way
-                    // to another never puts one into it.
-                    onClick = {},
-                    onDoubleClick = onEdit,
-                ).onPreviewKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                // Bubbling, and above the cell's own focus target rather than a
+                // preview above everything in it. A preview here reached the
+                // cell *before* whatever the keyboard was really on, so Enter on
+                // a task written inside the cell opened the cell's editor and
+                // the task never saw the key at all — which is why Space worked
+                // on a task and Enter did not. Bubbling asks the cell last: the
+                // task answers for its own word, and what nothing inside claimed
+                // belongs to the cell.
+                .onKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                     when (event.key) {
                         Key.Enter, Key.NumPadEnter, Key.F2 -> {
                             onEdit()
@@ -1136,7 +1137,15 @@ private fun CellSlot(
 
                         else -> false
                     }
-                }.padding(horizontal = 10.dp, vertical = 8.dp)
+                }.focusable()
+                .combinedClickable(
+                    onClickLabel = editLabel,
+                    // A single click only takes the focus; the double click is
+                    // what opens the editor, so passing over a cell on the way
+                    // to another never puts one into it.
+                    onClick = {},
+                    onDoubleClick = onEdit,
+                ).padding(horizontal = 10.dp, vertical = 8.dp)
                 .semantics { contentDescription = description },
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
@@ -1322,6 +1331,23 @@ private fun TaskHandle(
     val focusRing = MaterialTheme.colorScheme.primary
     val hoverRing = MaterialTheme.colorScheme.primary
 
+    val handle = remember { FocusRequester() }
+    val open = { controller.openTaskMenu(gameId, columnType, taskId) }
+    // The keyboard goes back to the word the panel was opened from. Escape
+    // closing a popover otherwise leaves focus nowhere — the popover had it, and
+    // the popover is gone — so the user has to reach for the mouse to get back
+    // to a row they never left. Only a task whose panel really was open asks for
+    // it, so closing one does not pull the keyboard off another.
+    var wasOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(menu != null) {
+        if (menu != null) {
+            wasOpen = true
+        } else if (wasOpen) {
+            wasOpen = false
+            runCatching { handle.requestFocus() }
+        }
+    }
+
     // A wrapped name is several boxes and one control. They share the hover and
     // the focus, so pressing either half does the same thing and lighting up is
     // about the task rather than about the piece of it under the pointer. Only
@@ -1342,22 +1368,59 @@ private fun TaskHandle(
                         if (leading) {
                             Modifier
                                 .onFocusEvent { focused = it.isFocused }
-                                .focusable()
-                        } else {
-                            Modifier
-                        },
-                    ).clickable(onClickLabel = openLabel) { controller.openTaskMenu(gameId, columnType, taskId) }
-                    .onPreviewKeyEvent { event ->
-                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                        when (event.key) {
-                            Key.Enter, Key.NumPadEnter, Key.Spacebar -> {
-                                controller.openTaskMenu(gameId, columnType, taskId)
-                                true
-                            }
+                                .focusRequester(handle)
+                                // Above the control it is about, and the control
+                                // is `clickable` alone. A preview reaches the
+                                // nodes *above* the one holding the keyboard, so
+                                // a handler written below never runs — Enter and
+                                // Space did nothing at all here — and a
+                                // `focusable` beside `clickable` would make one
+                                // word two tab stops that look like one.
+                                .onPreviewKeyEvent { event ->
+                                    // Only the press. The release of the same
+                                    // stroke would open the panel a second time,
+                                    // and a held key would keep reopening it.
+                                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                    when (event.key) {
+                                        Key.Enter, Key.NumPadEnter, Key.Spacebar -> {
+                                            open()
+                                            true
+                                        }
 
-                            else -> false
-                        }
-                    }.drawBehind {
+                                        else -> false
+                                    }
+                                }.clickable(onClickLabel = openLabel) { open() }
+                                .semantics {
+                                    contentDescription = spoken
+                                    role = Role.Button
+                                    // Said as a state rather than folded into the
+                                    // name, so a reader hears it once and hears it
+                                    // change when the task does.
+                                    stateDescription = completion
+                                    // The tick draws the same thing and says
+                                    // nothing, so this is the only place the
+                                    // keyboard and a reader can reach it — and
+                                    // there is one of it per task however many
+                                    // colours the name is in.
+                                    customActions =
+                                        listOf(
+                                            CustomAccessibilityAction(finishLabel) {
+                                                scope.launch { controller.toggleTaskCompletion(gameId, columnType, taskId) }
+                                                true
+                                            },
+                                        )
+                                }
+                        } else {
+                            // The later lines of a wrapped name are the same
+                            // control drawn again. They answer the pointer and
+                            // nothing else: a `clickable` here would be a focus
+                            // stop of its own, so Tab would visit one task as
+                            // many times as its name happens to wrap.
+                            Modifier
+                                .pointerInput(taskId) { detectTapGestures { open() } }
+                                .clearAndSetSemantics { }
+                        },
+                    ).drawBehind {
                         // A ring rather than a wash: the colour underneath is the
                         // information, and covering it to say "you are over this"
                         // would trade the answer for the pointer.
@@ -1368,31 +1431,7 @@ private fun TaskHandle(
                                 style = Stroke(width = if (focused) 2.dp.toPx() else 1.5.dp.toPx()),
                             )
                         }
-                    }.then(
-                        if (leading) {
-                            Modifier.semantics {
-                                contentDescription = spoken
-                                role = Role.Button
-                                // Said as a state rather than folded into the
-                                // name, so a reader hears it once and hears it
-                                // change when the task does.
-                                stateDescription = completion
-                                // The tick draws the same thing and says nothing,
-                                // so this is the only place the keyboard and a
-                                // reader can reach it — and there is one of it
-                                // per task however many colours the name is in.
-                                customActions =
-                                    listOf(
-                                        CustomAccessibilityAction(finishLabel) {
-                                            scope.launch { controller.toggleTaskCompletion(gameId, columnType, taskId) }
-                                            true
-                                        },
-                                    )
-                            }
-                        } else {
-                            Modifier.clearAndSetSemantics { }
-                        },
-                    ),
+                    },
         ) {
             if (leading && menu != null) {
                 TaskPopover(menu = menu, state = state, controller = controller)

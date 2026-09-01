@@ -41,6 +41,18 @@ interface TaskProgressing {
     suspend fun reopenTask(taskId: EntityId): TaskProgressOutcome
 
     /**
+     * The game as a question about finishing it should be answered against.
+     *
+     * Read rather than worked out from what the table happens to be showing: the
+     * pipelines a bulk completion writes are not drawn in a game row at all, so
+     * a picture built from the screen could not tell a card at `15/10/5` from
+     * the same card at `9/0/0`.
+     *
+     * @return null when there is no such game.
+     */
+    suspend fun gameCompletion(gameId: EntityId): GameCompletionSnapshot?
+
+    /**
      * Finishes a whole game: everything unfinished in it, then the game (PLAN 12.9).
      *
      * One transaction, so a game is never left marked finished over work that is
@@ -171,6 +183,13 @@ class TaskProgressStore(
 
     override suspend fun reopenTask(taskId: EntityId): TaskProgressOutcome =
         outcomeOf { taskProgressDao.reopenTask(taskId = taskId, clock = clock) }
+
+    override suspend fun gameCompletion(gameId: EntityId): GameCompletionSnapshot? =
+        try {
+            taskProgressDao.gameCompletionSnapshot(gameId)
+        } catch (cause: SQLiteException) {
+            null
+        }
 
     override suspend fun completeGame(
         gameId: EntityId,

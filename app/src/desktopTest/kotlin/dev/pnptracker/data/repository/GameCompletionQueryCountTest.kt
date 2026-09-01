@@ -77,6 +77,25 @@ class GameCompletionQueryCountTest {
         return game.id
     }
 
+    /** A game of [tasks] open card tasks, each with a pipeline of its own. */
+    private suspend fun aGameOfCards(tasks: Int): EntityId {
+        val game = aGame(name = "Kartlar ${IdGenerator.Random.newId()}")
+        val cell = aCell(gameId = game.id, columnType = CellColumnType.CARD)
+        database.gameDao().insert(game)
+        database.gameCellDao().insert(cell)
+        repeat(tasks) { at ->
+            val task =
+                aTask(
+                    poolType = PoolType.CARD,
+                    trackingMode = TrackingMode.PIPELINE,
+                    name = "Deste $at",
+                    requiredQuantity = 20,
+                )
+            database.taskDao().addTaskToCell(task, cell.id, IdGenerator.Random.newId(), createdAt)
+        }
+        return game.id
+    }
+
     /**
      * What was really run, by kind.
      *
@@ -168,6 +187,44 @@ class GameCompletionQueryCountTest {
             assertEquals(42, counted["INSERT"], "the debts were not settled one event each: $counted")
             assertEquals(42, counted["UPDATE tasks"])
             assertTrue(decisions(counted).values.all { it <= 2 }, "a debt cost a question of its own: $counted")
+        }
+
+    @Test
+    fun `asking about a game costs the same three reads whatever is in it`() =
+        runBlocking<Unit> {
+            val small = aGameOf(1)
+            val large = aGameOf(42)
+
+            driver.start()
+            progress.gameCompletionSnapshot(small)
+            val one = ran(driver.stop())
+            driver.start()
+            progress.gameCompletionSnapshot(large)
+            val many = ran(driver.stop())
+
+            assertEquals(one, many, "asking about a game grew with the game: $one then $many")
+            assertEquals(1, many["SELECT games"], "the game was read more than once: $many")
+            assertEquals(1, many["SELECT tasks"], "the tasks were read per task: $many")
+            assertEquals(1, many["SELECT task_stages"], "the stages were read per task: $many")
+            assertTrue(many.keys.none { it.startsWith("UPDATE") || it.startsWith("INSERT") }, "asking wrote something: $many")
+        }
+
+    @Test
+    fun `asking about a game of pipelines costs no more than asking about one task`() =
+        runBlocking<Unit> {
+            // The stages are what was added to the picture, so this is the read
+            // that could have become one per task and did not.
+            val gameId = aGameOfCards(42)
+
+            driver.start()
+            val snapshot = progress.gameCompletionSnapshot(gameId)
+            val counted = ran(driver.stop())
+
+            assertEquals(42, snapshot?.tasks?.size)
+            assertEquals(3 * 42, snapshot?.tasks?.sumOf { it.stages.size }, "the pipelines were not read")
+            assertEquals(1, counted["SELECT task_stages"], "a pipeline cost a query of its own: $counted")
+            assertEquals(1, counted["SELECT tasks"], "$counted")
+            assertEquals(1, counted["SELECT games"], "$counted")
         }
 
     @Test

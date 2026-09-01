@@ -2,7 +2,6 @@ package dev.pnptracker.data.database
 
 import dev.pnptracker.data.database.entity.TaskEntity
 import dev.pnptracker.domain.games.GameCompletionSnapshot
-import dev.pnptracker.domain.games.GameTaskSnapshot
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
@@ -145,15 +144,14 @@ class GameCompletionTest {
 
     private suspend fun gameById(gameId: EntityId) = assertNotNull(database.gameDao().gameByIdIncludingDeleted(gameId))
 
-    /** The game as it stands, which is the picture a confirmation would carry. */
+    /**
+     * The game as it stands, which is the picture a confirmation would carry.
+     *
+     * The application's own read, so the tests here answer with exactly what the
+     * screen would have been given rather than with a second idea of it.
+     */
     private suspend fun snapshotOf(gameId: EntityId): GameCompletionSnapshot =
-        GameCompletionSnapshot(
-            isGameCompleted = gameById(gameId).isManuallyCompleted,
-            tasks =
-                progress.workableTasksOfGame(gameId).map {
-                    GameTaskSnapshot(it.id, it.isCompleted, it.currentMissingQuantity, it.requiredQuantity)
-                },
-        )
+        assertNotNull(progress.gameCompletionSnapshot(gameId), "there is no such game to ask about")
 
     private suspend fun finish(
         gameId: EntityId,
@@ -552,6 +550,180 @@ class GameCompletionTest {
             // no-op would give: the user asked to finish work and it did not.
             assertEquals(TaskProgressFailure.STALE_GAME_COMPLETION, refusal.failure)
             assertEquals(createdAt, gameById(fixture.gameId).completedAt)
+        }
+
+    @Test
+    fun `a card whose pipeline moved under the question is refused`() =
+        runBlocking<Unit> {
+            // The stages are what a bulk completion writes, so a pipeline that
+            // moved while the question stood open is a different amount of work
+            // being agreed to — and the answer was given about the other one.
+            val fixture = aGameCalled()
+            val card = fixture.writing(poolType = PoolType.CARD, trackingMode = TrackingMode.PIPELINE)
+            val asked = snapshotOf(fixture.gameId)
+            progress.setStageQuantities(card.id, mapOf(ProductionStage.PRINT to 9), StoppedClock(createdAt))
+
+            val refusal = assertFailsWith<TaskProgressException> { finish(fixture.gameId, expected = asked) }
+
+            assertEquals(TaskProgressFailure.STALE_GAME_COMPLETION, refusal.failure)
+            assertFalse(gameById(fixture.gameId).isManuallyCompleted, "a refused answer finished the game")
+            assertEquals(listOf(9, 0, 0), pipelineOf(card.id), "a refused answer wrote the pipeline")
+        }
+
+    @Test
+    fun `a board whose pipeline moved under the question is refused`() =
+        runBlocking<Unit> {
+            val fixture = aGameCalled()
+            val board = fixture.writing(poolType = PoolType.BOARD, trackingMode = TrackingMode.PIPELINE)
+            val asked = snapshotOf(fixture.gameId)
+            progress.setStageQuantities(board.id, mapOf(ProductionStage.PRINT to 7), StoppedClock(createdAt))
+
+            val refusal = assertFailsWith<TaskProgressException> { finish(fixture.gameId, expected = asked) }
+
+            assertEquals(TaskProgressFailure.STALE_GAME_COMPLETION, refusal.failure)
+            assertEquals(listOf(7, 0, 0), pipelineOf(board.id))
+        }
+
+    @Test
+    fun `a pipeline that moved leaves nothing written, no time read and no name spent`() =
+        runBlocking<Unit> {
+            val fixture = aGameCalled()
+            val card = fixture.writing(poolType = PoolType.CARD, trackingMode = TrackingMode.PIPELINE)
+            val other = fixture.writing(name = "Gri token")
+            progress.reportFailure(IdGenerator.Random.newId(), other.id, quantity = 3, clock = StoppedClock(createdAt))
+            val asked = snapshotOf(fixture.gameId)
+            progress.setStageQuantities(card.id, mapOf(ProductionStage.PRINT to 6), StoppedClock(createdAt))
+            val before = listOf(gameById(fixture.gameId), taskById(card.id), taskById(other.id))
+            val stagesBefore = progress.stagesOfTask(card.id)
+            val eventsBefore = progress.progressEventsOfTask(other.id)
+            val counting = CountingClock(updatedAt)
+            val names = LimitedIdGenerator(afterwards = 0)
+
+            assertFailsWith<TaskProgressException> {
+                finish(fixture.gameId, clock = counting, idGenerator = names, expected = asked)
+            }
+
+            assertEquals(before, listOf(gameById(fixture.gameId), taskById(card.id), taskById(other.id)))
+            assertEquals(stagesBefore, progress.stagesOfTask(card.id))
+            assertEquals(eventsBefore, progress.progressEventsOfTask(other.id))
+            assertEquals(0, counting.reads, "a refused answer asked what time it was")
+            assertEquals(0, names.handed, "a refused answer spent a name")
+        }
+
+    @Test
+    fun `a stage that has gone, or one that has appeared, is a different game`() =
+        runBlocking<Unit> {
+            // A pipeline is the rows it has as well as the counts on them. The
+            // model gives no way to add or drop one, so the picture is edited
+            // instead — which is exactly what a snapshot must be able to notice
+            // if it is ever to notice a real one.
+            val fixture = aGameCalled()
+            fixture.writing(poolType = PoolType.CARD, trackingMode = TrackingMode.PIPELINE)
+            val asked = snapshotOf(fixture.gameId)
+            val task = asked.tasks.single()
+
+            val missingOne = asked.copy(tasks = listOf(task.copy(stages = task.stages.drop(1))))
+            val extraOne =
+                asked.copy(
+                    tasks = listOf(task.copy(stages = task.stages + task.stages.first().copy(orderIndex = 9))),
+                )
+
+            listOf(missingOne, extraOne).forEach { stale ->
+                val refusal = assertFailsWith<TaskProgressException> { finish(fixture.gameId, expected = stale) }
+                assertEquals(TaskProgressFailure.STALE_GAME_COMPLETION, refusal.failure)
+            }
+            assertFalse(gameById(fixture.gameId).isManuallyCompleted)
+        }
+
+    @Test
+    fun `a pipeline reordered under the question is refused`() =
+        runBlocking<Unit> {
+            val fixture = aGameCalled()
+            fixture.writing(poolType = PoolType.CARD, trackingMode = TrackingMode.PIPELINE)
+            val asked = snapshotOf(fixture.gameId)
+            val task = asked.tasks.single()
+            val reordered =
+                asked.copy(
+                    tasks = listOf(task.copy(stages = task.stages.map { it.copy(orderIndex = it.orderIndex + 1) })),
+                )
+
+            val refusal = assertFailsWith<TaskProgressException> { finish(fixture.gameId, expected = reordered) }
+
+            assertEquals(TaskProgressFailure.STALE_GAME_COMPLETION, refusal.failure)
+        }
+
+    @Test
+    fun `the same pipeline read back in another order is still the same pipeline`() =
+        runBlocking<Unit> {
+            // SQLite hands rows over in whatever order it likes. A snapshot that
+            // depended on it would refuse a game nobody had touched.
+            val fixture = aGameCalled()
+            fixture.writing(poolType = PoolType.CARD, trackingMode = TrackingMode.PIPELINE)
+            fixture.writing(poolType = PoolType.BOARD, trackingMode = TrackingMode.PIPELINE, name = "Tahta")
+            val asked = snapshotOf(fixture.gameId)
+            val shuffled =
+                asked.copy(tasks = asked.tasks.reversed().map { it.copy(stages = it.stages.reversed()) })
+
+            assertTrue(finish(fixture.gameId, expected = shuffled), "the same game read another way looked changed")
+        }
+
+    @Test
+    fun `asking again after the pipeline moved finishes the game`() =
+        runBlocking<Unit> {
+            val fixture = aGameCalled()
+            val card = fixture.writing(poolType = PoolType.CARD, trackingMode = TrackingMode.PIPELINE)
+            val stale = snapshotOf(fixture.gameId)
+            progress.setStageQuantities(card.id, mapOf(ProductionStage.PRINT to 11), StoppedClock(createdAt))
+            assertFailsWith<TaskProgressException> { finish(fixture.gameId, expected = stale) }
+
+            // The question is asked again, and this time it is about the game
+            // that is really there.
+            assertTrue(finish(fixture.gameId, expected = snapshotOf(fixture.gameId)))
+
+            assertTrue(gameById(fixture.gameId).isManuallyCompleted)
+            assertEquals(listOf(20, 20, 20), pipelineOf(card.id))
+        }
+
+    @Test
+    fun `the picture a question is given carries the pipeline it will write`() =
+        runBlocking<Unit> {
+            val fixture = aGameCalled()
+            val card = fixture.writing(poolType = PoolType.CARD, trackingMode = TrackingMode.PIPELINE)
+            progress.setStageQuantities(
+                card.id,
+                mapOf(ProductionStage.PRINT to 15, ProductionStage.LAMINATE to 10, ProductionStage.CUT to 5),
+                StoppedClock(createdAt),
+            )
+
+            val asked = snapshotOf(fixture.gameId)
+
+            val stages = asked.tasks.single().stages
+            assertEquals(
+                listOf(ProductionStage.PRINT, ProductionStage.LAMINATE, ProductionStage.CUT),
+                stages.sortedBy { it.orderIndex }.map { it.stage },
+            )
+            assertEquals(listOf(15, 10, 5), stages.sortedBy { it.orderIndex }.map { it.completedQuantity })
+        }
+
+    @Test
+    fun `a game with nothing to ask about still answers the question`() =
+        runBlocking<Unit> {
+            val fixture = aGameCalled()
+
+            val asked = snapshotOf(fixture.gameId)
+
+            assertEquals(0, asked.unfinishedCount)
+            assertFalse(asked.needsConfirmation)
+        }
+
+    @Test
+    fun `there is nothing to ask about a game that is gone`() =
+        runBlocking<Unit> {
+            val fixture = aGameCalled()
+            fixture.writing()
+            database.gameDao().softDelete(fixture.gameId, deletedAt)
+
+            assertNull(progress.gameCompletionSnapshot(fixture.gameId))
         }
 
     @Test

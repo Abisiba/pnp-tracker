@@ -129,6 +129,8 @@ private class FakeProgress(
 
     override suspend fun reopenTask(taskId: EntityId): TaskProgressOutcome = TaskProgressOutcome.Done
 
+    override suspend fun gameCompletion(gameId: EntityId): GameCompletionSnapshot? = null
+
     override suspend fun completeGame(
         gameId: EntityId,
         expected: GameCompletionSnapshot?,
