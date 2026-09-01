@@ -10,12 +10,15 @@ import androidx.room3.Update
 import dev.pnptracker.data.database.entity.CellSegmentEntity
 import dev.pnptracker.data.database.entity.DraftTaskColorEntity
 import dev.pnptracker.data.database.entity.DraftTaskEntity
+import dev.pnptracker.data.database.entity.GameEntity
 import dev.pnptracker.data.database.entity.ImportBatchEntity
 import dev.pnptracker.data.database.entity.RawImportBlockEntity
+import dev.pnptracker.data.database.entity.TaskColorEntity
 import dev.pnptracker.data.database.entity.TaskEntity
 import dev.pnptracker.data.database.entity.TaskStageEntity
 import dev.pnptracker.data.database.entity.stageRowsFor
 import dev.pnptracker.data.database.projection.CellColumnRow
+import dev.pnptracker.data.database.projection.DraftTargetRow
 import dev.pnptracker.domain.importconfirm.ImportConfirmationException
 import dev.pnptracker.domain.importconfirm.ImportConfirmationFailure
 import dev.pnptracker.domain.importreview.ImportReviewException
@@ -28,7 +31,10 @@ import dev.pnptracker.domain.model.ImportBatchStatus
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.SourceColumnType
 import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.model.stagesOf
 import dev.pnptracker.domain.rules.requireAllowedTrackingMode
+import dev.pnptracker.domain.tasks.CompletionRules
+import dev.pnptracker.domain.text.graphemeBoundariesOf
 import kotlinx.coroutines.flow.Flow
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -671,6 +677,124 @@ abstract class ImportDao {
         updatedAt: Instant,
     ): Int
 
+    /**
+     * Every cell this import is aiming at, with its column, its game and where
+     * its document ends — all of it in one query, for the whole batch.
+     *
+     * Joined from the batch rather than from a list of cell identifiers, so the
+     * statement has one shape however many drafts there are: a generated
+     * `IN (?, ?, ...)` would be a new statement for every different number of
+     * targets and would meet SQLite's parameter ceiling on a large import.
+     *
+     * The `LEFT JOIN` is what lets an empty cell answer at all; without it a cell
+     * with no pieces yet would simply not come back and would look deleted.
+     *
+     * `COUNT(DISTINCT …)` rather than `COUNT(…)`, because two drafts aiming at
+     * one cell meet every piece of that cell twice: a plain count would report a
+     * cell of three pieces as holding six and call a sound document damaged.
+     */
+    @Query(
+        """
+        SELECT game_cells.id AS cell_id,
+               game_cells.column_type AS column_type,
+               game_cells.game_id AS game_id,
+               COALESCE(MAX(cell_segments.order_index), -1) + 1 AS next_order_index,
+               COUNT(DISTINCT cell_segments.id) AS segment_count
+        FROM draft_tasks
+        INNER JOIN raw_import_blocks ON raw_import_blocks.id = draft_tasks.raw_import_block_id
+        INNER JOIN game_cells ON game_cells.id = draft_tasks.target_cell_id
+        INNER JOIN games ON games.id = game_cells.game_id
+        LEFT JOIN cell_segments ON cell_segments.cell_id = game_cells.id
+        WHERE raw_import_blocks.import_batch_id = :batchId AND games.deleted_at IS NULL
+        GROUP BY game_cells.id
+        """,
+    )
+    abstract suspend fun draftTargetsOfBatch(batchId: EntityId): List<DraftTargetRow>
+
+    /**
+     * The games an import's accepted green cells point at, still active.
+     *
+     * One row per game however many cells name it, so answering the same thing
+     * about one game three times cannot cost three reads or three writes.
+     */
+    @Query(
+        """
+        SELECT games.* FROM games
+        INNER JOIN raw_import_blocks ON raw_import_blocks.completion_target_game_id = games.id
+        WHERE raw_import_blocks.import_batch_id = :batchId
+          AND raw_import_blocks.game_completion_hint = 'ACCEPTED'
+          AND games.deleted_at IS NULL
+        GROUP BY games.id
+        """,
+    )
+    abstract suspend fun acceptedCompletionTargetsOfBatch(batchId: EntityId): List<GameEntity>
+
+    /** Records the user's own judgement that a game is finished, without touching its work. */
+    @Query(
+        """
+        UPDATE games
+        SET is_manually_completed = 1, completed_at = :moment, updated_at = :moment
+        WHERE id = :gameId AND deleted_at IS NULL AND is_manually_completed = 0
+        """,
+    )
+    protected abstract suspend fun markGameManuallyCompleted(
+        gameId: EntityId,
+        moment: Instant,
+    ): Int
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    protected abstract suspend fun insertTaskColor(taskColor: TaskColorEntity)
+
+    // ----------------------------------------------- reading back what was written
+
+    /** Every task this import produced, reached through the drafts that made them. */
+    @Query(
+        """
+        SELECT tasks.* FROM tasks
+        INNER JOIN draft_tasks ON draft_tasks.materialized_task_id = tasks.id
+        INNER JOIN raw_import_blocks ON raw_import_blocks.id = draft_tasks.raw_import_block_id
+        WHERE raw_import_blocks.import_batch_id = :batchId
+        ORDER BY tasks.id
+        """,
+    )
+    abstract suspend fun tasksOfConfirmedBatch(batchId: EntityId): List<TaskEntity>
+
+    /** Every colour of every task this import produced, in slot order. */
+    @Query(
+        """
+        SELECT task_colors.* FROM task_colors
+        INNER JOIN draft_tasks ON draft_tasks.materialized_task_id = task_colors.task_id
+        INNER JOIN raw_import_blocks ON raw_import_blocks.id = draft_tasks.raw_import_block_id
+        WHERE raw_import_blocks.import_batch_id = :batchId
+        ORDER BY task_colors.task_id, task_colors.slot_index
+        """,
+    )
+    abstract suspend fun taskColorsOfConfirmedBatch(batchId: EntityId): List<TaskColorEntity>
+
+    /** Every stage of every task this import produced, in pipeline order. */
+    @Query(
+        """
+        SELECT task_stages.* FROM task_stages
+        INNER JOIN draft_tasks ON draft_tasks.materialized_task_id = task_stages.task_id
+        INNER JOIN raw_import_blocks ON raw_import_blocks.id = draft_tasks.raw_import_block_id
+        WHERE raw_import_blocks.import_batch_id = :batchId
+        ORDER BY task_stages.task_id, task_stages.order_index
+        """,
+    )
+    abstract suspend fun taskStagesOfConfirmedBatch(batchId: EntityId): List<TaskStageEntity>
+
+    /** Every piece of a cell this import wrote, reached the same way. */
+    @Query(
+        """
+        SELECT cell_segments.* FROM cell_segments
+        INNER JOIN draft_tasks ON draft_tasks.materialized_task_id = cell_segments.task_id
+        INNER JOIN raw_import_blocks ON raw_import_blocks.id = draft_tasks.raw_import_block_id
+        WHERE raw_import_blocks.import_batch_id = :batchId
+        ORDER BY cell_segments.cell_id, cell_segments.order_index
+        """,
+    )
+    abstract suspend fun segmentsOfConfirmedBatch(batchId: EntityId): List<CellSegmentEntity>
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     protected abstract suspend fun insertTask(task: TaskEntity)
 
@@ -721,6 +845,67 @@ abstract class ImportDao {
         moment: Instant,
         idGenerator: IdGenerator,
     ): Int {
+        val plan = plannedConfirmationOf(batchId, acknowledgeUnprocessedBlocks)
+
+        // Nothing above this line has written, read a clock or made a name. The
+        // clock is the caller's single moment for the whole act, and every
+        // identity is made now, before the first insert: an identifier that ran
+        // out half way would otherwise leave a batch of rows behind it.
+        val named = plan.drafts.map { it to (idGenerator.newId() to idGenerator.newId()) }
+
+        named.forEach { (piece, ids) ->
+            val (taskId, segmentId) = ids
+            insertTask(piece.taskRow(taskId, moment))
+            piece.colorIds.forEachIndexed { slot, colorId ->
+                insertTaskColor(TaskColorEntity(taskId = taskId, colorId = colorId, slotIndex = slot))
+            }
+            stageRowsFor(taskId, piece.poolType, moment, piece.stageCount).forEach { insertStage(it) }
+            insertSegment(
+                CellSegmentEntity.task(
+                    id = segmentId,
+                    cellId = piece.targetCellId,
+                    orderIndex = piece.orderIndex,
+                    taskId = taskId,
+                    moment = moment,
+                ),
+            )
+            val aimed = setDraftMaterializedTask(piece.draftId, taskId, moment)
+            check(aimed == 1) { "The draft ${piece.draftId} could not be linked to the task it produced." }
+        }
+
+        // One write per game however many cells named it, and none at all for a
+        // game the user had already finished: PLAN 5.3 makes `completedAt` the
+        // moment they decided, and rewriting it would move a date they set.
+        plan.gamesToFinish.forEach { gameId ->
+            val finished = markGameManuallyCompleted(gameId, moment)
+            check(finished == 1) { "The game $gameId could not be finished by the import that named it." }
+        }
+
+        val confirmed = markBatchConfirmed(batchId, plan.drafts.size, moment)
+        check(confirmed == 1) { "The import $batchId was no longer a draft when it was about to be confirmed." }
+
+        requireConfirmationHeld(batchId, plan)
+        return plan.drafts.size
+    }
+
+    /**
+     * Everything a confirmation is about to do, worked out before it does any of
+     * it.
+     *
+     * Every guard lives here, and every guard is answered from a fixed number of
+     * batch-wide reads: the batch, its drafts, its raw cells, the cells they aim
+     * at, the colours they were given, the catalogue, and the games any accepted
+     * green cell names. Seven questions, whether the import holds one draft or
+     * forty-two. Asking per draft is the shape PLAN 16 rules out, and it is what
+     * this used to do.
+     *
+     * Nothing is written, no clock is read and no identity is made while this
+     * runs, so a refusal from anywhere in it costs nothing and leaves nothing.
+     */
+    private suspend fun plannedConfirmationOf(
+        batchId: EntityId,
+        acknowledgeUnprocessedBlocks: Boolean,
+    ): PlannedConfirmation {
         val batch = batchById(batchId) ?: refuse(ImportConfirmationFailure.BATCH_NOT_FOUND)
         when (batch.status) {
             // A guarded refusal, not a repeat success: the first run's tasks stand.
@@ -735,101 +920,304 @@ abstract class ImportDao {
         val drafts = draftTasksOfBatch(batchId)
         if (drafts.isEmpty()) refuse(ImportConfirmationFailure.NO_DRAFTS_TO_CONFIRM)
         if (activeCellCount() == 0) refuse(ImportConfirmationFailure.NO_CELLS_AVAILABLE)
-        if (!acknowledgeUnprocessedBlocks && unprocessedRawBlockCount(batchId) > 0) {
+
+        val blocks = rawBlocksOfBatch(batchId).associateBy { it.id }
+        if (!acknowledgeUnprocessedBlocks && blocks.values.any { !it.isProcessed }) {
             refuse(ImportConfirmationFailure.UNPROCESSED_BLOCKS_NOT_ACKNOWLEDGED)
         }
 
-        var createdTaskCount = 0
-        drafts.forEach { draft ->
-            // One unready draft stops the whole batch; none is ever skipped.
-            val targetCellId =
-                draft.targetCellId
-                    ?: refuse(ImportConfirmationFailure.TARGET_CELL_MISSING, draft.id)
-            val poolType =
-                draft.selectedPoolType
-                    ?: refuse(ImportConfirmationFailure.POOL_TYPE_MISSING, draft.id)
-            val trackingMode =
-                draft.selectedTrackingMode
-                    ?: refuse(ImportConfirmationFailure.TRACKING_MODE_MISSING, draft.id)
-            if (activeCellCount(targetCellId) != 1) {
-                refuse(ImportConfirmationFailure.TARGET_CELL_NOT_AVAILABLE, draft.id)
-            }
-            val columnType =
-                columnTypeOfCell(targetCellId)
-                    ?: refuse(ImportConfirmationFailure.TARGET_CELL_NOT_AVAILABLE, draft.id)
-            if (!columnType.holdsTasks) {
-                refuse(ImportConfirmationFailure.TARGET_CELL_NOT_TASK_CAPABLE, draft.id)
-            }
-            if (columnType.poolType != poolType) {
-                refuse(ImportConfirmationFailure.TARGET_CELL_WRONG_COLUMN, draft.id)
-            }
-            // A stored draft cannot hold a quantity of zero or a pool the mode
-            // forbids, so either would be a defect rather than a user mistake.
-            require(draft.requiredQuantity == null || draft.requiredQuantity > 0) {
-                "The draft ${draft.id} holds a required quantity of ${draft.requiredQuantity}."
-            }
-            val taskId = idGenerator.newId()
-            insertTask(
-                TaskEntity(
-                    id = taskId,
+        val targets = draftTargetsOfBatch(batchId).associateBy { it.cellId }
+        val chosenColors = draftColorsOfBatch(batchId).groupBy { it.draftTaskId }
+        val catalogue = if (chosenColors.isEmpty()) emptySet() else allColorIds().toSet()
+
+        // Where the next piece goes in each cell, carried in memory: several
+        // drafts aiming at one cell take consecutive places, and drafts aiming at
+        // different cells do not disturb each other's numbering.
+        val nextIndex = mutableMapOf<EntityId, Int>()
+        val pieces =
+            drafts.map { draft ->
+                // One unready draft stops the whole batch; none is ever skipped.
+                val targetCellId =
+                    draft.targetCellId ?: refuse(ImportConfirmationFailure.TARGET_CELL_MISSING, draft.id)
+                val poolType =
+                    draft.selectedPoolType ?: refuse(ImportConfirmationFailure.POOL_TYPE_MISSING, draft.id)
+                val trackingMode =
+                    draft.selectedTrackingMode ?: refuse(ImportConfirmationFailure.TRACKING_MODE_MISSING, draft.id)
+                val target =
+                    targets[targetCellId] ?: refuse(ImportConfirmationFailure.TARGET_CELL_NOT_AVAILABLE, draft.id)
+                if (!target.columnType.holdsTasks) {
+                    refuse(ImportConfirmationFailure.TARGET_CELL_NOT_TASK_CAPABLE, draft.id)
+                }
+                if (target.columnType.poolType != poolType) {
+                    refuse(ImportConfirmationFailure.TARGET_CELL_WRONG_COLUMN, draft.id)
+                }
+                // A document numbered with a gap in it is damaged, and writing
+                // into one would either collide or widen the gap. Renumbering it
+                // silently would be rewriting the user's own document, so this
+                // stops instead.
+                check(target.isSound) {
+                    "The cell $targetCellId holds ${target.segmentCount} pieces numbered up to " +
+                        "${target.nextOrderIndex - 1}."
+                }
+                // A stored draft cannot hold a quantity of zero or a pool the mode
+                // forbids, so either would be a defect rather than a user mistake.
+                require(draft.requiredQuantity == null || draft.requiredQuantity > 0) {
+                    "The draft ${draft.id} holds a required quantity of ${draft.requiredQuantity}."
+                }
+                requireAllowedTrackingMode(poolType, trackingMode)
+                requireSelectionStillFits(draft, blocks[draft.rawImportBlockId])
+
+                val colorIds = chosenColors[draft.id].orEmpty().sortedBy { it.slotIndex }
+                check(colorIds.map { it.slotIndex } == colorIds.indices.toList()) {
+                    "The draft ${draft.id} has colour slots ${colorIds.map { it.slotIndex }}."
+                }
+                val ids = colorIds.map { it.colorId }
+                check(ids.toSet().size == ids.size) { "The draft ${draft.id} names one colour twice." }
+                if (ids.any { it !in catalogue }) {
+                    refuse(ImportConfirmationFailure.COLOR_NO_LONGER_AVAILABLE, draft.id)
+                }
+
+                val orderIndex = nextIndex.getOrPut(targetCellId) { target.nextOrderIndex }
+                nextIndex[targetCellId] = orderIndex + 1
+
+                PlannedTask(
+                    draftId = draft.id,
+                    rawImportBlockId = draft.rawImportBlockId,
+                    name = draft.name,
                     poolType = poolType,
                     trackingMode = trackingMode,
-                    name = draft.name,
                     requiredQuantity = draft.requiredQuantity,
                     notes = draft.notes,
-                    createdAt = moment,
-                    updatedAt = moment,
-                    sourceRawImportBlockId = draft.rawImportBlockId,
-                ),
-            )
-            insertSegment(
-                CellSegmentEntity.task(
-                    id = idGenerator.newId(),
-                    cellId = targetCellId,
-                    orderIndex = nextSegmentIndex(targetCellId),
-                    taskId = taskId,
-                    moment = moment,
-                ),
-            )
-            stageRowsFor(taskId, poolType, moment).forEach { insertStage(it) }
-            val aimed = setDraftMaterializedTask(draft.id, taskId, moment)
-            check(aimed == 1) { "The draft ${draft.id} could not be linked to the task it produced." }
-            createdTaskCount++
-        }
+                    isMissing = draft.isMissing,
+                    isBorrowed = draft.isBorrowed,
+                    needsInfo = draft.needsInfo,
+                    needsClassification = draft.needsClassification,
+                    // PLAN 11.5 makes `**` a hint and nothing more until the user
+                    // agrees to it. Pending and rejected both leave the task open.
+                    isFinished = draft.completionHint == HintDecision.ACCEPTED,
+                    targetCellId = targetCellId,
+                    orderIndex = orderIndex,
+                    colorIds = ids,
+                )
+            }
 
-        val confirmed = markBatchConfirmed(batchId, createdTaskCount, moment)
-        check(confirmed == 1) { "The import $batchId was no longer a draft when it was about to be confirmed." }
-
-        requireConfirmationHeld(batchId, drafts.size, createdTaskCount)
-        return createdTaskCount
+        return PlannedConfirmation(drafts = pieces, gamesToFinish = gamesToFinishFor(batchId, blocks.values))
     }
+
+    /**
+     * The games this import will finish, and nothing more.
+     *
+     * PLAN 5.3 lets an accepted green cell change whether a game is finished, and
+     * says in the same breath that a game's state is the user's own statement
+     * rather than a summary of its work — so this finishes games and never
+     * touches a task. A game the user had already finished is left entirely
+     * alone.
+     */
+    private suspend fun gamesToFinishFor(
+        batchId: EntityId,
+        blocks: Collection<RawImportBlockEntity>,
+    ): List<EntityId> {
+        val accepted = blocks.filter { it.gameCompletionHint == HintDecision.ACCEPTED }
+        if (accepted.isEmpty()) return emptyList()
+        // A version 5 database could record the answer with nowhere to say which
+        // game it was about. That answer is kept and the user is asked, rather
+        // than the import guessing or the answer being thrown away.
+        if (accepted.any { it.completionTargetGameId == null }) {
+            refuse(ImportConfirmationFailure.COMPLETION_TARGET_GAME_REQUIRED)
+        }
+        val wanted = accepted.mapNotNull { it.completionTargetGameId }.toSet()
+        val reachable = acceptedCompletionTargetsOfBatch(batchId)
+        if (reachable.size != wanted.size) refuse(ImportConfirmationFailure.COMPLETION_TARGET_GAME_NOT_AVAILABLE)
+        // Named once each, and only the ones that are not finished already.
+        return reachable.filterNot { it.isManuallyCompleted }.map { it.id }
+    }
+
+    /**
+     * Checks a draft's selection against the cell it really came from.
+     *
+     * The raw text is never rewritten, so what can change is the cell going away.
+     * The boundaries are checked against the user's own characters rather than
+     * against code units: offsets that fall inside one — half of an emoji, a
+     * letter without its accent — would name text nobody selected.
+     */
+    private fun requireSelectionStillFits(
+        draft: DraftTaskEntity,
+        block: RawImportBlockEntity?,
+    ) {
+        val start = draft.selectionStartIndex ?: return
+        val end = draft.selectionEndIndex ?: return
+        if (block == null) refuse(ImportConfirmationFailure.SELECTION_NO_LONGER_FITS, draft.id)
+        val boundaries = graphemeBoundariesOf(block.rawText)
+        if (end > block.rawText.length || start !in boundaries || end !in boundaries) {
+            refuse(ImportConfirmationFailure.SELECTION_NO_LONGER_FITS, draft.id)
+        }
+    }
+
+    /** What one draft is about to become, decided before anything is written. */
+    private data class PlannedTask(
+        val draftId: EntityId,
+        val rawImportBlockId: EntityId,
+        val name: String,
+        val poolType: PoolType,
+        val trackingMode: TrackingMode,
+        val requiredQuantity: Int?,
+        val notes: String?,
+        val isMissing: Boolean,
+        val isBorrowed: Boolean,
+        val needsInfo: Boolean,
+        val needsClassification: Boolean,
+        val isFinished: Boolean,
+        val targetCellId: EntityId,
+        val orderIndex: Int,
+        val colorIds: List<EntityId>,
+    ) {
+        /** What each stage of the pipeline reads; the whole total when born finished. */
+        val stageCount: Int
+            get() = if (isFinished) CompletionRules.stageCountWhenFinished(requiredQuantity, 0) else 0
+
+        fun taskRow(
+            taskId: EntityId,
+            moment: Instant,
+        ): TaskEntity =
+            TaskEntity(
+                id = taskId,
+                poolType = poolType,
+                trackingMode = trackingMode,
+                name = name,
+                requiredQuantity = requiredQuantity,
+                notes = notes,
+                // A task born finished is finished the way any other is: PLAN 6.4
+                // will not have the mark contradict the counters, so the print run
+                // and the pipeline say so too. It owes nothing, having never been
+                // worked on, so no event explains a debt that was never there.
+                isCompleted = isFinished,
+                completedAt = moment.takeIf { isFinished },
+                primaryBatchCompleted =
+                    isFinished && CompletionRules.primaryBatchCompletedWhenFinished(poolType, false),
+                createdAt = moment,
+                updatedAt = moment,
+                sourceRawImportBlockId = rawImportBlockId,
+                isMissing = isMissing,
+                isBorrowed = isBorrowed,
+                needsInfo = needsInfo,
+                needsClassification = needsClassification,
+            )
+    }
+
+    /** Everything one confirmation will write, and nothing it will not. */
+    private data class PlannedConfirmation(
+        val drafts: List<PlannedTask>,
+        val gamesToFinish: List<EntityId>,
+    )
 
     /**
      * Reads back what the transaction has just written and refuses to let it
      * stand unless it is exactly what was promised. Still inside the transaction,
      * so a broken postcondition rolls the whole confirmation back.
+     *
+     * Five reads for the whole batch, none of them per task: a check that cost a
+     * query a row would put back the very shape the planning above exists to
+     * remove.
      */
     private suspend fun requireConfirmationHeld(
         batchId: EntityId,
-        draftCount: Int,
-        createdTaskCount: Int,
+        plan: PlannedConfirmation,
     ) {
-        check(createdTaskCount == draftCount) {
-            "$draftCount drafts should have produced $draftCount tasks, not $createdTaskCount."
-        }
         val batch = batchById(batchId)
         checkNotNull(batch) { "The import $batchId disappeared while it was being confirmed." }
         check(batch.status == ImportBatchStatus.CONFIRMED) {
             "The import $batchId was left as ${batch.status} after being confirmed."
         }
-        check(batch.createdTaskCount == createdTaskCount) {
-            "The import $batchId says it created ${batch.createdTaskCount} tasks, not $createdTaskCount."
+        check(batch.createdTaskCount == plan.drafts.size) {
+            "The import $batchId says it created ${batch.createdTaskCount} tasks, not ${plan.drafts.size}."
         }
         check(batch.createdGameCount == 0) {
             "Confirming an import created ${batch.createdGameCount} games; it must create none."
         }
-        val unlinked = draftTasksOfBatch(batchId).count { it.materializedTaskId == null }
-        check(unlinked == 0) { "$unlinked drafts were left without the task they produced." }
+
+        val stored = draftTasksOfBatch(batchId)
+        check(stored.size == plan.drafts.size) { "The import $batchId lost or gained a draft while confirming." }
+        check(stored.none { it.materializedTaskId == null }) {
+            "${stored.count { it.materializedTaskId == null }} drafts were left without the task they produced."
+        }
+
+        val tasks = tasksOfConfirmedBatch(batchId).associateBy { it.id }
+        check(tasks.size == plan.drafts.size) {
+            "${plan.drafts.size} drafts should have produced ${plan.drafts.size} tasks, not ${tasks.size}."
+        }
+        val colors = taskColorsOfConfirmedBatch(batchId).groupBy { it.taskId }
+        val stages = taskStagesOfConfirmedBatch(batchId).groupBy { it.taskId }
+        val segments = segmentsOfConfirmedBatch(batchId)
+        check(segments.size == plan.drafts.size) {
+            "The import wrote ${segments.size} pieces of a cell for ${plan.drafts.size} tasks."
+        }
+
+        val byDraft = stored.associateBy { it.id }
+        plan.drafts.forEach { piece ->
+            val taskId =
+                checkNotNull(byDraft[piece.draftId]?.materializedTaskId) {
+                    "The draft ${piece.draftId} is not linked to a task."
+                }
+            val task = checkNotNull(tasks[taskId]) { "The task $taskId this import made is not there." }
+            check(task.isMissing == piece.isMissing && task.isBorrowed == piece.isBorrowed) {
+                "The task $taskId did not keep the missing and borrowed flags of its draft."
+            }
+            check(task.needsInfo == piece.needsInfo && task.needsClassification == piece.needsClassification) {
+                "The task $taskId did not keep the information flags of its draft."
+            }
+            check(task.isCompleted == piece.isFinished) {
+                "The task $taskId came out ${task.isCompleted} when the hint said ${piece.isFinished}."
+            }
+            check(task.isCompleted == (task.completedAt != null)) {
+                "The task $taskId is ${task.isCompleted} but finished at ${task.completedAt}."
+            }
+            check(!task.isCompleted || task.poolType != PoolType.THREE_D || task.primaryBatchCompleted) {
+                "The finished 3D task $taskId never had its print run made."
+            }
+            check(task.currentMissingQuantity == 0) { "A task this import made already owes something." }
+
+            check(colors[taskId].orEmpty().map { it.colorId } == piece.colorIds) {
+                "The task $taskId did not take the colours its draft was given, in order."
+            }
+            check(colors[taskId].orEmpty().map { it.slotIndex } == piece.colorIds.indices.toList()) {
+                "The task $taskId has colour slots with a gap in them."
+            }
+
+            val pipeline = stages[taskId].orEmpty()
+            check(pipeline.map { it.stage } == stagesOf(piece.poolType)) {
+                "The task $taskId has the pipeline ${pipeline.map { it.stage }} for a ${piece.poolType} task."
+            }
+            check(pipeline.all { it.completedQuantity == piece.stageCount }) {
+                "The task $taskId has a pipeline at ${pipeline.map { it.completedQuantity }}."
+            }
+        }
+
+        // Every cell this import wrote in is still numbered 0..N-1. The same
+        // batch-wide read the planning used, so checking forty-two cells costs
+        // what checking one does.
+        val written = segments.mapTo(mutableSetOf()) { it.cellId }
+        draftTargetsOfBatch(batchId).filter { it.cellId in written }.forEach { cell ->
+            check(cell.isSound) {
+                "The cell ${cell.cellId} holds ${cell.segmentCount} pieces numbered up to " +
+                    "${cell.nextOrderIndex - 1}."
+            }
+        }
+
+        if (plan.gamesToFinish.isNotEmpty()) {
+            val finished = acceptedCompletionTargetsOfBatch(batchId).associateBy { it.id }
+            plan.gamesToFinish.forEach { gameId ->
+                val game = checkNotNull(finished[gameId]) { "The game $gameId disappeared while being finished." }
+                // What is checked is the invariant PLAN 5.3 gives — a game is
+                // finished exactly when it has a time it was finished at — and
+                // not that the time reads back as the same object. The column
+                // holds milliseconds, so an instant carrying anything finer
+                // comes back rounded and would fail a comparison that is not
+                // about anything the application means.
+                check(game.isManuallyCompleted && game.completedAt != null) {
+                    "The game $gameId was not finished by the import that named it."
+                }
+            }
+        }
     }
 
     private fun refuse(

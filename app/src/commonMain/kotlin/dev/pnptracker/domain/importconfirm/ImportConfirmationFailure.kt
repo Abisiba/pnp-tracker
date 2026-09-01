@@ -57,6 +57,34 @@ enum class ImportConfirmationFailure {
     /** A draft has no tracking mode chosen. */
     TRACKING_MODE_MISSING,
 
+    /**
+     * A colour a draft was given is not in the catalogue any more.
+     *
+     * PLAN 5.9 deletes a colour physically and only on the user's own say-so, so
+     * this is something that really happens between reviewing and confirming.
+     */
+    COLOR_NO_LONGER_AVAILABLE,
+
+    /**
+     * A draft's text selection no longer fits the cell it came from.
+     *
+     * The raw text is never rewritten, so this is a draft whose cell has gone —
+     * or offsets that would cut a character in half.
+     */
+    SELECTION_NO_LONGER_FITS,
+
+    /**
+     * A green cell was accepted without saying which game it was about.
+     *
+     * The shape a version 5 database can hold: it could record the answer but had
+     * nowhere to put the game. The user is asked rather than the answer thrown
+     * away.
+     */
+    COMPLETION_TARGET_GAME_REQUIRED,
+
+    /** The game an accepted green cell names is gone, or has been deleted. */
+    COMPLETION_TARGET_GAME_NOT_AVAILABLE,
+
     /** The database refused the confirmation, so nothing at all was written. */
     COULD_NOT_SAVE,
 }

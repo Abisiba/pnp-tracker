@@ -28,6 +28,11 @@ fun messageOf(failure: ImportConfirmationFailure): StringResource =
         ImportConfirmationFailure.TARGET_CELL_WRONG_COLUMN -> Strings.Confirm.errorTargetWrongColumn
         ImportConfirmationFailure.POOL_TYPE_MISSING -> Strings.Confirm.errorPoolMissing
         ImportConfirmationFailure.TRACKING_MODE_MISSING -> Strings.Confirm.errorTrackingMissing
+        ImportConfirmationFailure.COLOR_NO_LONGER_AVAILABLE -> Strings.Confirm.errorColorUnavailable
+        ImportConfirmationFailure.SELECTION_NO_LONGER_FITS -> Strings.Confirm.errorSelectionNoLongerFits
+        ImportConfirmationFailure.COMPLETION_TARGET_GAME_REQUIRED -> Strings.Confirm.errorCompletionTargetRequired
+        ImportConfirmationFailure.COMPLETION_TARGET_GAME_NOT_AVAILABLE ->
+            Strings.Confirm.errorCompletionTargetUnavailable
         ImportConfirmationFailure.COULD_NOT_SAVE -> Strings.Confirm.errorCouldNotSave
     }
 

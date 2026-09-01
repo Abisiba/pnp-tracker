@@ -163,11 +163,15 @@ import dev.pnptracker.resources.confirm_done_body
 import dev.pnptracker.resources.confirm_done_title
 import dev.pnptracker.resources.confirm_error_already_confirmed
 import dev.pnptracker.resources.confirm_error_batch_not_found
+import dev.pnptracker.resources.confirm_error_color_unavailable
+import dev.pnptracker.resources.confirm_error_completion_target_required
+import dev.pnptracker.resources.confirm_error_completion_target_unavailable
 import dev.pnptracker.resources.confirm_error_could_not_save
 import dev.pnptracker.resources.confirm_error_no_cells
 import dev.pnptracker.resources.confirm_error_no_drafts
 import dev.pnptracker.resources.confirm_error_not_a_draft
 import dev.pnptracker.resources.confirm_error_pool_missing
+import dev.pnptracker.resources.confirm_error_selection_no_longer_fits
 import dev.pnptracker.resources.confirm_error_target_missing
 import dev.pnptracker.resources.confirm_error_target_not_task_capable
 import dev.pnptracker.resources.confirm_error_target_unavailable
@@ -1153,6 +1157,10 @@ object Strings {
         val errorTargetWrongColumn = Res.string.confirm_error_target_wrong_column
         val errorPoolMissing = Res.string.confirm_error_pool_missing
         val errorTrackingMissing = Res.string.confirm_error_tracking_missing
+        val errorColorUnavailable = Res.string.confirm_error_color_unavailable
+        val errorSelectionNoLongerFits = Res.string.confirm_error_selection_no_longer_fits
+        val errorCompletionTargetRequired = Res.string.confirm_error_completion_target_required
+        val errorCompletionTargetUnavailable = Res.string.confirm_error_completion_target_unavailable
         val errorCouldNotSave = Res.string.confirm_error_could_not_save
     }
 

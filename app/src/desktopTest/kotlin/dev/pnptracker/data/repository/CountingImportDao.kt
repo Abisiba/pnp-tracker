@@ -4,11 +4,14 @@ import dev.pnptracker.data.database.dao.ImportDao
 import dev.pnptracker.data.database.entity.CellSegmentEntity
 import dev.pnptracker.data.database.entity.DraftTaskColorEntity
 import dev.pnptracker.data.database.entity.DraftTaskEntity
+import dev.pnptracker.data.database.entity.GameEntity
 import dev.pnptracker.data.database.entity.ImportBatchEntity
 import dev.pnptracker.data.database.entity.RawImportBlockEntity
+import dev.pnptracker.data.database.entity.TaskColorEntity
 import dev.pnptracker.data.database.entity.TaskEntity
 import dev.pnptracker.data.database.entity.TaskStageEntity
 import dev.pnptracker.data.database.projection.CellColumnRow
+import dev.pnptracker.data.database.projection.DraftTargetRow
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.HintDecision
@@ -106,6 +109,26 @@ class CountingImportDao(
     // Room keeps these to itself, so they cannot be handed on. Summarising never
     // asks for them; anything that does has outgrown this double.
     override suspend fun draftColorsOf(draftTaskId: EntityId): List<DraftTaskColorEntity> = real.draftColorsOf(draftTaskId)
+
+    override suspend fun draftTargetsOfBatch(batchId: EntityId): List<DraftTargetRow> = real.draftTargetsOfBatch(batchId)
+
+    override suspend fun acceptedCompletionTargetsOfBatch(batchId: EntityId): List<GameEntity> =
+        real.acceptedCompletionTargetsOfBatch(batchId)
+
+    override suspend fun tasksOfConfirmedBatch(batchId: EntityId): List<TaskEntity> = real.tasksOfConfirmedBatch(batchId)
+
+    override suspend fun taskColorsOfConfirmedBatch(batchId: EntityId): List<TaskColorEntity> = real.taskColorsOfConfirmedBatch(batchId)
+
+    override suspend fun taskStagesOfConfirmedBatch(batchId: EntityId): List<TaskStageEntity> = real.taskStagesOfConfirmedBatch(batchId)
+
+    override suspend fun segmentsOfConfirmedBatch(batchId: EntityId): List<CellSegmentEntity> = real.segmentsOfConfirmedBatch(batchId)
+
+    override suspend fun markGameManuallyCompleted(
+        gameId: EntityId,
+        moment: Instant,
+    ): Int = outOfReach("markGameManuallyCompleted")
+
+    override suspend fun insertTaskColor(taskColor: TaskColorEntity): Unit = outOfReach("insertTaskColor")
 
     override fun observeDraftColorsOfBatch(batchId: EntityId): Flow<List<DraftTaskColorEntity>> = real.observeDraftColorsOfBatch(batchId)
 

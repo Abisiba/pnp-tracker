@@ -65,7 +65,7 @@ data class TaskStageEntity(
 }
 
 /**
- * The stage rows a task of this pool starts life with, at nothing done.
+ * The stage rows a task of this pool starts life with.
  *
  * A plain function over [stagesOf] rather than a step any writer performs, so
  * the two places that create tasks — one by hand, one from an import — shape a
@@ -73,18 +73,26 @@ data class TaskStageEntity(
  * Each caller inserts these rows inside its own write, which is what keeps a
  * task and its pipeline atomic.
  *
+ * [completedQuantity] is nothing done for an ordinary new task. A task that is
+ * born finished — an import carrying a `**` the user agreed to — starts with its
+ * whole total, because PLAN 6.4 will not have a finished task whose pipeline
+ * disagrees, and the rule is the same one [dev.pnptracker.domain.tasks.CompletionRules]
+ * gives for finishing a task that already existed.
+ *
  * A pool with no pipeline returns nothing, so a caller needs no special case.
  */
 fun stageRowsFor(
     taskId: EntityId,
     poolType: PoolType,
     moment: Instant,
+    completedQuantity: Int = 0,
 ): List<TaskStageEntity> =
     stagesOf(poolType).mapIndexed { index, stage ->
         TaskStageEntity(
             taskId = taskId,
             stage = stage,
             orderIndex = index,
+            completedQuantity = completedQuantity,
             createdAt = moment,
             updatedAt = moment,
         )

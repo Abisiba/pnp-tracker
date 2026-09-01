@@ -55,22 +55,28 @@ class ImportConfirmationController(
         confirmation.observeTargetCells().collect { targetCells = it }
     }
 
+    /** Which import the refusal on screen was about, so it cannot outlive it. */
+    private var failedBatchId: EntityId? = null
+
     /**
      * Reads what confirming this import would do now.
      *
      * Called again after every change, because the summary is a snapshot and
      * anything the user does to a draft changes it.
+     *
+     * A refusal already on screen is kept, so re-reading does not wipe out what
+     * the user was told to fix — but only for the import it was about. Opening a
+     * different one starts clean: a sentence about another file would be an
+     * error the user cannot act on and cannot make go away.
      */
     suspend fun refresh(batchId: EntityId) {
         val summary = confirmation.summarize(batchId)
+        val standing = (state as? ImportConfirmationState.Ready)?.failure?.takeIf { failedBatchId == batchId }
+        if (standing == null) failedBatchId = null
         state =
             when {
                 summary == null -> ImportConfirmationState.Unavailable
-                else ->
-                    ImportConfirmationState.Ready(
-                        summary = summary,
-                        failure = (state as? ImportConfirmationState.Ready)?.failure,
-                    )
+                else -> ImportConfirmationState.Ready(summary = summary, failure = standing)
             }
     }
 
@@ -96,7 +102,7 @@ class ImportConfirmationController(
             clearFailure()
             refresh(batchId)
         } catch (failure: ImportConfirmationException) {
-            reportFailure(failure)
+            reportFailure(batchId, failure)
         } finally {
             isBusy = false
         }
@@ -138,18 +144,23 @@ class ImportConfirmationController(
             // The summary is re-read so the screen shows what the database
             // really holds now, with the refusal beside it.
             refresh(batchId)
-            reportFailure(failure)
+            reportFailure(batchId, failure)
         } finally {
             isBusy = false
         }
     }
 
     private fun clearFailure() {
+        failedBatchId = null
         val ready = state as? ImportConfirmationState.Ready ?: return
         state = ready.copy(failure = null)
     }
 
-    private fun reportFailure(failure: ImportConfirmationException) {
+    private fun reportFailure(
+        batchId: EntityId,
+        failure: ImportConfirmationException,
+    ) {
+        failedBatchId = batchId
         val ready = state as? ImportConfirmationState.Ready ?: return
         state = ready.copy(failure = failure.failure)
     }

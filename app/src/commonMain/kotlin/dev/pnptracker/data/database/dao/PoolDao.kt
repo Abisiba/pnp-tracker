@@ -65,6 +65,7 @@ interface PoolDao {
         INNER JOIN games ON games.id = game_cells.game_id
         WHERE tasks.pool_type = :poolType
           AND tasks.is_completed = 0
+          AND tasks.needs_info = 0
           AND tasks.deleted_at IS NULL
           AND games.deleted_at IS NULL
         ORDER BY games.name, games.id, tasks.name, tasks.id
@@ -100,6 +101,7 @@ interface PoolDao {
         INNER JOIN games ON games.id = game_cells.game_id
         WHERE tasks.pool_type = :poolType
           AND tasks.is_completed = 0
+          AND tasks.needs_info = 0
           AND tasks.deleted_at IS NULL
           AND games.deleted_at IS NULL
         ORDER BY task_colors.task_id, task_colors.slot_index
@@ -126,6 +128,7 @@ interface PoolDao {
         INNER JOIN games ON games.id = game_cells.game_id
         WHERE tasks.pool_type = :poolType
           AND tasks.is_completed = 0
+          AND tasks.needs_info = 0
           AND tasks.deleted_at IS NULL
           AND games.deleted_at IS NULL
         ORDER BY task_stages.task_id, task_stages.order_index
@@ -153,6 +156,7 @@ interface PoolDao {
         INNER JOIN games ON games.id = game_cells.game_id
         WHERE tasks.pool_type = :poolType
           AND tasks.is_completed = 0
+          AND tasks.needs_info = 0
           AND tasks.deleted_at IS NULL
           AND games.deleted_at IS NULL
           AND progress_events.kind = 'FAILURE_REPORTED'
@@ -178,7 +182,7 @@ interface PoolDao {
     @Query(
         """
         SELECT tasks.pool_type AS pool_type,
-               SUM(CASE WHEN tasks.is_completed = 0 THEN 1 ELSE 0 END) AS active_count,
+               SUM(CASE WHEN tasks.is_completed = 0 AND tasks.needs_info = 0 THEN 1 ELSE 0 END) AS active_count,
                COUNT(*) AS task_count
         FROM tasks
         INNER JOIN cell_segments ON cell_segments.task_id = tasks.id

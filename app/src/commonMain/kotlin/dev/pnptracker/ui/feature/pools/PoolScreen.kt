@@ -185,11 +185,11 @@ private fun PoolBody(
                 }
                 if (sections.singleColorGroups.isNotEmpty()) {
                     item { SectionTitle(stringResource(Strings.Pool.sectionSingleColor)) }
-                    colorGroups(sections.singleColorGroups, controller)
+                    colorGroups("single", sections.singleColorGroups, controller)
                 }
                 if (sections.multicolorGroups.isNotEmpty()) {
                     item { SectionTitle(stringResource(Strings.Pool.sectionMulticolor)) }
-                    colorGroups(sections.multicolorGroups, controller)
+                    colorGroups("multi", sections.multicolorGroups, controller)
                 }
             }
         }
@@ -202,16 +202,23 @@ private fun PoolBody(
  * The key of a card is the colour and the task together, because the same task
  * really is in several of these groups (PLAN 12.10) and a key of the task alone
  * would be the same key twice.
+ *
+ * [section] is part of both keys for the same reason one step further out: the
+ * two sections of the 3D pool are one list, and one colour can head a group in
+ * each of them — grey for a task made only in grey, and grey again for a task
+ * made in grey and two others. Keyed by the colour alone, that is the same key
+ * twice in one list, which is not a drawing mistake but a crash.
  */
 private fun LazyListScope.colorGroups(
+    section: String,
     groups: List<PoolColorGroup>,
     controller: PoolController,
 ) {
     groups.forEach { group ->
-        item(key = "group-" + group.color.colorId) { ColorGroupHeading(group) }
+        item(key = "group-$section-" + group.color.colorId) { ColorGroupHeading(group) }
         items(
             count = group.tasks.size,
-            key = { at -> "" + group.color.colorId + group.tasks[at].taskId },
+            key = { at -> "$section-" + group.color.colorId + group.tasks[at].taskId },
         ) { at ->
             val task = group.tasks[at]
             TaskCard(

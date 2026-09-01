@@ -391,11 +391,21 @@ class PoolScreenLayoutTest {
     }
 
     @Test
-    fun `a card is keyed by the colour it is drawn under as well as by its task`() {
-        // The same task really is on several cards. Keyed by the task alone, a
-        // lazy list would be told two rows have one key.
+    fun `a card is keyed by its section, the colour it is drawn under and its task`() {
+        // The same task really is on several cards, and the same colour really
+        // heads a group in both sections. Keyed by less than all three, a lazy
+        // list would be told two rows have one key — which it refuses rather
+        // than draws wrongly. `PoolListKeyTest` composes the case for real; this
+        // only keeps the three parts from quietly being dropped again.
         assertTrue("data class PoolCardKey" in state)
-        assertTrue("group.color.colorId + group.tasks[at].taskId" in screen, "two cards of one task share a key")
+        assertTrue(
+            "\"group-\$section-\" + group.color.colorId" in screen,
+            "a colour's heading is keyed without the section it is in",
+        )
+        assertTrue(
+            "\"\$section-\" + group.color.colorId + group.tasks[at].taskId" in screen,
+            "two cards of one task share a key",
+        )
     }
 
     // --------------------------------------------------------- the sidebar

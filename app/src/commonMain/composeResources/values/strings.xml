@@ -383,6 +383,10 @@
     <string name="confirm_error_pool_missing">Bu taslağa üretim havuzu seçilmedi.</string>
     <string name="confirm_error_tracking_missing">Bu taslağa takip biçimi seçilmedi.</string>
     <string name="confirm_error_could_not_save">Onay kaydedilemedi; hiçbir görev oluşturulmadı ve içe aktarma taslak olarak kaldı.</string>
+    <string name="confirm_error_color_unavailable">Bu taslağa seçilmiş bir renk artık katalogda yok; rengi yeniden seçin.</string>
+    <string name="confirm_error_selection_no_longer_fits">Bu taslağın seçtiği metin, geldiği hücreye artık uymuyor.</string>
+    <string name="confirm_error_completion_target_required">Yeşil oyun hücresi kabul edilmiş fakat hangi oyunu bitirdiği seçilmemiş. Önce oyunu seçin.</string>
+    <string name="confirm_error_completion_target_unavailable">Yeşil ipucunun işaret ettiği oyun artık kullanılamıyor.</string>
 
     <!-- Aiming a draft at the cell its task will be written in. -->
     <string name="aim_title">Hedef</string>

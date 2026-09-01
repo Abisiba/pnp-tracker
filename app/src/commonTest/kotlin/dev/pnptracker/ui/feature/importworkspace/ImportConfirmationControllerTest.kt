@@ -21,6 +21,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
@@ -429,4 +430,103 @@ class ImportConfirmationControllerTest {
             assertTrue(!ready.summary.isStillADraft)
             assertTrue(!ready.summary.canConfirm)
         }
+}
+
+/**
+ * A refusal belongs to the import it was about.
+ *
+ * Keeping it across a re-read is right: the user has to be able to see what to
+ * fix without the screen wiping it out from under them. Keeping it across a move
+ * to a different import is not — it would be a sentence about another file that
+ * they can neither act on nor dismiss.
+ */
+class ImportConfirmationFailureScopeTest {
+    @Test
+    fun `a refusal survives re-reading the same import`() =
+        runBlocking<Unit> {
+            val confirmation = FakeConfirmation()
+            val controller = ImportConfirmationController(confirmation)
+            controller.refresh(confirmation.firstBatchId)
+            confirmation.refuseWith = ImportConfirmationFailure.COMPLETION_TARGET_GAME_REQUIRED
+            controller.confirm(confirmation.firstBatchId)
+            confirmation.refuseWith = null
+
+            controller.refresh(confirmation.firstBatchId)
+
+            assertEquals(
+                ImportConfirmationFailure.COMPLETION_TARGET_GAME_REQUIRED,
+                (controller.state as ImportConfirmationState.Ready).failure,
+            )
+        }
+
+    @Test
+    fun `a refusal does not follow the user to another import`() =
+        runBlocking<Unit> {
+            val confirmation = FakeConfirmation()
+            val controller = ImportConfirmationController(confirmation)
+            controller.refresh(confirmation.firstBatchId)
+            confirmation.refuseWith = ImportConfirmationFailure.COMPLETION_TARGET_GAME_REQUIRED
+            controller.confirm(confirmation.firstBatchId)
+            confirmation.refuseWith = null
+
+            controller.refresh(confirmation.secondBatchId)
+
+            assertNull(
+                (controller.state as ImportConfirmationState.Ready).failure,
+                "an error about one import was shown on another",
+            )
+        }
+
+    @Test
+    fun `coming back to the import that was refused does not resurrect the message`() =
+        runBlocking<Unit> {
+            val confirmation = FakeConfirmation()
+            val controller = ImportConfirmationController(confirmation)
+            controller.refresh(confirmation.firstBatchId)
+            confirmation.refuseWith = ImportConfirmationFailure.COMPLETION_TARGET_GAME_REQUIRED
+            controller.confirm(confirmation.firstBatchId)
+            confirmation.refuseWith = null
+            controller.refresh(confirmation.secondBatchId)
+
+            controller.refresh(confirmation.firstBatchId)
+
+            assertNull(
+                (controller.state as ImportConfirmationState.Ready).failure,
+                "a message the user had already left behind came back",
+            )
+        }
+
+    private class FakeConfirmation : ImportConfirmation {
+        val firstBatchId: EntityId = IdGenerator.Random.newId()
+        val secondBatchId: EntityId = IdGenerator.Random.newId()
+        var refuseWith: ImportConfirmationFailure? = null
+
+        override fun observeTargetCells(): Flow<List<TargetCellChoice>> = flowOf(emptyList())
+
+        override suspend fun summarize(batchId: EntityId): ImportConfirmationSummary =
+            ImportConfirmationSummary(
+                batchId = batchId,
+                status = ImportBatchStatus.DRAFT,
+                draftTaskCount = 1,
+                readyTaskCount = 1,
+                unprocessedBlockCount = 0,
+                problems = emptyList(),
+                hasAnyCell = true,
+            )
+
+        override suspend fun aimDraft(
+            draftId: EntityId,
+            targetCellId: EntityId?,
+            poolType: PoolType?,
+            trackingMode: TrackingMode?,
+        ) = Unit
+
+        override suspend fun confirm(
+            batchId: EntityId,
+            acknowledgeUnprocessedBlocks: Boolean,
+        ): ImportConfirmationResult {
+            refuseWith?.let { throw ImportConfirmationException(it) }
+            return ImportConfirmationResult(batchId, createdTaskCount = 1, createdGameCount = 0)
+        }
+    }
 }

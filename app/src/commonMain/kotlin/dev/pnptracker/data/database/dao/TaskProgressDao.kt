@@ -19,6 +19,7 @@ import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.model.ProgressEventKind
 import dev.pnptracker.domain.model.hasStages
 import dev.pnptracker.domain.model.stagesOf
+import dev.pnptracker.domain.tasks.CompletionRules
 import dev.pnptracker.domain.tasks.StageSnapshot
 import dev.pnptracker.domain.tasks.TaskProgressException
 import dev.pnptracker.domain.tasks.TaskProgressFailure
@@ -495,8 +496,11 @@ abstract class TaskProgressDao {
             // task like that is finished by hand and its pipeline left alone.
             stageTarget = task.requiredQuantity,
             // Only the 3D pool counts a print run; for the others the flag is
-            // not part of what being finished means.
-            primaryBatchCompleted = task.primaryBatchCompleted || task.poolType == PoolType.THREE_D,
+            // not part of what being finished means. The rule is shared with the
+            // import path, so a task born finished and a task ticked finished
+            // cannot come to mean different things.
+            primaryBatchCompleted =
+                CompletionRules.primaryBatchCompletedWhenFinished(task.poolType, task.primaryBatchCompleted),
         )
 
     /** The event that explains a settled debt, so the history still adds up. */
