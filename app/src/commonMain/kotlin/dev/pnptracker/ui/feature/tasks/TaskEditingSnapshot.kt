@@ -35,4 +35,9 @@ data class TaskEditingSnapshot(
     val requiredQuantity: Int?,
     val notes: String?,
     val trackingMode: TrackingMode,
+    /** PLAN 10 and 11.7: the four marks the task carries, so the form can show them. */
+    val isMissing: Boolean = false,
+    val isBorrowed: Boolean = false,
+    val needsInfo: Boolean = false,
+    val needsClassification: Boolean = false,
 )

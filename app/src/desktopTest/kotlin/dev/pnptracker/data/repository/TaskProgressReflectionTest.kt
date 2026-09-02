@@ -750,6 +750,7 @@ class TaskProgressReflectionTest {
             requiredQuantity = total,
             notes = task.notes,
             trackingMode = task.trackingMode,
+            flags = null,
             clock = clock,
         )
     }

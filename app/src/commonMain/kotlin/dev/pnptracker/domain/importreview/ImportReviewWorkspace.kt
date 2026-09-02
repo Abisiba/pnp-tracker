@@ -63,12 +63,33 @@ data class ReviewDraftTask(
     val targetCellId: EntityId? = null,
     val selectedPoolType: PoolType? = null,
     val selectedTrackingMode: TrackingMode? = null,
+    /** The total, or null for one the user has left unknown (PLAN 11.7). */
+    val requiredQuantity: Int? = null,
+    /** The user's own words, kept exactly, or null when they wrote none. */
+    val notes: String? = null,
+    val selectionStartIndex: Int? = null,
+    val selectionEndIndex: Int? = null,
+    /** PLAN 10: came from the `Eksik` column. A note about the work, not a shortage. */
+    val isMissing: Boolean = false,
+    /** PLAN 10: came from the `Ödünç Parçalar` column. */
+    val isBorrowed: Boolean = false,
+    /** PLAN 11.7: something the work needs is still unknown. */
+    val needsInfo: Boolean = false,
+    /** PLAN 10: the pool will be the user's own decision rather than the column's. */
+    val needsClassification: Boolean = false,
     val colorIds: List<EntityId> = emptyList(),
     val materializedTaskId: EntityId? = null,
 ) {
     /** True when the draft has everything a task needs. */
     val isReady: Boolean
-        get() = targetCellId != null && selectedPoolType != null && selectedTrackingMode != null
+        get() =
+            targetCellId != null &&
+                selectedPoolType != null &&
+                selectedTrackingMode != null &&
+                completionHint != HintDecision.PENDING
+
+    /** True when the draft was cut out of the cell rather than typed by hand. */
+    val cameFromSelection: Boolean get() = selectionStartIndex != null && selectionEndIndex != null
 }
 
 /**

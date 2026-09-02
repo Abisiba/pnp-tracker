@@ -34,6 +34,7 @@ import kotlin.test.assertTrue
 private val BATCH = IdGenerator.Random.newId()
 private val DRAFT_ONE = IdGenerator.Random.newId()
 private val DRAFT_TWO = IdGenerator.Random.newId()
+private val BLOCK_ONE = IdGenerator.Random.newId()
 private val CELL = IdGenerator.Random.newId()
 private val GAME = IdGenerator.Random.newId()
 
@@ -166,6 +167,7 @@ class ImportConfirmationControllerTest {
                             listOf(
                                 DraftTaskProblem(
                                     DRAFT_TWO,
+                                    BLOCK_ONE,
                                     "Yeşil kart",
                                     ImportConfirmationFailure.TARGET_CELL_MISSING,
                                 ),

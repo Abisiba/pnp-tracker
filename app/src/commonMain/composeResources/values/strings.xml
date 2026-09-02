@@ -567,4 +567,112 @@
     <string name="stage_laminate">Lamine edildi</string>
     <string name="stage_glue">Yapıştırıldı</string>
     <string name="stage_cut">Kesildi</string>
+
+    <!-- Import review: choosing words, editing a draft, answering hints (Adım 18C) -->
+    <string name="review_raw_text_title">Ham hücre metni</string>
+    <string name="review_raw_text_hint">Metnin bir bölümünü seçin, sonra “Seçimden görev oluştur”a basın.</string>
+    <string name="review_raw_text_accessibility">%1$d. satır %2$d. sütun, %3$s: %4$s</string>
+    <string name="review_selection_none">Henüz metin seçilmedi.</string>
+    <string name="review_selection_shown">Seçili: “%1$s”</string>
+    <string name="review_create_from_selection">Seçimden görev oluştur</string>
+    <string name="review_create_by_hand">Elle görev ekle</string>
+    <string name="review_manual_title">Elle görev</string>
+    <string name="review_manual_hint">Bu görev ham metinden bir seçim taşımaz.</string>
+    <string name="review_manual_create">Görevi ekle</string>
+
+    <string name="review_hints_title">İçe aktarma ipuçları</string>
+    <string name="review_hint_quantity">Adet adayı: %1$d</string>
+    <string name="review_hint_marker">Bu hücrede %1$d tamamlanma işareti (**) var.</string>
+    <string name="review_hint_alternative">Belirsiz renk ifadesi: %1$s. Kesin rengi siz seçmelisiniz.</string>
+    <string name="review_hint_column">Sütun önerisi: %1$s</string>
+    <string name="review_hint_only">İpuçları yalnızca öneridir; hiçbiri kendiliğinden uygulanmaz.</string>
+
+    <string name="review_edit_open">Düzenle</string>
+    <string name="review_edit_title">Taslağı düzenle</string>
+    <string name="review_edit_save">Kaydet</string>
+    <string name="review_edit_cancel">Vazgeç</string>
+    <string name="review_edit_saving">Kaydediliyor…</string>
+    <string name="review_edit_name_label">Görev adı</string>
+    <string name="review_edit_quantity_label">Adet</string>
+    <string name="review_edit_quantity_unknown">Adet bilinmiyor</string>
+    <string name="review_edit_quantity_invalid">Adet, sıfırdan büyük bir tam sayı olmalıdır.</string>
+    <string name="review_edit_notes_label">Not</string>
+    <string name="review_edit_read_only">Onaylanmış içe aktarma yalnızca okunur.</string>
+    <string name="review_edit_hint">Bütün alanlar tek kaydetmede birlikte yazılır.</string>
+
+    <string name="review_flags_title">İşaretler</string>
+    <string name="review_flags_note">Bunlar havuz değildir; içe aktarma bağlamındaki işaretlerdir.</string>
+    <string name="review_flag_missing">Eksik</string>
+    <string name="review_flag_borrowed">Ödünç</string>
+    <string name="review_flag_needs_info">Bilgi eksik</string>
+    <string name="review_flag_needs_classification">Sınıflandırma gerekli</string>
+    <string name="review_flag_conflict">Bir görev ya eksik ya ödünçtür; ikisi birden seçilemez.</string>
+    <string name="review_flag_needs_info_note">Adet yazmanız bu işareti kendiliğinden kaldırmaz; kaldırmayı siz seçersiniz.</string>
+
+    <string name="review_colors_title">Renkler</string>
+    <string name="review_colors_none">Renk seçilmedi. Renksiz görev geçerlidir.</string>
+    <string name="review_colors_duplicate">%1$d. ve %2$d. sıradaki renk aynı.</string>
+    <string name="review_colors_open">Renk ekle</string>
+    <string name="review_colors_close">Renk listesini kapat</string>
+
+    <string name="review_completion_title">Tamamlanma ipucu (**)</string>
+    <string name="review_completion_accept">Tamamlanmış olarak işaretle</string>
+    <string name="review_completion_reject">Açık görev olarak oluştur</string>
+    <string name="review_completion_accepted">Tamamlanmış olarak işaretlendi.</string>
+    <string name="review_completion_rejected">Açık görev olarak oluşturulacak.</string>
+    <string name="review_completion_undecided">Bu görev için “%1$s” kararı verilmedi.</string>
+
+    <string name="review_green_title">Oyun tamamlanma ipucu</string>
+    <string name="review_green_accept">Oyunu tamamlanmış say</string>
+    <string name="review_green_reject">Tamamlanmış sayma</string>
+    <string name="review_green_choose_game">Hangi oyunun tamamlandığını seçin</string>
+    <string name="review_green_change_game">Oyunu değiştir</string>
+    <string name="review_green_target">Seçili oyun: %1$s</string>
+    <string name="review_green_accepted">Onayda bu oyun tamamlanmış sayılacak.</string>
+    <string name="review_green_rejected">Bu oyun tamamlanmış sayılmayacak.</string>
+    <string name="review_green_needs_target">Kabul edildi fakat hangi oyun olduğu seçilmedi.</string>
+    <string name="review_green_no_games">Önce oyun tablosundan bir oyun satırı oluşturun.</string>
+    <string name="review_green_game_shared">%1$s (%2$d. kayıt)</string>
+    <string name="review_green_game_completed">%1$s — tamamlanmış</string>
+
+    <string name="review_blockers_title">Onayı engelleyenler</string>
+    <string name="review_blocker_draft">%1$s: %2$s</string>
+    <string name="review_blocker_block">%1$d. satır %2$d. sütun: %3$s</string>
+    <string name="review_blocker_goto">Bu satıra git</string>
+
+    <string name="review_pane_cells">Hücreler</string>
+    <string name="review_pane_drafts">Taslaklar</string>
+    <string name="review_draft_quantity">Adet: %1$d</string>
+    <string name="review_draft_quantity_unknown">Adet bilinmiyor</string>
+    <string name="review_draft_colors">Renkler: %1$s</string>
+    <string name="review_draft_colors_none">Renksiz</string>
+    <string name="review_draft_notes">Not: %1$s</string>
+    <string name="review_draft_accessibility">Taslak %1$s</string>
+
+    <string name="review_error_invalid_selection">Bu seçim kullanılamaz.</string>
+    <string name="review_error_selection_splits_character">Seçim bir karakterin ortasından geçiyor. Karakterin tamamını seçin.</string>
+    <string name="review_error_selection_empty">Seçimde görev adı olacak bir şey kalmadı.</string>
+    <string name="review_error_selection_line_break">Görev adı satır sonu içeremez. Tek satır seçin.</string>
+    <string name="review_error_task_name_empty">Görev adı boş olamaz.</string>
+    <string name="review_error_quantity">Adet, sıfırdan büyük bir tam sayı olmalıdır.</string>
+    <string name="review_error_missing_and_borrowed">Bir görev ya eksik ya ödünçtür; ikisi birden seçilemez.</string>
+    <string name="review_error_tracking_not_allowed">Bu havuz seçilen takip biçimine izin vermiyor.</string>
+    <string name="review_error_target_unavailable">Seçilen hücre artık yok.</string>
+    <string name="review_error_target_not_task_capable">Notlar hücresi görev tutmaz.</string>
+    <string name="review_error_target_wrong_column">Seçilen hücre bu havuza ait değil.</string>
+    <string name="review_error_hint_not_answerable">Bu görevde yanıtlanacak bir ** işareti yok.</string>
+    <string name="review_error_draft_gone">Bu taslak artık yok.</string>
+    <string name="review_error_block_gone">Bu hücre artık yok.</string>
+    <string name="review_error_batch_not_draft">Bu içe aktarma artık düzenlenemez.</string>
+    <string name="review_error_duplicate_color">Aynı renk iki kez seçilemez.</string>
+    <string name="review_error_color_unavailable">Seçilen renklerden biri artık katalogda yok.</string>
+    <string name="review_error_block_cannot_carry_hint">Bu hücre oyun tamamlanma ipucu taşıyamaz.</string>
+    <string name="review_error_completion_target_required">Tamamlanmış saymak için bir oyun seçmelisiniz.</string>
+    <string name="review_error_completion_target_not_allowed">Tamamlanmış sayılmayan bir ipucu oyun taşıyamaz.</string>
+    <string name="review_error_completion_target_unavailable">Seçilen oyun artık yok.</string>
+
+    <string name="confirm_error_completion_hint_undecided">Bir taslakta ** ipucu yanıtlanmadı.</string>
+    <string name="confirm_error_game_hint_undecided">Bir oyun hücresinde tamamlanma ipucu yanıtlanmadı.</string>
+    <string name="task_edit_flags_title">İşaretler</string>
+    <string name="task_edit_flags_note">Bunlar havuz değildir; görev hakkındaki işaretlerdir. “Bilgi eksik” işaretli açık görev aktif havuzda görünmez.</string>
 </resources>

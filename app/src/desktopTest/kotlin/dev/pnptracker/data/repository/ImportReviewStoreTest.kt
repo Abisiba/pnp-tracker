@@ -7,6 +7,8 @@ import dev.pnptracker.data.database.TemporaryDatabaseDirectory
 import dev.pnptracker.data.database.aDraftTask
 import dev.pnptracker.data.database.aRawImportBlock
 import dev.pnptracker.data.database.anImportBatch
+import dev.pnptracker.domain.importreview.ImportReviewException
+import dev.pnptracker.domain.importreview.ImportReviewFailure
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.HintDecision
 import dev.pnptracker.domain.model.ImportBatchStatus
@@ -60,7 +62,7 @@ class ImportReviewStoreTest {
         realDatabaseExistedBefore = Files.exists(TemporaryDatabaseDirectory.realApplicationDatabaseFile())
         directory = TemporaryDatabaseDirectory()
         database = DatabaseFactory().open(directory.databaseFile)
-        store = ImportReviewStore(database.importDao(), clock = SteppingClock(moment))
+        store = ImportReviewStore(database.importDao(), database.gameDao(), database.colorDao(), clock = SteppingClock(moment))
     }
 
     @AfterTest
@@ -263,7 +265,7 @@ class ImportReviewStoreTest {
             database.close()
 
             database = DatabaseFactory().open(directory.databaseFile)
-            store = ImportReviewStore(database.importDao(), clock = SteppingClock(moment))
+            store = ImportReviewStore(database.importDao(), database.gameDao(), database.colorDao(), clock = SteppingClock(moment))
 
             val workspace = assertNotNull(workspaceOf(batchId))
             assertEquals(listOf(false, false, true), workspace.rawBlocks.map { it.isProcessed })
@@ -292,7 +294,7 @@ class ImportReviewStoreTest {
         runBlocking {
             val (batchId, blocks) = saveImport()
 
-            store.addDraftTask(blocks[0], "Kırmızı token")
+            store.createDraftByHand(blocks[0], "Kırmızı token")
 
             val workspace = assertNotNull(workspaceOf(batchId))
             val draft = workspace.draftTasks.single()
@@ -302,14 +304,15 @@ class ImportReviewStoreTest {
         }
 
     @Test
-    fun `the name is stored exactly as it was given`() =
+    fun `a typed name is trimmed at the ends and kept exactly inside them`() =
         runBlocking {
             val (batchId, blocks) = saveImport()
-            val awkward = "  12 KIRMIZI**  "
 
-            store.addDraftTask(blocks[0], awkward)
+            store.createDraftByHand(blocks[0], "  12 KIRMIZI**  ")
 
-            assertEquals(awkward, assertNotNull(workspaceOf(batchId)).draftTasks.single().name)
+            // A space either side of a word is a slip rather than a decision;
+            // everything between them, marker included, is what they typed.
+            assertEquals("12 KIRMIZI**", assertNotNull(workspaceOf(batchId)).draftTasks.single().name)
         }
 
     @Test
@@ -317,7 +320,10 @@ class ImportReviewStoreTest {
         runBlocking {
             val (batchId, blocks) = saveImport()
 
-            assertFailsWith<IllegalArgumentException> { store.addDraftTask(blocks[0], "   ") }
+            assertEquals(
+                ImportReviewFailure.TASK_NAME_EMPTY,
+                assertFailsWith<ImportReviewException> { store.createDraftByHand(blocks[0], "   ") }.failure,
+            )
 
             assertEquals(0, assertNotNull(workspaceOf(batchId)).draftTaskCount)
         }
@@ -327,8 +333,8 @@ class ImportReviewStoreTest {
         runBlocking {
             val (batchId, blocks) = saveImport()
 
-            store.addDraftTask(blocks[0], "Kırmızı token")
-            store.addDraftTask(blocks[0], "Mavi token")
+            store.createDraftByHand(blocks[0], "Kırmızı token")
+            store.createDraftByHand(blocks[0], "Mavi token")
 
             val workspace = assertNotNull(workspaceOf(batchId))
             assertEquals(listOf("Kırmızı token", "Mavi token"), workspace.draftsOf(blocks[0]).map { it.name })
@@ -340,7 +346,7 @@ class ImportReviewStoreTest {
         runBlocking {
             val (batchId, blocks) = saveImport()
 
-            store.addDraftTask(blocks[0], "Kırmızı token")
+            store.createDraftByHand(blocks[0], "Kırmızı token")
 
             val workspace = assertNotNull(workspaceOf(batchId))
             assertTrue(!workspace.rawBlocks.first { it.id == blocks[0] }.isProcessed)
@@ -352,7 +358,7 @@ class ImportReviewStoreTest {
         runBlocking {
             val (batchId, blocks) = saveImport()
 
-            store.addDraftTask(blocks[0], "Kırmızı token")
+            store.createDraftByHand(blocks[0], "Kırmızı token")
 
             val batch = assertNotNull(database.importDao().batchById(batchId))
             assertEquals(ImportBatchStatus.DRAFT, batch.status)
@@ -368,7 +374,7 @@ class ImportReviewStoreTest {
             val (batchId, blocks) = saveImport()
             val (otherId, _) = saveImport(fileName = "baska.xlsx", sha256 = "b".repeat(64))
 
-            store.addDraftTask(blocks[0], "Kırmızı token")
+            store.createDraftByHand(blocks[0], "Kırmızı token")
 
             assertEquals(1, assertNotNull(workspaceOf(batchId)).draftTaskCount)
             assertEquals(0, assertNotNull(workspaceOf(otherId)).draftTaskCount)
@@ -382,7 +388,12 @@ class ImportReviewStoreTest {
             database.importDao().insertBatch(batch)
             database.importDao().insertRawBlock(block)
 
-            assertFailsWith<IllegalArgumentException> { store.addDraftTask(block.id, "Geç kalmış taslak") }
+            assertEquals(
+                ImportReviewFailure.BATCH_NOT_A_DRAFT,
+                assertFailsWith<ImportReviewException> {
+                    store.createDraftByHand(block.id, "Geç kalmış taslak")
+                }.failure,
+            )
 
             assertEquals(emptyList(), database.importDao().draftTasksOfBlock(block.id))
         }
@@ -392,8 +403,8 @@ class ImportReviewStoreTest {
         runBlocking {
             val (batchId, _) = saveImport()
 
-            assertFailsWith<IllegalArgumentException> {
-                store.addDraftTask(
+            assertFailsWith<ImportReviewException> {
+                store.createDraftByHand(
                     dev.pnptracker.domain.model.IdGenerator.Random
                         .newId(),
                     "Öksüz taslak",
@@ -407,13 +418,13 @@ class ImportReviewStoreTest {
     fun `drafts are still there after closing and reopening the database`() =
         runBlocking {
             val (batchId, blocks) = saveImport()
-            store.addDraftTask(blocks[0], "Kırmızı token")
-            store.addDraftTask(blocks[0], "Mavi token")
+            store.createDraftByHand(blocks[0], "Kırmızı token")
+            store.createDraftByHand(blocks[0], "Mavi token")
             store.setProcessed(blocks[1], true)
             database.close()
 
             database = DatabaseFactory().open(directory.databaseFile)
-            store = ImportReviewStore(database.importDao(), clock = SteppingClock(moment))
+            store = ImportReviewStore(database.importDao(), database.gameDao(), database.colorDao(), clock = SteppingClock(moment))
 
             val workspace = assertNotNull(workspaceOf(batchId))
             assertEquals(listOf("Kırmızı token", "Mavi token"), workspace.draftTasks.map { it.name })
@@ -426,10 +437,10 @@ class ImportReviewStoreTest {
         runBlocking {
             // A stopped clock makes both drafts claim the same instant, which is what
             // the id tie-breaker is there for: the order must not wander between reads.
-            store = ImportReviewStore(database.importDao(), clock = StoppedClock(moment))
+            store = ImportReviewStore(database.importDao(), database.gameDao(), database.colorDao(), clock = StoppedClock(moment))
             val (batchId, blocks) = saveImport()
-            store.addDraftTask(blocks[0], "Bir")
-            store.addDraftTask(blocks[0], "Iki")
+            store.createDraftByHand(blocks[0], "Bir")
+            store.createDraftByHand(blocks[0], "Iki")
 
             val firstRead = assertNotNull(workspaceOf(batchId)).draftTasks.map { it.name }
             val secondRead = assertNotNull(workspaceOf(batchId)).draftTasks.map { it.name }

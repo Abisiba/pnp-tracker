@@ -133,6 +133,10 @@ class GameTableStore(
                             poolType = row.taskPoolType,
                             currentMissingQuantity = row.taskCurrentMissingQuantity ?: 0,
                             hasProgress = row.taskHasProgress == true,
+                            isMissing = row.taskIsMissing == true,
+                            isBorrowed = row.taskIsBorrowed == true,
+                            needsInfo = row.taskNeedsInfo == true,
+                            needsClassification = row.taskNeedsClassification == true,
                         )
                     }
             }

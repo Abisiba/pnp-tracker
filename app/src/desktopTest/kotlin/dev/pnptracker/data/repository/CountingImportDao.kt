@@ -154,6 +154,22 @@ class CountingImportDao(
         updatedAt: Instant,
     ): Int = outOfReach("touchDraftTask")
 
+    override suspend fun updateDraftRow(
+        draftId: EntityId,
+        name: String,
+        targetCellId: EntityId?,
+        poolType: PoolType?,
+        trackingMode: TrackingMode?,
+        requiredQuantity: Int?,
+        notes: String?,
+        isMissing: Boolean,
+        isBorrowed: Boolean,
+        needsInfo: Boolean,
+        needsClassification: Boolean,
+        completionHint: HintDecision,
+        updatedAt: Instant,
+    ): Int = outOfReach("updateDraftRow")
+
     override suspend fun insertDraftTaskRow(draft: DraftTaskEntity): Unit = outOfReach("insertDraftTaskRow")
 
     override suspend fun updateDraftTaskRow(draft: DraftTaskEntity): Int = outOfReach("updateDraftTaskRow")

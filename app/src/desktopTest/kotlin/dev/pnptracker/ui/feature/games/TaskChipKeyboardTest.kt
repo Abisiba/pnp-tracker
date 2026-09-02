@@ -30,6 +30,7 @@ import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.tasks.CellTextSelection
 import dev.pnptracker.domain.tasks.StageSnapshot
 import dev.pnptracker.domain.tasks.TaskDraft
+import dev.pnptracker.domain.tasks.TaskFlags
 import dev.pnptracker.ui.ComposeSceneHarness
 import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.contentDescriptions
@@ -208,6 +209,7 @@ class TaskChipKeyboardTest {
             requiredQuantity: Int?,
             notes: String?,
             trackingMode: TrackingMode,
+            flags: TaskFlags?,
         ): Boolean = true
 
         override suspend fun convertTaskToText(taskId: EntityId): Boolean = true

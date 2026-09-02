@@ -35,6 +35,7 @@ import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.rules.normalizeColorTerm
 import dev.pnptracker.domain.tasks.TaskDraft
 import dev.pnptracker.domain.tasks.TaskEditException
+import dev.pnptracker.domain.tasks.TaskFlags
 import dev.pnptracker.domain.tasks.TaskFromTextException
 import dev.pnptracker.domain.tasks.TaskFromTextFailure
 import dev.pnptracker.domain.tasks.TaskProgressFailure
@@ -1426,6 +1427,14 @@ class GameTableController(
                                 originalNotes = task.notes.orEmpty(),
                                 trackingMode = task.trackingMode ?: onlyTrackingModeOf(poolType) ?: return,
                                 originalTrackingMode = task.trackingMode ?: onlyTrackingModeOf(poolType) ?: return,
+                                isMissing = task.isMissing,
+                                isBorrowed = task.isBorrowed,
+                                needsInfo = task.needsInfo,
+                                needsClassification = task.needsClassification,
+                                originalIsMissing = task.isMissing,
+                                originalIsBorrowed = task.isBorrowed,
+                                originalNeedsInfo = task.needsInfo,
+                                originalNeedsClassification = task.needsClassification,
                             ),
                     ),
             )
@@ -1499,6 +1508,22 @@ class GameTableController(
 
     override fun chooseTaskEditTracking(trackingMode: TrackingMode) = onEditor { it.copy(trackingMode = trackingMode, failure = null) }
 
+    // A task is in the missing column or the borrowed one, never in both, so
+    // ticking either one unticks the other rather than leaving a pair the
+    // transaction would refuse.
+    override fun setTaskEditMissing(isMissing: Boolean) =
+        onEditor { it.copy(isMissing = isMissing, isBorrowed = if (isMissing) false else it.isBorrowed, failure = null) }
+
+    override fun setTaskEditBorrowed(isBorrowed: Boolean) =
+        onEditor {
+            it.copy(isBorrowed = isBorrowed, isMissing = if (isBorrowed) false else it.isMissing, failure = null)
+        }
+
+    override fun setTaskEditNeedsInfo(needsInfo: Boolean) = onEditor { it.copy(needsInfo = needsInfo, failure = null) }
+
+    override fun setTaskEditNeedsClassification(needsClassification: Boolean) =
+        onEditor { it.copy(needsClassification = needsClassification, failure = null) }
+
     /**
      * Saves everything the user changed about the task, all at once.
      *
@@ -1519,6 +1544,13 @@ class GameTableController(
                 requiredQuantity = editor.quantity,
                 notes = editor.notes.takeIf { it.isNotEmpty() },
                 trackingMode = editor.trackingMode,
+                flags =
+                    TaskFlags(
+                        isMissing = editor.isMissing,
+                        isBorrowed = editor.isBorrowed,
+                        needsInfo = editor.needsInfo,
+                        needsClassification = editor.needsClassification,
+                    ),
             )
             state = state.copy(work = editing.from, focusRecall = state.focusRecall + 1)
         } catch (refusal: TaskEditException) {

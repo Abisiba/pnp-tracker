@@ -27,6 +27,10 @@ data class CellHintAnalysis(
 
     val gameCompletion: ImportHint.GameCompletion?
         get() = hints.filterIsInstance<ImportHint.GameCompletion>().firstOrNull()
+
+    /** The count the cell opens with, if it opens with one. */
+    val quantity: ImportHint.Quantity?
+        get() = hints.filterIsInstance<ImportHint.Quantity>().firstOrNull()
 }
 
 /**
@@ -34,9 +38,9 @@ data class CellHintAnalysis(
  *
  * The same cell always gives an equal result: nothing here reads a clock, makes
  * an identifier, touches a file or keeps state between calls. Hints come back in
- * a fixed order — the column suggestion, then the green game cell, then the `**`
- * markers left to right, then the colour choices left to right — so two runs can
- * be compared directly.
+ * a fixed order — the column suggestion, then the green game cell, then the
+ * leading count, then the `**` markers left to right, then the colour choices
+ * left to right — so two runs can be compared directly.
  *
  * Nothing is applied. No task, colour relation, game or draft is created, and no
  * hint arrives already agreed to.
@@ -55,6 +59,7 @@ class ImportHintAnalyzer(
             buildList {
                 columnSuggestion?.let { add(ImportHint.ColumnSuggestion(it)) }
                 detectGameCompletionHint(cell, sourceColumnType)?.let { add(it) }
+                detectLeadingQuantity(cell.rawText)?.let { add(it) }
                 addAll(markerScan.markers)
                 addAll(detectAlternativeColorExpressions(cell.rawText, vocabulary))
             }

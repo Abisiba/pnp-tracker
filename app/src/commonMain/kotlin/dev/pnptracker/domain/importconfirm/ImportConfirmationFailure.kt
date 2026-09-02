@@ -74,6 +74,24 @@ enum class ImportConfirmationFailure {
     SELECTION_NO_LONGER_FITS,
 
     /**
+     * A draft still carries an unanswered `**`.
+     *
+     * PLAN 11.5 makes the marker a hint the user accepts or rejects, and PLAN
+     * 11.4.2 lets no draft be quietly skipped — so an unanswered one stops the
+     * whole import rather than producing a task that silently guessed.
+     */
+    COMPLETION_HINT_UNDECIDED,
+
+    /**
+     * A green game cell still carries an unanswered completion hint.
+     *
+     * The same rule one step out: the file being kept by hand means a green fill
+     * is a question, and confirming would have to answer it one way or the other
+     * on the user's behalf.
+     */
+    GAME_COMPLETION_HINT_UNDECIDED,
+
+    /**
      * A green cell was accepted without saying which game it was about.
      *
      * The shape a version 5 database can hold: it could record the answer but had

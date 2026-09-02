@@ -164,9 +164,11 @@ import dev.pnptracker.resources.confirm_done_title
 import dev.pnptracker.resources.confirm_error_already_confirmed
 import dev.pnptracker.resources.confirm_error_batch_not_found
 import dev.pnptracker.resources.confirm_error_color_unavailable
+import dev.pnptracker.resources.confirm_error_completion_hint_undecided
 import dev.pnptracker.resources.confirm_error_completion_target_required
 import dev.pnptracker.resources.confirm_error_completion_target_unavailable
 import dev.pnptracker.resources.confirm_error_could_not_save
+import dev.pnptracker.resources.confirm_error_game_hint_undecided
 import dev.pnptracker.resources.confirm_error_no_cells
 import dev.pnptracker.resources.confirm_error_no_drafts
 import dev.pnptracker.resources.confirm_error_not_a_draft
@@ -336,38 +338,130 @@ import dev.pnptracker.resources.pool_task_quantity_unknown
 import dev.pnptracker.resources.pool_task_spoken
 import dev.pnptracker.resources.pool_three_d
 import dev.pnptracker.resources.review_back
+import dev.pnptracker.resources.review_blocker_block
+import dev.pnptracker.resources.review_blocker_draft
+import dev.pnptracker.resources.review_blocker_goto
+import dev.pnptracker.resources.review_blockers_title
 import dev.pnptracker.resources.review_cell_location
+import dev.pnptracker.resources.review_colors_close
+import dev.pnptracker.resources.review_colors_duplicate
+import dev.pnptracker.resources.review_colors_none
+import dev.pnptracker.resources.review_colors_open
+import dev.pnptracker.resources.review_colors_title
+import dev.pnptracker.resources.review_completion_accept
+import dev.pnptracker.resources.review_completion_accepted
 import dev.pnptracker.resources.review_completion_hint_pending
+import dev.pnptracker.resources.review_completion_reject
+import dev.pnptracker.resources.review_completion_rejected
+import dev.pnptracker.resources.review_completion_title
+import dev.pnptracker.resources.review_completion_undecided
 import dev.pnptracker.resources.review_could_not_save
+import dev.pnptracker.resources.review_create_by_hand
 import dev.pnptracker.resources.review_create_draft
+import dev.pnptracker.resources.review_create_from_selection
+import dev.pnptracker.resources.review_draft_accessibility
+import dev.pnptracker.resources.review_draft_colors
+import dev.pnptracker.resources.review_draft_colors_none
 import dev.pnptracker.resources.review_draft_count
 import dev.pnptracker.resources.review_draft_discard
 import dev.pnptracker.resources.review_draft_form_title
 import dev.pnptracker.resources.review_draft_name_label
 import dev.pnptracker.resources.review_draft_name_required
+import dev.pnptracker.resources.review_draft_notes
 import dev.pnptracker.resources.review_draft_only_note
+import dev.pnptracker.resources.review_draft_quantity
+import dev.pnptracker.resources.review_draft_quantity_unknown
 import dev.pnptracker.resources.review_draft_save
 import dev.pnptracker.resources.review_draft_source
 import dev.pnptracker.resources.review_drafts_empty
 import dev.pnptracker.resources.review_drafts_empty_hint
 import dev.pnptracker.resources.review_drafts_of_selected
 import dev.pnptracker.resources.review_drafts_title
+import dev.pnptracker.resources.review_edit_cancel
+import dev.pnptracker.resources.review_edit_hint
+import dev.pnptracker.resources.review_edit_name_label
+import dev.pnptracker.resources.review_edit_notes_label
+import dev.pnptracker.resources.review_edit_open
+import dev.pnptracker.resources.review_edit_quantity_invalid
+import dev.pnptracker.resources.review_edit_quantity_label
+import dev.pnptracker.resources.review_edit_quantity_unknown
+import dev.pnptracker.resources.review_edit_read_only
+import dev.pnptracker.resources.review_edit_save
+import dev.pnptracker.resources.review_edit_saving
+import dev.pnptracker.resources.review_edit_title
 import dev.pnptracker.resources.review_empty
 import dev.pnptracker.resources.review_empty_title
+import dev.pnptracker.resources.review_error_batch_not_draft
+import dev.pnptracker.resources.review_error_block_cannot_carry_hint
+import dev.pnptracker.resources.review_error_block_gone
+import dev.pnptracker.resources.review_error_color_unavailable
+import dev.pnptracker.resources.review_error_completion_target_not_allowed
+import dev.pnptracker.resources.review_error_completion_target_required
+import dev.pnptracker.resources.review_error_completion_target_unavailable
+import dev.pnptracker.resources.review_error_draft_gone
+import dev.pnptracker.resources.review_error_duplicate_color
+import dev.pnptracker.resources.review_error_hint_not_answerable
+import dev.pnptracker.resources.review_error_invalid_selection
+import dev.pnptracker.resources.review_error_missing_and_borrowed
+import dev.pnptracker.resources.review_error_quantity
+import dev.pnptracker.resources.review_error_selection_empty
+import dev.pnptracker.resources.review_error_selection_line_break
+import dev.pnptracker.resources.review_error_selection_splits_character
+import dev.pnptracker.resources.review_error_target_not_task_capable
+import dev.pnptracker.resources.review_error_target_unavailable
+import dev.pnptracker.resources.review_error_target_wrong_column
+import dev.pnptracker.resources.review_error_task_name_empty
+import dev.pnptracker.resources.review_error_tracking_not_allowed
+import dev.pnptracker.resources.review_flag_borrowed
+import dev.pnptracker.resources.review_flag_conflict
+import dev.pnptracker.resources.review_flag_missing
+import dev.pnptracker.resources.review_flag_needs_classification
+import dev.pnptracker.resources.review_flag_needs_info
+import dev.pnptracker.resources.review_flag_needs_info_note
+import dev.pnptracker.resources.review_flags_note
+import dev.pnptracker.resources.review_flags_title
+import dev.pnptracker.resources.review_green_accept
+import dev.pnptracker.resources.review_green_accepted
+import dev.pnptracker.resources.review_green_change_game
+import dev.pnptracker.resources.review_green_choose_game
+import dev.pnptracker.resources.review_green_game_completed
+import dev.pnptracker.resources.review_green_game_shared
 import dev.pnptracker.resources.review_green_hint_pending
+import dev.pnptracker.resources.review_green_needs_target
+import dev.pnptracker.resources.review_green_no_games
+import dev.pnptracker.resources.review_green_reject
+import dev.pnptracker.resources.review_green_rejected
+import dev.pnptracker.resources.review_green_target
+import dev.pnptracker.resources.review_green_title
+import dev.pnptracker.resources.review_hint_alternative
+import dev.pnptracker.resources.review_hint_column
+import dev.pnptracker.resources.review_hint_marker
+import dev.pnptracker.resources.review_hint_only
+import dev.pnptracker.resources.review_hint_quantity
+import dev.pnptracker.resources.review_hints_title
 import dev.pnptracker.resources.review_loading
+import dev.pnptracker.resources.review_manual_create
+import dev.pnptracker.resources.review_manual_hint
+import dev.pnptracker.resources.review_manual_title
 import dev.pnptracker.resources.review_mark_processed
 import dev.pnptracker.resources.review_mark_unprocessed
 import dev.pnptracker.resources.review_no_real_records
 import dev.pnptracker.resources.review_open
+import dev.pnptracker.resources.review_pane_cells
+import dev.pnptracker.resources.review_pane_drafts
 import dev.pnptracker.resources.review_processed_accessibility
 import dev.pnptracker.resources.review_processed_badge
 import dev.pnptracker.resources.review_progress
 import dev.pnptracker.resources.review_raw_blocks_title
+import dev.pnptracker.resources.review_raw_text_accessibility
+import dev.pnptracker.resources.review_raw_text_hint
+import dev.pnptracker.resources.review_raw_text_title
 import dev.pnptracker.resources.review_resumable_entry
 import dev.pnptracker.resources.review_resumable_hint
 import dev.pnptracker.resources.review_resumable_title
 import dev.pnptracker.resources.review_select_cell_accessibility
+import dev.pnptracker.resources.review_selection_none
+import dev.pnptracker.resources.review_selection_shown
 import dev.pnptracker.resources.review_title
 import dev.pnptracker.resources.review_unavailable
 import dev.pnptracker.resources.review_unavailable_title
@@ -450,6 +544,8 @@ import dev.pnptracker.resources.task_edit_error_quantity
 import dev.pnptracker.resources.task_edit_error_quantity_below_progress
 import dev.pnptracker.resources.task_edit_error_quantity_locked
 import dev.pnptracker.resources.task_edit_error_task_gone
+import dev.pnptracker.resources.task_edit_flags_note
+import dev.pnptracker.resources.task_edit_flags_title
 import dev.pnptracker.resources.task_edit_hint
 import dev.pnptracker.resources.task_edit_name_invalid
 import dev.pnptracker.resources.task_edit_name_label
@@ -1073,6 +1169,8 @@ object Strings {
 
     /** Changing what a task already written down is. */
     object TaskEdit {
+        val flagsTitle = Res.string.task_edit_flags_title
+        val flagsNote = Res.string.task_edit_flags_note
         val title = Res.string.task_edit_title
         val nameLabel = Res.string.task_edit_name_label
         val nameInvalid = Res.string.task_edit_name_invalid
@@ -1159,6 +1257,8 @@ object Strings {
         val errorTrackingMissing = Res.string.confirm_error_tracking_missing
         val errorColorUnavailable = Res.string.confirm_error_color_unavailable
         val errorSelectionNoLongerFits = Res.string.confirm_error_selection_no_longer_fits
+        val errorCompletionHintUndecided = Res.string.confirm_error_completion_hint_undecided
+        val errorGameHintUndecided = Res.string.confirm_error_game_hint_undecided
         val errorCompletionTargetRequired = Res.string.confirm_error_completion_target_required
         val errorCompletionTargetUnavailable = Res.string.confirm_error_completion_target_unavailable
         val errorCouldNotSave = Res.string.confirm_error_could_not_save
@@ -1237,6 +1337,144 @@ object Strings {
 
         val selectCellAccessibility = Res.string.review_select_cell_accessibility
         val processedAccessibility = Res.string.review_processed_accessibility
+
+        // --- Adım 18C: cutting a task out of the text, and deciding about it ---
+
+        val rawTextTitle = Res.string.review_raw_text_title
+        val rawTextHint = Res.string.review_raw_text_hint
+
+        /** Takes the one based row and column, the column's name and the cell text. */
+        val rawTextAccessibility = Res.string.review_raw_text_accessibility
+        val selectionNone = Res.string.review_selection_none
+
+        /** Takes the selected words. */
+        val selectionShown = Res.string.review_selection_shown
+        val createFromSelection = Res.string.review_create_from_selection
+        val createByHand = Res.string.review_create_by_hand
+        val manualTitle = Res.string.review_manual_title
+        val manualHint = Res.string.review_manual_hint
+        val manualCreate = Res.string.review_manual_create
+
+        val hintsTitle = Res.string.review_hints_title
+
+        /** Takes the count the cell opens with. */
+        val hintQuantity = Res.string.review_hint_quantity
+
+        /** Takes how many `**` markers the cell holds. */
+        val hintMarker = Res.string.review_hint_marker
+
+        /** Takes the colours the source offered as a choice. */
+        val hintAlternative = Res.string.review_hint_alternative
+
+        /** Takes the pool the column suggests. */
+        val hintColumn = Res.string.review_hint_column
+        val hintOnly = Res.string.review_hint_only
+
+        val editOpen = Res.string.review_edit_open
+        val editTitle = Res.string.review_edit_title
+        val editSave = Res.string.review_edit_save
+        val editCancel = Res.string.review_edit_cancel
+        val editSaving = Res.string.review_edit_saving
+        val editNameLabel = Res.string.review_edit_name_label
+        val editQuantityLabel = Res.string.review_edit_quantity_label
+        val editQuantityUnknown = Res.string.review_edit_quantity_unknown
+        val editQuantityInvalid = Res.string.review_edit_quantity_invalid
+        val editNotesLabel = Res.string.review_edit_notes_label
+        val editReadOnly = Res.string.review_edit_read_only
+        val editHint = Res.string.review_edit_hint
+
+        val flagsTitle = Res.string.review_flags_title
+        val flagsNote = Res.string.review_flags_note
+        val flagMissing = Res.string.review_flag_missing
+        val flagBorrowed = Res.string.review_flag_borrowed
+        val flagNeedsInfo = Res.string.review_flag_needs_info
+        val flagNeedsClassification = Res.string.review_flag_needs_classification
+        val flagConflict = Res.string.review_flag_conflict
+        val flagNeedsInfoNote = Res.string.review_flag_needs_info_note
+
+        val colorsTitle = Res.string.review_colors_title
+        val colorsNone = Res.string.review_colors_none
+
+        /** Takes the one based places of the two entries that clash. */
+        val colorsDuplicate = Res.string.review_colors_duplicate
+        val colorsOpen = Res.string.review_colors_open
+        val colorsClose = Res.string.review_colors_close
+
+        val completionTitle = Res.string.review_completion_title
+        val completionAccept = Res.string.review_completion_accept
+        val completionReject = Res.string.review_completion_reject
+        val completionAccepted = Res.string.review_completion_accepted
+        val completionRejected = Res.string.review_completion_rejected
+
+        /** Takes the draft's own name. */
+        val completionUndecided = Res.string.review_completion_undecided
+
+        val greenTitle = Res.string.review_green_title
+        val greenAccept = Res.string.review_green_accept
+        val greenReject = Res.string.review_green_reject
+        val greenChooseGame = Res.string.review_green_choose_game
+        val greenChangeGame = Res.string.review_green_change_game
+
+        /** Takes the chosen game's name. */
+        val greenTarget = Res.string.review_green_target
+        val greenAccepted = Res.string.review_green_accepted
+        val greenRejected = Res.string.review_green_rejected
+        val greenNeedsTarget = Res.string.review_green_needs_target
+        val greenNoGames = Res.string.review_green_no_games
+
+        /** Takes the game name and its place among the games sharing it. */
+        val greenGameShared = Res.string.review_green_game_shared
+
+        /** Takes the game name. */
+        val greenGameCompleted = Res.string.review_green_game_completed
+
+        val blockersTitle = Res.string.review_blockers_title
+
+        /** Takes the draft's name and what is wrong with it. */
+        val blockerDraft = Res.string.review_blocker_draft
+
+        /** Takes the one based row and column, and what is unanswered. */
+        val blockerBlock = Res.string.review_blocker_block
+        val blockerGoto = Res.string.review_blocker_goto
+
+        val paneCells = Res.string.review_pane_cells
+        val paneDrafts = Res.string.review_pane_drafts
+
+        /** Takes the total. */
+        val draftQuantity = Res.string.review_draft_quantity
+        val draftQuantityUnknown = Res.string.review_draft_quantity_unknown
+
+        /** Takes the colour names in the user's own order. */
+        val draftColors = Res.string.review_draft_colors
+        val draftColorsNone = Res.string.review_draft_colors_none
+
+        /** Takes the user's own note. */
+        val draftNotes = Res.string.review_draft_notes
+
+        /** Takes everything one draft says, as one sentence for a reader. */
+        val draftAccessibility = Res.string.review_draft_accessibility
+
+        val errorInvalidSelection = Res.string.review_error_invalid_selection
+        val errorSelectionSplitsCharacter = Res.string.review_error_selection_splits_character
+        val errorSelectionEmpty = Res.string.review_error_selection_empty
+        val errorSelectionLineBreak = Res.string.review_error_selection_line_break
+        val errorTaskNameEmpty = Res.string.review_error_task_name_empty
+        val errorQuantity = Res.string.review_error_quantity
+        val errorMissingAndBorrowed = Res.string.review_error_missing_and_borrowed
+        val errorTrackingNotAllowed = Res.string.review_error_tracking_not_allowed
+        val errorTargetUnavailable = Res.string.review_error_target_unavailable
+        val errorTargetNotTaskCapable = Res.string.review_error_target_not_task_capable
+        val errorTargetWrongColumn = Res.string.review_error_target_wrong_column
+        val errorHintNotAnswerable = Res.string.review_error_hint_not_answerable
+        val errorDraftGone = Res.string.review_error_draft_gone
+        val errorBlockGone = Res.string.review_error_block_gone
+        val errorBatchNotDraft = Res.string.review_error_batch_not_draft
+        val errorDuplicateColor = Res.string.review_error_duplicate_color
+        val errorColorUnavailable = Res.string.review_error_color_unavailable
+        val errorBlockCannotCarryHint = Res.string.review_error_block_cannot_carry_hint
+        val errorCompletionTargetRequired = Res.string.review_error_completion_target_required
+        val errorCompletionTargetNotAllowed = Res.string.review_error_completion_target_not_allowed
+        val errorCompletionTargetUnavailable = Res.string.review_error_completion_target_unavailable
     }
 
     object SheetVisibilityNames {

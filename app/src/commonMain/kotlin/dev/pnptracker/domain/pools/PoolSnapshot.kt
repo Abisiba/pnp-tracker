@@ -47,6 +47,14 @@ data class PoolTask(
     val stages: List<PoolStage> = emptyList(),
     /** Uncapped, and so kept as wide as the database added it up (PLAN 6.4). */
     val failureTotal: Long = 0L,
+    /** PLAN 10: came from the `Eksik` column. A note about the work, not a shortage. */
+    val isMissing: Boolean = false,
+    /** PLAN 10: came from the `Ödünç Parçalar` column. */
+    val isBorrowed: Boolean = false,
+    /** PLAN 11.7: something the work needs is still unknown. */
+    val needsInfo: Boolean = false,
+    /** PLAN 10: the pool was the user's own decision rather than the column's. */
+    val needsClassification: Boolean = false,
 ) {
     /** True when something has gone wrong on this task, which sorts it forward. */
     val needsAttention: Boolean get() = currentMissingQuantity > 0 || failureTotal > 0

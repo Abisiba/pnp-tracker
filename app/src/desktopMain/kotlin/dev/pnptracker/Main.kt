@@ -59,7 +59,7 @@ fun main() {
             gateway = XlsxImportFileGateway(AwtXlsxFilePicker(title = FILE_DIALOG_TITLE)),
             store = ImportDraftStore(database.importDao()),
         )
-    val reviewController = ImportReviewController(ImportReviewStore(database.importDao()))
+    val reviewController = ImportReviewController(ImportReviewStore(database.importDao(), database.gameDao(), database.colorDao()))
     val confirmationController =
         ImportConfirmationController(
             ImportConfirmationStore(database.importDao(), database.gameCellDao(), database.gameDao()),

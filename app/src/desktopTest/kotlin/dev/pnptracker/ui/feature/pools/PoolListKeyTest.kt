@@ -21,6 +21,7 @@ import dev.pnptracker.domain.pools.PoolNavigationSummary
 import dev.pnptracker.domain.pools.PoolSnapshot
 import dev.pnptracker.domain.pools.PoolTask
 import dev.pnptracker.domain.tasks.StageSnapshot
+import dev.pnptracker.domain.tasks.TaskFlags
 import dev.pnptracker.ui.ComposeSceneHarness
 import dev.pnptracker.ui.theme.PnpTrackerTheme
 import dev.pnptracker.ui.theme.ThemeMode
@@ -139,6 +140,7 @@ class PoolListKeyTest {
             requiredQuantity: Int?,
             notes: String?,
             trackingMode: TrackingMode,
+            flags: TaskFlags?,
         ): Boolean = error("not asked")
 
         override suspend fun convertTaskToText(taskId: EntityId): Boolean = error("not asked")

@@ -452,18 +452,33 @@ class ImportConfirmationCarryTest {
         }
 
     @Test
-    fun `a marker nobody agreed to leaves the task open`() =
+    fun `a marker nobody answered stops the whole import rather than guessing`() =
         runBlocking<Unit> {
             val fixture = given()
-            val pending = fixture.draft(name = "Bekleyen", completionHint = HintDecision.PENDING)
+            fixture.draft(name = "Bekleyen", completionHint = HintDecision.PENDING)
+            fixture.draft(name = "Reddedilen", completionHint = HintDecision.REJECTED)
+
+            // PLAN 11.5 has the user answer the marker, and PLAN 11.4.2 skips no
+            // draft: answering it for them, either way, would write a guess into
+            // a real task.
+            val refusal = assertFailsWith<ImportConfirmationException> { fixture.confirm() }
+
+            assertEquals(ImportConfirmationFailure.COMPLETION_HINT_UNDECIDED, refusal.failure)
+            assertEquals(emptyList(), database.taskDao().allTasksIncludingDeleted(), "a task survived the refusal")
+        }
+
+    @Test
+    fun `a marker answered no, and no marker at all, both leave the task open`() =
+        runBlocking<Unit> {
+            val fixture = given()
             val rejected = fixture.draft(name = "Reddedilen", completionHint = HintDecision.REJECTED)
             val none = fixture.draft(name = "İpucusuz", completionHint = HintDecision.NONE)
 
             fixture.confirm()
 
-            listOf(pending, rejected, none).forEach { draftId ->
+            listOf(rejected, none).forEach { draftId ->
                 val task = taskOf(draftId)
-                assertFalse(task.isCompleted, "an unanswered hint finished a task")
+                assertFalse(task.isCompleted, "a rejected or absent hint finished a task")
                 assertNull(task.completedAt)
                 assertFalse(task.primaryBatchCompleted)
             }

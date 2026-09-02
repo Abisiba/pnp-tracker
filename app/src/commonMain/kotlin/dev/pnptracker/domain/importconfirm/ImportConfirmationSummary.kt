@@ -4,18 +4,49 @@ import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.ImportBatchStatus
 
-/** One cell the user can send a task to, named the way the screen lists it. */
+/**
+ * One cell the user can send a task to, named the way the screen lists it.
+ *
+ * [sharedNameOrdinal] is set only when another game carries the same name, and
+ * is that game's place among the ones that share it. PLAN 17 does not let a
+ * choice be ambiguous, and two chips reading `Wingspan › 3D Baskı` with nothing
+ * to tell them apart is exactly that; the number comes from the game list's own
+ * fixed reading order, so it does not move between reads.
+ */
 data class TargetCellChoice(
     val cellId: EntityId,
     val gameId: EntityId,
     val gameName: String,
     val columnType: CellColumnType,
+    val sharedNameOrdinal: Int? = null,
 )
 
-/** One draft that is not ready, and what is missing from it. */
+/**
+ * One draft that is not ready, and what is missing from it.
+ *
+ * [rawImportBlockId] travels with it so the screen can take the user to the cell
+ * the draft came from: PLAN 17 asks that a problem be reachable, and a list of
+ * names with nothing to press is a list of things to go and find by hand.
+ */
 data class DraftTaskProblem(
     val draftTaskId: EntityId,
+    val rawImportBlockId: EntityId,
     val draftTaskName: String,
+    val failure: ImportConfirmationFailure,
+)
+
+/**
+ * One source cell that is not ready, and what is unanswered about it.
+ *
+ * Kept apart from [DraftTaskProblem] because it is about the cell rather than
+ * about anything made from it: a green game cell nobody has answered stops the
+ * import even when every draft in it is complete.
+ */
+data class RawBlockProblem(
+    val rawImportBlockId: EntityId,
+    /** One based, because the user reads this against their spreadsheet. */
+    val rowIndex: Int,
+    val columnIndex: Int,
     val failure: ImportConfirmationFailure,
 )
 
@@ -34,6 +65,7 @@ data class ImportConfirmationSummary(
     val readyTaskCount: Int,
     val unprocessedBlockCount: Int,
     val problems: List<DraftTaskProblem>,
+    val blockProblems: List<RawBlockProblem> = emptyList(),
     val hasAnyCell: Boolean,
 ) {
     val isStillADraft: Boolean get() = status == ImportBatchStatus.DRAFT
@@ -57,6 +89,7 @@ data class ImportConfirmationSummary(
                 draftTaskCount == 0 -> ImportConfirmationFailure.NO_DRAFTS_TO_CONFIRM
                 !hasAnyCell -> ImportConfirmationFailure.NO_CELLS_AVAILABLE
                 problems.isNotEmpty() -> problems.first().failure
+                blockProblems.isNotEmpty() -> blockProblems.first().failure
                 else -> null
             }
 

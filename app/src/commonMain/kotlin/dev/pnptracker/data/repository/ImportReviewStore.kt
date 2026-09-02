@@ -1,9 +1,14 @@
 package dev.pnptracker.data.repository
 
 import androidx.sqlite.SQLiteException
+import dev.pnptracker.data.database.dao.ColorDao
+import dev.pnptracker.data.database.dao.GameDao
 import dev.pnptracker.data.database.dao.ImportDao
 import dev.pnptracker.data.database.entity.DraftTaskEntity
 import dev.pnptracker.data.database.entity.RawImportBlockEntity
+import dev.pnptracker.domain.colors.ColorSummary
+import dev.pnptracker.domain.importhint.ColorVocabulary
+import dev.pnptracker.domain.importhint.ColorVocabularyEntry
 import dev.pnptracker.domain.importreview.ImportReviewException
 import dev.pnptracker.domain.importreview.ImportReviewFailure
 import dev.pnptracker.domain.importreview.ImportReviewWorkspace
@@ -44,21 +49,79 @@ interface ImportReview {
     )
 
     /**
-     * Stores one task draft made from a cell.
+     * Every game the user still has, newest reading first, kept fresh.
      *
-     * [name] is written as the user left it. It is not trimmed, tidied or stripped
-     * of markers: they were shown the cell text and then edited it, so what they
-     * ended up with is the answer.
-     *
-     * The draft is only a draft. No game, cell or task comes of it here, the cell
-     * it came from keeps its review mark, and the import stays a draft.
-     *
-     * @throws ImportReviewException if the draft did not reach the database.
+     * For the one question the review screen asks about a game: which one an
+     * accepted green cell was about. Nothing here creates a game — PLAN 11.4.1
+     * leaves that entirely to the user in the game table — and there is one
+     * stream for the whole list rather than one per game.
      */
-    suspend fun addDraftTask(
+    fun observeActiveGames(): Flow<List<GameChoice>>
+
+    /**
+     * The colour names the hint detectors are allowed to recognise, kept fresh.
+     *
+     * Handed to the detectors rather than reached for by them: PLAN 11.6 has the
+     * application read `Mavi/Açık Mavi` as a choice the user still has to make,
+     * and it can only see that a choice was offered if it knows which words name
+     * colours. One stream for the whole vocabulary, never one per colour.
+     */
+    fun observeColorVocabulary(): Flow<ColorVocabulary>
+
+    /** The catalogue the colour list offers, in the user's own order. */
+    fun observeColors(): Flow<List<ColorSummary>>
+
+    /**
+     * Cuts a draft out of one cell's own text, between two offsets.
+     *
+     * The offsets are read against the text as the database holds it, so a
+     * selection made against a cell that has since gone is refused rather than
+     * cut blindly. The name, the pool the column implies, the count the line
+     * opens with and the `**` kept as a question are all written with it.
+     *
+     * @throws ImportReviewException if the cell is gone, its import is no longer
+     *   a draft, or the selection is not one a name can be cut from.
+     */
+    suspend fun createDraftFromSelection(
+        blockId: EntityId,
+        startIndex: Int,
+        endIndex: Int,
+    ): EntityId
+
+    /**
+     * Stores a draft the user typed, with no selection at all.
+     *
+     * @throws ImportReviewException if the cell is gone, its import is no longer
+     *   a draft, or the name says nothing.
+     */
+    suspend fun createDraftByHand(
         blockId: EntityId,
         name: String,
-    )
+    ): EntityId
+
+    /**
+     * Saves everything one draft says, in one transaction.
+     *
+     * The whole answer at once, because a half applied panel is a state the user
+     * never asked for. Saving the same answer changes nothing and moves no
+     * timestamp.
+     *
+     * @return true when this call changed something.
+     * @throws ImportReviewException with the case that stopped it; nothing written.
+     */
+    suspend fun saveDraft(edit: DraftEdit): Boolean
+
+    /**
+     * Answers the `**` of one draft, on its own.
+     *
+     * @return true when this call changed something.
+     * @throws ImportReviewException if the draft is gone, its import is no longer
+     *   a draft, or the file left no marker to answer.
+     */
+    suspend fun setCompletionDecision(
+        draftTaskId: EntityId,
+        decision: HintDecision,
+    ): Boolean
 
     /**
      * Replaces the colours of one draft with exactly [colorIds], in that order.
@@ -96,6 +159,8 @@ interface ImportReview {
 
 class ImportReviewStore(
     private val importDao: ImportDao,
+    private val gameDao: GameDao,
+    private val colorDao: ColorDao,
     private val idGenerator: IdGenerator = IdGenerator.Random,
     private val clock: Clock = Clock.System,
 ) : ImportReview {
@@ -142,25 +207,110 @@ class ImportReviewStore(
         }
     }
 
-    override suspend fun addDraftTask(
-        blockId: EntityId,
-        name: String,
-    ) {
-        val moment = clock.now()
-        val draft =
-            DraftTaskEntity(
-                id = idGenerator.newId(),
-                rawImportBlockId = blockId,
-                name = name,
-                createdAt = moment,
-                updatedAt = moment,
+    override fun observeActiveGames(): Flow<List<GameChoice>> =
+        gameDao.observeActiveGames().map { games ->
+            // Two games really can share a name (PLAN 5.3 puts no rule on it), and
+            // a picker offering the same word twice asks the user to guess. The
+            // reading order is fixed by the query, so counting through it gives
+            // each of them the same label every time.
+            val sharedNames =
+                games
+                    .groupingBy { it.name }
+                    .eachCount()
+                    .filterValues { it > 1 }
+                    .keys
+            val seen = mutableMapOf<String, Int>()
+            games.map { game ->
+                val ordinal = seen.merge(game.name, 1, Int::plus)
+                GameChoice(
+                    id = game.id,
+                    name = game.name,
+                    isCompleted = game.isManuallyCompleted,
+                    // Null for a name nobody else has: a bare `1` beside a unique
+                    // name is noise that says nothing.
+                    sharedNameOrdinal = ordinal.takeIf { game.name in sharedNames },
+                )
+            }
+        }
+
+    override fun observeColors(): Flow<List<ColorSummary>> =
+        colorDao.observeColors().map { colors ->
+            colors.map { ColorSummary(it.id, it.canonicalName, it.hex, it.sortOrder) }
+        }
+
+    override fun observeColorVocabulary(): Flow<ColorVocabulary> =
+        combine(colorDao.observeColors(), colorDao.observeAliases()) { colors, aliases ->
+            val byColor = aliases.groupBy { it.colorId }
+            ColorVocabulary.of(
+                colors.map { color ->
+                    ColorVocabularyEntry(
+                        canonicalName = color.canonicalName,
+                        aliases = byColor[color.id].orEmpty().map { it.alias },
+                    )
+                },
             )
+        }
+
+    override suspend fun createDraftFromSelection(
+        blockId: EntityId,
+        startIndex: Int,
+        endIndex: Int,
+    ): EntityId {
+        val draftId = idGenerator.newId()
+        // A refusal the transaction already named travels out as it is; only a
+        // storage failure has to be turned into something to say here.
         try {
-            importDao.addDraftTaskUnderReview(draft)
+            importDao.createDraftFromSelectionUnderReview(draftId, blockId, startIndex, endIndex, clock)
         } catch (cause: SQLiteException) {
             throw ImportReviewException(ImportReviewFailure.COULD_NOT_SAVE, cause)
         }
+        return draftId
     }
+
+    override suspend fun createDraftByHand(
+        blockId: EntityId,
+        name: String,
+    ): EntityId {
+        val draftId = idGenerator.newId()
+        try {
+            importDao.createDraftByHandUnderReview(draftId, blockId, name, clock)
+        } catch (cause: SQLiteException) {
+            throw ImportReviewException(ImportReviewFailure.COULD_NOT_SAVE, cause)
+        }
+        return draftId
+    }
+
+    override suspend fun saveDraft(edit: DraftEdit): Boolean =
+        try {
+            importDao.editDraftUnderReview(
+                draftTaskId = edit.draftTaskId,
+                name = edit.name,
+                targetCellId = edit.targetCellId,
+                poolType = edit.poolType,
+                trackingMode = edit.trackingMode,
+                requiredQuantity = edit.requiredQuantity,
+                notes = edit.notes,
+                isMissing = edit.isMissing,
+                isBorrowed = edit.isBorrowed,
+                needsInfo = edit.needsInfo,
+                needsClassification = edit.needsClassification,
+                completionHint = edit.completionHint,
+                colorIds = edit.colorIds,
+                clock = clock,
+            )
+        } catch (cause: SQLiteException) {
+            throw ImportReviewException(ImportReviewFailure.COULD_NOT_SAVE, cause)
+        }
+
+    override suspend fun setCompletionDecision(
+        draftTaskId: EntityId,
+        decision: HintDecision,
+    ): Boolean =
+        try {
+            importDao.setDraftCompletionDecisionUnderReview(draftTaskId, decision, clock)
+        } catch (cause: SQLiteException) {
+            throw ImportReviewException(ImportReviewFailure.COULD_NOT_SAVE, cause)
+        }
 
     override suspend fun setDraftColors(
         draftTaskId: EntityId,
@@ -210,6 +360,14 @@ private fun DraftTaskEntity.toReviewDraft(colorIds: List<EntityId>): ReviewDraft
         targetCellId = targetCellId,
         selectedPoolType = selectedPoolType,
         selectedTrackingMode = selectedTrackingMode,
+        requiredQuantity = requiredQuantity,
+        notes = notes,
+        selectionStartIndex = selectionStartIndex,
+        selectionEndIndex = selectionEndIndex,
+        isMissing = isMissing,
+        isBorrowed = isBorrowed,
+        needsInfo = needsInfo,
+        needsClassification = needsClassification,
         colorIds = colorIds,
         materializedTaskId = materializedTaskId,
     )

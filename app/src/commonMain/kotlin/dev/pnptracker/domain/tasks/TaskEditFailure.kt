@@ -69,6 +69,14 @@ enum class TaskEditFailure {
      */
     QUANTITY_LOCKED_BY_COMPLETION,
 
+    /**
+     * The task was marked both missing and borrowed.
+     *
+     * PLAN 10 gives each its own column and a cell is in one of them, so the two
+     * together describe nothing that could have come from a file.
+     */
+    MISSING_AND_BORROWED,
+
     /** The storage refused the change, so nothing was written. */
     COULD_NOT_SAVE,
 }

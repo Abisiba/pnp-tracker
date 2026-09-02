@@ -100,6 +100,14 @@ data class CellSegmentPreview(
      * task back into text.
      */
     val hasProgress: Boolean = false,
+    /** PLAN 10: came from the `Eksik` column. A note about the work, not a shortage. */
+    val isMissing: Boolean = false,
+    /** PLAN 10: came from the `Ödünç Parçalar` column. */
+    val isBorrowed: Boolean = false,
+    /** PLAN 11.7: something the work needs is still unknown. */
+    val needsInfo: Boolean = false,
+    /** PLAN 10: the pool was the user's own decision rather than the column's. */
+    val needsClassification: Boolean = false,
 ) {
     val isTask: Boolean get() = taskId != null
 }

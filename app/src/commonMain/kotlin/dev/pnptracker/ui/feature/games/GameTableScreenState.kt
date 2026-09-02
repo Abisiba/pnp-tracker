@@ -728,6 +728,15 @@ data class TaskEditor(
     val originalNotes: String,
     val trackingMode: TrackingMode,
     val originalTrackingMode: TrackingMode,
+    /** PLAN 10 and 11.7: the four marks the import puts on a task, editable here. */
+    val isMissing: Boolean = false,
+    val isBorrowed: Boolean = false,
+    val needsInfo: Boolean = false,
+    val needsClassification: Boolean = false,
+    val originalIsMissing: Boolean = false,
+    val originalIsBorrowed: Boolean = false,
+    val originalNeedsInfo: Boolean = false,
+    val originalNeedsClassification: Boolean = false,
     val isSaving: Boolean = false,
     val failure: TaskEditFailure? = null,
     /** Which colour of the list the refusal was about, if it was about one. */
@@ -757,10 +766,17 @@ data class TaskEditor(
                 colorIds != originalColorIds ||
                 quantityText != originalQuantityText ||
                 notes != originalNotes ||
-                trackingMode != originalTrackingMode
+                trackingMode != originalTrackingMode ||
+                isMissing != originalIsMissing ||
+                isBorrowed != originalIsBorrowed ||
+                needsInfo != originalNeedsInfo ||
+                needsClassification != originalNeedsClassification
+
+    /** A task is in the missing column or the borrowed one, never in both (PLAN 10). */
+    val flagsConflict: Boolean get() = isMissing && isBorrowed
 
     val canSave: Boolean
-        get() = !isSaving && isNameUsable && isQuantityUsable && hasEnoughColors && hasChanges
+        get() = !isSaving && isNameUsable && isQuantityUsable && hasEnoughColors && hasChanges && !flagsConflict
 }
 
 /**

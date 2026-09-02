@@ -49,6 +49,15 @@ data class CellContentRow(
     /** How much the task still owes, so a menu over it costs no query of its own. */
     @ColumnInfo(name = "task_current_missing_quantity")
     val taskCurrentMissingQuantity: Int?,
+    /** PLAN 10 and 11.7: what the import said about the work, not about its progress. */
+    @ColumnInfo(name = "task_is_missing")
+    val taskIsMissing: Boolean? = null,
+    @ColumnInfo(name = "task_is_borrowed")
+    val taskIsBorrowed: Boolean? = null,
+    @ColumnInfo(name = "task_needs_info")
+    val taskNeedsInfo: Boolean? = null,
+    @ColumnInfo(name = "task_needs_classification")
+    val taskNeedsClassification: Boolean? = null,
     /**
      * Whether any work has been recorded against the task.
      *

@@ -19,6 +19,7 @@ import dev.pnptracker.domain.pools.poolModelOf
 import dev.pnptracker.domain.rules.normalizeColorTerm
 import dev.pnptracker.domain.tasks.StageSnapshot
 import dev.pnptracker.domain.tasks.TaskEditException
+import dev.pnptracker.domain.tasks.TaskFlags
 import dev.pnptracker.domain.tasks.TaskProgressFailure
 import dev.pnptracker.domain.tasks.quantityDigitsOf
 import dev.pnptracker.domain.tasks.trackingModesOf
@@ -445,6 +446,10 @@ class PoolController(
             requiredQuantity = task.requiredQuantity,
             notes = task.notes,
             trackingMode = task.trackingMode,
+            isMissing = task.isMissing,
+            isBorrowed = task.isBorrowed,
+            needsInfo = task.needsInfo,
+            needsClassification = task.needsClassification,
         )
     }
 
@@ -551,6 +556,14 @@ class PoolController(
             originalNotes = snapshot.notes.orEmpty(),
             trackingMode = snapshot.trackingMode,
             originalTrackingMode = snapshot.trackingMode,
+            isMissing = snapshot.isMissing,
+            isBorrowed = snapshot.isBorrowed,
+            needsInfo = snapshot.needsInfo,
+            needsClassification = snapshot.needsClassification,
+            originalIsMissing = snapshot.isMissing,
+            originalIsBorrowed = snapshot.isBorrowed,
+            originalNeedsInfo = snapshot.needsInfo,
+            originalNeedsClassification = snapshot.needsClassification,
         )
 
     private fun onEditor(change: (TaskEditor) -> TaskEditor) {
@@ -560,6 +573,21 @@ class PoolController(
     }
 
     override fun editTaskName(name: String) = onEditor { it.copy(name = name, failure = null) }
+
+    // The same rule the table applies, because it is the same transaction that
+    // would refuse the pair: a task is missing or borrowed, never both.
+    override fun setTaskEditMissing(isMissing: Boolean) =
+        onEditor { it.copy(isMissing = isMissing, isBorrowed = if (isMissing) false else it.isBorrowed, failure = null) }
+
+    override fun setTaskEditBorrowed(isBorrowed: Boolean) =
+        onEditor {
+            it.copy(isBorrowed = isBorrowed, isMissing = if (isBorrowed) false else it.isMissing, failure = null)
+        }
+
+    override fun setTaskEditNeedsInfo(needsInfo: Boolean) = onEditor { it.copy(needsInfo = needsInfo, failure = null) }
+
+    override fun setTaskEditNeedsClassification(needsClassification: Boolean) =
+        onEditor { it.copy(needsClassification = needsClassification, failure = null) }
 
     override fun editTaskEditColorQuery(query: String) = onEditor { it.copy(colorQuery = query) }
 
@@ -625,6 +653,13 @@ class PoolController(
                 requiredQuantity = editor.quantity,
                 notes = editor.notes.takeIf { it.isNotEmpty() },
                 trackingMode = editor.trackingMode,
+                flags =
+                    TaskFlags(
+                        isMissing = editor.isMissing,
+                        isBorrowed = editor.isBorrowed,
+                        needsInfo = editor.needsInfo,
+                        needsClassification = editor.needsClassification,
+                    ),
             )
             state = state.copy(work = editing.from, focusRecall = state.focusRecall + 1)
         } catch (refusal: TaskEditException) {

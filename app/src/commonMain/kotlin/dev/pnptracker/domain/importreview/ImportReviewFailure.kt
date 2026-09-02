@@ -41,6 +41,59 @@ enum class ImportReviewFailure {
 
     /** The game a hint was pointed at is gone, or has been deleted. */
     COMPLETION_TARGET_GAME_NOT_AVAILABLE,
+
+    /** The selection runs backwards, is empty, or reaches past the cell text. */
+    INVALID_SELECTION,
+
+    /**
+     * An end of the selection falls inside one of the user's own characters.
+     *
+     * Half of an emoji, a letter parted from its accent, a `\r` without its
+     * `\n`. Storing one would put a broken name in the database that no later
+     * step could repair, so the cut is refused instead.
+     */
+    SELECTION_SPLITS_A_CHARACTER,
+
+    /** Nothing but whitespace, or nothing but `**`, was selected. */
+    SELECTION_IS_EMPTY,
+
+    /** The selected words run across a line ending, which is notes and not a name. */
+    SELECTION_CONTAINS_LINE_BREAK,
+
+    /** A draft was given a name that says nothing. */
+    TASK_NAME_EMPTY,
+
+    /** A total was given that is not a whole number above nothing. */
+    INVALID_REQUIRED_QUANTITY,
+
+    /**
+     * A draft was marked both missing and borrowed.
+     *
+     * PLAN 10 gives each its own column and a cell is in one of them, so the two
+     * together could not have come from a file.
+     */
+    MISSING_AND_BORROWED,
+
+    /** The pool a draft was put in does not allow the way it is to be tracked. */
+    TRACKING_MODE_NOT_ALLOWED,
+
+    /** The cell a draft was aimed at is gone, or its game has been deleted. */
+    TARGET_CELL_NOT_AVAILABLE,
+
+    /** The target belongs to the notes column, which PLAN 5.4 keeps tasks out of. */
+    TARGET_CELL_NOT_TASK_CAPABLE,
+
+    /** The cell a draft was aimed at belongs to a different column than its pool. */
+    TARGET_CELL_WRONG_COLUMN,
+
+    /**
+     * A `**` was answered on a draft the file never marked, or a real marker was
+     * asked to become no marker at all.
+     *
+     * PLAN 11.5 makes the marker a fact about the source file. Whether it was
+     * agreed to is the user's answer; whether it was there is not.
+     */
+    COMPLETION_HINT_NOT_ANSWERABLE,
 }
 
 /**

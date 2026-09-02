@@ -1,12 +1,19 @@
 package dev.pnptracker.ui.feature.importworkspace
 
+import dev.pnptracker.data.repository.DraftEdit
 import dev.pnptracker.data.repository.EarlierImport
+import dev.pnptracker.data.repository.GameChoice
 import dev.pnptracker.data.repository.ImportReview
+import dev.pnptracker.domain.colors.ColorSummary
+import dev.pnptracker.domain.importhint.ColorVocabulary
 import dev.pnptracker.domain.importreview.ImportReviewException
 import dev.pnptracker.domain.importreview.ImportReviewFailure
 import dev.pnptracker.domain.importreview.ImportReviewWorkspace
 import dev.pnptracker.domain.importreview.ReviewDraftTask
 import dev.pnptracker.domain.importreview.ReviewRawBlock
+import dev.pnptracker.domain.importreview.initialDraftByHand
+import dev.pnptracker.domain.importreview.initialDraftFromSelection
+import dev.pnptracker.domain.importreview.selectTaskNameIn
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.HintDecision
 import dev.pnptracker.domain.model.IdGenerator
@@ -68,9 +75,16 @@ private class FakeReview(
 ) : ImportReview {
     val workspace = MutableStateFlow(initial)
     val draftBatches = MutableStateFlow<List<EarlierImport>>(emptyList())
+    val games = MutableStateFlow<List<GameChoice>>(emptyList())
+    val colors = MutableStateFlow<List<ColorSummary>>(emptyList())
+    val vocabulary = MutableStateFlow(ColorVocabulary.of(emptyList()))
     var failWith: ImportReviewFailure? = null
     val processedCalls = mutableListOf<Pair<EntityId, Boolean>>()
-    val draftCalls = mutableListOf<Pair<EntityId, String>>()
+    val selectionCalls = mutableListOf<Triple<EntityId, Int, Int>>()
+    val manualCalls = mutableListOf<Pair<EntityId, String>>()
+    val edits = mutableListOf<DraftEdit>()
+    val completionCalls = mutableListOf<Pair<EntityId, HintDecision>>()
+    val gameHintCalls = mutableListOf<Triple<EntityId, HintDecision, EntityId?>>()
 
     override fun observeDraftBatches(): Flow<List<EarlierImport>> = draftBatches
 
@@ -89,31 +103,153 @@ private class FakeReview(
             )
     }
 
-    override suspend fun addDraftTask(
+    override fun observeActiveGames(): Flow<List<GameChoice>> = games
+
+    override fun observeColorVocabulary(): Flow<ColorVocabulary> = vocabulary
+
+    override fun observeColors(): Flow<List<ColorSummary>> = colors
+
+    override suspend fun createDraftFromSelection(
         blockId: EntityId,
-        name: String,
-    ) {
+        startIndex: Int,
+        endIndex: Int,
+    ): EntityId {
         failWith?.let { throw ImportReviewException(it) }
-        draftCalls += blockId to name
-        val current = workspace.value ?: return
+        val current = workspace.value ?: throw ImportReviewException(ImportReviewFailure.RAW_BLOCK_NOT_FOUND)
+        val block =
+            current.rawBlocks.firstOrNull { it.id == blockId }
+                ?: throw ImportReviewException(ImportReviewFailure.RAW_BLOCK_NOT_FOUND)
+        // The real contract, run against the stored text, so a controller test
+        // cannot pass with offsets the transaction would refuse.
+        val selection = selectTaskNameIn(block.rawText, startIndex, endIndex)
+        val initial = initialDraftFromSelection(block.columnIndex, selection)
+        selectionCalls += Triple(blockId, selection.startIndex, selection.endIndex)
+        val draftId = IdGenerator.Random.newId()
         workspace.value =
             current.copy(
-                draftTasks = current.draftTasks + ReviewDraftTask(IdGenerator.Random.newId(), blockId, name),
+                draftTasks =
+                    current.draftTasks +
+                        ReviewDraftTask(
+                            id = draftId,
+                            rawImportBlockId = blockId,
+                            name = initial.name,
+                            suggestedPoolType = initial.suggestedPoolType,
+                            completionHint = initial.completionHint,
+                            requiredQuantity = initial.requiredQuantity,
+                            selectionStartIndex = initial.selectionStartIndex,
+                            selectionEndIndex = initial.selectionEndIndex,
+                            isMissing = initial.isMissing,
+                            isBorrowed = initial.isBorrowed,
+                            needsInfo = initial.needsInfo,
+                            needsClassification = initial.needsClassification,
+                        ),
             )
+        return draftId
     }
 
-    // 18A stores these; no controller reaches them yet, so the double only has
-    // to exist rather than pretend to do the work.
+    override suspend fun createDraftByHand(
+        blockId: EntityId,
+        name: String,
+    ): EntityId {
+        failWith?.let { throw ImportReviewException(it) }
+        val current = workspace.value ?: throw ImportReviewException(ImportReviewFailure.RAW_BLOCK_NOT_FOUND)
+        val block =
+            current.rawBlocks.firstOrNull { it.id == blockId }
+                ?: throw ImportReviewException(ImportReviewFailure.RAW_BLOCK_NOT_FOUND)
+        val initial = initialDraftByHand(block.columnIndex, name)
+        manualCalls += blockId to initial.name
+        val draftId = IdGenerator.Random.newId()
+        workspace.value =
+            current.copy(
+                draftTasks =
+                    current.draftTasks +
+                        ReviewDraftTask(
+                            id = draftId,
+                            rawImportBlockId = blockId,
+                            name = initial.name,
+                            suggestedPoolType = initial.suggestedPoolType,
+                            isMissing = initial.isMissing,
+                            isBorrowed = initial.isBorrowed,
+                            needsClassification = initial.needsClassification,
+                        ),
+            )
+        return draftId
+    }
+
+    override suspend fun saveDraft(edit: DraftEdit): Boolean {
+        failWith?.let { throw ImportReviewException(it) }
+        edits += edit
+        val current = workspace.value ?: return false
+        workspace.value =
+            current.copy(
+                draftTasks =
+                    current.draftTasks.map { draft ->
+                        if (draft.id != edit.draftTaskId) {
+                            draft
+                        } else {
+                            draft.copy(
+                                name = edit.name,
+                                targetCellId = edit.targetCellId,
+                                selectedPoolType = edit.poolType,
+                                selectedTrackingMode = edit.trackingMode,
+                                requiredQuantity = edit.requiredQuantity,
+                                notes = edit.notes,
+                                isMissing = edit.isMissing,
+                                isBorrowed = edit.isBorrowed,
+                                needsInfo = edit.needsInfo,
+                                needsClassification = edit.needsClassification,
+                                completionHint = edit.completionHint,
+                                colorIds = edit.colorIds,
+                            )
+                        }
+                    },
+            )
+        return true
+    }
+
+    override suspend fun setCompletionDecision(
+        draftTaskId: EntityId,
+        decision: HintDecision,
+    ): Boolean {
+        failWith?.let { throw ImportReviewException(it) }
+        completionCalls += draftTaskId to decision
+        val current = workspace.value ?: return false
+        workspace.value =
+            current.copy(
+                draftTasks =
+                    current.draftTasks.map {
+                        if (it.id == draftTaskId) it.copy(completionHint = decision) else it
+                    },
+            )
+        return true
+    }
+
     override suspend fun setDraftColors(
         draftTaskId: EntityId,
         colorIds: List<EntityId>,
-    ): Boolean = throw UnsupportedOperationException("no review controller chooses colours yet")
+    ): Boolean = throw UnsupportedOperationException("the panel saves colours with the rest of the form")
 
     override suspend fun setGameCompletionDecision(
         blockId: EntityId,
         decision: HintDecision,
         targetGameId: EntityId?,
-    ): Boolean = throw UnsupportedOperationException("no review controller answers the green hint yet")
+    ): Boolean {
+        failWith?.let { throw ImportReviewException(it) }
+        gameHintCalls += Triple(blockId, decision, targetGameId)
+        val current = workspace.value ?: return false
+        workspace.value =
+            current.copy(
+                rawBlocks =
+                    current.rawBlocks.map {
+                        if (it.id == blockId) {
+                            it.copy(gameCompletionHint = decision, completionTargetGameId = targetGameId)
+                        } else {
+                            it
+                        }
+                    },
+            )
+        return true
+    }
 }
 
 class ImportReviewWorkspaceEditabilityTest {
@@ -374,84 +510,206 @@ class ImportReviewControllerTest {
         assertIs<IllegalStateException>(thrown, "a defect must travel out as it is, not become a save failure")
     }
 
+    // ------------------------------------ cutting a task out of the cell text
+
     @Test
-    fun `starting a draft fills the form with the cell text`() {
-        val awkward = "  12 KIRMIZI**\n8 MAVİ  "
-        val one = block(awkward, 1, 1)
+    fun `pointing at words in a cell records exactly the offsets the field reports`() {
+        val one = block("12 KIRMIZI**", 1, 1)
         withObserving(FakeReview(workspaceOf(listOf(one)))) { controller ->
-            controller.startDraft(one.id)
+            controller.select(one.id)
+            controller.pointAt(one.id, 3, 10)
 
-            val composer = assertNotNull(controller.composer)
-            assertEquals(one.id, composer.blockId)
-            assertEquals(awkward, composer.name, "the cell text must arrive untouched")
+            val pointed = assertNotNull(controller.selection)
+            assertEquals(one.id, pointed.blockId)
+            assertEquals(3, pointed.startIndex)
+            assertEquals(10, pointed.endIndex)
         }
     }
 
     @Test
-    fun `starting a draft from a cell that is not there opens no form`() {
-        withObserving(FakeReview(workspaceOf(listOf(block("bir", 1, 1))))) { controller ->
-            controller.startDraft(IdGenerator.Random.newId())
-
-            assertNull(controller.composer)
+    fun `an empty or backwards selection is no selection at all`() {
+        val one = block("12 KIRMIZI**", 1, 1)
+        withObserving(FakeReview(workspaceOf(listOf(one)))) { controller ->
+            controller.pointAt(one.id, 4, 4)
+            assertNull(controller.selection)
+            controller.pointAt(one.id, 6, 2)
+            assertNull(controller.selection)
         }
     }
 
     @Test
-    fun `a blank draft name cannot be saved and writes nothing`() {
+    fun `moving to another cell drops the words pointed at in the last one`() {
+        val one = block("bir", 1, 1)
+        val two = block("iki", 2, 1)
+        withObserving(FakeReview(workspaceOf(listOf(one, two)))) { controller ->
+            controller.select(one.id)
+            controller.pointAt(one.id, 0, 3)
+            assertNotNull(controller.selection)
+
+            controller.select(two.id)
+
+            assertNull(controller.selection, "offsets only mean anything against the text they came from")
+        }
+    }
+
+    @Test
+    fun `a draft cut from the text takes the trimmed offsets and the cleared name`() {
+        val one = block("  12 KIRMIZI**\n8 MAVİ  ", 1, 1)
+        val review = FakeReview(workspaceOf(listOf(one)))
+        withObserving(review) { controller ->
+            controller.select(one.id)
+            // The user's drag takes the spaces on either side with it.
+            controller.pointAt(one.id, 2, 15)
+            controller.createFromSelection()
+            yield()
+
+            assertEquals(listOf(Triple(one.id, 2, 14)), review.selectionCalls)
+            val draft = assertIs<ImportReviewState.Content>(controller.state).workspace.draftTasks.single()
+            assertEquals("12 KIRMIZI", draft.name, "PLAN 11.5 clears the marker from the shown name")
+            assertEquals(12, draft.requiredQuantity)
+            assertEquals(HintDecision.PENDING, draft.completionHint, "a `**` is a question, never an answer")
+            assertEquals(2, draft.selectionStartIndex)
+            assertEquals(14, draft.selectionEndIndex)
+        }
+    }
+
+    @Test
+    fun `the cell text is not changed by cutting a task out of it`() {
+        val text = "  12 KIRMIZI**\n8 MAVİ  "
+        val one = block(text, 1, 1)
+        withObserving(FakeReview(workspaceOf(listOf(one)))) { controller ->
+            controller.select(one.id)
+            controller.pointAt(one.id, 2, 15)
+            controller.createFromSelection()
+            yield()
+
+            assertEquals(
+                text,
+                assertIs<ImportReviewState.Content>(controller.state)
+                    .workspace.rawBlocks
+                    .single()
+                    .rawText,
+            )
+        }
+    }
+
+    @Test
+    fun `a selection cutting a character in half is refused and keeps the selection`() {
+        val one = block("aile 👨‍👩‍👧‍👦 burada", 1, 1)
+        val review = FakeReview(workspaceOf(listOf(one)))
+        withObserving(review) { controller ->
+            controller.select(one.id)
+            // Half way into the family: eleven code units, one character.
+            controller.pointAt(one.id, 5, 8)
+            controller.createFromSelection()
+            yield()
+
+            assertEquals(emptyList(), review.selectionCalls)
+            assertEquals(
+                ImportReviewFailure.SELECTION_SPLITS_A_CHARACTER,
+                assertIs<ImportReviewState.Content>(controller.state).failure,
+            )
+            assertNotNull(controller.selection, "the selection stays so it can be widened")
+        }
+    }
+
+    @Test
+    fun `a selection running across a line ending is refused`() {
+        val one = block("gri token\n26 ağaç", 1, 1)
+        val review = FakeReview(workspaceOf(listOf(one)))
+        withObserving(review) { controller ->
+            controller.select(one.id)
+            controller.pointAt(one.id, 4, 12)
+            controller.createFromSelection()
+            yield()
+
+            assertEquals(emptyList(), review.selectionCalls)
+            assertEquals(
+                ImportReviewFailure.SELECTION_CONTAINS_LINE_BREAK,
+                assertIs<ImportReviewState.Content>(controller.state).failure,
+            )
+        }
+    }
+
+    @Test
+    fun `overlapping selections make independent drafts`() {
+        val one = block("kırmızı token", 1, 1)
+        withObserving(FakeReview(workspaceOf(listOf(one)))) { controller ->
+            controller.select(one.id)
+            controller.pointAt(one.id, 0, 13)
+            controller.createFromSelection()
+            yield()
+            controller.pointAt(one.id, 8, 13)
+            controller.createFromSelection()
+            yield()
+
+            val drafts = assertIs<ImportReviewState.Content>(controller.state).workspace.draftTasks
+            assertEquals(listOf("kırmızı token", "token"), drafts.map { it.name })
+            assertEquals(2, drafts.map { it.id }.toSet().size, "each draft is its own record")
+        }
+    }
+
+    // --------------------------------------------- a task typed rather than cut
+
+    @Test
+    fun `a task typed by hand carries no selection at all`() {
         val one = block("bir", 1, 1)
         val review = FakeReview(workspaceOf(listOf(one)))
         withObserving(review) { controller ->
-            controller.startDraft(one.id)
-            controller.editDraftName("   ")
+            controller.beginManualDraft(one.id)
+            controller.editManualName("Kırmızı token")
+            controller.createByHand()
+            yield()
 
-            assertTrue(!assertNotNull(controller.composer).canSave)
-            controller.saveDraft()
-
-            assertEquals(emptyList(), review.draftCalls)
-            assertNotNull(controller.composer, "the form stays open so the name can be fixed")
+            assertEquals(listOf(one.id to "Kırmızı token"), review.manualCalls)
+            val draft = assertIs<ImportReviewState.Content>(controller.state).workspace.draftTasks.single()
+            assertNull(draft.selectionStartIndex)
+            assertNull(draft.selectionEndIndex)
+            assertTrue(!draft.cameFromSelection)
+            assertEquals(ImportReviewSurface.None, controller.surface)
         }
     }
 
     @Test
-    fun `changing one's mind writes nothing at all`() {
+    fun `a blank typed name cannot be saved and writes nothing`() {
         val one = block("bir", 1, 1)
         val review = FakeReview(workspaceOf(listOf(one)))
         withObserving(review) { controller ->
-            controller.startDraft(one.id)
-            controller.editDraftName("Kırmızı token")
-            controller.cancelDraft()
+            controller.beginManualDraft(one.id)
+            controller.editManualName("   ")
 
-            assertNull(controller.composer)
-            assertEquals(emptyList(), review.draftCalls)
+            assertTrue(!assertIs<ImportReviewSurface.ManualDraft>(controller.surface).canSave)
+            controller.createByHand()
+
+            assertEquals(emptyList(), review.manualCalls)
+            assertIs<ImportReviewSurface.ManualDraft>(controller.surface)
+        }
+    }
+
+    @Test
+    fun `changing one's mind about a typed task writes nothing at all`() {
+        val one = block("bir", 1, 1)
+        val review = FakeReview(workspaceOf(listOf(one)))
+        withObserving(review) { controller ->
+            controller.beginManualDraft(one.id)
+            controller.editManualName("Kırmızı token")
+            controller.cancelManualDraft()
+
+            assertEquals(ImportReviewSurface.None, controller.surface)
+            assertEquals(emptyList(), review.manualCalls)
             assertEquals(emptyList(), review.processedCalls)
             assertEquals(0, assertIs<ImportReviewState.Content>(controller.state).workspace.draftTaskCount)
         }
     }
 
     @Test
-    fun `saving writes one draft with the edited name and closes the form`() {
-        val one = block("12 KIRMIZI**", 1, 1)
-        val review = FakeReview(workspaceOf(listOf(one)))
-        withObserving(review) { controller ->
-            controller.startDraft(one.id)
-            controller.editDraftName("Kırmızı token")
-            controller.saveDraft()
-            yield()
-
-            assertEquals(listOf(one.id to "Kırmızı token"), review.draftCalls)
-            assertNull(controller.composer)
-            assertEquals(1, assertIs<ImportReviewState.Content>(controller.state).workspace.draftTaskCount)
-        }
-    }
-
-    @Test
-    fun `a draft leaves the cell unmarked and the import a draft`() {
+    fun `making a draft leaves the cell unmarked and the import a draft`() {
         val one = block("bir", 1, 1)
         val review = FakeReview(workspaceOf(listOf(one)))
         withObserving(review) { controller ->
-            controller.startDraft(one.id)
-            controller.editDraftName("Kırmızı token")
-            controller.saveDraft()
+            controller.beginManualDraft(one.id)
+            controller.editManualName("Kırmızı token")
+            controller.createByHand()
             yield()
 
             val state = assertIs<ImportReviewState.Content>(controller.state)
@@ -470,37 +728,54 @@ class ImportReviewControllerTest {
         val one = block("bir", 1, 1)
         val review = FakeReview(workspaceOf(listOf(one)))
         withObserving(review) { controller ->
-            controller.startDraft(one.id)
-            controller.editDraftName("Kırmızı token")
-            controller.saveDraft()
+            controller.beginManualDraft(one.id)
+            controller.editManualName("Kırmızı token")
+            controller.createByHand()
             yield()
-            controller.startDraft(one.id)
-            controller.editDraftName("Mavi token")
-            controller.saveDraft()
+            controller.beginManualDraft(one.id)
+            controller.editManualName("Mavi token")
+            controller.createByHand()
             yield()
 
-            assertEquals(listOf(one.id to "Kırmızı token", one.id to "Mavi token"), review.draftCalls)
+            assertEquals(listOf(one.id to "Kırmızı token", one.id to "Mavi token"), review.manualCalls)
             controller.select(one.id)
             assertEquals(2, assertIs<ImportReviewState.Content>(controller.state).visibleDrafts.size)
         }
     }
 
     @Test
-    fun `a draft that could not be saved keeps the form open with what was typed`() {
+    fun `a typed draft that could not be saved keeps the form open with what was typed`() {
         val one = block("bir", 1, 1)
         val review = FakeReview(workspaceOf(listOf(one)))
         review.failWith = ImportReviewFailure.COULD_NOT_SAVE
         withObserving(review) { controller ->
-            controller.startDraft(one.id)
-            controller.editDraftName("Kırmızı token")
-            controller.saveDraft()
+            controller.beginManualDraft(one.id)
+            controller.editManualName("Kırmızı token")
+            controller.createByHand()
 
-            assertEquals("Kırmızı token", assertNotNull(controller.composer).name)
+            assertEquals(
+                "Kırmızı token",
+                assertIs<ImportReviewSurface.ManualDraft>(controller.surface).name,
+            )
             assertEquals(
                 ImportReviewFailure.COULD_NOT_SAVE,
                 assertIs<ImportReviewState.Content>(controller.state).failure,
             )
             assertEquals(0, assertIs<ImportReviewState.Content>(controller.state).workspace.draftTaskCount)
+        }
+    }
+
+    @Test
+    fun `the two ways of making a draft cannot be open at once`() {
+        val one = block("kırmızı token", 1, 1)
+        withObserving(FakeReview(workspaceOf(listOf(one)))) { controller ->
+            controller.beginManualDraft(one.id)
+            controller.editManualName("elle yazılan")
+
+            // A second form would be a second name nobody could see.
+            controller.beginManualDraft(one.id)
+
+            assertEquals("elle yazılan", assertIs<ImportReviewSurface.ManualDraft>(controller.surface).name)
         }
     }
 

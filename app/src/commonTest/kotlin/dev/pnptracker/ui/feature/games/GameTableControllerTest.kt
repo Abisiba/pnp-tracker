@@ -38,6 +38,7 @@ import dev.pnptracker.domain.tasks.StageSnapshot
 import dev.pnptracker.domain.tasks.TaskDraft
 import dev.pnptracker.domain.tasks.TaskEditException
 import dev.pnptracker.domain.tasks.TaskEditFailure
+import dev.pnptracker.domain.tasks.TaskFlags
 import dev.pnptracker.domain.tasks.TaskFromTextException
 import dev.pnptracker.domain.tasks.TaskFromTextFailure
 import dev.pnptracker.domain.tasks.TaskProgressFailure
@@ -181,9 +182,10 @@ class GameTableControllerTest {
             requiredQuantity: Int?,
             notes: String?,
             trackingMode: TrackingMode,
+            flags: TaskFlags?,
         ): Boolean {
             failure?.let { throw TaskEditException(it, failedRow) }
-            edits += EditedTask(taskId, name, colorIds, requiredQuantity, notes, trackingMode)
+            edits += EditedTask(taskId, name, colorIds, requiredQuantity, notes, trackingMode, flags)
             return true
         }
 
@@ -298,6 +300,7 @@ class GameTableControllerTest {
         val requiredQuantity: Int?,
         val notes: String?,
         val trackingMode: TrackingMode,
+        val flags: TaskFlags? = null,
     )
 
     /** The text editor open in whatever cell, whatever is layered over it. */

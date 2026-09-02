@@ -309,6 +309,12 @@ class ImportConfirmationQueryCountTest {
             val before = decisions(ran(driver.stop()))
 
             markEverythingAsWaiting()
+            // A raw write fires Room's invalidation triggers, and the refresh
+            // that follows can re-run a query the moment after it was created.
+            // One reading is taken to let that settle, so what is measured next
+            // is the cost of showing the pool rather than the cost of the write
+            // that happened to precede it.
+            assertNotNull(pools.observePool(PoolType.THREE_D).first())
 
             driver.start()
             val snapshot = assertNotNull(pools.observePool(PoolType.THREE_D).first())

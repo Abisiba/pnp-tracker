@@ -101,6 +101,17 @@ interface ColorDao {
     suspend fun allAliases(): List<ColorAliasEntity>
 
     /**
+     * Every alias, as one stream for the whole table.
+     *
+     * What the import hint detectors are given so they can recognise the other
+     * ways a colour gets written down. One subscription for the catalogue rather
+     * than one per colour, because the detectors ask about the vocabulary as a
+     * whole and never about a single entry.
+     */
+    @Query("SELECT * FROM color_aliases")
+    fun observeAliases(): Flow<List<ColorAliasEntity>>
+
+    /**
      * Resolves what the user typed to a color, matching the canonical name first
      * and then the aliases.
      */

@@ -19,6 +19,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -90,6 +91,20 @@ interface TaskEditingHost {
     fun editTaskEditNotes(text: String)
 
     fun chooseTaskEditTracking(trackingMode: TrackingMode)
+
+    /**
+     * Turns one of the four import marks on or off.
+     *
+     * PLAN 11.7 makes `needs_info` the user's own judgement, so it is only ever
+     * cleared from here: filling in a total does not quietly take it off.
+     */
+    fun setTaskEditMissing(isMissing: Boolean)
+
+    fun setTaskEditBorrowed(isBorrowed: Boolean)
+
+    fun setTaskEditNeedsInfo(needsInfo: Boolean)
+
+    fun setTaskEditNeedsClassification(needsClassification: Boolean)
 
     /** Saves the whole answer at once, through the one editing transaction. */
     suspend fun saveTaskEdit()
@@ -208,6 +223,8 @@ internal fun TaskEditPanel(
                 onChoose = host::chooseTaskEditTracking,
             )
         }
+
+        TaskFlagChoices(editor = editor, host = host)
 
         OutlinedTextField(
             value = editor.notes,
@@ -536,8 +553,73 @@ internal fun taskEditMessageOf(failure: TaskEditFailure) =
         TaskEditFailure.INVALID_REQUIRED_QUANTITY -> Strings.TaskEdit.errorQuantity
         TaskEditFailure.QUANTITY_BELOW_PROGRESS -> Strings.TaskEdit.errorQuantityBelowProgress
         TaskEditFailure.QUANTITY_LOCKED_BY_COMPLETION -> Strings.TaskEdit.errorQuantityLocked
+        TaskEditFailure.MISSING_AND_BORROWED -> Strings.Review.flagConflict
         TaskEditFailure.COULD_NOT_SAVE -> Strings.TaskEdit.errorCouldNotSave
     }
+
+/**
+ * The four marks a task carries, as things to tick.
+ *
+ * They are not pools and the line under them says so: PLAN 10 keeps `Eksik` and
+ * `Ödünç Parçalar` as notes about the work rather than places it is done, and
+ * PLAN 11.7 has `Bilgi eksik` keep an open task out of its active pool until the
+ * user says the question is answered. Ticking missing unticks borrowed and the
+ * other way about, because a cell came from one column.
+ */
+@Composable
+internal fun TaskFlagChoices(
+    editor: TaskEditor,
+    host: TaskEditingHost,
+) {
+    Text(
+        text = stringResource(Strings.TaskEdit.flagsTitle),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        TaskFlagBox(stringResource(Strings.Review.flagMissing), editor.isMissing, !editor.isSaving) {
+            host.setTaskEditMissing(it)
+        }
+        TaskFlagBox(stringResource(Strings.Review.flagBorrowed), editor.isBorrowed, !editor.isSaving) {
+            host.setTaskEditBorrowed(it)
+        }
+        TaskFlagBox(stringResource(Strings.Review.flagNeedsInfo), editor.needsInfo, !editor.isSaving) {
+            host.setTaskEditNeedsInfo(it)
+        }
+        TaskFlagBox(
+            stringResource(Strings.Review.flagNeedsClassification),
+            editor.needsClassification,
+            !editor.isSaving,
+        ) { host.setTaskEditNeedsClassification(it) }
+    }
+    NoteLine(text = stringResource(Strings.TaskEdit.flagsNote), isProblem = false)
+    if (editor.flagsConflict) {
+        NoteLine(text = stringResource(Strings.Review.flagConflict), isProblem = true)
+    }
+}
+
+@Composable
+private fun TaskFlagBox(
+    label: String,
+    checked: Boolean,
+    enabled: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(
+            checked = checked,
+            enabled = enabled,
+            onCheckedChange = onChange,
+            modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = label },
+        )
+        Text(text = label, style = MaterialTheme.typography.labelSmall)
+    }
+}
 
 /** Draws a ring around whatever holds keyboard focus, without moving anything. */
 @Composable

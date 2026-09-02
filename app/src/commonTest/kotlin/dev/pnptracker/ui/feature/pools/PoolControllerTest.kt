@@ -25,6 +25,7 @@ import dev.pnptracker.domain.pools.PoolTask
 import dev.pnptracker.domain.tasks.StageSnapshot
 import dev.pnptracker.domain.tasks.TaskEditException
 import dev.pnptracker.domain.tasks.TaskEditFailure
+import dev.pnptracker.domain.tasks.TaskFlags
 import dev.pnptracker.domain.tasks.TaskProgressFailure
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -91,6 +92,7 @@ private class FakeEditing : TaskEditing {
         val requiredQuantity: Int?,
         val notes: String?,
         val trackingMode: TrackingMode,
+        val flags: TaskFlags? = null,
     )
 
     override suspend fun editTask(
@@ -100,9 +102,10 @@ private class FakeEditing : TaskEditing {
         requiredQuantity: Int?,
         notes: String?,
         trackingMode: TrackingMode,
+        flags: TaskFlags?,
     ): Boolean {
         refuseWith?.let { throw it }
-        edits += EditRecord(taskId, name, colorIds, requiredQuantity, notes, trackingMode)
+        edits += EditRecord(taskId, name, colorIds, requiredQuantity, notes, trackingMode, flags)
         return true
     }
 

@@ -529,6 +529,7 @@ class GameTablePresentationTest {
             TaskEditFailure.INVALID_REQUIRED_QUANTITY -> Strings.TaskEdit.errorQuantity
             TaskEditFailure.QUANTITY_BELOW_PROGRESS -> Strings.TaskEdit.errorQuantityBelowProgress
             TaskEditFailure.QUANTITY_LOCKED_BY_COMPLETION -> Strings.TaskEdit.errorQuantityLocked
+            TaskEditFailure.MISSING_AND_BORROWED -> Strings.Review.flagConflict
             TaskEditFailure.COULD_NOT_SAVE -> Strings.TaskEdit.errorCouldNotSave
         }
 

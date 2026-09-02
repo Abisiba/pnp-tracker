@@ -38,6 +38,15 @@ data class PoolTaskRow(
     val primaryBatchCompleted: Boolean,
     @ColumnInfo(name = "current_missing_quantity")
     val currentMissingQuantity: Int,
+    /** PLAN 10 and 11.7: what the import said about the work, carried for the editor. */
+    @ColumnInfo(name = "is_missing")
+    val isMissing: Boolean = false,
+    @ColumnInfo(name = "is_borrowed")
+    val isBorrowed: Boolean = false,
+    @ColumnInfo(name = "needs_info")
+    val needsInfo: Boolean = false,
+    @ColumnInfo(name = "needs_classification")
+    val needsClassification: Boolean = false,
 )
 
 /** One colour of one task of a pool, in the user's own slot order. */

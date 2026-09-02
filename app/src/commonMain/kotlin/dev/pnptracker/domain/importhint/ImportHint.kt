@@ -59,6 +59,23 @@ sealed interface ImportHint {
     }
 
     /**
+     * A count the cell opens with, such as the `15` of `15 KIRMIZI**`.
+     *
+     * A suggestion for the total field and nothing more. PLAN 11.7 has tasks
+     * whose amount is genuinely unknown, so an amount that was never written is
+     * absence rather than a nought, and this hint is simply not produced.
+     */
+    data class Quantity(
+        override val evidence: TextRange,
+        val value: Int,
+        override val confidence: HintConfidence = HintConfidence.MEDIUM,
+    ) : ImportHint {
+        init {
+            require(value > 0) { "A count is either unknown or above nothing, was: $value" }
+        }
+    }
+
+    /**
      * Colours written as a choice rather than as a list, such as
      * `MAVİ/AÇIK MAVİ`.
      *

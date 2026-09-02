@@ -7,6 +7,7 @@ import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.tasks.TaskEditException
 import dev.pnptracker.domain.tasks.TaskEditFailure
+import dev.pnptracker.domain.tasks.TaskFlags
 import kotlin.time.Clock
 
 /** Changing a task that already exists, and turning one back into text. */
@@ -33,6 +34,8 @@ interface TaskEditing {
         requiredQuantity: Int?,
         notes: String?,
         trackingMode: TrackingMode,
+        /** The four marks to store, or null to leave whatever the task carries. */
+        flags: TaskFlags? = null,
     ): Boolean
 
     /**
@@ -48,6 +51,7 @@ interface TaskEditing {
         requiredQuantity: Int?,
         notes: String?,
         trackingMode: TrackingMode,
+        flags: TaskFlags? = null,
     ): Boolean =
         editTask(
             taskId = taskId,
@@ -56,6 +60,7 @@ interface TaskEditing {
             requiredQuantity = requiredQuantity,
             notes = notes,
             trackingMode = trackingMode,
+            flags = flags,
         )
 
     /**
@@ -91,6 +96,7 @@ class TaskEditStore(
         requiredQuantity: Int?,
         notes: String?,
         trackingMode: TrackingMode,
+        flags: TaskFlags?,
     ): Boolean =
         try {
             taskEditDao.editTask(
@@ -100,6 +106,7 @@ class TaskEditStore(
                 requiredQuantity = requiredQuantity,
                 notes = notes,
                 trackingMode = trackingMode,
+                flags = flags,
                 clock = clock,
             )
         } catch (cause: SQLiteException) {

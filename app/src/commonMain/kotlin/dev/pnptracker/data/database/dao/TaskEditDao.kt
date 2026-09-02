@@ -16,6 +16,7 @@ import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.rules.requireAllowedTrackingMode
 import dev.pnptracker.domain.tasks.TaskEditException
 import dev.pnptracker.domain.tasks.TaskEditFailure
+import dev.pnptracker.domain.tasks.TaskFlags
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -93,7 +94,10 @@ abstract class TaskEditDao {
     @Query(
         """
         UPDATE tasks SET name = :name, required_quantity = :requiredQuantity,
-                         notes = :notes, tracking_mode = :trackingMode, updated_at = :updatedAt
+                         notes = :notes, tracking_mode = :trackingMode,
+                         is_missing = :isMissing, is_borrowed = :isBorrowed,
+                         needs_info = :needsInfo, needs_classification = :needsClassification,
+                         updated_at = :updatedAt
         WHERE id = :taskId
         """,
     )
@@ -103,6 +107,10 @@ abstract class TaskEditDao {
         requiredQuantity: Int?,
         notes: String?,
         trackingMode: TrackingMode,
+        isMissing: Boolean,
+        isBorrowed: Boolean,
+        needsInfo: Boolean,
+        needsClassification: Boolean,
         updatedAt: Instant,
     ): Int
 
@@ -181,6 +189,11 @@ abstract class TaskEditDao {
      * 5.10 calls a colourless task an ordinary state and 5.9 produces one by
      * deleting a colour.
      *
+     * The four import marks (PLAN 10 and 11.7) are saved with the rest. They say
+     * something about the work rather than about its progress, so changing one
+     * moves nothing else: `needs_info` in particular is only ever cleared by the
+     * user saying so here, never as a side effect of a total being filled in.
+     *
      * Nothing about the task's work is touched. The identity, the piece of the
      * cell that names it, its stages and its history all stay exactly as they
      * were: a change of colour is a change of what is to be made, not of what
@@ -207,6 +220,7 @@ abstract class TaskEditDao {
         requiredQuantity: Int?,
         notes: String?,
         trackingMode: TrackingMode,
+        flags: TaskFlags?,
         clock: Clock,
     ): Boolean {
         val task = workableTaskById(taskId) ?: refuse(TaskEditFailure.TASK_NOT_AVAILABLE)
@@ -215,6 +229,18 @@ abstract class TaskEditDao {
         val cleanName = name.trim()
         if (cleanName.isEmpty()) refuse(TaskEditFailure.TASK_NAME_EMPTY)
         if (cleanName.any { it == '\n' || it == '\r' }) refuse(TaskEditFailure.NAME_CONTAINS_LINE_BREAK)
+        // PLAN 10 gives `Eksik` and `Ödünç Parçalar` a column each and a cell is
+        // in one of them, so the pair together could not describe anything. An
+        // edit that says nothing about the marks leaves them exactly as they are,
+        // rather than clearing four values it never read.
+        if (flags?.conflict == true) refuse(TaskEditFailure.MISSING_AND_BORROWED)
+        val marks =
+            flags ?: TaskFlags(
+                isMissing = task.isMissing,
+                isBorrowed = task.isBorrowed,
+                needsInfo = task.needsInfo,
+                needsClassification = task.needsClassification,
+            )
 
         // Read in slot order, so what is compared against is the list as the
         // user last left it rather than whatever order the rows come back in.
@@ -261,6 +287,10 @@ abstract class TaskEditDao {
                 task.requiredQuantity == requiredQuantity &&
                 task.notes == notes &&
                 task.trackingMode == trackingMode &&
+                task.isMissing == marks.isMissing &&
+                task.isBorrowed == marks.isBorrowed &&
+                task.needsInfo == marks.needsInfo &&
+                task.needsClassification == marks.needsClassification &&
                 !colorChanges
         if (unchanged) return false
 
@@ -271,6 +301,10 @@ abstract class TaskEditDao {
             requiredQuantity = requiredQuantity,
             notes = notes,
             trackingMode = trackingMode,
+            isMissing = marks.isMissing,
+            isBorrowed = marks.isBorrowed,
+            needsInfo = marks.needsInfo,
+            needsClassification = marks.needsClassification,
             updatedAt = moment,
         )
         if (colorChanges) {

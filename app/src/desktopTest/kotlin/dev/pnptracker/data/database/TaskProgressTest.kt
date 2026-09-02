@@ -1349,6 +1349,8 @@ class TaskProgressTest {
             requiredQuantity = total,
             notes = task.notes,
             trackingMode = task.trackingMode,
+            // The marks are not what this changes, so they are left alone.
+            flags = null,
             clock = clock,
         )
     }
@@ -1431,6 +1433,7 @@ class TaskProgressTest {
                 requiredQuantity = task.requiredQuantity,
                 notes = "ikinci baskı",
                 trackingMode = task.trackingMode,
+                flags = null,
                 clock = clock,
             )
 

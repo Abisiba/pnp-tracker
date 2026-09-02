@@ -4,16 +4,21 @@ import androidx.sqlite.SQLiteException
 import dev.pnptracker.data.database.dao.GameCellDao
 import dev.pnptracker.data.database.dao.GameDao
 import dev.pnptracker.data.database.dao.ImportDao
+import dev.pnptracker.data.database.entity.DraftTaskEntity
+import dev.pnptracker.data.database.entity.RawImportBlockEntity
 import dev.pnptracker.domain.importconfirm.DraftTaskProblem
 import dev.pnptracker.domain.importconfirm.ImportConfirmationException
 import dev.pnptracker.domain.importconfirm.ImportConfirmationFailure
 import dev.pnptracker.domain.importconfirm.ImportConfirmationResult
 import dev.pnptracker.domain.importconfirm.ImportConfirmationSummary
+import dev.pnptracker.domain.importconfirm.RawBlockProblem
 import dev.pnptracker.domain.importconfirm.TargetCellChoice
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.HintDecision
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.text.graphemeBoundariesOf
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlin.time.Clock
@@ -70,6 +75,22 @@ class ImportConfirmationStore(
     override fun observeTargetCells(): Flow<List<TargetCellChoice>> =
         combine(gameDao.observeActiveGames(), gameCellDao.observeCellsOfActiveGames()) { games, cells ->
             val gameNames = games.associate { it.id to it.name }
+            // Two games really can share a name, and a row of chips saying the
+            // same words twice asks the user to guess which is which. The game
+            // list's reading order is fixed by the query, so counting through it
+            // gives each of them the same number every time.
+            val sharedNames =
+                games
+                    .groupingBy { it.name }
+                    .eachCount()
+                    .filterValues { it > 1 }
+                    .keys
+            val seen = mutableMapOf<String, Int>()
+            val ordinals =
+                games.associate { game ->
+                    val at = seen.merge(game.name, 1, Int::plus)
+                    game.id to at.takeIf { game.name in sharedNames }
+                }
             cells.mapNotNull { cell ->
                 // A cell whose game is not active has already been filtered out of
                 // the cell query; this only guards the join.
@@ -81,6 +102,7 @@ class ImportConfirmationStore(
                     gameId = cell.gameId,
                     gameName = gameName,
                     columnType = cell.columnType,
+                    sharedNameOrdinal = ordinals[cell.gameId],
                 )
             }
         }
@@ -95,18 +117,72 @@ class ImportConfirmationStore(
         val aimedAt = drafts.mapNotNull { it.targetCellId }.toSet()
         val liveCells =
             if (aimedAt.isEmpty()) emptyMap() else importDao.activeCellColumns(aimedAt).associateBy { it.cellId }
+        val blocks = importDao.rawBlocksOfBatch(batchId).associateBy { it.id }
+        // The colours the whole import chose, and the whole catalogue, in two
+        // reads rather than two per draft. The catalogue is not read at all when
+        // nothing was given a colour.
+        val chosenColors = importDao.draftColorsOfBatch(batchId).groupBy { it.draftTaskId }
+        val catalogue = if (chosenColors.isEmpty()) emptySet() else importDao.allColorIds().toSet()
+        // Where each cell's characters really begin, worked out once per cell
+        // rather than once per draft cut out of it.
+        val boundaries = mutableMapOf<EntityId, Set<Int>>()
+
         val problems =
             drafts.mapNotNull { draft ->
+                val target = draft.targetCellId?.let { liveCells[it] }
+                val chosen = chosenColors[draft.id].orEmpty().map { it.colorId }
+                val block = blocks[draft.rawImportBlockId]
                 val failure =
                     when {
                         draft.targetCellId == null -> ImportConfirmationFailure.TARGET_CELL_MISSING
-                        draft.targetCellId !in liveCells -> ImportConfirmationFailure.TARGET_CELL_NOT_AVAILABLE
+                        target == null -> ImportConfirmationFailure.TARGET_CELL_NOT_AVAILABLE
+                        !target.columnType.holdsTasks -> ImportConfirmationFailure.TARGET_CELL_NOT_TASK_CAPABLE
                         draft.selectedPoolType == null -> ImportConfirmationFailure.POOL_TYPE_MISSING
+                        target.columnType.poolType != draft.selectedPoolType ->
+                            ImportConfirmationFailure.TARGET_CELL_WRONG_COLUMN
+
                         draft.selectedTrackingMode == null -> ImportConfirmationFailure.TRACKING_MODE_MISSING
+                        draft.completionHint == HintDecision.PENDING ->
+                            ImportConfirmationFailure.COMPLETION_HINT_UNDECIDED
+
+                        chosen.any { it !in catalogue } -> ImportConfirmationFailure.COLOR_NO_LONGER_AVAILABLE
+                        !selectionStillFits(draft, block, boundaries) ->
+                            ImportConfirmationFailure.SELECTION_NO_LONGER_FITS
+
                         else -> null
                     }
-                failure?.let { DraftTaskProblem(draft.id, draft.name, it) }
+                failure?.let { DraftTaskProblem(draft.id, draft.rawImportBlockId, draft.name, it) }
             }
+
+        // Which games the accepted green cells can still reach, in one read.
+        val reachable =
+            if (blocks.values.none { it.gameCompletionHint == HintDecision.ACCEPTED }) {
+                emptySet()
+            } else {
+                importDao.acceptedCompletionTargetsOfBatch(batchId).mapTo(mutableSetOf()) { it.id }
+            }
+        val blockProblems =
+            blocks.values
+                .mapNotNull { block ->
+                    val failure =
+                        when {
+                            block.gameCompletionHint == HintDecision.PENDING ->
+                                ImportConfirmationFailure.GAME_COMPLETION_HINT_UNDECIDED
+
+                            block.gameCompletionHint != HintDecision.ACCEPTED -> null
+                            // The one shape a version 5 database can hand over: the
+                            // answer was recorded with nowhere to put the game.
+                            block.completionTargetGameId == null ->
+                                ImportConfirmationFailure.COMPLETION_TARGET_GAME_REQUIRED
+
+                            block.completionTargetGameId !in reachable ->
+                                ImportConfirmationFailure.COMPLETION_TARGET_GAME_NOT_AVAILABLE
+
+                            else -> null
+                        }
+                    failure?.let { RawBlockProblem(block.id, block.rowIndex, block.columnIndex, it) }
+                }.sortedWith(compareBy({ it.rowIndex }, { it.columnIndex }))
+
         return ImportConfirmationSummary(
             batchId = batch.id,
             status = batch.status,
@@ -114,8 +190,28 @@ class ImportConfirmationStore(
             readyTaskCount = drafts.size - problems.size,
             unprocessedBlockCount = importDao.unprocessedRawBlockCount(batchId),
             problems = problems,
+            blockProblems = blockProblems,
             hasAnyCell = importDao.activeCellCount() > 0,
         )
+    }
+
+    /**
+     * Whether a draft's selection still describes whole characters of its cell.
+     *
+     * The same question the confirming transaction asks, asked early so the user
+     * is told rather than refused. A draft the user typed has no selection and
+     * nothing to check.
+     */
+    private fun selectionStillFits(
+        draft: DraftTaskEntity,
+        block: RawImportBlockEntity?,
+        boundaries: MutableMap<EntityId, Set<Int>>,
+    ): Boolean {
+        val start = draft.selectionStartIndex ?: return true
+        val end = draft.selectionEndIndex ?: return true
+        if (block == null) return false
+        val edges = boundaries.getOrPut(block.id) { graphemeBoundariesOf(block.rawText).toSet() }
+        return end <= block.rawText.length && start in edges && end in edges
     }
 
     override suspend fun aimDraft(

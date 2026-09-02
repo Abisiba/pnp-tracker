@@ -58,7 +58,11 @@ interface PoolDao {
                tasks.notes AS notes,
                tasks.tracking_mode AS tracking_mode,
                tasks.primary_batch_completed AS primary_batch_completed,
-               tasks.current_missing_quantity AS current_missing_quantity
+               tasks.current_missing_quantity AS current_missing_quantity,
+               tasks.is_missing AS is_missing,
+               tasks.is_borrowed AS is_borrowed,
+               tasks.needs_info AS needs_info,
+               tasks.needs_classification AS needs_classification
         FROM tasks
         INNER JOIN cell_segments ON cell_segments.task_id = tasks.id
         INNER JOIN game_cells ON game_cells.id = cell_segments.cell_id

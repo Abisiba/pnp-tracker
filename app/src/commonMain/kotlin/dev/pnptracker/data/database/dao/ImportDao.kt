@@ -21,8 +21,12 @@ import dev.pnptracker.data.database.projection.CellColumnRow
 import dev.pnptracker.data.database.projection.DraftTargetRow
 import dev.pnptracker.domain.importconfirm.ImportConfirmationException
 import dev.pnptracker.domain.importconfirm.ImportConfirmationFailure
+import dev.pnptracker.domain.importreview.DraftInitialValues
 import dev.pnptracker.domain.importreview.ImportReviewException
 import dev.pnptracker.domain.importreview.ImportReviewFailure
+import dev.pnptracker.domain.importreview.initialDraftByHand
+import dev.pnptracker.domain.importreview.initialDraftFromSelection
+import dev.pnptracker.domain.importreview.selectTaskNameIn
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.HintDecision
@@ -32,6 +36,7 @@ import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.SourceColumnType
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.model.stagesOf
+import dev.pnptracker.domain.rules.isTrackingModeAllowed
 import dev.pnptracker.domain.rules.requireAllowedTrackingMode
 import dev.pnptracker.domain.tasks.CompletionRules
 import dev.pnptracker.domain.text.graphemeBoundariesOf
@@ -484,6 +489,306 @@ abstract class ImportDao {
         val changed = updateGameCompletionDecision(blockId, decision, targetGameId, clock.now())
         check(changed == 1) { "The raw cell $blockId disappeared while its hint was being answered." }
         return true
+    }
+
+    // --------------------------------------------- making a draft out of a cell
+
+    /**
+     * Cuts a draft out of the cell's own text, at the boundaries the user drew.
+     *
+     * The selection is read against the text **as the database holds it**, inside
+     * this transaction, rather than against whatever the screen was showing: a
+     * cell that has gone, or offsets that no longer describe whole characters,
+     * are caught here and cost nothing. The name and both offsets therefore
+     * always belong together and always belong to the stored cell.
+     *
+     * Everything else the new draft starts out saying — the pool its column
+     * implies, the count the line opens with, the `**` kept as a question, the
+     * missing and borrowed marks — is worked out from that same stored cell and
+     * written with it, so a suggestion the user accepted by making the draft is
+     * still there when the review is closed and opened again (PLAN 11.4.3).
+     *
+     * The cell itself is not touched. Its text is unchanged, and its review mark
+     * stays whatever it was: having made something out of a cell is a different
+     * judgement from having finished reading it.
+     *
+     * @return what the new draft holds, so the caller need not read it back.
+     * @throws ImportReviewException if the cell is gone, its import is no longer
+     *   a draft, or the selection is not one a name can be cut from; nothing is
+     *   written in any of those cases.
+     */
+    @Transaction
+    open suspend fun createDraftFromSelectionUnderReview(
+        draftId: EntityId,
+        blockId: EntityId,
+        startIndex: Int,
+        endIndex: Int,
+        clock: Clock,
+    ): DraftTaskEntity {
+        val block = rawBlockById(blockId) ?: refuseReview(ImportReviewFailure.RAW_BLOCK_NOT_FOUND)
+        requireDraftBatchOf(block)
+        val selection = selectTaskNameIn(block.rawText, startIndex, endIndex)
+        return storeNewDraft(draftId, block, initialDraftFromSelection(block.columnIndex, selection), clock)
+    }
+
+    /**
+     * Stores a draft the user typed rather than cut out of the text.
+     *
+     * It carries no selection at all, which is the difference the shape itself
+     * records: PLAN 11.4 offers making an empty task by hand as its own action,
+     * and a draft with invented offsets would claim to come from words nobody
+     * pointed at. The column's own marks still apply, because the cell is in the
+     * missing or borrowed list whether the words came out of it or not.
+     *
+     * @throws ImportReviewException if the cell is gone, its import is no longer
+     *   a draft, or the name says nothing; nothing is written in those cases.
+     */
+    @Transaction
+    open suspend fun createDraftByHandUnderReview(
+        draftId: EntityId,
+        blockId: EntityId,
+        name: String,
+        clock: Clock,
+    ): DraftTaskEntity {
+        val block = rawBlockById(blockId) ?: refuseReview(ImportReviewFailure.RAW_BLOCK_NOT_FOUND)
+        requireDraftBatchOf(block)
+        return storeNewDraft(draftId, block, initialDraftByHand(block.columnIndex, name), clock)
+    }
+
+    private suspend fun storeNewDraft(
+        draftId: EntityId,
+        block: RawImportBlockEntity,
+        initial: DraftInitialValues,
+        clock: Clock,
+    ): DraftTaskEntity {
+        val moment = clock.now()
+        val draft =
+            DraftTaskEntity(
+                id = draftId,
+                rawImportBlockId = block.id,
+                name = initial.name,
+                suggestedPoolType = initial.suggestedPoolType,
+                requiredQuantity = initial.requiredQuantity,
+                selectionStartIndex = initial.selectionStartIndex,
+                selectionEndIndex = initial.selectionEndIndex,
+                completionHint = initial.completionHint,
+                isMissing = initial.isMissing,
+                isBorrowed = initial.isBorrowed,
+                needsInfo = initial.needsInfo,
+                needsClassification = initial.needsClassification,
+                createdAt = moment,
+                updatedAt = moment,
+            )
+        insertDraftTaskRow(draft)
+        return draft
+    }
+
+    // ------------------------------------------------- editing a whole draft
+
+    /**
+     * Saves everything the user changed about one draft, together.
+     *
+     * A name, a target, a pool, a total, a note, four marks and an ordered list
+     * of colours are one answer to what the task is going to be, so they are
+     * written in one transaction or not at all. A refusal anywhere in it leaves
+     * the draft exactly as it was, colours included, and the panel still holding
+     * what the user typed.
+     *
+     * The suggestions the draft was born with are not consulted here and are not
+     * rewritten: `suggestedPoolType` stays what the column said, and everything
+     * the user answers is stored beside it. That is what keeps a value somebody
+     * edited from being pushed back by the next reading of the cell.
+     *
+     * A `**` that was never there cannot be answered and one that was there
+     * cannot be made to disappear: [completionHint] may move between pending,
+     * accepted and rejected, and may not cross to or from
+     * [HintDecision.NONE]. PLAN 11.5 makes the marker a fact about the file.
+     *
+     * Saving the same answer again is nothing at all: no write, no new timestamp,
+     * and [clock] is not read.
+     *
+     * @return true when this call changed something.
+     * @throws ImportReviewException with the case that stopped it; nothing written.
+     */
+    @Transaction
+    open suspend fun editDraftUnderReview(
+        draftTaskId: EntityId,
+        name: String,
+        targetCellId: EntityId?,
+        poolType: PoolType?,
+        trackingMode: TrackingMode?,
+        requiredQuantity: Int?,
+        notes: String?,
+        isMissing: Boolean,
+        isBorrowed: Boolean,
+        needsInfo: Boolean,
+        needsClassification: Boolean,
+        completionHint: HintDecision,
+        colorIds: List<EntityId>,
+        clock: Clock,
+    ): Boolean {
+        val draft = draftTaskById(draftTaskId) ?: refuseReview(ImportReviewFailure.DRAFT_TASK_NOT_FOUND)
+        requireDraftBatch(draft)
+
+        val cleanName = name.trim()
+        if (cleanName.isEmpty()) refuseReview(ImportReviewFailure.TASK_NAME_EMPTY)
+        if (cleanName.any { it == '\n' || it == '\r' }) refuseReview(ImportReviewFailure.SELECTION_CONTAINS_LINE_BREAK)
+        if (requiredQuantity != null && requiredQuantity <= 0) {
+            refuseReview(ImportReviewFailure.INVALID_REQUIRED_QUANTITY)
+        }
+        if (isMissing && isBorrowed) refuseReview(ImportReviewFailure.MISSING_AND_BORROWED)
+        if ((draft.completionHint == HintDecision.NONE) != (completionHint == HintDecision.NONE)) {
+            refuseReview(ImportReviewFailure.COMPLETION_HINT_NOT_ANSWERABLE)
+        }
+        if (poolType != null && trackingMode != null && !isTrackingModeAllowed(poolType, trackingMode)) {
+            refuseReview(ImportReviewFailure.TRACKING_MODE_NOT_ALLOWED)
+        }
+        if (targetCellId != null) requireUsableTarget(targetCellId, poolType)
+
+        // Named twice is found before anything is read: a duplicate costs no
+        // query and certainly no write.
+        if (colorIds.toSet().size != colorIds.size) refuseReview(ImportReviewFailure.DUPLICATE_COLOR)
+        val existing = draftColorsOf(draftTaskId)
+        val colorsHold =
+            existing.map { it.colorId } == colorIds &&
+                existing.withIndex().all { (at, row) -> row.slotIndex == at }
+        if (!colorsHold && colorIds.isNotEmpty()) {
+            val catalogue = allColorIds().toSet()
+            if (colorIds.any { it !in catalogue }) refuseReview(ImportReviewFailure.COLOR_NOT_AVAILABLE)
+        }
+
+        val fieldsHold =
+            draft.name == cleanName &&
+                draft.targetCellId == targetCellId &&
+                draft.selectedPoolType == poolType &&
+                draft.selectedTrackingMode == trackingMode &&
+                draft.requiredQuantity == requiredQuantity &&
+                draft.notes == notes &&
+                draft.isMissing == isMissing &&
+                draft.isBorrowed == isBorrowed &&
+                draft.needsInfo == needsInfo &&
+                draft.needsClassification == needsClassification &&
+                draft.completionHint == completionHint
+        if (fieldsHold && colorsHold) return false
+
+        val moment = clock.now()
+        if (!fieldsHold) {
+            val written =
+                updateDraftRow(
+                    draftId = draftTaskId,
+                    name = cleanName,
+                    targetCellId = targetCellId,
+                    poolType = poolType,
+                    trackingMode = trackingMode,
+                    requiredQuantity = requiredQuantity,
+                    notes = notes,
+                    isMissing = isMissing,
+                    isBorrowed = isBorrowed,
+                    needsInfo = needsInfo,
+                    needsClassification = needsClassification,
+                    completionHint = completionHint,
+                    updatedAt = moment,
+                )
+            check(written == 1) { "The draft $draftTaskId disappeared while it was being saved." }
+        }
+        if (!colorsHold) {
+            // Out of the way first: renumbering in place would collide with the
+            // unique slot index the moment one colour moved onto a place another
+            // still held.
+            existing.forEach { deleteDraftColor(it) }
+            colorIds.forEachIndexed { slot, colorId ->
+                insertDraftColor(DraftTaskColorEntity(draftTaskId = draftTaskId, colorId = colorId, slotIndex = slot))
+            }
+            if (fieldsHold) touchDraftTask(draftTaskId, moment)
+        }
+        return true
+    }
+
+    @Query(
+        """
+        UPDATE draft_tasks
+        SET name = :name,
+            target_cell_id = :targetCellId,
+            selected_pool_type = :poolType,
+            selected_tracking_mode = :trackingMode,
+            required_quantity = :requiredQuantity,
+            notes = :notes,
+            is_missing = :isMissing,
+            is_borrowed = :isBorrowed,
+            needs_info = :needsInfo,
+            needs_classification = :needsClassification,
+            completion_hint = :completionHint,
+            updated_at = :updatedAt
+        WHERE id = :draftId
+        """,
+    )
+    protected abstract suspend fun updateDraftRow(
+        draftId: EntityId,
+        name: String,
+        targetCellId: EntityId?,
+        poolType: PoolType?,
+        trackingMode: TrackingMode?,
+        requiredQuantity: Int?,
+        notes: String?,
+        isMissing: Boolean,
+        isBorrowed: Boolean,
+        needsInfo: Boolean,
+        needsClassification: Boolean,
+        completionHint: HintDecision,
+        updatedAt: Instant,
+    ): Int
+
+    /**
+     * Answers the `**` of one draft, and nothing else about it.
+     *
+     * Its own transaction because it is its own decision: PLAN 11.4 lists
+     * accepting or rejecting the marker beside the other actions, and a user who
+     * only wants to say "this one is done" should not have to save a form to do
+     * it. A draft the file never marked has no question to answer, so it is
+     * refused rather than given one.
+     *
+     * Nothing is completed here. The answer is stored, and the task it produces
+     * is born finished — or not — when the import is confirmed.
+     *
+     * @return true when this call changed something.
+     * @throws ImportReviewException if the draft is gone, its import is no longer
+     *   a draft, or the file left no marker to answer; nothing is written.
+     */
+    @Transaction
+    open suspend fun setDraftCompletionDecisionUnderReview(
+        draftTaskId: EntityId,
+        decision: HintDecision,
+        clock: Clock,
+    ): Boolean {
+        val draft = draftTaskById(draftTaskId) ?: refuseReview(ImportReviewFailure.DRAFT_TASK_NOT_FOUND)
+        requireDraftBatch(draft)
+        if (draft.completionHint == HintDecision.NONE || decision == HintDecision.NONE) {
+            refuseReview(ImportReviewFailure.COMPLETION_HINT_NOT_ANSWERABLE)
+        }
+        if (draft.completionHint == decision) return false
+        val changed = updateDraftCompletionHint(draftTaskId, decision, clock.now())
+        check(changed == 1) { "The draft $draftTaskId disappeared while its marker was being answered." }
+        return true
+    }
+
+    /** The cell a draft is aimed at has to be there, hold tasks and match its pool. */
+    private suspend fun requireUsableTarget(
+        targetCellId: EntityId,
+        poolType: PoolType?,
+    ) {
+        if (activeCellCount(targetCellId) != 1) refuseReview(ImportReviewFailure.TARGET_CELL_NOT_AVAILABLE)
+        val columnType =
+            columnTypeOfCell(targetCellId) ?: refuseReview(ImportReviewFailure.TARGET_CELL_NOT_AVAILABLE)
+        if (!columnType.holdsTasks) refuseReview(ImportReviewFailure.TARGET_CELL_NOT_TASK_CAPABLE)
+        if (poolType != null && columnType.poolType != poolType) {
+            refuseReview(ImportReviewFailure.TARGET_CELL_WRONG_COLUMN)
+        }
+    }
+
+    /** The import one raw cell belongs to, refusing unless it is still being reviewed. */
+    private suspend fun requireDraftBatchOf(block: RawImportBlockEntity) {
+        val batch = batchById(block.importBatchId) ?: refuseReview(ImportReviewFailure.RAW_BLOCK_NOT_FOUND)
+        if (batch.status != ImportBatchStatus.DRAFT) refuseReview(ImportReviewFailure.BATCH_NOT_A_DRAFT)
     }
 
     /** The import a draft belongs to, refusing unless it is still being reviewed. */
@@ -943,6 +1248,12 @@ abstract class ImportDao {
                     draft.selectedPoolType ?: refuse(ImportConfirmationFailure.POOL_TYPE_MISSING, draft.id)
                 val trackingMode =
                     draft.selectedTrackingMode ?: refuse(ImportConfirmationFailure.TRACKING_MODE_MISSING, draft.id)
+                // PLAN 11.5 has the user answer the marker. Confirming with the
+                // question still open would answer it for them, one way or the
+                // other, and write the answer into a real task.
+                if (draft.completionHint == HintDecision.PENDING) {
+                    refuse(ImportConfirmationFailure.COMPLETION_HINT_UNDECIDED, draft.id)
+                }
                 val target =
                     targets[targetCellId] ?: refuse(ImportConfirmationFailure.TARGET_CELL_NOT_AVAILABLE, draft.id)
                 if (!target.columnType.holdsTasks) {
@@ -993,7 +1304,8 @@ abstract class ImportDao {
                     needsInfo = draft.needsInfo,
                     needsClassification = draft.needsClassification,
                     // PLAN 11.5 makes `**` a hint and nothing more until the user
-                    // agrees to it. Pending and rejected both leave the task open.
+                    // agrees to it. An unanswered one never gets this far, and a
+                    // rejected one leaves the task open.
                     isFinished = draft.completionHint == HintDecision.ACCEPTED,
                     targetCellId = targetCellId,
                     orderIndex = orderIndex,
@@ -1017,6 +1329,9 @@ abstract class ImportDao {
         batchId: EntityId,
         blocks: Collection<RawImportBlockEntity>,
     ): List<EntityId> {
+        if (blocks.any { it.gameCompletionHint == HintDecision.PENDING }) {
+            refuse(ImportConfirmationFailure.GAME_COMPLETION_HINT_UNDECIDED)
+        }
         val accepted = blocks.filter { it.gameCompletionHint == HintDecision.ACCEPTED }
         if (accepted.isEmpty()) return emptyList()
         // A version 5 database could record the answer with nowhere to say which

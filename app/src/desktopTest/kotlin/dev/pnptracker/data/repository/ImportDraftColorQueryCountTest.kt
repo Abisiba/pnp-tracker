@@ -129,7 +129,7 @@ class ImportDraftColorQueryCountTest {
     }
 
     private suspend fun workspaceReads(batchId: EntityId): Map<String, Int> {
-        val store = ImportReviewStore(importDao, IdGenerator.Random, StoppedClock(moment))
+        val store = ImportReviewStore(importDao, database.gameDao(), database.colorDao(), IdGenerator.Random, StoppedClock(moment))
         driver.start()
         assertNotNull(store.observeWorkspace(batchId).first())
         return ran(driver.stop())

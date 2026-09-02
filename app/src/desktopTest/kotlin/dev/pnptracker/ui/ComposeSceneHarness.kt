@@ -4,9 +4,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.InternalComposeUiApi
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -85,6 +88,50 @@ class ComposeSceneHarness(
     /** Moves the keyboard on by one stop, the way the user's Tab key does. */
     fun tab() = press(Key.Tab)
 
+    /** Moves the keyboard back one stop, the way Shift+Tab does. */
+    fun shiftTab() = press(Key.Tab, shift = true)
+
+    /**
+     * One whole stroke with modifiers held, press and release.
+     *
+     * The modifiers travel on the event itself, which is how a real window sends
+     * them: a handler asking `isCtrlPressed` sees exactly what it would see from
+     * the keyboard.
+     */
+    fun press(
+        key: Key,
+        ctrl: Boolean = false,
+        shift: Boolean = false,
+        alt: Boolean = false,
+    ) {
+        send(key, KeyEventType.KeyDown, ctrl, shift, alt)
+        send(key, KeyEventType.KeyUp, ctrl, shift, alt)
+    }
+
+    /**
+     * Drags the pointer from one place to another, the way a mouse selects text.
+     *
+     * Press, a move part way, and release: the move matters, because a text
+     * field decides what is selected from where the pointer travelled and not
+     * from where it was let go.
+     */
+    fun dragFrom(
+        from: Offset,
+        to: Offset,
+    ) {
+        scene.sendPointerEvent(PointerEventType.Press, from)
+        render()
+        scene.sendPointerEvent(PointerEventType.Move, Offset((from.x + to.x) / 2f, (from.y + to.y) / 2f))
+        render()
+        scene.sendPointerEvent(PointerEventType.Move, to)
+        render()
+        scene.sendPointerEvent(PointerEventType.Release, to)
+        render()
+    }
+
+    /** Where a node a reader would name is drawn, or null when it is not there. */
+    fun boundsOf(description: String): Rect? = spokenNodes().firstOrNull { description in it.contentDescriptions() }?.boundsInRoot
+
     /**
      * Puts one event into the scene the way the window does.
      *
@@ -97,8 +144,20 @@ class ComposeSceneHarness(
     private fun send(
         key: Key,
         type: KeyEventType,
+        ctrl: Boolean = false,
+        shift: Boolean = false,
+        alt: Boolean = false,
     ): Boolean {
-        val handled = scene.sendKeyEvent(KeyEvent(key = key, type = type))
+        val handled =
+            scene.sendKeyEvent(
+                KeyEvent(
+                    key = key,
+                    type = type,
+                    isCtrlPressed = ctrl,
+                    isShiftPressed = shift,
+                    isAltPressed = alt,
+                ),
+            )
         render()
         return handled
     }
