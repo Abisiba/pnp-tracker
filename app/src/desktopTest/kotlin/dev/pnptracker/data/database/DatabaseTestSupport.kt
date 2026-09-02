@@ -15,6 +15,10 @@ import dev.pnptracker.domain.model.ImportSourceFormat
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.SourceColumnType
 import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.pools.PoolSnapshot
+import dev.pnptracker.domain.pools.PoolTask
+import dev.pnptracker.domain.search.PoolFilter
+import dev.pnptracker.domain.search.filterPoolTasks
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.assertTrue
@@ -262,3 +266,18 @@ suspend fun insertSegmentDirectly(
         }
     }
 }
+
+/**
+ * The tasks a pool screen shows when nothing has been filtered.
+ *
+ * The pool's reads return every task of the pool — the work still to do, the
+ * work finished, and the work nobody can start yet — because PLAN 13 lets the
+ * user ask for any of the three and PLAN 16 will not have a query per answer.
+ * Which of them is on screen is decided in memory by [PoolFilter], and its
+ * default is the active work.
+ *
+ * So a test asking what is "in the pool" asks through the same arithmetic the
+ * screen does. Reading `snapshot.tasks` straight would be asking what the
+ * database returned, which is a different and much wider question.
+ */
+fun activePoolTasks(snapshot: PoolSnapshot): List<PoolTask> = filterPoolTasks(snapshot.tasks, PoolFilter.NONE)

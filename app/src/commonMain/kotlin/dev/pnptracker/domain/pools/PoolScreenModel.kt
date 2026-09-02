@@ -153,28 +153,51 @@ sealed interface PoolModel {
 }
 
 /**
+ * The same order, with what is owed right now lifted to the front of it.
+ *
+ * PLAN 13 asks for tasks with a failed print to be brought forward, and this is
+ * the only thing that does: everything below the first key is the order the pool
+ * already had, so two tasks that both owe pieces — or neither — stay exactly
+ * where they were. Nothing is hidden and nothing is repeated; a task appears in
+ * the same groups it always did.
+ */
+private fun withShortagesFirst(within: Comparator<PoolTask>): Comparator<PoolTask> =
+    compareByDescending<PoolTask> { it.hasCurrentShortage }.then(within)
+
+/**
  * Lays one pool out for the screen.
  *
  * Pure, and the only place the layout is decided, so what a test measures is
  * what the screen draws. Nothing here reads or writes anything.
+ *
+ * [shortagesFirst] is the one thing the user can change about the order, and it
+ * only ever moves rows: PLAN 13 calls it bringing work forward, not filtering.
+ * Which tasks arrive here at all is settled before this is called.
  */
-fun poolModelOf(snapshot: PoolSnapshot): PoolModel =
-    when (snapshot.poolType) {
-        PoolType.THREE_D -> PoolModel.ThreeD(threeDSectionsOf(snapshot.tasks))
-        PoolType.CARD, PoolType.BOARD ->
-            PoolModel.Flat(snapshot.poolType, snapshot.tasks.sortedWith(byStageThenAttentionThenName))
-
-        PoolType.SPECIAL -> PoolModel.Flat(snapshot.poolType, snapshot.tasks.sortedWith(byAttentionThenName))
+fun poolModelOf(
+    snapshot: PoolSnapshot,
+    shortagesFirst: Boolean = false,
+): PoolModel {
+    val flat = if (shortagesFirst) withShortagesFirst(byAttentionThenName) else byAttentionThenName
+    val pipeline = if (shortagesFirst) withShortagesFirst(byStageThenAttentionThenName) else byStageThenAttentionThenName
+    return when (snapshot.poolType) {
+        PoolType.THREE_D -> PoolModel.ThreeD(threeDSectionsOf(snapshot.tasks, flat))
+        PoolType.CARD, PoolType.BOARD -> PoolModel.Flat(snapshot.poolType, snapshot.tasks.sortedWith(pipeline))
+        PoolType.SPECIAL -> PoolModel.Flat(snapshot.poolType, snapshot.tasks.sortedWith(flat))
     }
+}
 
-private fun threeDSectionsOf(tasks: List<PoolTask>): ThreeDPoolModel {
+private fun threeDSectionsOf(
+    tasks: List<PoolTask>,
+    within: Comparator<PoolTask>,
+): ThreeDPoolModel {
     val awaiting = tasks.filter { it.colors.isEmpty() }
     val single = tasks.filter { it.colors.size == 1 }
     val several = tasks.filter { it.colors.size > 1 }
     return ThreeDPoolModel(
-        awaitingColor = PoolAwaitingColorSection(awaiting.sortedWith(byAttentionThenName)),
-        singleColorGroups = colorGroupsOf(single),
-        multicolorGroups = colorGroupsOf(several),
+        awaitingColor = PoolAwaitingColorSection(awaiting.sortedWith(within)),
+        singleColorGroups = colorGroupsOf(single, within),
+        multicolorGroups = colorGroupsOf(several, within),
     )
 }
 
@@ -193,7 +216,10 @@ private fun threeDSectionsOf(tasks: List<PoolTask>): ThreeDPoolModel {
  * The groups come out in the user's own colour order (PLAN 5.10), with identity
  * settling two colours placed at the same spot so the list never reshuffles.
  */
-private fun colorGroupsOf(tasks: List<PoolTask>): List<PoolColorGroup> {
+private fun colorGroupsOf(
+    tasks: List<PoolTask>,
+    within: Comparator<PoolTask>,
+): List<PoolColorGroup> {
     val gathered = LinkedHashMap<EntityId, MutableList<PoolTask>>()
     val colors = LinkedHashMap<EntityId, PoolColor>()
     tasks.forEach { task ->
@@ -203,6 +229,6 @@ private fun colorGroupsOf(tasks: List<PoolTask>): List<PoolColorGroup> {
         }
     }
     return gathered
-        .map { (colorId, held) -> PoolColorGroup(colors.getValue(colorId), held.sortedWith(byAttentionThenName)) }
+        .map { (colorId, held) -> PoolColorGroup(colors.getValue(colorId), held.sortedWith(within)) }
         .sortedWith(compareBy({ it.color.sortOrder }, { it.color.colorId.toString() }))
 }

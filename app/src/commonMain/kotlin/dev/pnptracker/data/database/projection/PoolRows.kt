@@ -38,6 +38,9 @@ data class PoolTaskRow(
     val primaryBatchCompleted: Boolean,
     @ColumnInfo(name = "current_missing_quantity")
     val currentMissingQuantity: Int,
+    /** PLAN 5.6: a finished task keeps its place; only the active pool loses it. */
+    @ColumnInfo(name = "is_completed")
+    val isCompleted: Boolean = false,
     /** PLAN 10 and 11.7: what the import said about the work, carried for the editor. */
     @ColumnInfo(name = "is_missing")
     val isMissing: Boolean = false,

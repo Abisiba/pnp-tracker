@@ -41,6 +41,8 @@ data class PoolTask(
     val trackingMode: TrackingMode,
     val primaryBatchCompleted: Boolean,
     val currentMissingQuantity: Int,
+    /** PLAN 5.6: finished, and still in its cell and its colour groups. */
+    val isCompleted: Boolean = false,
     /** In the user's own slot order (PLAN 5.10). */
     val colors: List<PoolColor> = emptyList(),
     /** In pipeline order, empty for the pools that have no pipeline. */
@@ -58,6 +60,20 @@ data class PoolTask(
 ) {
     /** True when something has gone wrong on this task, which sorts it forward. */
     val needsAttention: Boolean get() = currentMissingQuantity > 0 || failureTotal > 0
+
+    /**
+     * True when this task owes pieces right now.
+     *
+     * Narrower than [needsAttention], and deliberately so: PLAN 13's `eksik/hatalı
+     * baskısı olanları öne alma` is about work that still has to be made, and a
+     * task that failed once and was made good owes nothing today. The failure
+     * total is history and is never deleted (PLAN 6.4), which is why it belongs
+     * in the ordinary ordering and not in this.
+     *
+     * Nothing to do with [isMissing], which is a note the import carried over
+     * from a spreadsheet column about a piece that is not in the box.
+     */
+    val hasCurrentShortage: Boolean get() = currentMissingQuantity > 0
 
     /**
      * The first stage that is not finished, or null when they all are.

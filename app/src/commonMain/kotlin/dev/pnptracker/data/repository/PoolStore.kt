@@ -110,6 +110,7 @@ class PoolStore(
                 trackingMode = row.trackingMode,
                 primaryBatchCompleted = row.primaryBatchCompleted,
                 currentMissingQuantity = row.currentMissingQuantity,
+                isCompleted = row.isCompleted,
                 isMissing = row.isMissing,
                 isBorrowed = row.isBorrowed,
                 needsInfo = row.needsInfo,

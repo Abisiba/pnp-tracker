@@ -191,6 +191,39 @@ import dev.pnptracker.resources.confirm_summary
 import dev.pnptracker.resources.confirm_unavailable
 import dev.pnptracker.resources.confirm_unprocessed_acknowledge
 import dev.pnptracker.resources.confirm_unprocessed_warning
+import dev.pnptracker.resources.filter_awaiting_color
+import dev.pnptracker.resources.filter_clear_all
+import dev.pnptracker.resources.filter_close
+import dev.pnptracker.resources.filter_color_option
+import dev.pnptracker.resources.filter_empty_pool
+import dev.pnptracker.resources.filter_empty_pool_hint
+import dev.pnptracker.resources.filter_empty_table
+import dev.pnptracker.resources.filter_empty_table_hint
+import dev.pnptracker.resources.filter_flag_borrowed
+import dev.pnptracker.resources.filter_flag_missing
+import dev.pnptracker.resources.filter_open
+import dev.pnptracker.resources.filter_open_with_count
+import dev.pnptracker.resources.filter_section_color
+import dev.pnptracker.resources.filter_section_flags
+import dev.pnptracker.resources.filter_section_order
+import dev.pnptracker.resources.filter_section_pool
+import dev.pnptracker.resources.filter_section_stage
+import dev.pnptracker.resources.filter_section_state
+import dev.pnptracker.resources.filter_shortages_first
+import dev.pnptracker.resources.filter_state_active
+import dev.pnptracker.resources.filter_state_completed
+import dev.pnptracker.resources.filter_state_needs_info
+import dev.pnptracker.resources.filter_summary_awaiting_color
+import dev.pnptracker.resources.filter_summary_colors
+import dev.pnptracker.resources.filter_summary_flags
+import dev.pnptracker.resources.filter_summary_label
+import dev.pnptracker.resources.filter_summary_none
+import dev.pnptracker.resources.filter_summary_pools
+import dev.pnptracker.resources.filter_summary_search
+import dev.pnptracker.resources.filter_summary_shortages_first
+import dev.pnptracker.resources.filter_summary_stages
+import dev.pnptracker.resources.filter_summary_state
+import dev.pnptracker.resources.filter_title
 import dev.pnptracker.resources.games_back
 import dev.pnptracker.resources.games_cell_open
 import dev.pnptracker.resources.games_cells_empty
@@ -465,6 +498,9 @@ import dev.pnptracker.resources.review_selection_shown
 import dev.pnptracker.resources.review_title
 import dev.pnptracker.resources.review_unavailable
 import dev.pnptracker.resources.review_unavailable_title
+import dev.pnptracker.resources.search_clear
+import dev.pnptracker.resources.search_label
+import dev.pnptracker.resources.search_placeholder
 import dev.pnptracker.resources.shortage_cancel
 import dev.pnptracker.resources.shortage_card_label
 import dev.pnptracker.resources.shortage_error_detail
@@ -552,6 +588,10 @@ import dev.pnptracker.resources.task_edit_name_label
 import dev.pnptracker.resources.task_edit_save
 import dev.pnptracker.resources.task_edit_saving
 import dev.pnptracker.resources.task_edit_title
+import dev.pnptracker.resources.task_flag_borrowed_mark
+import dev.pnptracker.resources.task_flag_missing_mark
+import dev.pnptracker.resources.task_flag_needs_classification_mark
+import dev.pnptracker.resources.task_flag_needs_info_mark
 import dev.pnptracker.resources.task_menu_complete
 import dev.pnptracker.resources.task_menu_convert
 import dev.pnptracker.resources.task_menu_edit
@@ -1508,6 +1548,50 @@ object Strings {
         /** Takes the column number. */
         val unsupportedColumn = Res.string.import_error_unsupported_column
         val emptySheet = Res.string.import_error_empty_sheet
+    }
+
+    /** Arama ve filtreleme, the words PLAN 13 asks for on the table and the pools. */
+    object Search {
+        val label = Res.string.search_label
+        val placeholder = Res.string.search_placeholder
+        val clear = Res.string.search_clear
+        val openFilters = Res.string.filter_open
+        val openFiltersWithCount = Res.string.filter_open_with_count
+        val closeFilters = Res.string.filter_close
+        val filtersTitle = Res.string.filter_title
+        val clearAll = Res.string.filter_clear_all
+        val summaryNone = Res.string.filter_summary_none
+        val summaryLabel = Res.string.filter_summary_label
+        val summarySearch = Res.string.filter_summary_search
+        val summaryPools = Res.string.filter_summary_pools
+        val summaryColors = Res.string.filter_summary_colors
+        val summaryAwaitingColor = Res.string.filter_summary_awaiting_color
+        val summaryState = Res.string.filter_summary_state
+        val summaryFlags = Res.string.filter_summary_flags
+        val summaryStages = Res.string.filter_summary_stages
+        val summaryShortagesFirst = Res.string.filter_summary_shortages_first
+        val sectionPool = Res.string.filter_section_pool
+        val sectionColor = Res.string.filter_section_color
+        val sectionState = Res.string.filter_section_state
+        val sectionFlags = Res.string.filter_section_flags
+        val sectionStage = Res.string.filter_section_stage
+        val sectionOrder = Res.string.filter_section_order
+        val awaitingColor = Res.string.filter_awaiting_color
+        val stateActive = Res.string.filter_state_active
+        val stateCompleted = Res.string.filter_state_completed
+        val stateNeedsInfo = Res.string.filter_state_needs_info
+        val flagMissing = Res.string.filter_flag_missing
+        val flagBorrowed = Res.string.filter_flag_borrowed
+        val shortagesFirst = Res.string.filter_shortages_first
+        val colorOption = Res.string.filter_color_option
+        val emptyPool = Res.string.filter_empty_pool
+        val emptyPoolHint = Res.string.filter_empty_pool_hint
+        val emptyTable = Res.string.filter_empty_table
+        val emptyTableHint = Res.string.filter_empty_table_hint
+        val markMissing = Res.string.task_flag_missing_mark
+        val markBorrowed = Res.string.task_flag_borrowed_mark
+        val markNeedsInfo = Res.string.task_flag_needs_info_mark
+        val markNeedsClassification = Res.string.task_flag_needs_classification_mark
     }
 
     object Accessibility {

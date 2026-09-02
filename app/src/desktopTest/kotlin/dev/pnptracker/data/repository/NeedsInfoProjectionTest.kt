@@ -8,6 +8,7 @@ import dev.pnptracker.data.database.TemporaryDatabaseDirectory
 import dev.pnptracker.data.database.aCell
 import dev.pnptracker.data.database.aGame
 import dev.pnptracker.data.database.aTask
+import dev.pnptracker.data.database.activePoolTasks
 import dev.pnptracker.data.database.createdAt
 import dev.pnptracker.data.database.updatedAt
 import dev.pnptracker.domain.model.CellColumnType
@@ -96,11 +97,7 @@ class NeedsInfoProjectionTest {
     }
 
     private suspend fun activeNames(poolType: PoolType = PoolType.THREE_D): List<String> =
-        pools
-            .observePool(poolType)
-            .first()
-            .tasks
-            .map { it.name }
+        activePoolTasks(pools.observePool(poolType).first()).map { it.name }
 
     private suspend fun counts() = database.poolDao().observePoolCounts().first()
 
@@ -210,10 +207,10 @@ class NeedsInfoProjectionTest {
                 needsInfo = true,
             )
 
-            val snapshot = pools.observePool(PoolType.CARD).first()
-            assertEquals(listOf("Deste"), snapshot.tasks.map { it.name })
+            val shown = activePoolTasks(pools.observePool(PoolType.CARD).first())
+            assertEquals(listOf("Deste"), shown.map { it.name })
             assertTrue(
-                snapshot.tasks.all { it.stages.isNotEmpty() },
+                shown.all { it.stages.isNotEmpty() },
                 "the pipeline of the task that is on the list went missing",
             )
         }

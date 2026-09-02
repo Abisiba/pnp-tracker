@@ -7,6 +7,7 @@ import dev.pnptracker.data.database.TemporaryDatabaseDirectory
 import dev.pnptracker.data.database.aCell
 import dev.pnptracker.data.database.aGame
 import dev.pnptracker.data.database.aTask
+import dev.pnptracker.data.database.activePoolTasks
 import dev.pnptracker.data.database.createdAt
 import dev.pnptracker.data.database.entity.TaskColorEntity
 import dev.pnptracker.data.database.entity.TaskEntity
@@ -101,12 +102,7 @@ class GameCompletionProjectionTest {
 
     private suspend fun namesIn(view: GameTableView): List<String> = rows().filter(view::includes).map { it.gameName }
 
-    private suspend fun idsIn(poolType: PoolType): List<EntityId> =
-        pools
-            .observePool(poolType)
-            .first()
-            .tasks
-            .map { it.taskId }
+    private suspend fun idsIn(poolType: PoolType): List<EntityId> = activePoolTasks(pools.observePool(poolType).first()).map { it.taskId }
 
     private suspend fun finish(gameId: EntityId) = progress.completeGame(gameId, StoppedClock(updatedAt), IdGenerator.Random)
 
@@ -203,7 +199,7 @@ class GameCompletionProjectionTest {
             assertEquals(listOf(task.id), idsIn(PoolType.THREE_D), "one task came back as several")
             val snapshot = pools.observePool(PoolType.THREE_D).first()
             val groups =
-                snapshot.tasks
+                activePoolTasks(snapshot)
                     .single()
                     .colors
                     .map { it.colorId }

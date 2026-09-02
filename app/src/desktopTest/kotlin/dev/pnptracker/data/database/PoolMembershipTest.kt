@@ -86,7 +86,7 @@ class PoolMembershipTest {
 
     private suspend fun snapshotOf(poolType: PoolType): PoolSnapshot = pools.observePool(poolType).first()
 
-    private suspend fun idsIn(poolType: PoolType): List<EntityId> = snapshotOf(poolType).tasks.map { it.taskId }
+    private suspend fun idsIn(poolType: PoolType): List<EntityId> = activePoolTasks(snapshotOf(poolType)).map { it.taskId }
 
     // ------------------------------------------------------ one pool each
 
@@ -227,7 +227,7 @@ class PoolMembershipTest {
             val black = colorNamed("Siyah")
             val yarasa = task(name = "Yarasa", quantity = 10, colors = listOf(red.id, yellow.id, black.id))
 
-            val tasks = snapshotOf(PoolType.THREE_D).tasks
+            val tasks = activePoolTasks(snapshotOf(PoolType.THREE_D))
 
             assertEquals(listOf(yarasa), tasks.map { it.taskId }, "one task came back more than once")
             assertEquals(
@@ -243,7 +243,7 @@ class PoolMembershipTest {
         runBlocking<Unit> {
             val id = task(name = "Renksiz")
 
-            val tasks = snapshotOf(PoolType.THREE_D).tasks
+            val tasks = activePoolTasks(snapshotOf(PoolType.THREE_D))
 
             assertEquals(listOf(id), tasks.map { it.taskId })
             assertEquals(emptyList(), tasks.single().colors)

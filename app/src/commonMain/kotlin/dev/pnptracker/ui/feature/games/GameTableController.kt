@@ -33,6 +33,8 @@ import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.rules.normalizeColorTerm
+import dev.pnptracker.domain.search.GameTableFilter
+import dev.pnptracker.domain.search.SearchQuery
 import dev.pnptracker.domain.tasks.TaskDraft
 import dev.pnptracker.domain.tasks.TaskEditException
 import dev.pnptracker.domain.tasks.TaskFlags
@@ -214,6 +216,74 @@ class GameTableController(
         state = state.copy(view = view, blockedByEditor = false).redrawn()
     }
 
+    // -------------------------------------------------------- what is shown
+
+    /**
+     * Changes what the table is being asked for, and draws it again.
+     *
+     * The single door every filter action goes through. Nothing is read and
+     * nothing is written: the rows already in hand are narrowed, so a filter
+     * costs one pass over a list and never a query.
+     *
+     * Unlike the view, a filter is not refused while a cell is open. The view
+     * decides which games exist for the table at all and moving it could carry
+     * the open row off the screen; a filter cannot, because the row being worked
+     * in is kept regardless. So somebody can look for something else without
+     * first abandoning what they were typing.
+     */
+    private fun onFilter(change: (GameTableFilter) -> GameTableFilter) {
+        val next = change(state.filter)
+        if (next == state.filter) return
+        state = state.copy(filter = next, blockedByEditor = false).redrawn()
+    }
+
+    /** What is typed in the search box, kept as typed and folded when it is used. */
+    fun search(text: String) {
+        if (text == state.searchText) return
+        state = state.copy(searchText = text)
+        onFilter { it.copy(query = SearchQuery(text)) }
+    }
+
+    /** Empties the search box on its own, leaving every other choice alone. */
+    fun clearSearch() = search("")
+
+    /** Adds a pool to the filter, or takes it out again (PLAN 13). */
+    fun togglePool(poolType: PoolType) =
+        onFilter { filter ->
+            filter.copy(
+                poolTypes = if (poolType in filter.poolTypes) filter.poolTypes - poolType else filter.poolTypes + poolType,
+            )
+        }
+
+    /** Adds a colour to the filter, or takes it out again. */
+    fun toggleColor(colorId: EntityId) =
+        onFilter { filter ->
+            filter.copy(
+                colorIds = if (colorId in filter.colorIds) filter.colorIds - colorId else filter.colorIds + colorId,
+            )
+        }
+
+    /** Whether rows holding work with no colour are being asked for. */
+    fun toggleAwaitingColor() = onFilter { it.copy(awaitingColor = !it.awaitingColor) }
+
+    /** Puts everything back the way the table opens, search included. */
+    fun clearFilters() {
+        if (state.filter == GameTableFilter.NONE && state.searchText.isEmpty()) return
+        state = state.copy(filter = GameTableFilter.NONE, searchText = "", blockedByEditor = false).redrawn()
+    }
+
+    /** Opens the panel of filter choices. */
+    fun openFilters() {
+        if (state.filterSurface == TableFilterSurface.OPEN) return
+        state = state.copy(filterSurface = TableFilterSurface.OPEN)
+    }
+
+    /** Closes it, and hands the keyboard back to the button it was opened from. */
+    fun closeFilters() {
+        if (state.filterSurface == TableFilterSurface.CLOSED) return
+        state = state.copy(filterSurface = TableFilterSurface.CLOSED, focusRecall = state.focusRecall + 1)
+    }
+
     /**
      * Says an action was refused, and calls the keyboard back to the open work.
      *
@@ -232,6 +302,13 @@ class GameTableController(
      * once would take the user somewhere they did not ask to be.
      */
     override fun closeInnermost() {
+        // Drawn over the toolbar and over everything below it, so whenever it is
+        // open it is the innermost thing there is. What is open in a cell stays
+        // open underneath: Escape takes one layer.
+        if (state.filterSurface == TableFilterSurface.OPEN) {
+            closeFilters()
+            return
+        }
         state.rowWork?.let { row ->
             // Nothing is written and nothing is thrown away: PLAN 12.9 has
             // `Hayır` leave the game exactly as it was.
@@ -1672,11 +1749,21 @@ class GameTableController(
      */
     private fun rowsFor(
         view: GameTableView,
+        filter: GameTableFilter,
         busyWith: Set<EntityId>,
     ): GameTableRowsState {
-        val visible = allRows.filter { view.includes(it) || it.gameId in busyWith }
+        // The row a surface is standing on is kept whatever the filter says, for
+        // the same reason it is kept whatever the view says.
+        val inView = allRows.filter { view.includes(it) || it.gameId in busyWith }
+        val visible = inView.filter { filter.matches(it) || it.gameId in busyWith }
         return if (visible.isEmpty()) {
-            GameTableRowsState.Empty(view = view, hasGamesInOtherViews = allRows.isNotEmpty())
+            GameTableRowsState.Empty(
+                view = view,
+                hasGamesInOtherViews = allRows.isNotEmpty(),
+                // Rows the view holds that the filter took away: something to
+                // loosen, rather than a library to start.
+                hiddenByFilter = inView.isNotEmpty(),
+            )
         } else {
             GameTableRowsState.Content(visible)
         }
@@ -1684,7 +1771,7 @@ class GameTableController(
 
     /** The same state with the table drawn for whatever is open in it now. */
     private fun GameTableScreenState.redrawn(): GameTableScreenState =
-        copy(rows = rowsFor(view, setOfNotNull(work?.gameId, rowWork?.gameId)))
+        copy(rows = rowsFor(view, filter, setOfNotNull(work?.gameId, rowWork?.gameId)))
 }
 
 /**

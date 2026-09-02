@@ -127,6 +127,15 @@ import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.columnNameOf
 import dev.pnptracker.ui.feature.colors.ColorPicker
 import dev.pnptracker.ui.feature.importworkspace.labelOf
+import dev.pnptracker.ui.feature.search.ColorFilterChoice
+import dev.pnptracker.ui.feature.search.FilterButton
+import dev.pnptracker.ui.feature.search.FilterChoice
+import dev.pnptracker.ui.feature.search.FilterChoiceRow
+import dev.pnptracker.ui.feature.search.FilterPanel
+import dev.pnptracker.ui.feature.search.FilterSectionTitle
+import dev.pnptracker.ui.feature.search.FilterSummary
+import dev.pnptracker.ui.feature.search.SearchField
+import dev.pnptracker.ui.feature.search.closesFilterPanelOnEscape
 import dev.pnptracker.ui.feature.tasks.ChosenColorList
 import dev.pnptracker.ui.feature.tasks.ColorList
 import dev.pnptracker.ui.feature.tasks.NoteLine
@@ -136,6 +145,7 @@ import dev.pnptracker.ui.feature.tasks.focusOutline
 import dev.pnptracker.ui.feature.tasks.sentenceOf
 import dev.pnptracker.ui.feature.tasks.stillHasEvery
 import dev.pnptracker.ui.feature.tasks.taskEditMessageOf
+import dev.pnptracker.ui.poolNavigationNameOf
 import dev.pnptracker.ui.stageNameOf
 import dev.pnptracker.ui.theme.PnpStatus
 import dev.pnptracker.ui.theme.opaqueColorOf
@@ -247,7 +257,7 @@ fun GameTableScreen(controller: GameTableController) {
 
         when (val rows = state.rows) {
             GameTableRowsState.Loading -> Message(stringResource(Strings.Table.loading))
-            is GameTableRowsState.Empty -> EmptyTable(rows)
+            is GameTableRowsState.Empty -> EmptyTable(rows, controller::clearFilters)
             is GameTableRowsState.Content -> Table(rows.rows, controller, state)
         }
     }
@@ -288,6 +298,8 @@ private fun TableControls(
                 )
             }
         }
+
+        TableSearchControls(controller = controller, state = state)
 
         if (state.blockedByEditor) {
             // Nothing is saved and nothing is thrown away; the user is told the
@@ -334,6 +346,114 @@ private fun TableControls(
             GameComposer(controller = controller, composer = composer, isSaving = controller.isSaving)
         }
     }
+}
+
+/**
+ * The search box, the filter button and the summary of what is in force.
+ *
+ * Under the three view chips and never beside them, at every width. The chips
+ * already fill a line at 720, and the two things are about different subjects
+ * anyway: the row above chooses which **games** are listed, and this chooses
+ * which of them hold the **work** the user is looking for.
+ */
+@Composable
+private fun TableSearchControls(
+    controller: GameTableController,
+    state: GameTableScreenState,
+) {
+    val filterButtonFocus = remember { FocusRequester() }
+    LaunchedEffect(state.focusRecall) {
+        if (state.filterSurface == TableFilterSurface.CLOSED && !state.isBusy) {
+            runCatching { filterButtonFocus.requestFocus() }
+        }
+    }
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .closesFilterPanelOnEscape(state.filterSurface == TableFilterSurface.OPEN, controller::closeFilters),
+    ) {
+        SearchField(
+            text = state.searchText,
+            onChange = controller::search,
+            onClear = controller::clearSearch,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            FilterButton(
+                chosenCount = state.chosenFilterCount,
+                onClick = if (state.filterSurface == TableFilterSurface.OPEN) controller::closeFilters else controller::openFilters,
+                focus = filterButtonFocus,
+            )
+            FilterSummary(parts = tableFilterSummaryOf(state), onClearAll = controller::clearFilters)
+        }
+        if (state.filterSurface == TableFilterSurface.OPEN) {
+            FilterPanel(
+                onClose = controller::closeFilters,
+                onClearAll = controller::clearFilters,
+                hasChoices = state.chosenFilterCount > 0,
+            ) {
+                TableFilterChoices(controller, state)
+            }
+        }
+    }
+}
+
+/**
+ * What the table's panel offers.
+ *
+ * The pool filter lives here and nowhere else: the table is the one screen that
+ * shows all four pools side by side, so it is the only one where choosing
+ * between them means anything (PLAN 13). A pool screen is already one pool.
+ */
+@Composable
+private fun TableFilterChoices(
+    controller: GameTableController,
+    state: GameTableScreenState,
+) {
+    val filter = state.filter
+    FilterSectionTitle(stringResource(Strings.Search.sectionPool))
+    FilterChoiceRow {
+        PoolType.entries.forEach { pool ->
+            FilterChoice(
+                label = stringResource(poolNavigationNameOf(pool)),
+                selected = pool in filter.poolTypes,
+                onToggle = { controller.togglePool(pool) },
+            )
+        }
+    }
+    FilterSectionTitle(stringResource(Strings.Search.sectionColor))
+    FilterChoiceRow {
+        FilterChoice(
+            label = stringResource(Strings.Search.awaitingColor),
+            selected = filter.awaitingColor,
+            onToggle = controller::toggleAwaitingColor,
+        )
+        state.colors.forEach { color ->
+            ColorFilterChoice(
+                colorName = color.canonicalName,
+                hex = color.hex,
+                selected = color.id in filter.colorIds,
+                onToggle = { controller.toggleColor(color.id) },
+            )
+        }
+    }
+}
+
+/** Everything in force, in words, for the summary line and for a reader. */
+@Composable
+private fun tableFilterSummaryOf(state: GameTableScreenState): List<String> {
+    val filter = state.filter
+    val poolNames = PoolType.entries.associateWith { stringResource(poolNavigationNameOf(it)) }
+    val parts = mutableListOf<String>()
+    if (!filter.query.isEmpty) parts += stringResource(Strings.Search.summarySearch, filter.query.raw.trim())
+    if (filter.poolTypes.isNotEmpty()) {
+        parts += stringResource(Strings.Search.summaryPools, filter.poolTypes.joinToString(", ") { poolNames.getValue(it) })
+    }
+    val colorNames = state.colors.filter { it.id in filter.colorIds }.map { it.canonicalName }
+    if (colorNames.isNotEmpty()) parts += stringResource(Strings.Search.summaryColors, colorNames.joinToString(", "))
+    if (filter.awaitingColor) parts += stringResource(Strings.Search.summaryAwaitingColor)
+    return parts
 }
 
 /**
@@ -2919,9 +3039,16 @@ private fun Modifier.cellBorder(focused: Boolean): Modifier =
     )
 
 @Composable
-private fun EmptyTable(state: GameTableRowsState.Empty) {
+private fun EmptyTable(
+    state: GameTableRowsState.Empty,
+    onClearFilters: () -> Unit,
+) {
     val (title, hint) =
         when {
+            // Asked first: the view really does hold rows, and the filter is why
+            // none of them is here. Telling somebody to add a game they already
+            // have would send them looking for the wrong thing.
+            state.hiddenByFilter -> Strings.Search.emptyTable to Strings.Search.emptyTableHint
             !state.hasGamesInOtherViews -> Strings.Table.emptyLibrary to Strings.Table.emptyLibraryHint
             state.view == GameTableView.COMPLETED ->
                 Strings.Table.emptyCompleted to Strings.Table.emptyCompletedHint
@@ -2935,6 +3062,11 @@ private fun EmptyTable(state: GameTableRowsState.Empty) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (state.hiddenByFilter) {
+            TextButton(onClick = onClearFilters, modifier = Modifier.focusOutline(ComposerShape)) {
+                Text(text = stringResource(Strings.Search.clearAll), style = MaterialTheme.typography.labelMedium)
+            }
+        }
     }
 }
 

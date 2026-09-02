@@ -30,12 +30,19 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface PoolDao {
     /**
-     * The work still to be done in one pool.
+     * Every task of one pool: the work still to do, the work finished, and the
+     * work nobody can start yet.
      *
-     * Active means four things at once, and PLAN 5.6 and 12.10 give each of them:
-     * the task is not finished, it has not been deleted, its game has not been
-     * deleted, and it is still written somewhere — a task with no piece in any
-     * cell is anchorless and has no place in the document the pool reflects.
+     * All three, from one statement, because PLAN 13 lets the user ask for any
+     * of them and PLAN 1410 says a finished task can be shown again. Which of
+     * the three the screen is showing is decided above this, in memory, over the
+     * rows this already returned — binding it into the `WHERE` clause would mean
+     * a fresh query and a fresh stream every time somebody changed their mind,
+     * which is the shape PLAN 16 rules out.
+     *
+     * What is excluded is what could not be shown at all: a deleted task, a task
+     * whose game was deleted, and a task with no piece in any cell — anchorless,
+     * and with no place in the document the pool reflects.
      *
      * A game the user has marked finished is deliberately *not* one of them.
      * PLAN's scenario at the end keeps an unfinished task in the 3D pool while
@@ -59,6 +66,7 @@ interface PoolDao {
                tasks.tracking_mode AS tracking_mode,
                tasks.primary_batch_completed AS primary_batch_completed,
                tasks.current_missing_quantity AS current_missing_quantity,
+               tasks.is_completed AS is_completed,
                tasks.is_missing AS is_missing,
                tasks.is_borrowed AS is_borrowed,
                tasks.needs_info AS needs_info,
@@ -68,8 +76,6 @@ interface PoolDao {
         INNER JOIN game_cells ON game_cells.id = cell_segments.cell_id
         INNER JOIN games ON games.id = game_cells.game_id
         WHERE tasks.pool_type = :poolType
-          AND tasks.is_completed = 0
-          AND tasks.needs_info = 0
           AND tasks.deleted_at IS NULL
           AND games.deleted_at IS NULL
         ORDER BY games.name, games.id, tasks.name, tasks.id
@@ -78,7 +84,7 @@ interface PoolDao {
     fun observeTasksOfPool(poolType: PoolType): Flow<List<PoolTaskRow>>
 
     /**
-     * Every colour of every active task of one pool, read once.
+     * Every colour of every task of one pool, read once.
      *
      * In slot order, because that order is what the task is: PLAN 5.10 numbers a
      * multi-colour task's colours from the user's own arrangement, and a card
@@ -104,8 +110,6 @@ interface PoolDao {
         INNER JOIN game_cells ON game_cells.id = cell_segments.cell_id
         INNER JOIN games ON games.id = game_cells.game_id
         WHERE tasks.pool_type = :poolType
-          AND tasks.is_completed = 0
-          AND tasks.needs_info = 0
           AND tasks.deleted_at IS NULL
           AND games.deleted_at IS NULL
         ORDER BY task_colors.task_id, task_colors.slot_index
@@ -114,7 +118,7 @@ interface PoolDao {
     fun observeColorsOfPool(poolType: PoolType): Flow<List<PoolColorRow>>
 
     /**
-     * Every stage of every active task of one pipeline pool, read once.
+     * Every stage of every task of one pipeline pool, read once.
      *
      * In pipeline order, so the first unfinished one is simply the first that
      * has not been fully done — which is what PLAN 12.11 puts on the badge.
@@ -131,8 +135,6 @@ interface PoolDao {
         INNER JOIN game_cells ON game_cells.id = cell_segments.cell_id
         INNER JOIN games ON games.id = game_cells.game_id
         WHERE tasks.pool_type = :poolType
-          AND tasks.is_completed = 0
-          AND tasks.needs_info = 0
           AND tasks.deleted_at IS NULL
           AND games.deleted_at IS NULL
         ORDER BY task_stages.task_id, task_stages.order_index
@@ -141,7 +143,7 @@ interface PoolDao {
     fun observeStagesOfPool(poolType: PoolType): Flow<List<PoolStageRow>>
 
     /**
-     * What has been reported wrong against each active task of one pool.
+     * What has been reported wrong against each task of one pool.
      *
      * Grouped in the database, so one row comes back per task however long its
      * history is. Only what was reported counts towards this total: PLAN 12.10
@@ -159,8 +161,6 @@ interface PoolDao {
         INNER JOIN game_cells ON game_cells.id = cell_segments.cell_id
         INNER JOIN games ON games.id = game_cells.game_id
         WHERE tasks.pool_type = :poolType
-          AND tasks.is_completed = 0
-          AND tasks.needs_info = 0
           AND tasks.deleted_at IS NULL
           AND games.deleted_at IS NULL
           AND progress_events.kind = 'FAILURE_REPORTED'

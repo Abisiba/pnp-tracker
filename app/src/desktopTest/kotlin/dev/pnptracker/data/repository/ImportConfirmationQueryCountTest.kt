@@ -10,6 +10,7 @@ import dev.pnptracker.data.database.aCell
 import dev.pnptracker.data.database.aDraftTask
 import dev.pnptracker.data.database.aGame
 import dev.pnptracker.data.database.aRawImportBlock
+import dev.pnptracker.data.database.activePoolTasks
 import dev.pnptracker.data.database.anImportBatch
 import dev.pnptracker.data.database.entity.ColorEntity
 import dev.pnptracker.data.database.updatedAt
@@ -326,7 +327,7 @@ class ImportConfirmationQueryCountTest {
             val snapshot = assertNotNull(pools.observePool(PoolType.THREE_D).first())
             val after = decisions(ran(driver.stop()))
 
-            assertEquals(emptyList(), snapshot.tasks, "work waiting on information stayed on the active list")
+            assertEquals(emptyList(), activePoolTasks(snapshot), "work waiting on information stayed on the active list")
             assertEquals(before, after, "the new filter cost another query")
         }
 

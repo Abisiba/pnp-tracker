@@ -5,6 +5,7 @@ import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.pools.PoolModel
 import dev.pnptracker.domain.pools.PoolTask
+import dev.pnptracker.domain.search.PoolFilter
 import dev.pnptracker.domain.tasks.StageSnapshot
 import dev.pnptracker.domain.tasks.TaskProgressFailure
 import dev.pnptracker.domain.tasks.countedQuantityOf
@@ -177,16 +178,46 @@ sealed interface PoolWork {
 }
 
 /**
+ * Whether the panel of filter choices is open over the pool.
+ *
+ * Its own value rather than a boolean beside the work, because it is a surface
+ * the keyboard can be inside and Escape has to close — and because it closes
+ * back to the button it was opened from. It is deliberately not one of
+ * [PoolWork]'s cases: that set is what is being done *to a task*, and every one
+ * of them carries the card it is about. This is about the whole screen and about
+ * no task at all.
+ */
+enum class PoolFilterSurface {
+    CLOSED,
+    OPEN,
+}
+
+/**
  * What one pool screen is showing and what is open over it.
  *
  * The open work is held apart from the pool's own rows, so a fresh list arriving
  * from the database replaces the rows and leaves what the user is halfway
- * through exactly where it was.
+ * through exactly where it was. The filter is held apart from both, for the same
+ * reason twice over: a fresh list is not a reason to forget what somebody asked
+ * to see, and opening a task is not a reason to widen it again.
  */
 data class PoolScreenState(
     val poolType: PoolType,
     val content: PoolContentState = PoolContentState.Loading,
     val work: PoolWork? = null,
+    /** What the user has asked this pool to show; PLAN 13. */
+    val filter: PoolFilter = PoolFilter.NONE,
+    /** What is typed in the search box, before it is trimmed and folded. */
+    val searchText: String = "",
+    val filterSurface: PoolFilterSurface = PoolFilterSurface.CLOSED,
+    /**
+     * True when the pool holds tasks but none of them answered the filter.
+     *
+     * Kept apart from a pool that is simply empty: one is a filter to loosen and
+     * the other is work to create, and a screen that said the same for both would
+     * send the user looking for a task they never made.
+     */
+    val hasHiddenTasks: Boolean = false,
     /**
      * Which tasks have their stage list open.
      *
@@ -210,4 +241,10 @@ data class PoolScreenState(
 
     /** The card the keyboard goes back to when what is open closes. */
     val focusCard: PoolCardKey? get() = work?.card
+
+    /** True when anything at all has been asked for beyond the ordinary view. */
+    val isNarrowed: Boolean get() = filter.isNarrowed
+
+    /** How many choices to show on the filter button, the search included. */
+    val chosenFilterCount: Int get() = filter.chosenCount + if (filter.query.isEmpty) 0 else 1
 }

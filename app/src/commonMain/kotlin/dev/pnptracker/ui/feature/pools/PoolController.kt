@@ -13,10 +13,17 @@ import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.model.stagesOf
 import dev.pnptracker.domain.pools.PoolModel
+import dev.pnptracker.domain.pools.PoolSnapshot
 import dev.pnptracker.domain.pools.PoolTask
 import dev.pnptracker.domain.pools.poolModelOf
 import dev.pnptracker.domain.rules.normalizeColorTerm
+import dev.pnptracker.domain.search.PoolFilter
+import dev.pnptracker.domain.search.SearchQuery
+import dev.pnptracker.domain.search.TaskFlagFilter
+import dev.pnptracker.domain.search.TaskStateFilter
+import dev.pnptracker.domain.search.filterPoolTasks
 import dev.pnptracker.domain.tasks.StageSnapshot
 import dev.pnptracker.domain.tasks.TaskEditException
 import dev.pnptracker.domain.tasks.TaskFlags
@@ -69,6 +76,16 @@ class PoolController(
         private set
 
     /**
+     * The last whole reading of the pool, before any filter was applied to it.
+     *
+     * Kept because the filter is answered from here and never from the database:
+     * PLAN 16 will not have the number of queries grow with what the user is
+     * looking at, and a filter bound into the query would open a new stream on
+     * every keystroke. The rows arrive once; narrowing them is arithmetic.
+     */
+    private var lastSnapshot: PoolSnapshot? = null
+
+    /**
      * Follows the pool until cancelled.
      *
      * The grouping and the ordering happen here, on the way through, so what the
@@ -79,14 +96,33 @@ class PoolController(
     suspend fun observePool() {
         pools
             .observePool(poolType)
-            .map { PoolContentState.Content(poolModelOf(it)) as PoolContentState }
-            .catch { emit(PoolContentState.Failed) }
-            .collect(::show)
+            .map { it as PoolSnapshot? }
+            .catch { emit(null) }
+            .collect { snapshot -> if (snapshot == null) show(PoolContentState.Failed) else show(snapshot) }
     }
 
-    /** Shows one reading of the pool, laid out. */
-    fun show(snapshot: dev.pnptracker.domain.pools.PoolSnapshot) {
-        show(PoolContentState.Content(poolModelOf(snapshot)))
+    /** Shows one reading of the pool, laid out for whatever is being asked for. */
+    fun show(snapshot: PoolSnapshot) {
+        lastSnapshot = snapshot
+        redraw()
+    }
+
+    /**
+     * Lays the last reading out again under the filter as it stands.
+     *
+     * The one place the filter is applied, so changing a filter and receiving a
+     * new list go through exactly the same arithmetic and cannot disagree. It
+     * reads nothing: a filter change costs no query and opens no stream.
+     */
+    private fun redraw() {
+        val snapshot = lastSnapshot ?: return
+        val kept = filterPoolTasks(snapshot.tasks, state.filter)
+        show(
+            content = PoolContentState.Content(poolModelOf(snapshot.copy(tasks = kept), state.filter.shortagesFirst)),
+            // Something to loosen rather than nothing to do: the pool holds work,
+            // and the filter is why none of it is on screen.
+            hasHiddenTasks = kept.isEmpty() && snapshot.tasks.isNotEmpty(),
+        )
     }
 
     /**
@@ -95,7 +131,10 @@ class PoolController(
      * The one place a new reading arrives, so what survives it is decided once
      * rather than at every call site.
      */
-    fun show(content: PoolContentState) {
+    fun show(
+        content: PoolContentState,
+        hasHiddenTasks: Boolean = false,
+    ) {
         // A read that failed says nothing about any task, so it takes nothing
         // away; a list that arrived is the whole truth about which cards there
         // are, so an expansion over a task that has left it has nothing to be
@@ -107,6 +146,7 @@ class PoolController(
         state =
             state.copy(
                 content = content,
+                hasHiddenTasks = hasHiddenTasks,
                 work = stillOpen(content, state.work),
                 expandedStages =
                     model?.let { shown -> state.expandedStages.filterTo(mutableSetOf()) { shown.taskNamed(it) != null } }
@@ -119,10 +159,100 @@ class PoolController(
         colors.observeColors().collect(::showColors)
     }
 
-    /** Shows one reading of the catalogue. */
+    /**
+     * Shows one reading of the catalogue.
+     *
+     * A colour the user was filtering by that has since been deleted stops being
+     * a filter. It cannot match anything any more — nothing is made in a colour
+     * that is not there — so leaving it selected would silently empty the screen
+     * and offer no way to find out why. Everything else they chose is left alone.
+     */
     fun showColors(colors: List<ColorSummary>) {
         catalogue = colors
+        if (colors.isEmpty() || state.filter.colorIds.isEmpty()) return
+        val known = colors.mapTo(mutableSetOf()) { it.id }
+        val kept = state.filter.colorIds.intersect(known)
+        if (kept.size != state.filter.colorIds.size) onFilter { it.copy(colorIds = kept) }
     }
+
+    // ------------------------------------------------------- what is shown
+
+    /**
+     * Changes what the pool is being asked for, and draws it again.
+     *
+     * The single door every filter action goes through. Nothing is read and
+     * nothing is written; the rows already in hand are narrowed and laid out
+     * again, so a filter costs exactly one pass over a list.
+     */
+    private fun onFilter(change: (PoolFilter) -> PoolFilter) {
+        val next = change(state.filter)
+        if (next == state.filter) return
+        state = state.copy(filter = next)
+        redraw()
+    }
+
+    /** What is typed in the search box, kept as typed and folded when it is used. */
+    fun search(text: String) {
+        if (text == state.searchText) return
+        state = state.copy(searchText = text)
+        onFilter { it.copy(query = SearchQuery(text)) }
+        // A query that trims to the same thing changes no rows, but the box has
+        // to show what was typed either way.
+    }
+
+    /** Empties the search box on its own, leaving every other choice alone. */
+    fun clearSearch() = search("")
+
+    /** Adds a colour to the filter, or takes it out again. */
+    fun toggleColor(colorId: EntityId) =
+        onFilter { filter ->
+            filter.copy(
+                colorIds = if (colorId in filter.colorIds) filter.colorIds - colorId else filter.colorIds + colorId,
+            )
+        }
+
+    /** Whether tasks with no colour at all are being asked for (PLAN 12.10). */
+    fun toggleAwaitingColor() = onFilter { it.copy(awaitingColor = !it.awaitingColor) }
+
+    /** Which of the three kinds of task the pool shows; one at a time. */
+    fun showState(taskState: TaskStateFilter) = onFilter { it.copy(state = taskState) }
+
+    /** Adds one of the import marks to the filter, or takes it out again. */
+    fun toggleFlag(flag: TaskFlagFilter) =
+        onFilter { filter ->
+            filter.copy(flags = if (flag in filter.flags) filter.flags - flag else filter.flags + flag)
+        }
+
+    /** Adds a pipeline step to the filter, or takes it out again. */
+    fun toggleStage(stage: ProductionStage) =
+        onFilter { filter ->
+            filter.copy(stages = if (stage in filter.stages) filter.stages - stage else filter.stages + stage)
+        }
+
+    /** Whether what is owed right now comes first (PLAN 13). */
+    fun toggleShortagesFirst() = onFilter { it.copy(shortagesFirst = !it.shortagesFirst) }
+
+    /** Puts everything back the way the screen opens, search included. */
+    fun clearFilters() {
+        if (state.filter == PoolFilter.NONE && state.searchText.isEmpty()) return
+        state = state.copy(filter = PoolFilter.NONE, searchText = "")
+        redraw()
+    }
+
+    /** Opens the panel of filter choices. */
+    fun openFilters() {
+        if (state.filterSurface == PoolFilterSurface.OPEN) return
+        state = state.copy(filterSurface = PoolFilterSurface.OPEN)
+    }
+
+    /** Closes it, and hands the keyboard back to the button it was opened from. */
+    fun closeFilters() {
+        if (state.filterSurface == PoolFilterSurface.CLOSED) return
+        state = state.copy(filterSurface = PoolFilterSurface.CLOSED, focusRecall = state.focusRecall + 1)
+    }
+
+    /** Which stages this pool's tasks can be waiting at, or none at all. */
+    fun stageChoices(): List<ProductionStage> = stagesOf(poolType)
 
     /**
      * What stays open when a new list arrives.
@@ -536,6 +666,14 @@ class PoolController(
 
     /** Closes the innermost surface, changing nothing anywhere. */
     override fun closeInnermost() {
+        // The filter panel is drawn over the toolbar and over everything below
+        // it, so it is the innermost thing there is whenever it is open. Closing
+        // it leaves the task surface underneath exactly as it was — a panel over
+        // a menu is two layers, and Escape takes one.
+        if (state.filterSurface == PoolFilterSurface.OPEN) {
+            closeFilters()
+            return
+        }
         val open = state.work ?: return
         if (state.isSaving) return
         state = state.copy(work = open.parent, focusRecall = state.focusRecall + 1)

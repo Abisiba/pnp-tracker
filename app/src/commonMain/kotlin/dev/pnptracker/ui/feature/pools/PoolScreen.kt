@@ -49,15 +49,28 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import dev.pnptracker.domain.colors.ColorSummary
+import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.pools.PoolColor
 import dev.pnptracker.domain.pools.PoolColorGroup
 import dev.pnptracker.domain.pools.PoolModel
 import dev.pnptracker.domain.pools.PoolTask
+import dev.pnptracker.domain.search.TaskFlagFilter
+import dev.pnptracker.domain.search.TaskStateFilter
 import dev.pnptracker.domain.tasks.TaskProgressFailure
 import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.feature.games.AnchoredAboveWord
+import dev.pnptracker.ui.feature.search.ColorFilterChoice
+import dev.pnptracker.ui.feature.search.FilterButton
+import dev.pnptracker.ui.feature.search.FilterChoice
+import dev.pnptracker.ui.feature.search.FilterChoiceRow
+import dev.pnptracker.ui.feature.search.FilterPanel
+import dev.pnptracker.ui.feature.search.FilterSectionTitle
+import dev.pnptracker.ui.feature.search.FilterSummary
+import dev.pnptracker.ui.feature.search.SearchField
+import dev.pnptracker.ui.feature.search.closesFilterPanelOnEscape
 import dev.pnptracker.ui.feature.tasks.NoteLine
 import dev.pnptracker.ui.feature.tasks.TaskEditPanel
 import dev.pnptracker.ui.feature.tasks.focusOutline
@@ -111,18 +124,227 @@ fun PoolScreen(controller: PoolController) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        PoolToolbar(controller, state)
         when (val content = state.content) {
             PoolContentState.Loading -> Message(stringResource(Strings.Pool.loading))
             PoolContentState.Failed -> Message(stringResource(Strings.Pool.error))
             is PoolContentState.Content ->
                 if (content.model.isEmpty) {
-                    Message(stringResource(Strings.Pool.empty))
+                    // Two different empty pools, and they are answered
+                    // differently: one is a filter to loosen, the other is work
+                    // that has not been made yet.
+                    if (state.hasHiddenTasks) {
+                        FilteredEmpty(
+                            title = stringResource(Strings.Search.emptyPool),
+                            hint = stringResource(Strings.Search.emptyPoolHint),
+                            onClearAll = controller::clearFilters,
+                        )
+                    } else {
+                        Message(stringResource(Strings.Pool.empty))
+                    }
                 } else {
                     PoolBody(content.model, controller)
                 }
         }
     }
 }
+
+/**
+ * The search box, the filter button and the summary of what is in force.
+ *
+ * The same three things at every width, in the same order, on their own rows.
+ * The pool offers no pool filter of its own: the user is already inside one, and
+ * a choice with one answer is not a choice.
+ */
+@Composable
+private fun PoolToolbar(
+    controller: PoolController,
+    state: PoolScreenState,
+) {
+    val filterFocus = remember { FocusRequester() }
+    // The keyboard comes back to the button the panel was opened from, rather
+    // than to wherever the popup happened to leave it.
+    LaunchedEffect(state.focusRecall) {
+        if (state.filterSurface == PoolFilterSurface.CLOSED && state.work == null) {
+            runCatching { filterFocus.requestFocus() }
+        }
+    }
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .closesFilterPanelOnEscape(state.filterSurface == PoolFilterSurface.OPEN, controller::closeFilters),
+    ) {
+        SearchField(
+            text = state.searchText,
+            onChange = controller::search,
+            onClear = controller::clearSearch,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            FilterButton(
+                chosenCount = state.chosenFilterCount,
+                onClick = if (state.filterSurface == PoolFilterSurface.OPEN) controller::closeFilters else controller::openFilters,
+                focus = filterFocus,
+            )
+            FilterSummary(parts = poolFilterSummaryOf(state, controller.catalogue), onClearAll = controller::clearFilters)
+        }
+        if (state.filterSurface == PoolFilterSurface.OPEN) {
+            FilterPanel(
+                onClose = controller::closeFilters,
+                onClearAll = controller::clearFilters,
+                hasChoices = state.chosenFilterCount > 0,
+            ) {
+                PoolFilterChoices(controller, state)
+            }
+        }
+    }
+}
+
+/** What the panel offers for this pool, which is not the same in all four. */
+@Composable
+private fun PoolFilterChoices(
+    controller: PoolController,
+    state: PoolScreenState,
+) {
+    val filter = state.filter
+    FilterSectionTitle(stringResource(Strings.Search.sectionState))
+    FilterChoiceRow {
+        TaskStateFilter.entries.forEach { choice ->
+            FilterChoice(
+                label = stringResource(stateNameOf(choice)),
+                selected = filter.state == choice,
+                onToggle = { controller.showState(choice) },
+            )
+        }
+    }
+
+    // Only the 3D pool groups by colour (PLAN 12.10); the other three carry no
+    // colours at all, so a colour filter there would answer for nothing.
+    if (state.poolType == PoolType.THREE_D) {
+        FilterSectionTitle(stringResource(Strings.Search.sectionColor))
+        FilterChoiceRow {
+            FilterChoice(
+                label = stringResource(Strings.Search.awaitingColor),
+                selected = filter.awaitingColor,
+                onToggle = controller::toggleAwaitingColor,
+            )
+            controller.catalogue.forEach { color ->
+                ColorFilterChoice(
+                    colorName = color.canonicalName,
+                    hex = color.hex,
+                    selected = color.id in filter.colorIds,
+                    onToggle = { controller.toggleColor(color.id) },
+                )
+            }
+        }
+    }
+
+    FilterSectionTitle(stringResource(Strings.Search.sectionFlags))
+    FilterChoiceRow {
+        TaskFlagFilter.entries.forEach { flag ->
+            FilterChoice(
+                label = stringResource(flagNameOf(flag)),
+                selected = flag in filter.flags,
+                onToggle = { controller.toggleFlag(flag) },
+            )
+        }
+    }
+
+    val stages = controller.stageChoices()
+    if (stages.isNotEmpty()) {
+        FilterSectionTitle(stringResource(Strings.Search.sectionStage))
+        FilterChoiceRow {
+            stages.forEach { stage ->
+                FilterChoice(
+                    label = stringResource(stageNameOf(stage)),
+                    selected = stage in filter.stages,
+                    onToggle = { controller.toggleStage(stage) },
+                )
+            }
+        }
+    }
+
+    // Bringing work forward is only meaningful where a shortage is counted, and
+    // PLAN 13 asks for it on the 3D pool.
+    if (state.poolType == PoolType.THREE_D) {
+        FilterSectionTitle(stringResource(Strings.Search.sectionOrder))
+        FilterChoiceRow {
+            FilterChoice(
+                label = stringResource(Strings.Search.shortagesFirst),
+                selected = filter.shortagesFirst,
+                onToggle = controller::toggleShortagesFirst,
+            )
+        }
+    }
+}
+
+/**
+ * Everything in force, in words, for the summary line and for a reader.
+ *
+ * Every name is resolved from the catalogue before it is joined, so a colour
+ * appears under the name it has now and a step under the word PLAN gave it. The
+ * search term is shown as the user typed it, trimmed only of the space they were
+ * about to type into.
+ */
+@Composable
+private fun poolFilterSummaryOf(
+    state: PoolScreenState,
+    catalogue: List<ColorSummary>,
+): List<String> {
+    val filter = state.filter
+    val flagNames = TaskFlagFilter.entries.associateWith { stringResource(flagNameOf(it)) }
+    val stageNames = ProductionStage.entries.associateWith { stringResource(stageNameOf(it)) }
+    val parts = mutableListOf<String>()
+    if (!filter.query.isEmpty) parts += stringResource(Strings.Search.summarySearch, filter.query.raw.trim())
+    if (filter.state != TaskStateFilter.ACTIVE) {
+        parts += stringResource(Strings.Search.summaryState, stringResource(stateNameOf(filter.state)))
+    }
+    val colorNames = catalogue.filter { it.id in filter.colorIds }.map { it.canonicalName }
+    if (colorNames.isNotEmpty()) parts += stringResource(Strings.Search.summaryColors, colorNames.joinToString(", "))
+    if (filter.awaitingColor) parts += stringResource(Strings.Search.summaryAwaitingColor)
+    if (filter.flags.isNotEmpty()) {
+        parts += stringResource(Strings.Search.summaryFlags, filter.flags.joinToString(", ") { flagNames.getValue(it) })
+    }
+    if (filter.stages.isNotEmpty()) {
+        parts += stringResource(Strings.Search.summaryStages, filter.stages.joinToString(", ") { stageNames.getValue(it) })
+    }
+    if (filter.shortagesFirst) parts += stringResource(Strings.Search.summaryShortagesFirst)
+    return parts
+}
+
+/** Nothing to show because the filter hid it, said as its own thing. */
+@Composable
+private fun FilteredEmpty(
+    title: String,
+    hint: String,
+    onClearAll: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(text = title, style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = hint,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        TextButton(onClick = onClearAll, modifier = Modifier.focusOutline(CardShape)) {
+            Text(text = stringResource(Strings.Search.clearAll), style = MaterialTheme.typography.labelMedium)
+        }
+    }
+}
+
+private fun stateNameOf(state: TaskStateFilter) =
+    when (state) {
+        TaskStateFilter.ACTIVE -> Strings.Search.stateActive
+        TaskStateFilter.COMPLETED -> Strings.Search.stateCompleted
+        TaskStateFilter.NEEDS_INFO -> Strings.Search.stateNeedsInfo
+    }
+
+private fun flagNameOf(flag: TaskFlagFilter) =
+    when (flag) {
+        TaskFlagFilter.MISSING -> Strings.Search.flagMissing
+        TaskFlagFilter.BORROWED -> Strings.Search.flagBorrowed
+    }
 
 @Composable
 private fun Message(text: String) {
@@ -423,6 +645,7 @@ private fun TaskCard(
                 if (task.colors.isNotEmpty()) {
                     ColorChips(task = task, current = card.colorId)
                 }
+                TaskMarks(task)
                 TaskFacts(task)
                 if (task.stages.isNotEmpty()) {
                     StageBadge(task = task, card = card, controller = controller)
@@ -432,6 +655,48 @@ private fun TaskCard(
                 }
             }
             if (isOpenHere) TaskPopover(controller)
+        }
+    }
+}
+
+/**
+ * The marks the task carries, written out.
+ *
+ * PLAN 10 and 11.7 put four notes on a task that are about the work rather than
+ * about its progress, and PLAN 13 lets two of them be filtered on. A card that
+ * could be selected by a mark and then said nothing about it would leave the
+ * user looking at a list they could not account for, so each one shows as its own
+ * small word — never as a colour, a dot or a shade, which PLAN 17 will not have
+ * carry a meaning alone.
+ */
+@Composable
+private fun TaskMarks(task: PoolTask) {
+    val marks =
+        listOfNotNull(
+            stringResource(Strings.Search.markMissing).takeIf { task.isMissing },
+            stringResource(Strings.Search.markBorrowed).takeIf { task.isBorrowed },
+            stringResource(Strings.Search.markNeedsInfo).takeIf { task.needsInfo },
+            stringResource(Strings.Search.markNeedsClassification).takeIf { task.needsClassification },
+        )
+    if (marks.isEmpty()) return
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        marks.forEach { mark ->
+            Surface(
+                shape = RoundedCornerShape(4.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            ) {
+                Text(
+                    text = mark,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
         }
     }
 }
@@ -886,7 +1151,17 @@ private fun spokenTaskOf(
         task.failureTotal
             .takeIf { it > 0 }
             ?.let { stringResource(Strings.Pool.failures, it.toString()) }
-    return listOfNotNull(head, colors, current, missing, failures).joinToString(" ")
+    // The same four marks the card draws, so what is heard and what is seen
+    // agree — and so a task found by a mark filter says why it was found.
+    val marks =
+        listOfNotNull(
+            stringResource(Strings.Search.markMissing).takeIf { task.isMissing },
+            stringResource(Strings.Search.markBorrowed).takeIf { task.isBorrowed },
+            stringResource(Strings.Search.markNeedsInfo).takeIf { task.needsInfo },
+            stringResource(Strings.Search.markNeedsClassification).takeIf { task.needsClassification },
+        ).takeIf { it.isNotEmpty() }
+            ?.joinToString(", ")
+    return listOfNotNull(head, colors, current, missing, failures, marks).joinToString(" ")
 }
 
 /**

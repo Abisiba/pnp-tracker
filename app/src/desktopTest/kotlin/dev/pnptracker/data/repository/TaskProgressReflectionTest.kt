@@ -5,6 +5,7 @@ import dev.pnptracker.data.database.CountingSqliteDriver
 import dev.pnptracker.data.database.DatabaseFactory
 import dev.pnptracker.data.database.TemporaryDatabaseDirectory
 import dev.pnptracker.data.database.aTask
+import dev.pnptracker.data.database.activePoolTasks
 import dev.pnptracker.data.database.entity.TaskColorEntity
 import dev.pnptracker.data.database.insertGameCellAndTask
 import dev.pnptracker.domain.model.CellColumnType
@@ -111,12 +112,7 @@ class TaskProgressReflectionTest {
             .take(count)
             .map { it.id }
 
-    private suspend fun idsIn(pool: PoolType): List<EntityId> =
-        pools
-            .observePool(pool)
-            .first()
-            .tasks
-            .map { it.taskId }
+    private suspend fun idsIn(pool: PoolType): List<EntityId> = activePoolTasks(pools.observePool(pool).first()).map { it.taskId }
 
     /**
      * Every statement really run, named by what it touched.
@@ -177,7 +173,7 @@ class TaskProgressReflectionTest {
 
             assertTrue(progress.reportFailure(ids.newId(), taskId, 2, clock))
 
-            val reflected = pools.observePool(PoolType.THREE_D).first().tasks
+            val reflected = activePoolTasks(pools.observePool(PoolType.THREE_D).first())
             assertEquals(listOf(taskId), reflected.map { it.taskId }, "one task came back more than once")
             val task = reflected.single()
             assertEquals(three, task.colors.map { it.colorId }, "it came back in fewer colours than it is made in")
@@ -220,12 +216,7 @@ class TaskProgressReflectionTest {
 
             progress.reportFailure(ids.newId(), cardId, 3, clock, stage = ProductionStage.LAMINATE)
 
-            val reflected =
-                pools
-                    .observePool(PoolType.CARD)
-                    .first()
-                    .tasks
-                    .single()
+            val reflected = activePoolTasks(pools.observePool(PoolType.CARD).first()).single()
             assertEquals(listOf(20, 0, 0), reflected.stages.map { it.completedQuantity })
             assertEquals(3, reflected.currentMissingQuantity)
         }
@@ -437,12 +428,7 @@ class TaskProgressReflectionTest {
                     .first()
                     .single()
             assertEquals(counted, projected.failureTotal, "the projection reported a different number")
-            val shown =
-                pools
-                    .observePool(PoolType.THREE_D)
-                    .first()
-                    .tasks
-                    .single()
+            val shown = activePoolTasks(pools.observePool(PoolType.THREE_D).first()).single()
             assertEquals(counted, shown.failureTotal, "the pool card reported a different number")
             assertTrue(shown.failureTotal > 0, "a card with everything wrong showed nothing wrong")
             // The debt is a different number and stays inside the task's total.
@@ -888,5 +874,8 @@ class TaskProgressReflectionTest {
     private fun queriesIn(recorded: List<String>): Map<String, Int> = tally(recorded).filterKeys { !it.startsWith("PRAGMA") }
 
     /** The 3D pool as the screen lays it out, read through the real projection. */
-    private suspend fun threeDSections() = (poolModelOf(pools.observePool(PoolType.THREE_D).first()) as PoolModel.ThreeD).sections
+    private suspend fun threeDSections(): dev.pnptracker.domain.pools.ThreeDPoolModel {
+        val snapshot = pools.observePool(PoolType.THREE_D).first()
+        return (poolModelOf(snapshot.copy(tasks = activePoolTasks(snapshot))) as PoolModel.ThreeD).sections
+    }
 }

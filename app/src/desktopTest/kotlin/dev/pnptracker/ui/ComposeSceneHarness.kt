@@ -170,6 +170,15 @@ class ComposeSceneHarness(
     /** The nodes a screen reader would announce, in tree order. */
     fun spokenNodes(): List<SemanticsNode> = nodes().filter { it.contentDescriptions().isNotEmpty() }
 
+    /**
+     * Every word actually written on the screen, in tree order.
+     *
+     * A plain `Text` carries its words as semantics text rather than as a
+     * content description, and a reader announces those too. A test that only
+     * looked at descriptions would think an ordinary sentence was not there.
+     */
+    fun writtenText(): List<String> = nodes().flatMap { node -> node.reads(SemanticsProperties.Text).orEmpty().map { it.text } }
+
     /** Every node that can take the keyboard, which is what a Tab stop is. */
     fun focusableNodes(): List<SemanticsNode> = nodes().filter { it.config.contains(SemanticsProperties.Focused) }
 

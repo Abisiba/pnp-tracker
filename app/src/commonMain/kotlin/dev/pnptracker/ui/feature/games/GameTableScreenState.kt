@@ -15,6 +15,7 @@ import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.model.hasStages
+import dev.pnptracker.domain.search.GameTableFilter
 import dev.pnptracker.domain.tasks.CellTextSelection
 import dev.pnptracker.domain.tasks.TaskEditFailure
 import dev.pnptracker.domain.tasks.TaskFromTextFailure
@@ -37,11 +38,32 @@ sealed interface GameTableRowsState {
     data class Empty(
         val view: GameTableView,
         val hasGamesInOtherViews: Boolean,
+        /**
+         * True when the view really does hold rows and the filter hid them all.
+         *
+         * A third thing to say, and it has to be said differently: an empty view
+         * is answered by making a game or looking at another view, and an empty
+         * result is answered by loosening what was asked for. One sentence for
+         * both would send the user to make a game they already have.
+         */
+        val hiddenByFilter: Boolean = false,
     ) : GameTableRowsState
 
     data class Content(
         val rows: List<GameTableRow>,
     ) : GameTableRowsState
+}
+
+/**
+ * Whether the panel of filter choices is open over the table.
+ *
+ * Its own value and not one of [CellWork]'s cases: that set is what is being
+ * done *inside one cell*, and every one of them names the cell it is in. This
+ * belongs to the whole table and to no cell at all.
+ */
+enum class TableFilterSurface {
+    CLOSED,
+    OPEN,
 }
 
 /** A name the user is typing, before anything is written. */
@@ -789,6 +811,18 @@ data class TaskEditor(
 data class GameTableScreenState(
     val view: GameTableView = GameTableView.ONGOING,
     val rows: GameTableRowsState = GameTableRowsState.Loading,
+    /**
+     * What the user has asked the table to show inside the open view (PLAN 13).
+     *
+     * Beside the view rather than folded into it: the view is about games and
+     * this is about the work in them, and PLAN 12.4 and 5.3 keep those apart.
+     * Not stored, for the same reason the view is not.
+     */
+    val filter: GameTableFilter = GameTableFilter.NONE,
+    /** What is typed in the search box, before it is trimmed and folded. */
+    val searchText: String = "",
+    /** Whether the panel of filter choices is open over the table. */
+    val filterSurface: TableFilterSurface = TableFilterSurface.CLOSED,
     val gameComposer: NameComposer? = null,
     val failure: GameSetupFailure? = null,
     /** The one thing being done in one cell, or null when the table is only read. */
@@ -840,6 +874,12 @@ data class GameTableScreenState(
 ) {
     /** True while anything at all is open, in a cell or on a row. */
     val isBusy: Boolean get() = work != null || rowWork != null
+
+    /** True when anything has been asked for beyond the open view. */
+    val isNarrowed: Boolean get() = filter.isNarrowed
+
+    /** How many choices to show on the filter button, the search included. */
+    val chosenFilterCount: Int get() = filter.chosenCount + if (filter.query.isEmpty) 0 else 1
 
     /** The confirmation open on this row, if there is one. */
     fun confirmingCompletionOf(gameId: EntityId): RowWork.ConfirmingGameCompletion? =

@@ -1,6 +1,7 @@
 package dev.pnptracker.data.database
 
 import dev.pnptracker.data.database.entity.TaskEntity
+import dev.pnptracker.data.repository.PoolStore
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
@@ -99,11 +100,7 @@ class TaskFlagEditTest {
         )
 
     private suspend fun activeNamesIn(poolType: PoolType): List<String> =
-        database
-            .poolDao()
-            .observeTasksOfPool(poolType)
-            .first()
-            .map { it.taskName }
+        activePoolTasks(PoolStore(database.poolDao()).observePool(poolType).first()).map { it.name }
 
     private suspend fun activeCountIn(poolType: PoolType): Int =
         database
