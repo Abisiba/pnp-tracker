@@ -18,7 +18,10 @@ import dev.pnptracker.data.database.entity.TaskEntity
 import dev.pnptracker.data.database.entity.TaskStageEntity
 import dev.pnptracker.data.database.entity.stageRowsFor
 import dev.pnptracker.data.database.projection.CellColumnRow
+import dev.pnptracker.data.database.projection.CellDocumentRow
 import dev.pnptracker.data.database.projection.DraftTargetRow
+import dev.pnptracker.domain.games.TASK_SEPARATOR
+import dev.pnptracker.domain.games.taskNeedsSeparatorAfter
 import dev.pnptracker.domain.importconfirm.ImportConfirmationException
 import dev.pnptracker.domain.importconfirm.ImportConfirmationFailure
 import dev.pnptracker.domain.importreview.DraftInitialValues
@@ -1017,6 +1020,37 @@ abstract class ImportDao {
     abstract suspend fun draftTargetsOfBatch(batchId: EntityId): List<DraftTargetRow>
 
     /**
+     * The whole document of every cell this import is aiming at, in reading
+     * order, with each piece resolved to the words it contributes.
+     *
+     * One statement for the batch, joined from the batch the same way the target
+     * lookup is, so reading forty-two cells costs what reading one does. Two
+     * drafts aiming at the same cell meet each of its pieces twice, which is what
+     * the `GROUP BY` is for: without it a cell would be reported as holding its
+     * document twice over.
+     *
+     * The import needs this to know where a cell's writing ends before it appends
+     * to it — whether the last thing in the cell is a task, a piece of text, or
+     * nothing at all — and to read the finished document back and check it says
+     * what was promised.
+     */
+    @Query(
+        """
+        SELECT cell_segments.cell_id AS cell_id,
+               cell_segments.order_index AS order_index,
+               COALESCE(cell_segments.text, tasks.name) AS text
+        FROM draft_tasks
+        INNER JOIN raw_import_blocks ON raw_import_blocks.id = draft_tasks.raw_import_block_id
+        INNER JOIN cell_segments ON cell_segments.cell_id = draft_tasks.target_cell_id
+        LEFT JOIN tasks ON tasks.id = cell_segments.task_id
+        WHERE raw_import_blocks.import_batch_id = :batchId
+        GROUP BY cell_segments.id
+        ORDER BY cell_segments.cell_id, cell_segments.order_index
+        """,
+    )
+    abstract suspend fun targetCellDocumentsOfBatch(batchId: EntityId): List<CellDocumentRow>
+
+    /**
      * The games an import's accepted green cells point at, still active.
      *
      * One row per game however many cells name it, so answering the same thing
@@ -1135,7 +1169,9 @@ abstract class ImportDao {
      * counter moving after a failure.
      *
      * Confirming an import creates no game and no cell. It only writes tasks into
-     * cells the user opened by hand, each one as a piece of that cell's document.
+     * cells the user opened by hand, each one as a piece of that cell's document,
+     * with a single space between it and whatever it follows so that two tasks
+     * written into one cell do not read as one word (PLAN 5.5).
      *
      * A card or board task arrives with its whole pipeline, exactly as one typed
      * by hand does. There is no second kind of task with stages missing.
@@ -1147,24 +1183,50 @@ abstract class ImportDao {
     open suspend fun confirmDraftBatch(
         batchId: EntityId,
         acknowledgeUnprocessedBlocks: Boolean,
-        moment: Instant,
+        clock: Clock,
         idGenerator: IdGenerator,
     ): Int {
         val plan = plannedConfirmationOf(batchId, acknowledgeUnprocessedBlocks)
 
-        // Nothing above this line has written, read a clock or made a name. The
-        // clock is the caller's single moment for the whole act, and every
-        // identity is made now, before the first insert: an identifier that ran
-        // out half way would otherwise leave a batch of rows behind it.
-        val named = plan.drafts.map { it to (idGenerator.newId() to idGenerator.newId()) }
+        // Nothing above this line has written, read a clock or made a name. Every
+        // identity is made now, before the first insert and the separators
+        // included: an identifier that ran out half way would otherwise leave a
+        // batch of rows behind it and a task with no space in front of it.
+        val named =
+            plan.drafts.map { piece ->
+                NamedTask(
+                    piece = piece,
+                    taskId = idGenerator.newId(),
+                    segmentId = idGenerator.newId(),
+                    separatorId = piece.separatorOrderIndex?.let { idGenerator.newId() },
+                )
+            }
+        // One reading of the clock for the whole act, taken once everything that
+        // could still refuse has been decided.
+        val moment = clock.now()
 
-        named.forEach { (piece, ids) ->
-            val (taskId, segmentId) = ids
+        named.forEach { made ->
+            val (piece, taskId, segmentId, separatorId) = made
             insertTask(piece.taskRow(taskId, moment))
             piece.colorIds.forEachIndexed { slot, colorId ->
                 insertTaskColor(TaskColorEntity(taskId = taskId, colorId = colorId, slotIndex = slot))
             }
             stageRowsFor(taskId, piece.poolType, moment, piece.stageCount).forEach { insertStage(it) }
+            // The space goes in as a piece of the document in its own right, so
+            // the boundary survives being read back, copied out, spoken aloud and
+            // edited again. Written before the task it separates, in the place
+            // planning kept for it.
+            if (separatorId != null && piece.separatorOrderIndex != null) {
+                insertSegment(
+                    CellSegmentEntity.plainText(
+                        id = separatorId,
+                        cellId = piece.targetCellId,
+                        orderIndex = piece.separatorOrderIndex,
+                        text = TASK_SEPARATOR,
+                        moment = moment,
+                    ),
+                )
+            }
             insertSegment(
                 CellSegmentEntity.task(
                     id = segmentId,
@@ -1234,11 +1296,21 @@ abstract class ImportDao {
         val targets = draftTargetsOfBatch(batchId).associateBy { it.cellId }
         val chosenColors = draftColorsOfBatch(batchId).groupBy { it.draftTaskId }
         val catalogue = if (chosenColors.isEmpty()) emptySet() else allColorIds().toSet()
+        // What each target cell reads before this import touches it, kept so the
+        // postcondition can insist the user's own writing came through unchanged.
+        val documentsBefore = targetCellDocumentsOfBatch(batchId).groupBy { it.cellId }
 
         // Where the next piece goes in each cell, carried in memory: several
         // drafts aiming at one cell take consecutive places, and drafts aiming at
         // different cells do not disturb each other's numbering.
         val nextIndex = mutableMapOf<EntityId, Int>()
+        // What each cell reads as the import fills it, so the second task written
+        // into a cell is separated from the first one this import put there and
+        // not just from whatever was in the cell to begin with.
+        val readsSoFar =
+            documentsBefore
+                .mapValues { (_, rows) -> rows.joinToString(separator = "") { it.text } }
+                .toMutableMap()
         val pieces =
             drafts.map { draft ->
                 // One unready draft stops the whole batch; none is ever skipped.
@@ -1288,8 +1360,16 @@ abstract class ImportDao {
                     refuse(ImportConfirmationFailure.COLOR_NO_LONGER_AVAILABLE, draft.id)
                 }
 
-                val orderIndex = nextIndex.getOrPut(targetCellId) { target.nextOrderIndex }
-                nextIndex[targetCellId] = orderIndex + 1
+                // A separator goes in only where a boundary would otherwise be
+                // invisible: never before the first task of an empty cell, and
+                // never after writing that already ends in a space of its own.
+                val soFar = readsSoFar[targetCellId].orEmpty()
+                val separator = taskNeedsSeparatorAfter(soFar)
+                var at = nextIndex.getOrPut(targetCellId) { target.nextOrderIndex }
+                val separatorOrderIndex = if (separator) at++ else null
+                val orderIndex = at++
+                nextIndex[targetCellId] = at
+                readsSoFar[targetCellId] = soFar + (if (separator) TASK_SEPARATOR else "") + draft.name
 
                 PlannedTask(
                     draftId = draft.id,
@@ -1308,12 +1388,17 @@ abstract class ImportDao {
                     // rejected one leaves the task open.
                     isFinished = draft.completionHint == HintDecision.ACCEPTED,
                     targetCellId = targetCellId,
+                    separatorOrderIndex = separatorOrderIndex,
                     orderIndex = orderIndex,
                     colorIds = ids,
                 )
             }
 
-        return PlannedConfirmation(drafts = pieces, gamesToFinish = gamesToFinishFor(batchId, blocks.values))
+        return PlannedConfirmation(
+            drafts = pieces,
+            gamesToFinish = gamesToFinishFor(batchId, blocks.values),
+            documentsBefore = documentsBefore,
+        )
     }
 
     /**
@@ -1383,6 +1468,8 @@ abstract class ImportDao {
         val needsClassification: Boolean,
         val isFinished: Boolean,
         val targetCellId: EntityId,
+        /** Where the space in front of this task goes, or null when it needs none. */
+        val separatorOrderIndex: Int?,
         val orderIndex: Int,
         val colorIds: List<EntityId>,
     ) {
@@ -1419,10 +1506,20 @@ abstract class ImportDao {
             )
     }
 
+    /** One planned task with the identities its rows will be written under. */
+    private data class NamedTask(
+        val piece: PlannedTask,
+        val taskId: EntityId,
+        val segmentId: EntityId,
+        val separatorId: EntityId?,
+    )
+
     /** Everything one confirmation will write, and nothing it will not. */
     private data class PlannedConfirmation(
         val drafts: List<PlannedTask>,
         val gamesToFinish: List<EntityId>,
+        /** What each target cell held before any of this was written. */
+        val documentsBefore: Map<EntityId, List<CellDocumentRow>>,
     )
 
     /**
@@ -1430,7 +1527,7 @@ abstract class ImportDao {
      * stand unless it is exactly what was promised. Still inside the transaction,
      * so a broken postcondition rolls the whole confirmation back.
      *
-     * Five reads for the whole batch, none of them per task: a check that cost a
+     * Six reads for the whole batch, none of them per task: a check that cost a
      * query a row would put back the very shape the planning above exists to
      * remove.
      */
@@ -1515,6 +1612,54 @@ abstract class ImportDao {
             check(cell.isSound) {
                 "The cell ${cell.cellId} holds ${cell.segmentCount} pieces numbered up to " +
                     "${cell.nextOrderIndex - 1}."
+            }
+        }
+
+        // What each cell reads now, against what it read before and against the
+        // boundaries this import promised to leave in it. One batch-wide read,
+        // the same statement the planning used.
+        val documentsAfter = targetCellDocumentsOfBatch(batchId).groupBy { it.cellId }
+        plan.drafts.groupBy { it.targetCellId }.forEach { (cellId, pieces) ->
+            val after = documentsAfter[cellId].orEmpty()
+            check(after.map { it.orderIndex } == after.indices.toList()) {
+                "The cell $cellId is numbered ${after.map { it.orderIndex }} after being written into."
+            }
+            val before = plan.documentsBefore[cellId].orEmpty()
+            val beforeText = before.joinToString(separator = "") { it.text }
+            val afterText = after.joinToString(separator = "") { it.text }
+            // The user's own writing, character for character, still at the front
+            // of the document: an import appends and never rewrites or trims.
+            check(afterText.startsWith(beforeText)) {
+                "The cell $cellId no longer begins with the ${beforeText.length} characters it held."
+            }
+            val separators = pieces.count { it.separatorOrderIndex != null }
+            check(after.size == before.size + pieces.size + separators) {
+                "The cell $cellId holds ${after.size} pieces for the ${before.size} it had, " +
+                    "${pieces.size} tasks and $separators separators."
+            }
+
+            val byIndex = after.associateBy { it.orderIndex }
+            pieces.forEach { piece ->
+                check(byIndex[piece.orderIndex]?.text == piece.name) {
+                    "The cell $cellId reads ${byIndex[piece.orderIndex]?.text} where ${piece.name} was written."
+                }
+                // Nothing runs straight on into a task: whatever precedes it ends
+                // where a reader, a screen reader and a paste all hear it end.
+                val preceding = byIndex[piece.orderIndex - 1]?.text
+                check(preceding == null || !taskNeedsSeparatorAfter(preceding)) {
+                    "The task ${piece.name} runs on from the writing before it in the cell $cellId."
+                }
+                piece.separatorOrderIndex?.let { at ->
+                    check(byIndex[at]?.text == TASK_SEPARATOR) {
+                        "The piece before ${piece.name} in the cell $cellId is not a single space."
+                    }
+                    // A space is only ever put where one was missing, so a
+                    // separator can never sit against writing that already ended.
+                    val earlier = byIndex[at - 1]?.text
+                    check(earlier != null && taskNeedsSeparatorAfter(earlier)) {
+                        "A separator was written before ${piece.name} in the cell $cellId with no need of one."
+                    }
+                }
             }
         }
 

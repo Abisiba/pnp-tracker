@@ -277,7 +277,7 @@ class ImportReviewEndToEndTest {
 
             // The cell reads as what the user wrote plus the two task names, and
             // nothing of the raw import text was copied into it.
-            assertEquals("elimde kalanlar: Kırmızı evMavi ev", documentOf(cell.id))
+            assertEquals("elimde kalanlar: Kırmızı ev Mavi ev", documentOf(cell.id))
             assertTrue(
                 "12 KIRMIZI**" !in documentOf(cell.id),
                 "the cell's whole raw text was copied into the game",

@@ -166,7 +166,8 @@ class ImportHintDecisionTest {
         return draft.id
     }
 
-    private suspend fun confirm(fixture: Fixture): Int = importDao.confirmDraftBatch(fixture.batchId, true, moment, IdGenerator.Random)
+    private suspend fun confirm(fixture: Fixture): Int =
+        importDao.confirmDraftBatch(fixture.batchId, true, StoppedClock(moment), IdGenerator.Random)
 
     private suspend fun taskOf(draftId: EntityId): dev.pnptracker.data.database.entity.TaskEntity {
         val taskId = assertNotNull(assertNotNull(importDao.draftTaskById(draftId)).materializedTaskId)
@@ -428,7 +429,7 @@ class ImportHintDecisionTest {
             assertEquals(
                 ImportConfirmationFailure.COMPLETION_TARGET_GAME_REQUIRED,
                 assertFailsWith<ImportConfirmationException> {
-                    importDao.confirmDraftBatch(fixture.batchId, false, moment, IdGenerator.Random)
+                    importDao.confirmDraftBatch(fixture.batchId, false, StoppedClock(moment), IdGenerator.Random)
                 }.failure,
             )
             assertEquals(emptyList(), database.taskDao().allTasksIncludingDeleted())
@@ -440,7 +441,7 @@ class ImportHintDecisionTest {
                 fixture.gameId,
                 StoppedClock(moment),
             )
-            assertEquals(1, importDao.confirmDraftBatch(fixture.batchId, false, moment, IdGenerator.Random))
+            assertEquals(1, importDao.confirmDraftBatch(fixture.batchId, false, StoppedClock(moment), IdGenerator.Random))
             assertTrue(assertNotNull(database.gameDao().activeGameById(fixture.gameId)).isManuallyCompleted)
         }
 

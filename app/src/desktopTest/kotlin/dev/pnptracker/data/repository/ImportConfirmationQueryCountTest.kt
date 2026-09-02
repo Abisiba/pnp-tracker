@@ -182,7 +182,12 @@ class ImportConfirmationQueryCountTest {
 
     private suspend fun confirm(batchId: EntityId): Map<String, Int> {
         driver.start()
-        importDao.confirmDraftBatch(batchId, acknowledgeUnprocessedBlocks = true, moment = moment, idGenerator = IdGenerator.Random)
+        importDao.confirmDraftBatch(
+            batchId,
+            acknowledgeUnprocessedBlocks = true,
+            clock = StoppedClock(moment),
+            idGenerator = IdGenerator.Random,
+        )
         return ran(driver.stop())
     }
 
@@ -197,9 +202,10 @@ class ImportConfirmationQueryCountTest {
             // recognisable rather than merely numerically different.
             assertEquals(1, many["SELECT game_cells"], "the per-draft cell lookup is back")
             assertEquals(1, many["SELECT cell_segments"], "the per-draft segment lookup is back")
-            // The writing grows, because the writing is the work.
+            // The writing grows, because the writing is the work: forty-two tasks
+            // and the forty-one spaces that keep their names apart.
             assertEquals(42, many["INSERT tasks"])
-            assertEquals(42, many["INSERT cell_segments"])
+            assertEquals(83, many["INSERT cell_segments"])
             assertEquals(42, many["UPDATE draft_tasks"])
             assertEquals(1, many["UPDATE import_batches"])
         }
@@ -269,7 +275,7 @@ class ImportConfirmationQueryCountTest {
     fun `the game table still reads in four queries after an import`() =
         runBlocking<Unit> {
             val batchId = aBatch(6)
-            importDao.confirmDraftBatch(batchId, true, moment, IdGenerator.Random)
+            importDao.confirmDraftBatch(batchId, true, StoppedClock(moment), IdGenerator.Random)
             val table = GameTableStore(database.gameDao(), database.gameCellDao(), database.gameTableDao())
 
             driver.start()
@@ -283,7 +289,7 @@ class ImportConfirmationQueryCountTest {
     fun `a pool still reads in the same few queries after an import`() =
         runBlocking<Unit> {
             val batchId = aBatch(6, colorIds = extraColors(2))
-            importDao.confirmDraftBatch(batchId, true, moment, IdGenerator.Random)
+            importDao.confirmDraftBatch(batchId, true, StoppedClock(moment), IdGenerator.Random)
             val pools = PoolStore(database.poolDao())
 
             driver.start()
@@ -302,7 +308,7 @@ class ImportConfirmationQueryCountTest {
         runBlocking<Unit> {
             val pools = PoolStore(database.poolDao())
             val batchId = aBatch(42)
-            importDao.confirmDraftBatch(batchId, true, moment, IdGenerator.Random)
+            importDao.confirmDraftBatch(batchId, true, StoppedClock(moment), IdGenerator.Random)
 
             driver.start()
             assertNotNull(pools.observePool(PoolType.THREE_D).first())

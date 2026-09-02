@@ -61,6 +61,21 @@ class ImportConfirmationRollbackTest {
         }
     }
 
+    /** Hands out names, but repeats the [reuse]-th one when the [at]-th is asked for. */
+    private class RepeatingIdGenerator(
+        private val reuse: Int,
+        private val at: Int,
+    ) : IdGenerator {
+        private var handed = 0
+        private var kept: EntityId? = null
+
+        override fun newId(): EntityId {
+            handed++
+            if (handed == at) return assertNotNull(kept)
+            return IdGenerator.Random.newId().also { if (handed == reuse) kept = it }
+        }
+    }
+
     /** A clock that will not say what time it is. */
     private class BrokenClock : Clock {
         override fun now(): Instant = throw IllegalStateException("the clock refused to answer")
@@ -193,7 +208,7 @@ class ImportConfirmationRollbackTest {
     }
 
     private suspend fun confirm(idGenerator: IdGenerator = IdGenerator.Random): Int =
-        importDao.confirmDraftBatch(batchId, acknowledgeUnprocessedBlocks = true, moment = moment, idGenerator = idGenerator)
+        importDao.confirmDraftBatch(batchId, acknowledgeUnprocessedBlocks = true, clock = StoppedClock(moment), idGenerator = idGenerator)
 
     /** Arms [trap], confirms, and proves the database is exactly as it was. */
     private suspend fun refusedLeavesEverything(
@@ -311,8 +326,8 @@ class ImportConfirmationRollbackTest {
     fun `a name runs out before the second task and nothing is written`() =
         runBlocking {
             given()
-            // Names are made in pairs, a task and its piece of the cell, and all
-            // of them before the first insert — so running out costs no rows.
+            // A task, its piece of the cell and the space in front of it are all
+            // named before the first insert — so running out costs no rows.
             refusedLeavesEverything({ }, LimitedIdGenerator(afterwards = 3))
         }
 
@@ -321,6 +336,44 @@ class ImportConfirmationRollbackTest {
         runBlocking {
             given()
             refusedLeavesEverything({ }, LimitedIdGenerator(afterwards = 7))
+        }
+
+    @Test
+    fun `a name runs out on the space between two tasks and nothing is written`() =
+        runBlocking {
+            given()
+            // Two names for the first draft, which needs no space in front of it,
+            // then a task and a piece for the second — and the separator's name
+            // is the one that cannot be had. The space is named with everything
+            // else, before the first insert, so this costs no rows either.
+            refusedLeavesEverything({ }, LimitedIdGenerator(afterwards = 4))
+        }
+
+    @Test
+    fun `the space in front of a task refuses to go in`() =
+        runBlocking {
+            given()
+            // The first separator is the second piece of the cell to be written:
+            // the first draft's task piece goes in before it.
+            refusedLeavesEverything(trapOn(2, "INSERT", "`CELL_SEGMENTS`"))
+        }
+
+    @Test
+    fun `a separator that collides with a piece already there takes everything back`() =
+        runBlocking {
+            val drafts = given()
+            val before = everything()
+            // A real constraint rather than an injected fault. Names are handed
+            // out task, piece, space — so the second draft's space is the fifth,
+            // and it is given the identity the first draft's piece already went
+            // in under. SQLite refuses it, and everything written before it goes
+            // with it.
+            assertFailsWith<Throwable> { confirm(RepeatingIdGenerator(reuse = 2, at = 5)) }
+
+            assertEquals(before, everything(), "a collided separator left something behind")
+            assertEquals(ImportBatchStatus.DRAFT, assertNotNull(importDao.batchById(batchId)).status)
+            assertTrue(importDao.draftTasksOfBatch(batchId).all { it.materializedTaskId == null })
+            assertEquals(drafts.size, importDao.draftTasksOfBatch(batchId).size)
         }
 
     @Test
@@ -408,7 +461,9 @@ class ImportConfirmationRollbackTest {
             assertEquals(drafts.size, confirm())
 
             assertEquals(drafts.size, database.taskDao().activeTasks().size)
-            assertEquals(drafts.size, database.cellSegmentDao().segmentCountOfCell(cellId))
+            // Four tasks and the three spaces between them, written once each.
+            assertEquals(drafts.size * 2 - 1, database.cellSegmentDao().segmentCountOfCell(cellId))
+            assertEquals(drafts.size - 1, database.cellSegmentDao().segmentsOfCell(cellId).count { it.text == " " })
             assertEquals(drafts.size * 2, CommittedSchema.countRowsOf(directory.databaseFile, "task_colors"))
             assertEquals(drafts.size * 3, CommittedSchema.countRowsOf(directory.databaseFile, "task_stages"))
             assertEquals(ImportBatchStatus.CONFIRMED, assertNotNull(importDao.batchById(batchId)).status)

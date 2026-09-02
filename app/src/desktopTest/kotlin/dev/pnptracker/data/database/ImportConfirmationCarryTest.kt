@@ -152,7 +152,12 @@ class ImportConfirmationCarryTest {
         }
 
         suspend fun confirm(): Int =
-            importDao.confirmDraftBatch(batchId, acknowledgeUnprocessedBlocks = true, moment = moment, idGenerator = IdGenerator.Random)
+            importDao.confirmDraftBatch(
+                batchId,
+                acknowledgeUnprocessedBlocks = true,
+                clock = StoppedClock(moment),
+                idGenerator = IdGenerator.Random,
+            )
     }
 
     private suspend fun given(columnType: CellColumnType = CellColumnType.THREE_D): Fixture {
@@ -598,7 +603,7 @@ class ImportConfirmationCarryTest {
             val draftId = fixture.draft(completionHint = HintDecision.ACCEPTED)
             fixture.greenHint(fixture.gameId)
 
-            importDao.confirmDraftBatch(fixture.batchId, true, fine, IdGenerator.Random)
+            importDao.confirmDraftBatch(fixture.batchId, true, StoppedClock(fine), IdGenerator.Random)
 
             assertTrue(assertNotNull(database.gameDao().activeGameById(fixture.gameId)).isManuallyCompleted)
             assertNotNull(assertNotNull(database.gameDao().activeGameById(fixture.gameId)).completedAt)
@@ -630,13 +635,20 @@ class ImportConfirmationCarryTest {
             assertEquals(42, fixture.confirm())
 
             val segments = database.cellSegmentDao().segmentsOfCell(fixture.cellId)
-            assertEquals((0..<42).toList(), segments.map { it.orderIndex }, "the document was left with a gap in it")
+            // Forty-two tasks and the forty-one spaces between them: the first
+            // needs none, having nothing in front of it.
+            assertEquals((0..<83).toList(), segments.map { it.orderIndex }, "the document was left with a gap in it")
             // In the order the drafts themselves come back, which is the order
             // the review screen lists them in; nothing is left to chance.
             assertEquals(
                 importDao.draftTasksOfBatch(fixture.batchId).map { it.materializedTaskId },
-                segments.map { it.taskId },
+                segments.mapNotNull { it.taskId },
             )
+            assertEquals(41, segments.count { it.text == " " })
+            // Read end to end: forty-two names, one space between each pair, and
+            // no space at either end of the cell.
+            val names = importDao.draftTasksOfBatch(fixture.batchId).map { taskName(assertNotNull(it.materializedTaskId)) }
+            assertEquals(names.joinToString(" "), documentOf(fixture.cellId))
         }
 
     @Test
@@ -657,14 +669,25 @@ class ImportConfirmationCarryTest {
             fixture.confirm()
 
             val segments = database.cellSegmentDao().segmentsOfCell(fixture.cellId)
-            assertEquals(listOf(0, 1, 2), segments.map { it.orderIndex })
+            // The user's own line, a space, the first task, a space, the second:
+            // the text is untouched and neither task runs into what precedes it.
+            assertEquals(listOf(0, 1, 2, 3, 4), segments.map { it.orderIndex })
             assertEquals("Kutu ve kapak", segments.first().text, "the plain text the user wrote was changed")
+            assertEquals(listOf(" ", " "), segments.filterIndexed { at, _ -> at == 1 || at == 3 }.map { it.text })
+            val made = importDao.draftTasksOfBatch(fixture.batchId).map { it.materializedTaskId }
             assertEquals(
-                listOf(null) + importDao.draftTasksOfBatch(fixture.batchId).map { it.materializedTaskId },
+                listOf(null, null, made[0], null, made[1]),
                 segments.map { it.taskId },
                 "the tasks did not follow the text the cell already held",
             )
-            assertEquals(setOf("Bir", "İki"), segments.drop(1).mapNotNull { taskName(assertNotNull(it.taskId)) }.toSet())
+            assertEquals(
+                setOf("Bir", "İki"),
+                segments.mapNotNull { it.taskId }.map { taskName(it) }.toSet(),
+            )
+            // One space between the line and the first task, one between the two
+            // tasks, and none anywhere else.
+            val names = made.map { taskName(assertNotNull(it)) }
+            assertEquals("Kutu ve kapak ${names.joinToString(" ")}", documentOf(fixture.cellId))
         }
 
     @Test
@@ -681,11 +704,21 @@ class ImportConfirmationCarryTest {
 
             fixture.confirm()
 
-            assertEquals(listOf(0, 1), database.cellSegmentDao().segmentsOfCell(fixture.cellId).map { it.orderIndex })
+            // Two tasks and the space between them in the first cell; one task and
+            // no space at all in the second, which had nothing to be parted from.
+            assertEquals(listOf(0, 1, 2), database.cellSegmentDao().segmentsOfCell(fixture.cellId).map { it.orderIndex })
             assertEquals(listOf(0), database.cellSegmentDao().segmentsOfCell(secondCell.id).map { it.orderIndex })
         }
 
     private suspend fun taskName(taskId: EntityId): String? = database.taskDao().taskByIdIncludingDeleted(taskId)?.name
+
+    /** What a cell reads: its pieces end to end, a task piece read as its name. */
+    private suspend fun documentOf(cellId: EntityId): String =
+        buildString {
+            database.cellSegmentDao().segmentsOfCell(cellId).forEach { piece ->
+                append(piece.text ?: taskName(assertNotNull(piece.taskId)).orEmpty())
+            }
+        }
 
     @Test
     fun `a second confirmation is still a guarded refusal that writes nothing`() =

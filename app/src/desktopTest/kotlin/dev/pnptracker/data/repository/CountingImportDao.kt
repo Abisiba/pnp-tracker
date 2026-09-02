@@ -11,6 +11,7 @@ import dev.pnptracker.data.database.entity.TaskColorEntity
 import dev.pnptracker.data.database.entity.TaskEntity
 import dev.pnptracker.data.database.entity.TaskStageEntity
 import dev.pnptracker.data.database.projection.CellColumnRow
+import dev.pnptracker.data.database.projection.CellDocumentRow
 import dev.pnptracker.data.database.projection.DraftTargetRow
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
@@ -111,6 +112,8 @@ class CountingImportDao(
     override suspend fun draftColorsOf(draftTaskId: EntityId): List<DraftTaskColorEntity> = real.draftColorsOf(draftTaskId)
 
     override suspend fun draftTargetsOfBatch(batchId: EntityId): List<DraftTargetRow> = real.draftTargetsOfBatch(batchId)
+
+    override suspend fun targetCellDocumentsOfBatch(batchId: EntityId): List<CellDocumentRow> = real.targetCellDocumentsOfBatch(batchId)
 
     override suspend fun acceptedCompletionTargetsOfBatch(batchId: EntityId): List<GameEntity> =
         real.acceptedCompletionTargetsOfBatch(batchId)

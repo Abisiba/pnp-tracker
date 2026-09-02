@@ -247,7 +247,7 @@ class ImportConfirmationStore(
                 importDao.confirmDraftBatch(
                     batchId = batchId,
                     acknowledgeUnprocessedBlocks = acknowledgeUnprocessedBlocks,
-                    moment = clock.now(),
+                    clock = clock,
                     idGenerator = idGenerator,
                 )
             } catch (cause: SQLiteException) {
