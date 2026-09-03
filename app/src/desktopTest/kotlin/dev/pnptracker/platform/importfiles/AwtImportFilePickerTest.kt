@@ -1,5 +1,6 @@
 package dev.pnptracker.platform.importfiles
 
+import dev.pnptracker.platform.awt.ModalFileDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -149,8 +150,8 @@ class AwtImportFilePickerTest {
     }
 
     @Test
-    fun `the picker does not reach for a coroutine main dispatcher`() {
-        val code = withoutComments(Files.readString(pickerSource()))
+    fun `the dialog hand-off does not reach for a coroutine main dispatcher`() {
+        val code = withoutComments(Files.readString(handoffSource()))
 
         assertTrue(
             "Dispatchers" !in code,
@@ -177,15 +178,15 @@ class AwtImportFilePickerTest {
             .lineSequence()
             .joinToString("\n") { it.substringBefore("//") }
 
-    private fun pickerSource(): Path {
+    private fun handoffSource(): Path {
         var candidate: Path? = Path.of("").toAbsolutePath().normalize()
         while (candidate != null) {
             listOf(candidate, candidate.resolve("app"))
-                .map { it.resolve("src/desktopMain/kotlin/dev/pnptracker/platform/importfiles/ImportFilePicker.kt") }
+                .map { it.resolve("src/desktopMain/kotlin/dev/pnptracker/platform/awt/ModalFileDialogs.kt") }
                 .firstOrNull { Files.isRegularFile(it) }
                 ?.let { return it }
             candidate = candidate.parent
         }
-        fail("Could not locate ImportFilePicker.kt from ${Path.of("").toAbsolutePath()}")
+        fail("Could not locate ModalFileDialogs.kt from ${Path.of("").toAbsolutePath()}")
     }
 }

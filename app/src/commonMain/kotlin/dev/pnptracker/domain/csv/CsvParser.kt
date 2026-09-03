@@ -1,8 +1,5 @@
 package dev.pnptracker.domain.csv
 
-/** A byte order mark, which a spreadsheet writes at the head of a UTF-8 CSV. */
-private const val BYTE_ORDER_MARK = '\uFEFF'
-
 private const val QUOTE = '"'
 private const val CARRIAGE_RETURN = '\r'
 private const val LINE_FEED = '\n'

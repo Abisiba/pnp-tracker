@@ -44,6 +44,8 @@ import dev.pnptracker.domain.pools.PoolNavigationSummary
 import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.feature.colors.ColorCatalogueController
 import dev.pnptracker.ui.feature.colors.ColorCatalogueScreen
+import dev.pnptracker.ui.feature.export.ExportController
+import dev.pnptracker.ui.feature.export.TaskExportAction
 import dev.pnptracker.ui.feature.games.GameTableController
 import dev.pnptracker.ui.feature.games.GameTableScreen
 import dev.pnptracker.ui.feature.home.HomeScreen
@@ -77,6 +79,7 @@ fun AppScaffold(
     reviewController: ImportReviewController,
     confirmationController: ImportConfirmationController,
     gameTableController: GameTableController,
+    exportController: ExportController,
     colorCatalogueController: ColorCatalogueController,
     poolControllers: PoolControllers,
     modifier: Modifier = Modifier,
@@ -107,7 +110,11 @@ fun AppScaffold(
             Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                 when (val screen = navigation.currentScreen) {
                     Screen.Home -> HomeScreen()
-                    Screen.Games -> GameTableScreen(gameTableController)
+                    Screen.Games ->
+                        GameTableScreen(
+                            controller = gameTableController,
+                            exportAction = { TaskExportAction(exportController) },
+                        )
                     Screen.Colors -> ColorCatalogueScreen(colorCatalogueController)
                     Screen.Import -> ImportSection(importController, reviewController, confirmationController)
                     // Keyed by the pool, so moving between two of them starts the

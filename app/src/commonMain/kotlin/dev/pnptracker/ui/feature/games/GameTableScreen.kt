@@ -234,7 +234,16 @@ private val ComposerShape = RoundedCornerShape(8.dp)
  * as one either.
  */
 @Composable
-fun GameTableScreen(controller: GameTableController) {
+fun GameTableScreen(
+    controller: GameTableController,
+    /**
+     * The export action, drawn with the table's own controls.
+     *
+     * Passed in rather than built here so the table keeps knowing nothing about
+     * files, and so a test of the table needs no exporter at all.
+     */
+    exportAction: @Composable () -> Unit = {},
+) {
     LaunchedEffect(controller) { controller.observeTable() }
     LaunchedEffect(controller) { controller.observeColorCatalogue() }
 
@@ -251,7 +260,7 @@ fun GameTableScreen(controller: GameTableController) {
             modifier = Modifier.padding(top = 4.dp),
         )
 
-        TableControls(controller = controller, state = state)
+        TableControls(controller = controller, state = state, exportAction = exportAction)
         FailureLine(state.failure)
         HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
@@ -268,6 +277,7 @@ fun GameTableScreen(controller: GameTableController) {
 private fun TableControls(
     controller: GameTableController,
     state: GameTableScreenState,
+    exportAction: @Composable () -> Unit = {},
 ) {
     Column(modifier = Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
@@ -345,6 +355,10 @@ private fun TableControls(
         } else {
             GameComposer(controller = controller, composer = composer, isSaving = controller.isSaving)
         }
+
+        // Below the composer, because it is about the whole table rather than
+        // about the row somebody is adding to it.
+        exportAction()
     }
 }
 

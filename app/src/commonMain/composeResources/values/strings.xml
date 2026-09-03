@@ -122,6 +122,26 @@
 
     <!-- Import screen: accessibility -->
     <string name="import_sheet_accessibility_label">İçe aktarılacak çalışma sayfası</string>
+    <!-- Task export -->
+    <string name="export_action">Görevleri CSV’ye aktar</string>
+    <string name="export_action_description">Bütün görevleri CSV dosyasına aktar</string>
+    <string name="export_choosing">Dosya konumu seçiliyor…</string>
+    <string name="export_writing">Görevler yazılıyor…</string>
+    <string name="export_written">%1$d görev %2$s dosyasına yazıldı.</string>
+    <string name="export_dismiss">Kapat</string>
+    <string name="export_scope_note">Ekrandaki arama ve filtreler dosyanın kapsamını değiştirmez; bütün görevler yazılır.</string>
+    <string name="export_overwrite_title">Dosya zaten var</string>
+    <string name="export_overwrite_question">%1$s adlı dosyanın üzerine yazılsın mı? Eski içerik geri alınamaz.</string>
+    <string name="export_overwrite_confirm">Üzerine yaz</string>
+    <string name="export_overwrite_cancel">Vazgeç</string>
+    <string name="export_error_title">Görevler dışa aktarılamadı</string>
+    <string name="export_error_nothing">Dışa aktarılacak görev yok. Dosya oluşturulmadı.</string>
+    <string name="export_error_broken_data">Kayıtlardan biri okunamadı. Hiçbir dosya oluşturulmadı veya değiştirilmedi.</string>
+    <string name="export_error_unsupported_file_type">Dosya adı .csv ile bitmelidir.</string>
+    <string name="export_error_not_writable">Bu konuma yazılamadı. Yazma izniniz olmayabilir.</string>
+    <string name="export_error_write_failed">Dosya yazılamadı. Varsa eski dosya olduğu gibi kaldı.</string>
+    <string name="export_error_not_atomic">Bu konumda dosya güvenle değiştirilemiyor. Eski dosya olduğu gibi bırakıldı; başka bir klasör deneyin.</string>
+
     <!-- Import review workspace -->
     <string name="review_title">İçe aktarma incelemesi</string>
     <string name="review_open">İncelemeyi aç</string>

@@ -16,6 +16,7 @@ import dev.pnptracker.data.database.dao.PoolDao
 import dev.pnptracker.data.database.dao.TaskColorDao
 import dev.pnptracker.data.database.dao.TaskDao
 import dev.pnptracker.data.database.dao.TaskEditDao
+import dev.pnptracker.data.database.dao.TaskExportDao
 import dev.pnptracker.data.database.dao.TaskFromTextDao
 import dev.pnptracker.data.database.dao.TaskProgressDao
 import dev.pnptracker.data.database.entity.CellSegmentEntity
@@ -75,6 +76,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun taskEditDao(): TaskEditDao
 
     abstract fun taskProgressDao(): TaskProgressDao
+
+    abstract fun taskExportDao(): TaskExportDao
 
     abstract fun importDao(): ImportDao
 }

@@ -37,7 +37,7 @@ enum class TaskStateFilter {
     /** Finished, and kept: PLAN 5.6 leaves it in its cell and its colour groups. */
     COMPLETED,
 
-    /** `needsInfo` or `needsClassification`; something about it is still unknown. */
+    /** `needsInfo`: something the work needs is still unknown (PLAN 11.7). */
     NEEDS_INFO,
     ;
 

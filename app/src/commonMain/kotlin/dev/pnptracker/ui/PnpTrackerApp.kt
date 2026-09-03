@@ -7,6 +7,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import dev.pnptracker.AppInfo
 import dev.pnptracker.ui.feature.colors.ColorCatalogueController
+import dev.pnptracker.ui.feature.export.ExportController
 import dev.pnptracker.ui.feature.games.GameTableController
 import dev.pnptracker.ui.feature.importreview.ImportController
 import dev.pnptracker.ui.feature.importworkspace.ImportConfirmationController
@@ -32,6 +33,7 @@ fun PnpTrackerApp(
     reviewController: ImportReviewController,
     confirmationController: ImportConfirmationController,
     gameTableController: GameTableController,
+    exportController: ExportController,
     colorCatalogueController: ColorCatalogueController,
     poolControllers: PoolControllers,
 ) {
@@ -48,6 +50,7 @@ fun PnpTrackerApp(
             reviewController = reviewController,
             confirmationController = confirmationController,
             gameTableController = gameTableController,
+            exportController = exportController,
             colorCatalogueController = colorCatalogueController,
             poolControllers = poolControllers,
         )

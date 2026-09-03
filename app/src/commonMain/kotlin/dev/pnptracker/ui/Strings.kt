@@ -191,6 +191,24 @@ import dev.pnptracker.resources.confirm_summary
 import dev.pnptracker.resources.confirm_unavailable
 import dev.pnptracker.resources.confirm_unprocessed_acknowledge
 import dev.pnptracker.resources.confirm_unprocessed_warning
+import dev.pnptracker.resources.export_action
+import dev.pnptracker.resources.export_action_description
+import dev.pnptracker.resources.export_choosing
+import dev.pnptracker.resources.export_dismiss
+import dev.pnptracker.resources.export_error_broken_data
+import dev.pnptracker.resources.export_error_not_atomic
+import dev.pnptracker.resources.export_error_not_writable
+import dev.pnptracker.resources.export_error_nothing
+import dev.pnptracker.resources.export_error_title
+import dev.pnptracker.resources.export_error_unsupported_file_type
+import dev.pnptracker.resources.export_error_write_failed
+import dev.pnptracker.resources.export_overwrite_cancel
+import dev.pnptracker.resources.export_overwrite_confirm
+import dev.pnptracker.resources.export_overwrite_question
+import dev.pnptracker.resources.export_overwrite_title
+import dev.pnptracker.resources.export_scope_note
+import dev.pnptracker.resources.export_writing
+import dev.pnptracker.resources.export_written
 import dev.pnptracker.resources.filter_awaiting_color
 import dev.pnptracker.resources.filter_clear_all
 import dev.pnptracker.resources.filter_close
@@ -1602,6 +1620,36 @@ object Strings {
 
         /** Takes the line number and the column heading. */
         val csvLineColumn = Res.string.import_error_csv_line_column
+    }
+
+    /** Writing the tasks out as a file (PLAN 11.8, PLAN 14.4). */
+    object Export {
+        val action = Res.string.export_action
+        val actionDescription = Res.string.export_action_description
+        val choosing = Res.string.export_choosing
+        val writing = Res.string.export_writing
+
+        /** Takes the number of tasks and the file name. */
+        val written = Res.string.export_written
+        val dismiss = Res.string.export_dismiss
+        val scopeNote = Res.string.export_scope_note
+
+        val overwriteTitle = Res.string.export_overwrite_title
+
+        /** Takes the file name. */
+        val overwriteQuestion = Res.string.export_overwrite_question
+        val overwriteConfirm = Res.string.export_overwrite_confirm
+        val overwriteCancel = Res.string.export_overwrite_cancel
+    }
+
+    object ExportErrors {
+        val title = Res.string.export_error_title
+        val nothingToExport = Res.string.export_error_nothing
+        val brokenData = Res.string.export_error_broken_data
+        val unsupportedFileType = Res.string.export_error_unsupported_file_type
+        val notWritable = Res.string.export_error_not_writable
+        val writeFailed = Res.string.export_error_write_failed
+        val notAtomic = Res.string.export_error_not_atomic
     }
 
     /** Arama ve filtreleme, the words PLAN 13 asks for on the table and the pools. */

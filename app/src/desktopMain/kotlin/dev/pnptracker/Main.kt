@@ -15,9 +15,12 @@ import dev.pnptracker.data.repository.ImportDraftStore
 import dev.pnptracker.data.repository.ImportReviewStore
 import dev.pnptracker.data.repository.PoolStore
 import dev.pnptracker.data.repository.TaskEditStore
+import dev.pnptracker.data.repository.TaskExportStore
 import dev.pnptracker.data.repository.TaskFromTextStore
 import dev.pnptracker.data.repository.TaskProgressStore
 import dev.pnptracker.platform.awt.applyLinuxFileDialogPolicy
+import dev.pnptracker.platform.exportfiles.AwtExportFilePicker
+import dev.pnptracker.platform.exportfiles.DesktopExportFileGateway
 import dev.pnptracker.platform.files.AppDirectoryInitializer
 import dev.pnptracker.platform.files.XdgAppPathsResolver
 import dev.pnptracker.platform.importfiles.AwtImportFilePicker
@@ -25,6 +28,8 @@ import dev.pnptracker.platform.importfiles.DesktopImportFileGateway
 import dev.pnptracker.ui.PnpTrackerApp
 import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.feature.colors.ColorCatalogueController
+import dev.pnptracker.ui.feature.export.ExportController
+import dev.pnptracker.ui.feature.export.exportNames
 import dev.pnptracker.ui.feature.games.GameTableController
 import dev.pnptracker.ui.feature.importreview.ImportController
 import dev.pnptracker.ui.feature.importworkspace.ImportConfirmationController
@@ -39,6 +44,9 @@ private const val MINIMUM_WINDOW_HEIGHT = 460
 
 /** Shown by the system file dialog, which is created before the resources are. */
 private const val FILE_DIALOG_TITLE = "Excel veya CSV dosyası seç"
+
+/** Shown by the system save dialog, which is created before the resources are. */
+private const val EXPORT_DIALOG_TITLE = "Görevleri CSV olarak kaydet"
 
 fun main() {
     // First of all, and before anything can touch AWT: the file dialog choice
@@ -81,6 +89,14 @@ fun main() {
             taskEditing = TaskEditStore(database.taskEditDao()),
             taskProgress = taskProgress,
         )
+    // The exporter owns the only Path on its side of the application, exactly as
+    // the import picker does; everything above it is handed a file name.
+    val exportController =
+        ExportController(
+            gateway = DesktopExportFileGateway(AwtExportFilePicker(title = EXPORT_DIALOG_TITLE)),
+            tasks = TaskExportStore(database.taskExportDao()),
+            names = ::exportNames,
+        )
     val colorCatalogueController = ColorCatalogueController(colorCatalogue)
     // The pools read the same tasks the table reads and write through the same
     // editing transaction, so they are given the very same store rather than one
@@ -111,6 +127,7 @@ fun main() {
                 reviewController,
                 confirmationController,
                 gameTableController,
+                exportController,
                 colorCatalogueController,
                 poolControllers,
             )
