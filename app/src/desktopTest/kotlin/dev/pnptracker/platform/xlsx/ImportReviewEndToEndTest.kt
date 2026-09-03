@@ -24,6 +24,8 @@ import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.model.SegmentKind
 import dev.pnptracker.domain.model.SourceColumnType
 import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.platform.importfiles.DesktopImportFileGateway
+import dev.pnptracker.platform.importfiles.ImportFilePicker
 import dev.pnptracker.ui.feature.importreview.ImportController
 import dev.pnptracker.ui.feature.importreview.ImportScreenState
 import kotlinx.coroutines.flow.first
@@ -64,8 +66,8 @@ class ImportReviewEndToEndTest {
 
     private class FixedPicker(
         private val file: Path,
-    ) : XlsxFilePicker {
-        override suspend fun chooseXlsxFile(): Path = file
+    ) : ImportFilePicker {
+        override suspend fun chooseImportFile(): Path = file
     }
 
     /**
@@ -118,7 +120,7 @@ class ImportReviewEndToEndTest {
     /** The whole real import, through the real reader, into this database. */
     private suspend fun importTheFixture(): EntityId {
         val controller =
-            ImportController(XlsxImportFileGateway(FixedPicker(file)), ImportDraftStore(importDao))
+            ImportController(DesktopImportFileGateway(FixedPicker(file)), ImportDraftStore(importDao))
         controller.chooseFile()
         val chooser = assertIs<ImportScreenState.SheetSelection>(controller.state)
         controller.selectSheet(assertNotNull(chooser.session.selectedSheetName))

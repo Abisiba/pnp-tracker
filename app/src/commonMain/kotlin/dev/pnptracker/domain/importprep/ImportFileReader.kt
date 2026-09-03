@@ -1,5 +1,7 @@
 package dev.pnptracker.domain.importprep
 
+import dev.pnptracker.domain.csv.CsvDelimiter
+import dev.pnptracker.domain.model.ImportSourceFormat
 import dev.pnptracker.domain.spreadsheet.WorkbookSnapshot
 
 /** A file that was read, together with the fingerprint it had while being read. */
@@ -7,6 +9,9 @@ data class ReadImportFile(
     val fileName: String,
     val sha256: String,
     val workbook: WorkbookSnapshot,
+    val sourceFormat: ImportSourceFormat,
+    /** The separator a CSV turned out to use; null for every other format. */
+    val csvDelimiter: CsvDelimiter? = null,
 )
 
 /**
@@ -33,11 +38,17 @@ class ImportFileReader {
      */
     suspend fun read(handle: ImportFileHandle): ReadImportFile {
         val before = handle.fingerprint()
-        val workbook = handle.readWorkbook()
+        val reading = handle.readWorkbook()
         val after = handle.fingerprint()
         if (before != after) throw ImportPreparationException(ImportFailure.FILE_CHANGED_WHILE_READING)
 
-        return ReadImportFile(fileName = handle.fileName, sha256 = before, workbook = workbook)
+        return ReadImportFile(
+            fileName = handle.fileName,
+            sha256 = before,
+            workbook = reading.workbook,
+            sourceFormat = reading.sourceFormat,
+            csvDelimiter = reading.csvDelimiter,
+        )
     }
 
     /**

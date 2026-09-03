@@ -29,10 +29,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.pnptracker.data.repository.EarlierImport
+import dev.pnptracker.domain.importprep.CsvErrorLocation
 import dev.pnptracker.domain.importprep.ImportWarning
 import dev.pnptracker.domain.importprep.ImportWarningKind
 import dev.pnptracker.domain.importprep.PreparedImportDraft
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.ImportSourceFormat
 import dev.pnptracker.ui.Strings
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -182,6 +184,19 @@ private fun SessionSection(
             text = stringResource(Strings.Import.fileLabel, session.fileName),
             style = MaterialTheme.typography.titleMedium,
         )
+        Text(
+            text = stringResource(Strings.Import.sourceFormatLabel, stringResource(nameOf(session.sourceFormat))),
+        )
+        // Which separator was settled on is a decision made for the user, so it
+        // is said out loud rather than left to be inferred from the preview.
+        session.csvDelimiter?.let { delimiter ->
+            Text(text = stringResource(Strings.Import.csvDelimiterLabel, stringResource(nameOf(delimiter))))
+            Text(
+                text = stringResource(Strings.Import.csvSinglePageNote),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
 
         if (askForSheet) {
             SheetChooser(
@@ -202,6 +217,7 @@ private fun SessionSection(
                 ProblemCard(
                     title = stringResource(Strings.ImportErrors.title),
                     detail = detailFor(preparation.failure, preparation.columnIndex),
+                    location = locationFor(preparation.csvLocation),
                 )
 
             null -> Unit
@@ -289,6 +305,11 @@ private fun DraftSummary(draft: PreparedImportDraft) {
                 text = stringResource(Strings.Import.summaryTitle),
                 style = MaterialTheme.typography.titleSmall,
             )
+            // A CSV is read row by row, so how many rows it held is the number
+            // the user can check against their own file.
+            if (draft.sourceFormat == ImportSourceFormat.CSV) {
+                Text(stringResource(Strings.Import.csvRecordCount, draft.sourceRowCount))
+            }
             Text(stringResource(Strings.Import.rawBlockCount, draft.rawBlockCount))
             Text(stringResource(Strings.Import.gameCellCount, draft.detectedGameCellCount))
             Text(stringResource(Strings.Import.greenHintCount, draft.pendingGameCompletionHintCount))
@@ -416,7 +437,10 @@ private fun FailedSection(
         ProblemCard(
             title = stringResource(Strings.ImportErrors.title),
             detail = detailFor(state.failure, state.columnIndex),
+            location = locationFor(state.csvLocation),
         )
+        // The panel stays where it is and offers another go, so a file that only
+        // needed one line corrected does not cost the user their place.
         Button(onClick = onChooseAnother) { Text(stringResource(Strings.Import.chooseAnotherFile)) }
     }
 }
@@ -433,6 +457,20 @@ private fun detailFor(
     }
 
 /**
+ * Where in the file the problem is, or null when the problem is the whole file.
+ *
+ * The line is the file's own numbering, from one, so it matches what a text
+ * editor shows. The column is named by its heading, which is a word the user
+ * wrote in the heading row; no value out of a cell is ever repeated back.
+ */
+@Composable
+private fun locationFor(location: CsvErrorLocation?): String? {
+    if (location == null) return null
+    val columnName = location.columnName ?: return stringResource(Strings.ImportErrors.csvLine, location.lineNumber)
+    return stringResource(Strings.ImportErrors.csvLineColumn, location.lineNumber, columnName)
+}
+
+/**
  * A problem, said in words.
  *
  * There is no cause, no stack trace and nothing from inside the file here: an
@@ -443,6 +481,7 @@ private fun detailFor(
 private fun ProblemCard(
     title: String,
     detail: String,
+    location: String? = null,
 ) {
     Card {
         Column(
@@ -451,6 +490,9 @@ private fun ProblemCard(
         ) {
             Text(text = title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             Text(text = detail)
+            location?.let {
+                Text(text = it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+            }
         }
     }
 }

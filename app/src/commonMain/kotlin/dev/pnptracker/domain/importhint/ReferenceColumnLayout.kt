@@ -48,6 +48,16 @@ object ReferenceColumnLayout {
             else -> null
         }
 
+    /**
+     * Where a source column sits in the reference layout.
+     *
+     * The inverse of [suggestionFor], and total: every source column is one of
+     * the seven, which is what lets a CSV row that names its column in words be
+     * laid out as though it had come from that column of the workbook.
+     */
+    fun columnIndexOf(sourceColumnType: SourceColumnType): Int =
+        (GAME_COLUMN_INDEX..LAST_COLUMN_INDEX).first { suggestionFor(it)?.sourceColumnType == sourceColumnType }
+
     private fun suggestion(
         columnIndex: Int,
         sourceColumnType: SourceColumnType,

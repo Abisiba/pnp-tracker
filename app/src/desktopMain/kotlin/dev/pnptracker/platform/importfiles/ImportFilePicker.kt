@@ -1,4 +1,4 @@
-package dev.pnptracker.platform.xlsx
+package dev.pnptracker.platform.importfiles
 
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.awt.EventQueue
@@ -8,14 +8,14 @@ import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * Asks the user for a spreadsheet.
+ * Asks the user for a file to import: a spreadsheet or a CSV.
  *
  * Kept behind an interface so the flow above it can be driven in a test without
  * a window server putting a dialog on someone's screen.
  */
-interface XlsxFilePicker {
+interface ImportFilePicker {
     /** The chosen file, or null if the user closed the dialog. */
-    suspend fun chooseXlsxFile(): Path?
+    suspend fun chooseImportFile(): Path?
 }
 
 /**
@@ -37,15 +37,15 @@ internal fun interface ModalFileDialog {
  * new. On Linux it gives the desktop's own dialog rather than a Swing imitation
  * of one, which is what makes it feel like part of the machine.
  *
- * The `.xlsx` filter is a convenience only — some desktops ignore it entirely —
- * so whatever comes back is checked properly afterwards.
+ * The extension filter is a convenience only — some desktops ignore it entirely
+ * — so whatever comes back is checked properly afterwards.
  */
-class AwtXlsxFilePicker internal constructor(
+class AwtImportFilePicker internal constructor(
     private val dialog: ModalFileDialog,
-) : XlsxFilePicker {
+) : ImportFilePicker {
     constructor(owner: Frame? = null, title: String) : this(awtFileDialog(owner, title))
 
-    override suspend fun chooseXlsxFile(): Path? = showOnEventDispatchThread(dialog)
+    override suspend fun chooseImportFile(): Path? = showOnEventDispatchThread(dialog)
 }
 
 private fun awtFileDialog(
@@ -54,7 +54,9 @@ private fun awtFileDialog(
 ): ModalFileDialog =
     ModalFileDialog { publish ->
         val dialog = FileDialog(owner, title, FileDialog.LOAD)
-        dialog.setFilenameFilter { _, name -> name.endsWith(".xlsx", ignoreCase = true) }
+        dialog.setFilenameFilter { _, name ->
+            name.endsWith(".xlsx", ignoreCase = true) || name.endsWith(".csv", ignoreCase = true)
+        }
         dialog.isMultipleMode = false
         // Published before it goes modal, because after that this thread is inside
         // the dialog's own event loop and cannot hand anything out.

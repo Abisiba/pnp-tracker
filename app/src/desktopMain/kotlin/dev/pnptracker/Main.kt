@@ -20,8 +20,8 @@ import dev.pnptracker.data.repository.TaskProgressStore
 import dev.pnptracker.platform.awt.applyLinuxFileDialogPolicy
 import dev.pnptracker.platform.files.AppDirectoryInitializer
 import dev.pnptracker.platform.files.XdgAppPathsResolver
-import dev.pnptracker.platform.xlsx.AwtXlsxFilePicker
-import dev.pnptracker.platform.xlsx.XlsxImportFileGateway
+import dev.pnptracker.platform.importfiles.AwtImportFilePicker
+import dev.pnptracker.platform.importfiles.DesktopImportFileGateway
 import dev.pnptracker.ui.PnpTrackerApp
 import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.feature.colors.ColorCatalogueController
@@ -38,7 +38,7 @@ private const val MINIMUM_WINDOW_WIDTH = 640
 private const val MINIMUM_WINDOW_HEIGHT = 460
 
 /** Shown by the system file dialog, which is created before the resources are. */
-private const val FILE_DIALOG_TITLE = "Excel dosyası seç"
+private const val FILE_DIALOG_TITLE = "Excel veya CSV dosyası seç"
 
 fun main() {
     // First of all, and before anything can touch AWT: the file dialog choice
@@ -56,7 +56,7 @@ fun main() {
         ImportController(
             // The picker owns the only Path in the import flow; everything above
             // it is handed a file name and nothing else.
-            gateway = XlsxImportFileGateway(AwtXlsxFilePicker(title = FILE_DIALOG_TITLE)),
+            gateway = DesktopImportFileGateway(AwtImportFilePicker(title = FILE_DIALOG_TITLE)),
             store = ImportDraftStore(database.importDao()),
         )
     val reviewController = ImportReviewController(ImportReviewStore(database.importDao(), database.gameDao(), database.colorDao()))

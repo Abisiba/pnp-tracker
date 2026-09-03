@@ -7,7 +7,6 @@ import dev.pnptracker.domain.importprep.PreparedImportDraft
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.ImportBatchStatus
-import dev.pnptracker.domain.model.ImportSourceFormat
 import kotlin.time.Clock
 
 /** What a finished save produced, for the screen to report. */
@@ -84,7 +83,7 @@ class ImportDraftStore(
                 id = batchId,
                 fileName = draft.fileName,
                 sha256 = draft.sha256,
-                sourceFormat = ImportSourceFormat.XLSX,
+                sourceFormat = draft.sourceFormat,
                 sheetName = draft.sheetName,
                 startRowIndex = draft.startRowIndex,
                 endRowIndex = draft.endRowIndex,

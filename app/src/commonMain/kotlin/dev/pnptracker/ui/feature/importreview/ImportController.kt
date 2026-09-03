@@ -154,6 +154,8 @@ class ImportController(
                 fileName = read.fileName,
                 sha256 = read.sha256,
                 workbook = read.workbook,
+                sourceFormat = read.sourceFormat,
+                csvDelimiter = read.csvDelimiter,
                 sheets = sheets,
                 selectedSheetName = null,
                 preparation = null,
@@ -188,12 +190,18 @@ class ImportController(
                 ?: return SheetPreparation.Rejected(ImportFailure.EMPTY_SHEET)
         return try {
             SheetPreparation.Ready(
-                prepareImportDraft(fileName = session.fileName, sha256 = session.sha256, sheet = sheet),
+                prepareImportDraft(
+                    fileName = session.fileName,
+                    sha256 = session.sha256,
+                    sheet = sheet,
+                    sourceFormat = session.sourceFormat,
+                ),
             )
         } catch (rejected: ImportPreparationException) {
-            SheetPreparation.Rejected(rejected.failure, rejected.columnIndex)
+            SheetPreparation.Rejected(rejected.failure, rejected.columnIndex, rejected.csvLocation)
         }
     }
 
-    private fun failedFrom(failure: ImportPreparationException) = ImportScreenState.Failed(failure.failure, failure.columnIndex)
+    private fun failedFrom(failure: ImportPreparationException) =
+        ImportScreenState.Failed(failure.failure, failure.columnIndex, failure.csvLocation)
 }

@@ -256,11 +256,28 @@ import dev.pnptracker.resources.import_choose_file
 import dev.pnptracker.resources.import_choosing_file
 import dev.pnptracker.resources.import_column_count_row
 import dev.pnptracker.resources.import_column_counts_title
+import dev.pnptracker.resources.import_csv_delimiter_comma
+import dev.pnptracker.resources.import_csv_delimiter_label
+import dev.pnptracker.resources.import_csv_delimiter_semicolon
+import dev.pnptracker.resources.import_csv_record_count
+import dev.pnptracker.resources.import_csv_single_page_note
 import dev.pnptracker.resources.import_description
 import dev.pnptracker.resources.import_duplicate_count
 import dev.pnptracker.resources.import_duplicate_entry
 import dev.pnptracker.resources.import_duplicate_question
 import dev.pnptracker.resources.import_duplicate_title
+import dev.pnptracker.resources.import_error_csv_ambiguous_delimiter
+import dev.pnptracker.resources.import_error_csv_blank_required_value
+import dev.pnptracker.resources.import_error_csv_duplicate_header_column
+import dev.pnptracker.resources.import_error_csv_line
+import dev.pnptracker.resources.import_error_csv_line_column
+import dev.pnptracker.resources.import_error_csv_missing_header_column
+import dev.pnptracker.resources.import_error_csv_quote_in_plain_field
+import dev.pnptracker.resources.import_error_csv_ragged_row
+import dev.pnptracker.resources.import_error_csv_text_after_quote
+import dev.pnptracker.resources.import_error_csv_unclosed_quote
+import dev.pnptracker.resources.import_error_csv_undetectable_delimiter
+import dev.pnptracker.resources.import_error_csv_unknown_source_type
 import dev.pnptracker.resources.import_error_damaged
 import dev.pnptracker.resources.import_error_empty_sheet
 import dev.pnptracker.resources.import_error_encrypted
@@ -268,10 +285,12 @@ import dev.pnptracker.resources.import_error_file_changed
 import dev.pnptracker.resources.import_error_file_not_found
 import dev.pnptracker.resources.import_error_legacy_xls
 import dev.pnptracker.resources.import_error_not_readable
+import dev.pnptracker.resources.import_error_not_utf8
 import dev.pnptracker.resources.import_error_not_xlsx
 import dev.pnptracker.resources.import_error_safety_limit
 import dev.pnptracker.resources.import_error_title
 import dev.pnptracker.resources.import_error_unsupported_column
+import dev.pnptracker.resources.import_error_unsupported_file_type
 import dev.pnptracker.resources.import_error_unsupported_layout
 import dev.pnptracker.resources.import_file_label
 import dev.pnptracker.resources.import_game_cell_count
@@ -293,6 +312,9 @@ import dev.pnptracker.resources.import_sheet_selection_title
 import dev.pnptracker.resources.import_sheet_visibility_hidden
 import dev.pnptracker.resources.import_sheet_visibility_very_hidden
 import dev.pnptracker.resources.import_sheet_visibility_visible
+import dev.pnptracker.resources.import_source_format_csv
+import dev.pnptracker.resources.import_source_format_label
+import dev.pnptracker.resources.import_source_format_xlsx
 import dev.pnptracker.resources.import_summary_title
 import dev.pnptracker.resources.import_title
 import dev.pnptracker.resources.import_warning_hidden_sheet
@@ -706,6 +728,20 @@ object Strings {
 
         /** Takes the sheet name. */
         val sheetLabel = Res.string.import_sheet_label
+
+        /** Takes the name of the format. */
+        val sourceFormatLabel = Res.string.import_source_format_label
+        val sourceFormatXlsx = Res.string.import_source_format_xlsx
+        val sourceFormatCsv = Res.string.import_source_format_csv
+
+        /** Takes the name of the separator. */
+        val csvDelimiterLabel = Res.string.import_csv_delimiter_label
+        val csvDelimiterComma = Res.string.import_csv_delimiter_comma
+        val csvDelimiterSemicolon = Res.string.import_csv_delimiter_semicolon
+
+        /** Takes the number of data records the file held. */
+        val csvRecordCount = Res.string.import_csv_record_count
+        val csvSinglePageNote = Res.string.import_csv_single_page_note
         val sheetSelectionTitle = Res.string.import_sheet_selection_title
 
         /** Takes the number of filled cells. */
@@ -1548,6 +1584,24 @@ object Strings {
         /** Takes the column number. */
         val unsupportedColumn = Res.string.import_error_unsupported_column
         val emptySheet = Res.string.import_error_empty_sheet
+        val unsupportedFileType = Res.string.import_error_unsupported_file_type
+        val notUtf8 = Res.string.import_error_not_utf8
+        val csvUnclosedQuote = Res.string.import_error_csv_unclosed_quote
+        val csvTextAfterQuote = Res.string.import_error_csv_text_after_quote
+        val csvQuoteInPlainField = Res.string.import_error_csv_quote_in_plain_field
+        val csvAmbiguousDelimiter = Res.string.import_error_csv_ambiguous_delimiter
+        val csvUndetectableDelimiter = Res.string.import_error_csv_undetectable_delimiter
+        val csvMissingHeaderColumn = Res.string.import_error_csv_missing_header_column
+        val csvDuplicateHeaderColumn = Res.string.import_error_csv_duplicate_header_column
+        val csvRaggedRow = Res.string.import_error_csv_ragged_row
+        val csvBlankRequiredValue = Res.string.import_error_csv_blank_required_value
+        val csvUnknownSourceType = Res.string.import_error_csv_unknown_source_type
+
+        /** Takes the line number. */
+        val csvLine = Res.string.import_error_csv_line
+
+        /** Takes the line number and the column heading. */
+        val csvLineColumn = Res.string.import_error_csv_line_column
     }
 
     /** Arama ve filtreleme, the words PLAN 13 asks for on the table and the pools. */

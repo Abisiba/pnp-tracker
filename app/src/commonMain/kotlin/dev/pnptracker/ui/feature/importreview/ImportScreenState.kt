@@ -2,8 +2,11 @@ package dev.pnptracker.ui.feature.importreview
 
 import dev.pnptracker.data.repository.EarlierImport
 import dev.pnptracker.data.repository.SavedImportSummary
+import dev.pnptracker.domain.csv.CsvDelimiter
+import dev.pnptracker.domain.importprep.CsvErrorLocation
 import dev.pnptracker.domain.importprep.ImportFailure
 import dev.pnptracker.domain.importprep.PreparedImportDraft
+import dev.pnptracker.domain.model.ImportSourceFormat
 import dev.pnptracker.domain.spreadsheet.SheetVisibility
 import dev.pnptracker.domain.spreadsheet.WorkbookSnapshot
 
@@ -25,6 +28,7 @@ sealed interface SheetPreparation {
     data class Rejected(
         val failure: ImportFailure,
         val columnIndex: Int? = null,
+        val csvLocation: CsvErrorLocation? = null,
     ) : SheetPreparation
 }
 
@@ -39,6 +43,15 @@ data class ImportSession(
     val fileName: String,
     val sha256: String,
     val workbook: WorkbookSnapshot,
+    val sourceFormat: ImportSourceFormat,
+    /**
+     * The separator a CSV turned out to use, for the preview to say out loud.
+     *
+     * Kept in the session and nowhere else. It describes one reading of one
+     * file, so it belongs to the screen for as long as that file is on it and
+     * has no business in the database.
+     */
+    val csvDelimiter: CsvDelimiter? = null,
     val sheets: List<SheetChoice>,
     val selectedSheetName: String?,
     val preparation: SheetPreparation?,
@@ -98,5 +111,6 @@ sealed interface ImportScreenState {
     data class Failed(
         val failure: ImportFailure,
         val columnIndex: Int? = null,
+        val csvLocation: CsvErrorLocation? = null,
     ) : ImportScreenState
 }

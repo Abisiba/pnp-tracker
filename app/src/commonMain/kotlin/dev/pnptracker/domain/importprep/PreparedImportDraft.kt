@@ -1,6 +1,7 @@
 package dev.pnptracker.domain.importprep
 
 import dev.pnptracker.domain.model.HintDecision
+import dev.pnptracker.domain.model.ImportSourceFormat
 import dev.pnptracker.domain.model.SourceColumnType
 import dev.pnptracker.domain.spreadsheet.SheetVisibility
 
@@ -59,6 +60,8 @@ data class PreparedRawBlock(
 data class PreparedImportDraft(
     val fileName: String,
     val sha256: String,
+    /** Which kind of file this was read from; the batch records it (PLAN 11.2). */
+    val sourceFormat: ImportSourceFormat,
     val sheetName: String,
     val sheetVisibility: SheetVisibility,
     val startRowIndex: Int?,
@@ -77,6 +80,15 @@ data class PreparedImportDraft(
     }
 
     val rawBlockCount: Int get() = blocks.size
+
+    /**
+     * How many source rows this import covers.
+     *
+     * For a CSV that is the number of data records the file held, because one
+     * record becomes one row. Counted from the blocks rather than kept alongside
+     * them, so the two can never disagree.
+     */
+    val sourceRowCount: Int get() = blocks.map { it.rowIndex }.distinct().size
 
     /** How many game names the sheet holds; not the number of games this import creates, which is none. */
     val detectedGameCellCount: Int

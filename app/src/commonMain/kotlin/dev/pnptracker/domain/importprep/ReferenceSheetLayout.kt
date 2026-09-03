@@ -64,6 +64,21 @@ object ReferenceSheetLayout {
             .filter { it > LAST_COLUMN_INDEX }
             .minOrNull()
 
+    /**
+     * The column a heading names, or null when no column accepts that spelling.
+     *
+     * The accepted spellings share no word between columns, so the answer does
+     * not depend on the order they are looked at in; a test pins that down. The
+     * game column's blank heading is not an answer here — an empty value names
+     * nothing, and a CSV row that leaves `source_type` empty is a row to reject
+     * rather than a row about a game name.
+     */
+    fun columnIndexOfHeader(text: String): Int? {
+        val normalized = normalizeHeader(text)
+        if (normalized.isEmpty()) return null
+        return ACCEPTED_HEADERS.entries.firstOrNull { (_, accepted) -> normalized in accepted }?.key
+    }
+
     fun isKnownHeader(
         columnIndex: Int,
         text: String,

@@ -9,6 +9,8 @@ import dev.pnptracker.domain.importprep.unpackArgb
 import dev.pnptracker.domain.model.HintDecision
 import dev.pnptracker.domain.model.ImportBatchStatus
 import dev.pnptracker.domain.model.SourceColumnType
+import dev.pnptracker.platform.importfiles.DesktopImportFileGateway
+import dev.pnptracker.platform.importfiles.ImportFilePicker
 import dev.pnptracker.ui.feature.importreview.ImportController
 import dev.pnptracker.ui.feature.importreview.ImportScreenState
 import kotlinx.coroutines.runBlocking
@@ -42,8 +44,8 @@ class XlsxImportEndToEndTest {
     /** Hands back the fixture instead of opening a dialog. */
     private class FixedPicker(
         private val file: Path,
-    ) : XlsxFilePicker {
-        override suspend fun chooseXlsxFile(): Path = file
+    ) : ImportFilePicker {
+        override suspend fun chooseImportFile(): Path = file
     }
 
     @BeforeTest
@@ -56,7 +58,7 @@ class XlsxImportEndToEndTest {
         controller = newController()
     }
 
-    private fun newController(gateway: ImportFileGateway = XlsxImportFileGateway(FixedPicker(file))) =
+    private fun newController(gateway: ImportFileGateway = DesktopImportFileGateway(FixedPicker(file))) =
         ImportController(gateway, ImportDraftStore(database.importDao()))
 
     @AfterTest
@@ -275,7 +277,7 @@ class XlsxImportEndToEndTest {
             Files.writeString(notASpreadsheet, "bu bir excel dosyası değil")
             val refusing =
                 ImportController(
-                    XlsxImportFileGateway(FixedPicker(notASpreadsheet)),
+                    DesktopImportFileGateway(FixedPicker(notASpreadsheet)),
                     ImportDraftStore(database.importDao()),
                 )
 
@@ -290,22 +292,43 @@ class XlsxImportEndToEndTest {
         }
 
     @Test
-    fun `a file with the wrong extension never reaches the reader`() =
+    fun `an old xls file never reaches the reader, and is told what to do`() =
         runBlocking<Unit> {
             val wrongName = fileDirectory.resolve("kitap.xls")
             Files.copy(file, wrongName)
             val refusing =
                 ImportController(
-                    XlsxImportFileGateway(FixedPicker(wrongName)),
+                    DesktopImportFileGateway(FixedPicker(wrongName)),
                     ImportDraftStore(database.importDao()),
                 )
 
             refusing.chooseFile()
 
             assertEquals(
-                dev.pnptracker.domain.importprep.ImportFailure.NOT_AN_XLSX_FILE,
+                dev.pnptracker.domain.importprep.ImportFailure.LEGACY_XLS_FILE,
                 assertIs<ImportScreenState.Failed>(refusing.state).failure,
             )
+            assertEquals(emptyList(), database.importDao().allBatches())
+        }
+
+    @Test
+    fun `a file that is neither a workbook nor a CSV is refused by name alone`() =
+        runBlocking<Unit> {
+            val wrongName = fileDirectory.resolve("notlar.txt")
+            Files.copy(file, wrongName)
+            val refusing =
+                ImportController(
+                    DesktopImportFileGateway(FixedPicker(wrongName)),
+                    ImportDraftStore(database.importDao()),
+                )
+
+            refusing.chooseFile()
+
+            assertEquals(
+                dev.pnptracker.domain.importprep.ImportFailure.UNSUPPORTED_FILE_TYPE,
+                assertIs<ImportScreenState.Failed>(refusing.state).failure,
+            )
+            assertEquals(emptyList(), database.importDao().allBatches())
         }
 
     @Test
@@ -313,9 +336,9 @@ class XlsxImportEndToEndTest {
         runBlocking<Unit> {
             val cancelling =
                 ImportController(
-                    XlsxImportFileGateway(
-                        object : XlsxFilePicker {
-                            override suspend fun chooseXlsxFile(): Path? = null
+                    DesktopImportFileGateway(
+                        object : ImportFilePicker {
+                            override suspend fun chooseImportFile(): Path? = null
                         },
                     ),
                     ImportDraftStore(database.importDao()),

@@ -13,6 +13,9 @@ enum class ImportFailure {
     FILE_NOT_FOUND,
     NOT_READABLE,
     NOT_AN_XLSX_FILE,
+
+    /** Neither an `.xlsx` nor a `.csv`; this version reads those two and no others. */
+    UNSUPPORTED_FILE_TYPE,
     LEGACY_XLS_FILE,
     DAMAGED_FILE,
     ENCRYPTED,
@@ -29,6 +32,55 @@ enum class ImportFailure {
 
     /** There is nothing on the chosen sheet to import. */
     EMPTY_SHEET,
+
+    /** The file is not valid UTF-8; nothing is guessed at and nothing is replaced. */
+    NOT_UTF8,
+
+    /** A CSV field opened with a quote that the file never closed. */
+    CSV_UNCLOSED_QUOTE,
+
+    /** Something other than a separator or a line ending followed a closing quote. */
+    CSV_TEXT_AFTER_QUOTE,
+
+    /** A quote turned up inside a CSV field that never opened with one. */
+    CSV_QUOTE_IN_PLAIN_FIELD,
+
+    /** Both separators read the heading row, so the file says two different things. */
+    CSV_AMBIGUOUS_DELIMITER,
+
+    /** Neither separator read the heading row, so the file is not one this reads. */
+    CSV_UNDETECTABLE_DELIMITER,
+
+    /** The heading row is missing one of the three columns PLAN 11.8 names. */
+    CSV_MISSING_HEADER_COLUMN,
+
+    /** The heading row names one of the three required columns more than once. */
+    CSV_DUPLICATE_HEADER_COLUMN,
+
+    /** A row has a different number of fields from the heading row. */
+    CSV_RAGGED_ROW,
+
+    /** A row leaves one of the three required values empty. */
+    CSV_BLANK_REQUIRED_VALUE,
+
+    /** A row names a `source_type` this version does not recognise. */
+    CSV_UNKNOWN_SOURCE_TYPE,
+}
+
+/**
+ * Where in a CSV file a problem is, in the file's own numbering.
+ *
+ * [lineNumber] counts physical lines from one, the way an editor does.
+ * [columnName] is the heading of the column at fault, which is a word the file
+ * itself contains and the user chose; it is never a value out of a cell.
+ */
+data class CsvErrorLocation(
+    val lineNumber: Int,
+    val columnName: String? = null,
+) {
+    init {
+        require(lineNumber >= 1) { "Lines are numbered from one, was: $lineNumber" }
+    }
 }
 
 /**
@@ -40,4 +92,9 @@ enum class ImportFailure {
 class ImportPreparationException(
     val failure: ImportFailure,
     val columnIndex: Int? = null,
-) : Exception("Import cannot go ahead: $failure${columnIndex?.let { " at column $it" } ?: ""}")
+    val csvLocation: CsvErrorLocation? = null,
+) : Exception(
+        "Import cannot go ahead: $failure" +
+            (columnIndex?.let { " at column $it" } ?: "") +
+            (csvLocation?.let { " at line ${it.lineNumber}" } ?: ""),
+    )

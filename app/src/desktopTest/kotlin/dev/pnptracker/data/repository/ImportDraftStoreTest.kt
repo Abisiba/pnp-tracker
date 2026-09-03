@@ -11,6 +11,7 @@ import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.HintDecision
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.ImportBatchStatus
+import dev.pnptracker.domain.model.ImportSourceFormat
 import dev.pnptracker.domain.model.SourceColumnType
 import dev.pnptracker.domain.spreadsheet.SheetVisibility
 import kotlinx.coroutines.runBlocking
@@ -71,9 +72,11 @@ class ImportDraftStoreTest {
         fileName: String = "ornek.xlsx",
         sheetName: String = "Sayfa1",
         blocks: List<PreparedRawBlock> = defaultBlocks(),
+        sourceFormat: ImportSourceFormat = ImportSourceFormat.XLSX,
     ) = PreparedImportDraft(
         fileName = fileName,
         sha256 = sha256,
+        sourceFormat = sourceFormat,
         sheetName = sheetName,
         sheetVisibility = SheetVisibility.VISIBLE,
         startRowIndex = blocks.minOf { it.rowIndex },

@@ -31,7 +31,7 @@
     <string name="navigation_state_not_selected">seçili değil</string>
 
     <!-- Import screen: actions -->
-    <string name="import_choose_file">Excel dosyası seç</string>
+    <string name="import_choose_file">Excel veya CSV dosyası seç</string>
     <string name="import_choose_another_file">Başka dosya seç</string>
     <string name="import_save_draft">Taslak olarak kaydet</string>
     <string name="import_cancel">İptal</string>
@@ -43,9 +43,17 @@
     <string name="import_saving">Taslak kaydediliyor…</string>
 
     <!-- Import screen: summary -->
-    <string name="import_idle_hint">Referans yapıdaki bir Excel dosyası seçin. Dosya yalnızca okunur, hiçbir zaman değiştirilmez.</string>
+    <string name="import_idle_hint">Referans yapıdaki bir Excel (.xlsx) dosyası ya da game, source_type ve raw_text sütunlarını taşıyan bir CSV (.csv) dosyası seçin. Dosya yalnızca okunur, hiçbir zaman değiştirilmez.</string>
     <string name="import_file_label">Dosya: %1$s</string>
     <string name="import_sheet_label">Çalışma sayfası: %1$s</string>
+    <string name="import_source_format_label">Kaynak türü: %1$s</string>
+    <string name="import_source_format_xlsx">Excel (.xlsx)</string>
+    <string name="import_source_format_csv">CSV (.csv)</string>
+    <string name="import_csv_delimiter_label">Ayırıcı: %1$s</string>
+    <string name="import_csv_delimiter_comma">Virgül</string>
+    <string name="import_csv_delimiter_semicolon">Noktalı virgül</string>
+    <string name="import_csv_record_count">Kaynak satır sayısı: %1$d</string>
+    <string name="import_csv_single_page_note">CSV tek mantıksal sayfa olarak okunur; sayfa adı dosya adıdır.</string>
     <string name="import_sheet_selection_title">Hangi çalışma sayfası içe aktarılsın?</string>
     <string name="import_sheet_visibility_visible">görünür</string>
     <string name="import_sheet_visibility_hidden">gizli</string>
@@ -97,6 +105,20 @@
     <string name="import_error_unsupported_layout">Bu çalışma sayfasının başlık satırı tanınmadı. Bu sürüm yalnızca yedi sütunlu referans yapıyı okuyabiliyor.</string>
     <string name="import_error_unsupported_column">%1$d numaralı sütun bu sürümde desteklenmiyor. Hiçbir hücre kaydedilmedi.</string>
     <string name="import_error_empty_sheet">Bu çalışma sayfasında içe aktarılacak veri yok.</string>
+    <string name="import_error_unsupported_file_type">Bu sürüm yalnızca .xlsx ve .csv dosyalarını okuyabiliyor.</string>
+    <string name="import_error_not_utf8">CSV dosyası UTF-8 olarak kaydedilmelidir. Dosyayı UTF-8 kodlamasıyla kaydedip tekrar deneyin.</string>
+    <string name="import_error_csv_unclosed_quote">Tırnak içinde başlayan bir alan kapanmamış. Tırnak işaretlerini tamamlayıp tekrar deneyin.</string>
+    <string name="import_error_csv_text_after_quote">Kapanan tırnaktan sonra ayırıcı ya da satır sonu yerine başka karakter var.</string>
+    <string name="import_error_csv_quote_in_plain_field">Tırnakla başlamayan bir alanın içinde tırnak işareti var. Alanın tamamını tırnak içine alın.</string>
+    <string name="import_error_csv_ambiguous_delimiter">Başlık satırı hem virgülle hem noktalı virgülle okunabiliyor. Dosyada tek bir ayırıcı kullanın.</string>
+    <string name="import_error_csv_undetectable_delimiter">Başlık satırı okunamadı. Ayırıcı olarak virgül veya noktalı virgül kullanın.</string>
+    <string name="import_error_csv_missing_header_column">Başlık satırında game, source_type ve raw_text sütunlarının üçü de bulunmalı.</string>
+    <string name="import_error_csv_duplicate_header_column">Başlık satırında zorunlu sütunlardan biri birden fazla kez yazılmış.</string>
+    <string name="import_error_csv_ragged_row">Bu satırdaki alan sayısı başlık satırıyla aynı değil. Hiçbir değer kaydırılmadı.</string>
+    <string name="import_error_csv_blank_required_value">Bu satırda zorunlu bir değer boş bırakılmış.</string>
+    <string name="import_error_csv_unknown_source_type">Bu satırdaki source_type değeri tanınmadı. Tahmin edilmedi ve hiçbir havuza atanmadı.</string>
+    <string name="import_error_csv_line">Satır %1$d</string>
+    <string name="import_error_csv_line_column">Satır %1$d, sütun: %2$s</string>
 
     <!-- Import screen: accessibility -->
     <string name="import_sheet_accessibility_label">İçe aktarılacak çalışma sayfası</string>

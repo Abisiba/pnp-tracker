@@ -128,7 +128,7 @@ class FileDialogCompatibilityTest {
 
         // Everything below eventually reaches AWT: Compose builds the toolkit, and
         // the picker is handed to the controller ready to open a dialog.
-        for (later in listOf("application {", "AwtXlsxFilePicker", "ImportController(")) {
+        for (later in listOf("application {", "AwtImportFilePicker", "ImportController(")) {
             val at = body.indexOf(later)
             assertTrue(at < 0 || policyCall < at, "'$later' comes before the file dialog policy in main()")
         }

@@ -7,9 +7,11 @@ import dev.pnptracker.domain.importprep.ImportFailure
 import dev.pnptracker.domain.importprep.ImportFileGateway
 import dev.pnptracker.domain.importprep.ImportFileHandle
 import dev.pnptracker.domain.importprep.ImportPreparationException
+import dev.pnptracker.domain.importprep.ImportSourceReading
 import dev.pnptracker.domain.importprep.PreparedImportDraft
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.ImportBatchStatus
+import dev.pnptracker.domain.model.ImportSourceFormat
 import dev.pnptracker.domain.spreadsheet.CellSnapshot
 import dev.pnptracker.domain.spreadsheet.SheetSnapshot
 import dev.pnptracker.domain.spreadsheet.SheetVisibility
@@ -77,9 +79,9 @@ private class FakeFileHandle(
         return fingerprints.getOrElse(fingerprintCalls - 1) { fingerprints.last() }
     }
 
-    override suspend fun readWorkbook(): WorkbookSnapshot {
+    override suspend fun readWorkbook(): ImportSourceReading {
         readFailure?.let { throw ImportPreparationException(it) }
-        return workbook
+        return ImportSourceReading(workbook = workbook, sourceFormat = ImportSourceFormat.XLSX)
     }
 }
 

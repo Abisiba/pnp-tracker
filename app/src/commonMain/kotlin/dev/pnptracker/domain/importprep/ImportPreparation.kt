@@ -3,6 +3,7 @@ package dev.pnptracker.domain.importprep
 import dev.pnptracker.domain.importhint.ReferenceColumnLayout
 import dev.pnptracker.domain.importhint.detectGameCompletionHint
 import dev.pnptracker.domain.model.HintDecision
+import dev.pnptracker.domain.model.ImportSourceFormat
 import dev.pnptracker.domain.model.SourceColumnType
 import dev.pnptracker.domain.spreadsheet.CellSnapshot
 import dev.pnptracker.domain.spreadsheet.SheetSnapshot
@@ -28,6 +29,7 @@ fun prepareImportDraft(
     fileName: String,
     sha256: String,
     sheet: SheetSnapshot,
+    sourceFormat: ImportSourceFormat = ImportSourceFormat.XLSX,
 ): PreparedImportDraft {
     if (sheet.isEmpty) throw ImportPreparationException(ImportFailure.EMPTY_SHEET)
 
@@ -48,6 +50,7 @@ fun prepareImportDraft(
     return PreparedImportDraft(
         fileName = fileName,
         sha256 = sha256,
+        sourceFormat = sourceFormat,
         sheetName = sheet.name,
         sheetVisibility = sheet.visibility,
         startRowIndex = blocks.minOf { it.rowIndex },

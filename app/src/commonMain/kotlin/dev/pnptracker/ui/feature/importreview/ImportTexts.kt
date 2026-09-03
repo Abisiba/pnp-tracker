@@ -1,6 +1,8 @@
 package dev.pnptracker.ui.feature.importreview
 
+import dev.pnptracker.domain.csv.CsvDelimiter
 import dev.pnptracker.domain.importprep.ImportFailure
+import dev.pnptracker.domain.model.ImportSourceFormat
 import dev.pnptracker.domain.model.SourceColumnType
 import dev.pnptracker.domain.spreadsheet.SheetVisibility
 import dev.pnptracker.ui.Strings
@@ -26,6 +28,36 @@ internal fun messageFor(failure: ImportFailure): StringResource =
         ImportFailure.UNSUPPORTED_SHEET_LAYOUT -> Strings.ImportErrors.unsupportedLayout
         ImportFailure.UNSUPPORTED_COLUMN -> Strings.ImportErrors.unsupportedColumn
         ImportFailure.EMPTY_SHEET -> Strings.ImportErrors.emptySheet
+        ImportFailure.UNSUPPORTED_FILE_TYPE -> Strings.ImportErrors.unsupportedFileType
+        ImportFailure.NOT_UTF8 -> Strings.ImportErrors.notUtf8
+        ImportFailure.CSV_UNCLOSED_QUOTE -> Strings.ImportErrors.csvUnclosedQuote
+        ImportFailure.CSV_TEXT_AFTER_QUOTE -> Strings.ImportErrors.csvTextAfterQuote
+        ImportFailure.CSV_QUOTE_IN_PLAIN_FIELD -> Strings.ImportErrors.csvQuoteInPlainField
+        ImportFailure.CSV_AMBIGUOUS_DELIMITER -> Strings.ImportErrors.csvAmbiguousDelimiter
+        ImportFailure.CSV_UNDETECTABLE_DELIMITER -> Strings.ImportErrors.csvUndetectableDelimiter
+        ImportFailure.CSV_MISSING_HEADER_COLUMN -> Strings.ImportErrors.csvMissingHeaderColumn
+        ImportFailure.CSV_DUPLICATE_HEADER_COLUMN -> Strings.ImportErrors.csvDuplicateHeaderColumn
+        ImportFailure.CSV_RAGGED_ROW -> Strings.ImportErrors.csvRaggedRow
+        ImportFailure.CSV_BLANK_REQUIRED_VALUE -> Strings.ImportErrors.csvBlankRequiredValue
+        ImportFailure.CSV_UNKNOWN_SOURCE_TYPE -> Strings.ImportErrors.csvUnknownSourceType
+    }
+
+internal fun nameOf(sourceFormat: ImportSourceFormat): StringResource =
+    when (sourceFormat) {
+        ImportSourceFormat.XLSX -> Strings.Import.sourceFormatXlsx
+        ImportSourceFormat.CSV -> Strings.Import.sourceFormatCsv
+    }
+
+/**
+ * The separator, in words.
+ *
+ * Written out rather than shown as the character itself, because a lone `,` or
+ * `;` on a line is easy to miss and impossible to read aloud.
+ */
+internal fun nameOf(delimiter: CsvDelimiter): StringResource =
+    when (delimiter) {
+        CsvDelimiter.COMMA -> Strings.Import.csvDelimiterComma
+        CsvDelimiter.SEMICOLON -> Strings.Import.csvDelimiterSemicolon
     }
 
 internal fun nameOf(columnType: SourceColumnType): StringResource =

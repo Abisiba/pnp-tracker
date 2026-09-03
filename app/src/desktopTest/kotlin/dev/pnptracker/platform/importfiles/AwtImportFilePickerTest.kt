@@ -1,4 +1,4 @@
-package dev.pnptracker.platform.xlsx
+package dev.pnptracker.platform.importfiles
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -33,13 +33,13 @@ import kotlin.test.fail
  * a window on whoever is running the tests — while the thread hand-off around it
  * is the real one.
  */
-class AwtXlsxFilePickerTest {
+class AwtImportFilePickerTest {
     @Test
     fun `the dialog runs on the awt event dispatch thread`() {
         val onDispatchThread = AtomicBoolean(false)
         val threadName = AtomicReference("")
         val picker =
-            AwtXlsxFilePicker(
+            AwtImportFilePicker(
                 ModalFileDialog {
                     onDispatchThread.set(EventQueue.isDispatchThread())
                     threadName.set(Thread.currentThread().name)
@@ -51,7 +51,7 @@ class AwtXlsxFilePickerTest {
         // would be if Compose ever moved this call off the toolkit thread.
         runBlocking(Dispatchers.Default) {
             check(!EventQueue.isDispatchThread()) { "the caller was already on the dispatch thread" }
-            picker.chooseXlsxFile()
+            picker.chooseImportFile()
         }
 
         assertTrue(
@@ -63,18 +63,18 @@ class AwtXlsxFilePickerTest {
     @Test
     fun `the chosen file is handed back unchanged`() {
         val chosen = Path.of("/some/where/kitap.xlsx")
-        val picker = AwtXlsxFilePicker(ModalFileDialog { chosen })
+        val picker = AwtImportFilePicker(ModalFileDialog { chosen })
 
-        val answer = runBlocking(Dispatchers.Default) { picker.chooseXlsxFile() }
+        val answer = runBlocking(Dispatchers.Default) { picker.chooseImportFile() }
 
         assertEquals(chosen, answer)
     }
 
     @Test
     fun `closing the dialog without choosing is not a failure`() {
-        val picker = AwtXlsxFilePicker(ModalFileDialog { null })
+        val picker = AwtImportFilePicker(ModalFileDialog { null })
 
-        val answer = runBlocking(Dispatchers.Default) { picker.chooseXlsxFile() }
+        val answer = runBlocking(Dispatchers.Default) { picker.chooseImportFile() }
 
         assertNull(answer, "changing one's mind must stay an ordinary null, not an error")
     }
@@ -82,11 +82,11 @@ class AwtXlsxFilePickerTest {
     @Test
     fun `an unexpected failure inside the dialog reaches the caller as it was`() {
         val thrown = IllegalStateException("the toolkit is in a state nobody expected")
-        val picker = AwtXlsxFilePicker(ModalFileDialog { throw thrown })
+        val picker = AwtImportFilePicker(ModalFileDialog { throw thrown })
 
         val caught =
             assertFailsWith<IllegalStateException> {
-                runBlocking(Dispatchers.Default) { picker.chooseXlsxFile() }
+                runBlocking(Dispatchers.Default) { picker.chooseImportFile() }
             }
 
         assertEquals(thrown.message, caught.message, "the failure was replaced instead of passed on")
@@ -94,12 +94,12 @@ class AwtXlsxFilePickerTest {
 
     @Test
     fun `a programming error is not dressed up as a file problem`() {
-        val picker = AwtXlsxFilePicker(ModalFileDialog { error("invariant broken") })
+        val picker = AwtImportFilePicker(ModalFileDialog { error("invariant broken") })
 
         // Nothing here turns a defect into ImportFailure.DAMAGED_FILE or any other
         // "your file is bad" answer, which would send the user hunting the wrong thing.
         assertFailsWith<IllegalStateException> {
-            runBlocking(Dispatchers.Default) { picker.chooseXlsxFile() }
+            runBlocking(Dispatchers.Default) { picker.chooseImportFile() }
         }
     }
 
@@ -113,7 +113,7 @@ class AwtXlsxFilePickerTest {
         val closed = CountDownLatch(1)
         val closeCount = AtomicInteger(0)
         val picker =
-            AwtXlsxFilePicker(
+            AwtImportFilePicker(
                 ModalFileDialog { publish ->
                     publish {
                         closeCount.incrementAndGet()
@@ -127,7 +127,7 @@ class AwtXlsxFilePickerTest {
             )
 
         runBlocking(Dispatchers.Default) {
-            val job = launch { picker.chooseXlsxFile() }
+            val job = launch { picker.chooseImportFile() }
             assertTrue(opened.await(10, TimeUnit.SECONDS), "the fake dialog never opened")
             job.cancel()
             job.join()
@@ -143,7 +143,7 @@ class AwtXlsxFilePickerTest {
     fun `no real file dialog is ever put on the screen`() {
         val before = fileDialogCount()
 
-        runBlocking(Dispatchers.Default) { AwtXlsxFilePicker(ModalFileDialog { null }).chooseXlsxFile() }
+        runBlocking(Dispatchers.Default) { AwtImportFilePicker(ModalFileDialog { null }).chooseImportFile() }
 
         assertEquals(before, fileDialogCount(), "a real awt file dialog was created")
     }
@@ -181,11 +181,11 @@ class AwtXlsxFilePickerTest {
         var candidate: Path? = Path.of("").toAbsolutePath().normalize()
         while (candidate != null) {
             listOf(candidate, candidate.resolve("app"))
-                .map { it.resolve("src/desktopMain/kotlin/dev/pnptracker/platform/xlsx/XlsxFilePicker.kt") }
+                .map { it.resolve("src/desktopMain/kotlin/dev/pnptracker/platform/importfiles/ImportFilePicker.kt") }
                 .firstOrNull { Files.isRegularFile(it) }
                 ?.let { return it }
             candidate = candidate.parent
         }
-        fail("Could not locate XlsxFilePicker.kt from ${Path.of("").toAbsolutePath()}")
+        fail("Could not locate ImportFilePicker.kt from ${Path.of("").toAbsolutePath()}")
     }
 }
