@@ -178,11 +178,23 @@ class TaskProgressStore(
             // after an uncertain failure has to be the same event, not a second
             // one. The generator is asked at most once, so handing it a constant
             // is exact rather than merely convenient.
-            taskProgressDao.completeTask(taskId = taskId, clock = clock, idGenerator = IdGenerator { eventId })
+            // Two names, and they have to be two: the settling event is the
+            // caller's, so a retry is the same shortage rather than a second one,
+            // while the history line is this transaction's own and is written
+            // exactly once. Handing the same identifier to both would be a row in
+            // each table claiming to be the same event.
+            taskProgressDao.completeTask(
+                taskId = taskId,
+                clock = clock,
+                idGenerator = IdGenerator { eventId },
+                historyEventId = idGenerator.newId(),
+            )
         }
 
     override suspend fun reopenTask(taskId: EntityId): TaskProgressOutcome =
-        outcomeOf { taskProgressDao.reopenTask(taskId = taskId, clock = clock) }
+        outcomeOf {
+            taskProgressDao.reopenTask(taskId = taskId, clock = clock, historyEventId = idGenerator.newId())
+        }
 
     override suspend fun gameCompletion(gameId: EntityId): GameCompletionSnapshot? =
         try {
@@ -226,6 +238,7 @@ class TaskProgressStore(
                 note = note,
                 cardReference = cardReference,
                 stage = stage,
+                reopenEventId = idGenerator.newId(),
             )
         }
 
@@ -244,6 +257,7 @@ class TaskProgressStore(
                 clock = clock,
                 note = note,
                 cardReference = cardReference,
+                completionEventId = idGenerator.newId(),
             )
         }
 
@@ -258,6 +272,7 @@ class TaskProgressStore(
                 targets = targets,
                 clock = clock,
                 expected = expected,
+                idGenerator = idGenerator,
             )
         }
 

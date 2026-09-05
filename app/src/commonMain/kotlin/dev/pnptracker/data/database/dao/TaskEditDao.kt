@@ -6,10 +6,12 @@ import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
 import androidx.room3.Transaction
 import dev.pnptracker.data.database.entity.CellSegmentEntity
+import dev.pnptracker.data.database.entity.HistoryEventEntity
 import dev.pnptracker.data.database.entity.TaskColorEntity
 import dev.pnptracker.data.database.entity.TaskEntity
 import dev.pnptracker.data.database.projection.CellRunRow
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.HistoryEventKind
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.SegmentKind
 import dev.pnptracker.domain.model.TrackingMode
@@ -120,14 +122,29 @@ abstract class TaskEditDao {
     @Query("DELETE FROM task_colors WHERE task_id = :taskId")
     protected abstract suspend fun removeColorsOfTask(taskId: EntityId): Int
 
-    @Query("DELETE FROM task_stages WHERE task_id = :taskId")
-    protected abstract suspend fun removeStagesOfTask(taskId: EntityId): Int
+    /**
+     * Takes a task out of view without taking it out of the database.
+     *
+     * The same row and the same pair of columns [dev.pnptracker.data.database.dao.TaskDao.softDelete]
+     * writes, and written from here because converting a task to text has to
+     * happen in one transaction with the cell it rewrites. `updated_at` moves
+     * with `deleted_at` because a deletion is the record's last change.
+     */
+    @Query(
+        "UPDATE tasks SET deleted_at = :deletedAt, updated_at = :deletedAt " +
+            "WHERE id = :taskId AND deleted_at IS NULL",
+    )
+    protected abstract suspend fun softDeleteTask(
+        taskId: EntityId,
+        deletedAt: Instant,
+    ): Int
 
-    @Query("DELETE FROM progress_events WHERE task_id = :taskId")
-    protected abstract suspend fun removeEventsOfTask(taskId: EntityId): Int
+    /** The game a cell belongs to, for the history line the conversion writes. */
+    @Query("SELECT game_id FROM game_cells WHERE id = :cellId")
+    protected abstract suspend fun gameIdOfCell(cellId: EntityId): EntityId?
 
-    @Query("DELETE FROM tasks WHERE id = :taskId")
-    protected abstract suspend fun deleteTaskRow(taskId: EntityId): Int
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    protected abstract suspend fun insertHistoryEvent(event: HistoryEventEntity)
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     protected abstract suspend fun insertSegment(segment: CellSegmentEntity)
@@ -324,17 +341,25 @@ abstract class TaskEditDao {
     /**
      * Turns a task back into the words it was made from.
      *
-     * PLAN 12.8 and 5.2 are explicit that this is not a deletion: the task record
-     * goes, and its name stays exactly where it was as ordinary text. So the cell
-     * reads the same afterwards as it did before, to the character — the only
-     * thing that changes is that those words are no longer a piece of work.
+     * PLAN 12.8 and 5.2 are explicit about what the user gets: the words stay
+     * exactly where they were as ordinary text, and they stop being a piece of
+     * work. So the cell reads the same afterwards as it did before, to the
+     * character, and the task leaves the pools, the table and the export.
      *
-     * Everything that hung off the task goes with it, in the order the foreign
-     * keys allow: its history, its pipeline, its colours, the piece that named
-     * it, and then the task itself. PLAN 12.8 asks for those relations to be
-     * cleaned up, and leaving any of them behind would be history belonging to
-     * nothing. PLAN 5.12 keeps a task's history from being edited underneath it —
-     * that is a rule about a task that still exists, and this one does not.
+     * **What it no longer does is destroy the record.** Until version 7 this
+     * deleted the task row and, with it, every shortage ever reported against
+     * that task — which PLAN 385 says is history that is never deleted, and PLAN
+     * 1123 asks the history screen to show. So the task is soft deleted instead,
+     * exactly as PLAN 141 has every other deletion work: the row stays, its
+     * colours stay, its pipeline stays, its shortages stay, and `deleted_at` is
+     * what takes it out of every active view. Physical removal is the separate
+     * maintenance action of PLAN 143 and is not this.
+     *
+     * The conversion is its own history event rather than a deletion event. They
+     * are different things to have done — one takes a piece of work out of sight,
+     * the other says those words were never a piece of work — and the tombstone
+     * here is the mechanism, not the act. The game is read before the piece of
+     * the cell is taken away, because that piece is the only way back to it.
      *
      * The cell is left canonical: the freed name joins the text on either side of
      * it into one piece, and the reading order closes up behind it.
@@ -349,9 +374,11 @@ abstract class TaskEditDao {
         taskId: EntityId,
         clock: Clock,
         idGenerator: IdGenerator,
+        historyEventId: EntityId = IdGenerator.Random.newId(),
     ): Boolean {
         val task = workableTaskById(taskId) ?: refuse(TaskEditFailure.TASK_NOT_AVAILABLE)
         val segment = segmentOfTask(taskId) ?: refuse(TaskEditFailure.TASK_NOT_AVAILABLE)
+        val gameId = gameIdOfCell(segment.cellId) ?: refuse(TaskEditFailure.TASK_NOT_AVAILABLE)
         val moment = clock.now()
 
         val rows = runsOfCell(segment.cellId)
@@ -373,13 +400,19 @@ abstract class TaskEditDao {
 
         rows.forEachIndexed { index, row -> moveSegment(row.segmentId, -(index + 1)) }
 
-        // The piece that named the task goes before the task does; its foreign
-        // key is what would otherwise refuse the delete.
+        // The piece that named the task goes, because those words are now part of
+        // the text around them. Nothing else of the task goes with it.
         deleteSegment(segment.id)
-        removeEventsOfTask(taskId)
-        removeStagesOfTask(taskId)
-        removeColorsOfTask(taskId)
-        deleteTaskRow(taskId)
+        softDeleteTask(taskId, moment)
+        insertHistoryEvent(
+            HistoryEventEntity(
+                id = historyEventId,
+                kind = HistoryEventKind.TASK_CONVERTED_TO_TEXT,
+                occurredAt = moment,
+                gameId = gameId,
+                taskId = taskId,
+            ),
+        )
 
         val kept = merged.mapNotNull { it.existingId }.toSet()
         rows

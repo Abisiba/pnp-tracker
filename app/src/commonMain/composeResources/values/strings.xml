@@ -292,7 +292,7 @@
     <!-- Game table: turning a task back into text -->
     <string name="task_convert_title">Görevi metne dönüştür</string>
     <string name="task_convert_body">%1$s kelimesi hücrede düz metin olarak kalacak; rengi, adedi ve aşamaları artık görev olarak izlenmeyecek.</string>
-    <string name="task_convert_history_warning">Bu görevin kaydedilmiş üretim geçmişi var; geçmiş de silinecek.</string>
+    <string name="task_convert_history_warning">Bu görevin kaydedilmiş üretim geçmişi var; geçmiş kaydı silinmez, görev listelerden çıkar.</string>
     <string name="task_convert_irreversible">Bu işlem geri alınamaz.</string>
     <string name="task_convert_accept">Metne dönüştür</string>
     <string name="task_convert_cancel">Vazgeç</string>

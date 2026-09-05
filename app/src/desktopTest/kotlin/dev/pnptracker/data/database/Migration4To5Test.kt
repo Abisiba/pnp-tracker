@@ -150,7 +150,7 @@ class Migration4To5Test {
             database.close()
         }
 
-        assertEquals(6L, version())
+        assertEquals(CURRENT_SCHEMA_VERSION, version())
         assertEquals(1, rows("games"))
         assertEquals(5, rows("game_cells"))
         assertEquals(8, rows("cell_segments"))
@@ -318,7 +318,7 @@ class Migration4To5Test {
                     first.close()
                 }
             assertEquals(12, seeded.size)
-            assertEquals(6L, version())
+            assertEquals(CURRENT_SCHEMA_VERSION, version())
 
             val second = DatabaseFactory().open(directory.databaseFile)
             try {
@@ -327,7 +327,7 @@ class Migration4To5Test {
             } finally {
                 second.close()
             }
-            assertEquals(6L, version())
+            assertEquals(CURRENT_SCHEMA_VERSION, version())
         }
 
     @Test
@@ -345,7 +345,7 @@ class Migration4To5Test {
                 database.close()
             }
 
-            assertEquals(6L, version())
+            assertEquals(CURRENT_SCHEMA_VERSION, version())
             assertEquals(0, rows("task_stages"))
             assertEquals(0, rows("progress_events"))
         }

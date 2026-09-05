@@ -136,7 +136,13 @@ class TaskProgressReflectionTest {
                         "TASK_COLORS" in head -> "task_colors"
                         "TASK_STAGES" in head -> "task_stages"
                         "PROGRESS_EVENTS" in head -> "progress_events"
+                        "HISTORY_EVENTS" in head -> "history_events"
                         "TASKS" in head -> "tasks"
+                        // After `tasks`, deliberately: nearly every read of a task
+                        // walks through its piece of a cell to check the game is
+                        // still there, and those are reads of tasks. Only a
+                        // statement that never mentions the table lands here.
+                        "CELL_SEGMENTS" in head -> "cell_segments"
                         else -> "other"
                     }
                 "$verb $table"
@@ -329,7 +335,9 @@ class TaskProgressReflectionTest {
             // One reopen really happens; the finish and the second reopen have
             // nothing to do, and doing nothing costs one look and no write.
             assertEquals(1, counted["UPDATE tasks"], "a no-op wrote the task: $counted")
-            assertEquals(0, counted.filterKeys { it.startsWith("INSERT") }.values.sum())
+            assertEquals(null, counted["INSERT progress_events"], "a no-op settled something: $counted")
+            // The one real reopen records itself, and neither no-op does.
+            assertEquals(1, counted["INSERT history_events"], "the reopenings were not recorded once: $counted")
         }
 
     // ---------------------------------------- what a finish does, and what it costs
@@ -535,8 +543,13 @@ class TaskProgressReflectionTest {
                     "SELECT tasks" to 2,
                     "SELECT task_stages" to 2,
                     "SELECT progress_events" to 2,
+                    // The game the history line has to name. One read for the
+                    // whole action, and the same one whether the library holds
+                    // one task or a thousand.
+                    "SELECT cell_segments" to 1,
                     "SELECT other" to 1,
                     "UPDATE tasks" to 1,
+                    "INSERT history_events" to 1,
                 ),
                 alone.getValue("complete owing nothing"),
             )

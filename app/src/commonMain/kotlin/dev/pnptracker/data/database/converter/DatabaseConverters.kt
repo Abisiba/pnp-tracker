@@ -4,6 +4,7 @@ import androidx.room3.ColumnTypeConverter
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.HintDecision
+import dev.pnptracker.domain.model.HistoryEventKind
 import dev.pnptracker.domain.model.ImportBatchStatus
 import dev.pnptracker.domain.model.ImportSourceFormat
 import dev.pnptracker.domain.model.PoolType
@@ -91,6 +92,12 @@ object DatabaseConverters {
 
     @ColumnTypeConverter
     fun textToProgressEventKind(name: String): ProgressEventKind = ProgressEventKind.valueOf(name)
+
+    @ColumnTypeConverter
+    fun historyEventKindToText(kind: HistoryEventKind): String = kind.name
+
+    @ColumnTypeConverter
+    fun textToHistoryEventKind(name: String): HistoryEventKind = HistoryEventKind.valueOf(name)
 
     @ColumnTypeConverter
     fun hintDecisionToText(decision: HintDecision): String = decision.name

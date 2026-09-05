@@ -4,8 +4,12 @@ import androidx.room3.Dao
 import androidx.room3.Insert
 import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
+import androidx.room3.Transaction
 import dev.pnptracker.data.database.entity.GameEntity
+import dev.pnptracker.data.database.entity.HistoryEventEntity
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.HistoryEventKind
+import dev.pnptracker.domain.model.IdGenerator
 import kotlinx.coroutines.flow.Flow
 import kotlin.time.Instant
 
@@ -39,17 +43,56 @@ interface GameDao {
     @Query("SELECT * FROM games ORDER BY name")
     suspend fun allGamesIncludingDeleted(): List<GameEntity>
 
-    /**
-     * Marks a game as deleted. Deleting an already deleted game changes nothing,
-     * so the stored timestamps keep pointing at the first deletion.
-     *
-     * @return how many rows changed: 1 on the first call, 0 afterwards.
-     */
     @Query("UPDATE games SET deleted_at = :deletedAt, updated_at = :deletedAt WHERE id = :id AND deleted_at IS NULL")
-    suspend fun softDelete(
+    suspend fun writeGameTombstone(
         id: EntityId,
         deletedAt: Instant,
     ): Int
+
+    /**
+     * Appends one line to the history. Only [softDelete] below has one to write.
+     *
+     * Public because a Room interface has no other visibility to offer, not
+     * because anything outside this file should call it. There is no update and
+     * no delete for these rows anywhere in the application: appending is the
+     * whole of what the table supports (PLAN 385).
+     */
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun appendHistoryEvent(event: HistoryEventEntity)
+
+    /**
+     * Marks a game as deleted, and records that it happened.
+     *
+     * Deleting an already deleted game changes nothing — the stored timestamps
+     * keep pointing at the first deletion — and writes no second history line
+     * either: the row count is what says whether this call was the deletion, so a
+     * repeat cannot leave the history claiming a game was deleted twice.
+     *
+     * The event carries the tombstone's own moment rather than a second reading
+     * of a clock, so the row and the history can never disagree about when it
+     * happened. Both are written in one transaction: a history line that could
+     * not be written takes the deletion down with it.
+     *
+     * @return how many rows changed: 1 on the first call, 0 afterwards.
+     */
+    @Transaction
+    suspend fun softDelete(
+        id: EntityId,
+        deletedAt: Instant,
+        eventId: EntityId = IdGenerator.Random.newId(),
+    ): Int {
+        val changed = writeGameTombstone(id, deletedAt)
+        if (changed == 0) return 0
+        appendHistoryEvent(
+            HistoryEventEntity(
+                id = eventId,
+                kind = HistoryEventKind.GAME_DELETED,
+                occurredAt = deletedAt,
+                gameId = id,
+            ),
+        )
+        return changed
+    }
 
     /**
      * Records the user's own judgement that a game is finished, or takes it back.

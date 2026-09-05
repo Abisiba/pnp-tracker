@@ -73,6 +73,18 @@ class StoppedClock(
     override fun now(): Instant = fixed
 }
 
+/**
+ * The schema version the application currently ships.
+ *
+ * Named once because every migration test walks up to whatever it is now: the
+ * step each of them is about is only the last of the walk, and the answer they
+ * all check is "where does a database of that vintage end up today". A literal
+ * repeated across six files would have to be found and changed on every bump,
+ * and the one that was missed would fail somewhere that has nothing to do with
+ * the change.
+ */
+const val CURRENT_SCHEMA_VERSION = 7L
+
 const val EPOCH_MILLISECONDS_CREATED = 1_700_000_000_000L
 const val EPOCH_MILLISECONDS_UPDATED = 1_700_000_600_000L
 const val EPOCH_MILLISECONDS_DELETED = 1_700_001_200_000L

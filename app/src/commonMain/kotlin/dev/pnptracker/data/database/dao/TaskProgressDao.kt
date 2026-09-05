@@ -6,6 +6,7 @@ import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
 import androidx.room3.Transaction
 import dev.pnptracker.data.database.entity.GameEntity
+import dev.pnptracker.data.database.entity.HistoryEventEntity
 import dev.pnptracker.data.database.entity.ProgressEventEntity
 import dev.pnptracker.data.database.entity.TaskEntity
 import dev.pnptracker.data.database.entity.TaskStageEntity
@@ -13,6 +14,7 @@ import dev.pnptracker.domain.games.GameCompletionSnapshot
 import dev.pnptracker.domain.games.GameStageSnapshot
 import dev.pnptracker.domain.games.GameTaskSnapshot
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.HistoryEventKind
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.ProductionStage
@@ -106,6 +108,25 @@ abstract class TaskProgressDao {
         """,
     )
     abstract suspend fun gameOfTask(taskId: EntityId): GameEntity?
+
+    /**
+     * Just the identity of the game a task is written in.
+     *
+     * A history event names the game it happened in, and only the identity is
+     * wanted — reading the whole game row to take one column off it would be a
+     * bigger read on every completion for nothing. The deleted games are not
+     * filtered out here on purpose: PLAN 1123 asks the history screen for
+     * records that have since been removed, so an event in a game that later
+     * goes still has a game to name.
+     */
+    @Query(
+        """
+        SELECT game_cells.game_id FROM cell_segments
+        INNER JOIN game_cells ON game_cells.id = cell_segments.cell_id
+        WHERE cell_segments.task_id = :taskId
+        """,
+    )
+    abstract suspend fun gameIdOfTask(taskId: EntityId): EntityId?
 
     /** The game, if it is still there. */
     @Query("SELECT * FROM games WHERE id = :gameId AND deleted_at IS NULL")
@@ -264,6 +285,32 @@ abstract class TaskProgressDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     protected abstract suspend fun insertEventIfNew(event: ProgressEventEntity): Long
 
+    /**
+     * Appends one line to the history, from inside the transaction that caused it.
+     *
+     * `ABORT` and not `IGNORE`, unlike the progress event above. A progress event
+     * is named by the user's screen so that a retry can be recognised, and a
+     * clash there is an ordinary retry. A history event is named by the
+     * transaction itself and is written exactly once, so a clash is an identifier
+     * that was already spent — and the honest answer to that is to take the whole
+     * transaction down rather than to write the state change with its record
+     * silently missing.
+     */
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    protected abstract suspend fun insertHistoryEvent(event: HistoryEventEntity)
+
+    /**
+     * The game a history event about this task has to name.
+     *
+     * [workableTaskById] has already walked the chain from the task through its
+     * piece of a cell to a living game, so by the time anything here is writing,
+     * the answer exists. The refusal is the typed one rather than a check that
+     * would crash: a task that has lost its anchor between two reads is a task
+     * that can no longer be worked on, which is exactly what the failure says.
+     */
+    private suspend fun gameOfWorkableTask(taskId: EntityId): EntityId =
+        gameIdOfTask(taskId) ?: refuse(TaskProgressFailure.TASK_NOT_AVAILABLE)
+
     @Query(
         """
         UPDATE tasks SET is_completed = :isCompleted, completed_at = :completedAt,
@@ -342,9 +389,11 @@ abstract class TaskProgressDao {
         taskId: EntityId,
         clock: Clock,
         idGenerator: IdGenerator,
+        historyEventId: EntityId = IdGenerator.Random.newId(),
     ): Boolean {
         val task = workableTaskById(taskId) ?: refuse(TaskProgressFailure.TASK_NOT_AVAILABLE)
         if (task.isCompleted) return false
+        val gameId = gameOfWorkableTask(taskId)
         val moment = clock.now()
         val plan = completionOf(task)
 
@@ -356,6 +405,15 @@ abstract class TaskProgressDao {
             check(settled != -1L) { "The settling event for $taskId was given a name that was already taken." }
         }
         writeCompletion(task, plan, stagesOfTask(taskId), moment)
+        insertHistoryEvent(
+            HistoryEventEntity(
+                id = historyEventId,
+                kind = HistoryEventKind.TASK_COMPLETED,
+                occurredAt = moment,
+                gameId = gameId,
+                taskId = taskId,
+            ),
+        )
         requireProgressHolds(taskId)
         return true
     }
@@ -410,8 +468,12 @@ abstract class TaskProgressDao {
         val plans = unfinished.map { it to completionOf(it) }
         // Every name a write will need, made before the first of them lands. A
         // generator that runs out on the second identifier would otherwise leave
-        // the first settling event written against work that never finished.
+        // the first settling event written against work that never finished. The
+        // history lines are named here for the same reason and in the same
+        // breath: PLAN 12.9 finishes a game as one act, so a generator that gave
+        // out halfway must leave the game exactly as it found it.
         val settlings = plans.filter { (_, plan) -> plan.settles > 0 }.map { (task, plan) -> Triple(task, plan, idGenerator.newId()) }
+        val completions = plans.map { (task, _) -> task.id to idGenerator.newId() }
 
         val moment = clock.now()
         settlings.forEach { (task, plan, eventId) ->
@@ -419,6 +481,20 @@ abstract class TaskProgressDao {
             check(settled != -1L) { "The settling event for ${task.id} was given a name that was already taken." }
         }
         plans.forEach { (task, plan) -> writeCompletion(task, plan, stages[task.id].orEmpty(), moment) }
+        // One line per task that really went from open to finished. The game is
+        // the one being finished, so nothing here asks the database which game a
+        // task is in: that would be a query per task, and PLAN 16 rules it out.
+        completions.forEach { (taskId, eventId) ->
+            insertHistoryEvent(
+                HistoryEventEntity(
+                    id = eventId,
+                    kind = HistoryEventKind.TASK_COMPLETED,
+                    occurredAt = moment,
+                    gameId = gameId,
+                    taskId = taskId,
+                ),
+            )
+        }
         // Last, so that a game is never marked finished over work that did not
         // finish: anything above taking the transaction down takes this with it.
         writeGameCompletion(gameId = gameId, isCompleted = true, completedAt = moment, updatedAt = moment)
@@ -554,9 +630,11 @@ abstract class TaskProgressDao {
     open suspend fun reopenTask(
         taskId: EntityId,
         clock: Clock,
+        historyEventId: EntityId = IdGenerator.Random.newId(),
     ): Boolean {
         val task = workableTaskById(taskId) ?: refuse(TaskProgressFailure.TASK_NOT_AVAILABLE)
         if (!task.isCompleted) return false
+        val gameId = gameOfWorkableTask(taskId)
         val moment = clock.now()
         writeProgress(
             taskId = taskId,
@@ -565,6 +643,15 @@ abstract class TaskProgressDao {
             primaryBatchCompleted = task.primaryBatchCompleted,
             currentMissingQuantity = task.currentMissingQuantity,
             updatedAt = moment,
+        )
+        insertHistoryEvent(
+            HistoryEventEntity(
+                id = historyEventId,
+                kind = HistoryEventKind.TASK_REOPENED,
+                occurredAt = moment,
+                gameId = gameId,
+                taskId = taskId,
+            ),
         )
         requireProgressHolds(taskId)
         return true
@@ -592,10 +679,12 @@ abstract class TaskProgressDao {
     open suspend fun completePrimaryBatch(
         taskId: EntityId,
         clock: Clock,
+        historyEventId: EntityId = IdGenerator.Random.newId(),
     ): Boolean {
         val task = workableTaskById(taskId) ?: refuse(TaskProgressFailure.TASK_NOT_AVAILABLE)
         if (task.poolType != PoolType.THREE_D) refuse(TaskProgressFailure.PRIMARY_BATCH_ONLY_FOR_THREE_D)
         if (task.primaryBatchCompleted) return false
+        val gameId = gameOfWorkableTask(taskId)
         val moment = clock.now()
         val finished = task.currentMissingQuantity == 0
         writeProgress(
@@ -606,6 +695,19 @@ abstract class TaskProgressDao {
             currentMissingQuantity = task.currentMissingQuantity,
             updatedAt = moment,
         )
+        // Recording the run is not itself a history event — nothing in PLAN 12.15
+        // asks for one — but it can finish the task, and that is.
+        if (finished) {
+            insertHistoryEvent(
+                HistoryEventEntity(
+                    id = historyEventId,
+                    kind = HistoryEventKind.TASK_COMPLETED,
+                    occurredAt = moment,
+                    gameId = gameId,
+                    taskId = taskId,
+                ),
+            )
+        }
         requireProgressHolds(taskId)
         return true
     }
@@ -655,6 +757,7 @@ abstract class TaskProgressDao {
         note: String? = null,
         cardReference: String? = null,
         stage: ProductionStage? = null,
+        reopenEventId: EntityId = IdGenerator.Random.newId(),
     ): Boolean {
         requireCountableQuantity(quantity)
         val task = workableTaskById(taskId) ?: refuse(TaskProgressFailure.TASK_NOT_AVAILABLE)
@@ -708,6 +811,22 @@ abstract class TaskProgressDao {
         if (game != null && game.isManuallyCompleted) {
             writeGameCompletion(gameId = game.id, isCompleted = false, completedAt = null, updatedAt = moment)
         }
+        // PLAN 437: a report brings a finished task back into the active pool, and
+        // that is a reopening like any other. A task that was already open is
+        // simply carrying on, and carrying on is not an event. The game comes from
+        // the read above rather than from a second one — and if the chain to it is
+        // gone the task was not workable, which the read at the top has ruled out.
+        if (task.isCompleted) {
+            insertHistoryEvent(
+                HistoryEventEntity(
+                    id = reopenEventId,
+                    kind = HistoryEventKind.TASK_REOPENED,
+                    occurredAt = moment,
+                    gameId = game?.id ?: gameOfWorkableTask(taskId),
+                    taskId = taskId,
+                ),
+            )
+        }
         requireProgressHolds(taskId)
         return true
     }
@@ -743,6 +862,7 @@ abstract class TaskProgressDao {
         clock: Clock,
         note: String? = null,
         cardReference: String? = null,
+        completionEventId: EntityId = IdGenerator.Random.newId(),
     ): Boolean {
         requireCountableQuantity(quantity)
         val task = workableTaskById(taskId) ?: refuse(TaskProgressFailure.TASK_NOT_AVAILABLE)
@@ -774,6 +894,21 @@ abstract class TaskProgressDao {
             currentMissingQuantity = owed,
             updatedAt = moment,
         )
+        // Making the last of it good can finish the task, and a task finishing is
+        // the same event whichever way it got there. It was certainly open before:
+        // a finished task owes nothing, so there would have been nothing to make
+        // good and the amount would have been refused above.
+        if (finished) {
+            insertHistoryEvent(
+                HistoryEventEntity(
+                    id = completionEventId,
+                    kind = HistoryEventKind.TASK_COMPLETED,
+                    occurredAt = moment,
+                    gameId = gameOfWorkableTask(taskId),
+                    taskId = taskId,
+                ),
+            )
+        }
         requireProgressHolds(taskId)
         return true
     }
@@ -795,7 +930,8 @@ abstract class TaskProgressDao {
         stage: ProductionStage,
         completedQuantity: Int,
         clock: Clock,
-    ): Boolean = setStageQuantities(taskId, mapOf(stage to completedQuantity), clock)
+        idGenerator: IdGenerator = IdGenerator.Random,
+    ): Boolean = setStageQuantities(taskId, mapOf(stage to completedQuantity), clock, idGenerator = idGenerator)
 
     /**
      * Sets how far several steps of a pipeline have got, all at once.
@@ -839,6 +975,7 @@ abstract class TaskProgressDao {
         targets: Map<ProductionStage, Int>,
         clock: Clock,
         expected: StageSnapshot? = null,
+        idGenerator: IdGenerator = IdGenerator.Random,
     ): Boolean {
         val task = workableTaskById(taskId) ?: refuse(TaskProgressFailure.TASK_NOT_AVAILABLE)
         if (!task.poolType.hasStages) refuse(TaskProgressFailure.TASK_HAS_NO_STAGES)
@@ -887,15 +1024,34 @@ abstract class TaskProgressDao {
             }
         }
 
-        val changed = wanted.filterIndexed { index, row -> row.completedQuantity != stages[index].completedQuantity }
-        if (changed.isEmpty()) return false
+        // Kept beside the count each step came from, because that is what the
+        // history line is: not where the work stands, but the move it just made.
+        val moves =
+            wanted
+                .filterIndexed { index, row -> row.completedQuantity != stages[index].completedQuantity }
+                .map { row -> row to stages.first { it.stage == row.stage }.completedQuantity }
+        if (moves.isEmpty()) return false
 
-        val moment = clock.now()
-        changed.forEach { row -> writeStage(taskId, row.stage, row.completedQuantity, moment) }
         // A pipeline counted all the way up still does not finish a task that
         // owes a reprint: PLAN 6.4 will not have the finished mark stand against
         // a counter saying work is left.
         val finished = task.currentMissingQuantity == 0 && readyToFinish(task, wanted)
+        // Everything the writes will need, settled before the first of them: the
+        // game to record against, a name per step that moved, and one more for
+        // the task crossing into or out of being finished. A generator that gave
+        // out in the middle would otherwise leave a pipeline half written.
+        val gameId = gameOfWorkableTask(taskId)
+        val moveEventIds = moves.map { idGenerator.newId() }
+        val crossing =
+            when {
+                !task.isCompleted && finished -> HistoryEventKind.TASK_COMPLETED
+                task.isCompleted && !finished -> HistoryEventKind.TASK_REOPENED
+                else -> null
+            }
+        val crossingEventId = crossing?.let { idGenerator.newId() }
+
+        val moment = clock.now()
+        moves.forEach { (row, _) -> writeStage(taskId, row.stage, row.completedQuantity, moment) }
         writeProgress(
             taskId = taskId,
             isCompleted = finished,
@@ -904,6 +1060,31 @@ abstract class TaskProgressDao {
             currentMissingQuantity = task.currentMissingQuantity,
             updatedAt = moment,
         )
+        moves.forEachIndexed { index, (row, before) ->
+            insertHistoryEvent(
+                HistoryEventEntity(
+                    id = moveEventIds[index],
+                    kind = HistoryEventKind.TASK_STAGE_QUANTITY_CHANGED,
+                    occurredAt = moment,
+                    gameId = gameId,
+                    taskId = taskId,
+                    stage = row.stage,
+                    previousQuantity = before,
+                    newQuantity = row.completedQuantity,
+                ),
+            )
+        }
+        if (crossing != null && crossingEventId != null) {
+            insertHistoryEvent(
+                HistoryEventEntity(
+                    id = crossingEventId,
+                    kind = crossing,
+                    occurredAt = moment,
+                    gameId = gameId,
+                    taskId = taskId,
+                ),
+            )
+        }
         requireProgressHolds(taskId)
         return true
     }

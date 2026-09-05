@@ -777,7 +777,10 @@ class IndependentTasksFromTextTest {
 
             assertTrue(editing().convertTaskToText(ids.first()))
 
-            assertNull(database.taskDao().taskByIdIncludingDeleted(ids.first()), "the task record survived")
+            // The record stays and is soft deleted, which is how it leaves the
+            // table and the pools without its history going with it.
+            assertNotNull(database.taskDao().taskByIdIncludingDeleted(ids.first()), "the task record was destroyed")
+            assertNull(database.taskDao().activeTaskById(ids.first()), "the converted task is still active")
             assertEquals(others, snapshotOf(ids.drop(1)), "converting one task changed another")
             // The words stay where they were and the other two are still tasks.
             assertEquals("Basılacak: TokenTokenToken, kutu ayrı.", documentTextOf(cell.id))

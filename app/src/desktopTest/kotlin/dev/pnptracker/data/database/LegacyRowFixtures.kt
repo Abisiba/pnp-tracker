@@ -232,6 +232,7 @@ fun insertVersion4Game(
     gameId: EntityId,
     name: String = "Harmonies",
     isManuallyCompleted: Boolean = false,
+    deleted: Boolean = false,
 ) {
     connection
         .prepare(
@@ -243,8 +244,8 @@ fun insertVersion4Game(
             statement.bindInt(3, if (isManuallyCompleted) 1 else 0)
             if (isManuallyCompleted) statement.bindLong(4, EPOCH_MILLISECONDS_UPDATED) else statement.bindNull(4)
             statement.bindLong(5, EPOCH_MILLISECONDS_CREATED)
-            statement.bindLong(6, EPOCH_MILLISECONDS_UPDATED)
-            statement.bindNull(7)
+            statement.bindLong(6, if (deleted) EPOCH_MILLISECONDS_DELETED else EPOCH_MILLISECONDS_UPDATED)
+            if (deleted) statement.bindLong(7, EPOCH_MILLISECONDS_DELETED) else statement.bindNull(7)
             statement.bindNull(8)
             statement.step()
         }
@@ -564,6 +565,59 @@ fun insertVersion5RawImportBlock(
             statement.bindInt(10, if (isProcessed) 1 else 0)
             statement.bindLong(11, EPOCH_MILLISECONDS_CREATED)
             statement.bindLong(12, EPOCH_MILLISECONDS_UPDATED)
+            statement.step()
+        }
+}
+
+/**
+ * A version 6 task: everything version 5 had, plus the four flags version 6 added.
+ *
+ * [completedAt] and [deletedAt] are given rather than derived, because the walk to
+ * version 7 reads them as the moments things happened at — so a test has to be
+ * able to put a finish and a deletion at two different times on one task.
+ */
+fun insertVersion6Task(
+    connection: SQLiteConnection,
+    taskId: EntityId,
+    poolType: String,
+    trackingMode: String,
+    name: String,
+    requiredQuantity: Int? = null,
+    notes: String? = null,
+    completedAt: Long? = null,
+    primaryBatchCompleted: Boolean = false,
+    currentMissingQuantity: Int = 0,
+    deletedAt: Long? = null,
+    isMissing: Boolean = false,
+    isBorrowed: Boolean = false,
+    needsInfo: Boolean = false,
+    needsClassification: Boolean = false,
+) {
+    connection
+        .prepare(
+            "INSERT INTO tasks (id, pool_type, tracking_mode, name, required_quantity, notes, " +
+                "is_completed, completed_at, primary_batch_completed, current_missing_quantity, " +
+                "created_at, updated_at, deleted_at, source_raw_import_block_id, " +
+                "is_missing, is_borrowed, needs_info, needs_classification) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)",
+        ).use { statement ->
+            statement.bindText(1, taskId.toString())
+            statement.bindText(2, poolType)
+            statement.bindText(3, trackingMode)
+            statement.bindText(4, name)
+            if (requiredQuantity == null) statement.bindNull(5) else statement.bindInt(5, requiredQuantity)
+            if (notes == null) statement.bindNull(6) else statement.bindText(6, notes)
+            statement.bindInt(7, if (completedAt != null) 1 else 0)
+            if (completedAt == null) statement.bindNull(8) else statement.bindLong(8, completedAt)
+            statement.bindInt(9, if (primaryBatchCompleted) 1 else 0)
+            statement.bindInt(10, currentMissingQuantity)
+            statement.bindLong(11, EPOCH_MILLISECONDS_CREATED)
+            statement.bindLong(12, deletedAt ?: EPOCH_MILLISECONDS_UPDATED)
+            if (deletedAt == null) statement.bindNull(13) else statement.bindLong(13, deletedAt)
+            statement.bindInt(14, if (isMissing) 1 else 0)
+            statement.bindInt(15, if (isBorrowed) 1 else 0)
+            statement.bindInt(16, if (needsInfo) 1 else 0)
+            statement.bindInt(17, if (needsClassification) 1 else 0)
             statement.step()
         }
 }

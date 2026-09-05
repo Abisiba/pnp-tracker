@@ -482,7 +482,14 @@ class GameTablePresentationTest {
         assertTrue("düz metin" in body, "the question does not say the word stays: $body")
         assertTrue(body.none { it == '%' }, "unformatted placeholder left in: $body")
         assertTrue("geri alınamaz" in textOf(Strings.TaskConvert.irreversible), "nothing says it is final")
-        assertTrue("geçmiş" in textOf(Strings.TaskConvert.historyWarning), "the history warning does not mention it")
+        val warning = textOf(Strings.TaskConvert.historyWarning)
+        assertTrue("geçmiş" in warning, "the history warning does not mention it: $warning")
+        // Until version 7 this really did delete the task's history, and the
+        // warning said so. It no longer does either, and a warning that still
+        // promised the deletion would be telling the user something untrue about
+        // what they are about to agree to.
+        assertTrue("silinmez" in warning, "the warning does not say the history is kept: $warning")
+        assertTrue("geçmiş de silinecek" !in warning, "the warning still promises to destroy the history: $warning")
     }
 
     @Test

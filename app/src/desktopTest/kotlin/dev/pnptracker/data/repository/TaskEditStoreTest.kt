@@ -455,23 +455,45 @@ class TaskEditStoreTest {
         }
 
     @Test
-    fun `everything that hung off the task goes with it`() =
+    fun `everything that hung off the task stays with it`() =
         runBlocking<Unit> {
-            // PLAN 12.8 asks for the relations to be cleaned up; leaving any of
-            // them would be a history belonging to nothing.
+            // The words go back to being words, and nothing else is destroyed.
+            // PLAN 385 keeps a shortage ever reported for the life of the record
+            // and PLAN 141 makes a deletion a tombstone, so a conversion that
+            // erased the pipeline and the history would be throwing away exactly
+            // what PLAN 1123 asks the history screen to show.
             val game = addGame()
             val cell = addCell(game.id, CellColumnType.CARD)
             addText(cell.id, "60 kart basılacak")
             val taskId = makeTask(game, cell, "kart", quantity = 60, trackingMode = TrackingMode.PIPELINE)
             database.taskProgressDao().setStageQuantity(taskId, ProductionStage.PRINT, 10, StoppedClock(updatedAt))
-            assertTrue(database.taskProgressDao().stagesOfTask(taskId).isNotEmpty())
+            database.taskProgressDao().reportFailure(
+                IdGenerator.Random.newId(),
+                taskId,
+                quantity = 3,
+                clock = StoppedClock(updatedAt),
+            )
 
             store.convertTaskToText(taskId)
 
-            assertNull(database.taskDao().taskByIdIncludingDeleted(taskId), "the task record survived")
-            assertTrue(database.taskProgressDao().stagesOfTask(taskId).isEmpty(), "stages were left behind")
-            assertTrue(database.taskProgressDao().progressEventsOfTask(taskId).isEmpty(), "events were left behind")
-            assertTrue(database.taskColorDao().colorsOfTask(taskId).isEmpty(), "colours were left behind")
+            val kept = assertNotNull(database.taskDao().taskByIdIncludingDeleted(taskId), "the task record was destroyed")
+            assertEquals("kart", kept.name, "the name was not kept")
+            assertEquals(60, kept.requiredQuantity, "the total was not kept")
+            assertNotNull(kept.deletedAt, "the task was not taken out of view")
+            assertEquals(kept.deletedAt, kept.updatedAt, "the tombstone is not the record's last change")
+            assertNull(database.taskDao().activeTaskById(taskId), "the converted task is still active")
+            assertEquals(3, database.taskProgressDao().stagesOfTask(taskId).size, "the pipeline was thrown away")
+            assertEquals(
+                10,
+                database
+                    .taskProgressDao()
+                    .stagesOfTask(taskId)
+                    .first()
+                    .completedQuantity,
+                "the pipeline lost its counts",
+            )
+            assertEquals(1, database.taskProgressDao().progressEventsOfTask(taskId).size, "the history was thrown away")
+            assertEquals(3, database.taskProgressDao().failureTotalOf(taskId).toInt(), "the failure total was lost")
             assertNull(database.cellSegmentDao().segmentOfTaskIncludingDeleted(taskId), "the piece was left behind")
             assertEquals("60 kart basılacak", documentTextOf(cell.id))
         }

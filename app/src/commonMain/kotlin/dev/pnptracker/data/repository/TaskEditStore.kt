@@ -117,7 +117,12 @@ class TaskEditStore(
 
     override suspend fun convertTaskToText(taskId: EntityId): Boolean =
         try {
-            taskEditDao.convertTaskToText(taskId = taskId, clock = clock, idGenerator = idGenerator)
+            taskEditDao.convertTaskToText(
+                taskId = taskId,
+                clock = clock,
+                idGenerator = idGenerator,
+                historyEventId = idGenerator.newId(),
+            )
         } catch (cause: SQLiteException) {
             throw TaskEditException(TaskEditFailure.COULD_NOT_SAVE, cause = cause)
         }

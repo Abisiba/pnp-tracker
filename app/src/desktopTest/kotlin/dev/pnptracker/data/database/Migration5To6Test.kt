@@ -208,7 +208,7 @@ class Migration5To6Test {
     }
 
     @Test
-    fun `a used version 5 database reaches version 6 with every row still there`() {
+    fun `a used version 5 database reaches the current version with every row still there`() {
         createUsedVersion5Database()
         assertEquals(5L, version(), "the fixture is not a version 5 database")
 
@@ -219,7 +219,7 @@ class Migration5To6Test {
             database.close()
         }
 
-        assertEquals(6L, version())
+        assertEquals(CURRENT_SCHEMA_VERSION, version())
         assertEquals(2, rows("games"))
         assertEquals(4, rows("game_cells"))
         assertEquals(9, rows("cell_segments"))
@@ -251,7 +251,7 @@ class Migration5To6Test {
                 database.close()
             }
 
-        assertEquals(6L, version())
+        assertEquals(CURRENT_SCHEMA_VERSION, version())
         assertEquals(12, colors.size, "the seed colours were disturbed")
         assertEquals(0, rows("tasks"))
         assertEquals(0, rows("draft_task_colors"))
@@ -425,7 +425,7 @@ class Migration5To6Test {
         }
 
     @Test
-    fun `a version 1 database can be walked all the way to version 6`() =
+    fun `a version 1 database can be walked all the way to the current version`() =
         runBlocking<Unit> {
             // Version 1 had no colour catalogue at all, so there is nothing to
             // seed by hand: the walk brings the table and the callback fills it.
@@ -442,7 +442,7 @@ class Migration5To6Test {
             } finally {
                 database.close()
             }
-            assertEquals(6L, version())
+            assertEquals(CURRENT_SCHEMA_VERSION, version())
             assertEquals(0, rows("draft_task_colors"))
         }
 

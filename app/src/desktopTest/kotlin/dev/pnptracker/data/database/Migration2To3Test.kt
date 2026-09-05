@@ -92,7 +92,7 @@ class Migration2To3Test {
             val database = DatabaseFactory().open(directory.databaseFile)
             try {
                 val colours = database.colorDao().allColors()
-                assertEquals(6L, CommittedSchema.readVersion(directory.databaseFile))
+                assertEquals(CURRENT_SCHEMA_VERSION, CommittedSchema.readVersion(directory.databaseFile))
                 assertEquals(seedColors.map { it.id }, colours.map { it.id })
                 assertEquals(seedColors.map { it.canonicalName }, colours.map { it.canonicalName })
                 assertEquals(seedColors.map { it.hex }, colours.map { it.hex })
@@ -169,7 +169,7 @@ class Migration2To3Test {
             try {
                 assertEquals(12, database.colorDao().allColors().size)
                 assertEquals(emptyList(), database.taskDao().allTasksIncludingDeleted())
-                assertEquals(6L, CommittedSchema.readVersion(directory.databaseFile))
+                assertEquals(CURRENT_SCHEMA_VERSION, CommittedSchema.readVersion(directory.databaseFile))
             } finally {
                 database.close()
             }

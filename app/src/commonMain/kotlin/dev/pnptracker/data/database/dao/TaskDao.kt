@@ -7,12 +7,15 @@ import androidx.room3.Query
 import androidx.room3.Transaction
 import dev.pnptracker.data.database.CELL_COLUMN_DISPLAY_ORDER
 import dev.pnptracker.data.database.entity.CellSegmentEntity
+import dev.pnptracker.data.database.entity.HistoryEventEntity
 import dev.pnptracker.data.database.entity.TaskEntity
 import dev.pnptracker.data.database.entity.TaskStageEntity
 import dev.pnptracker.data.database.entity.stageRowsFor
 import dev.pnptracker.data.database.projection.GameTaskRow
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.HistoryEventKind
+import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.tasks.TaskSetupException
 import dev.pnptracker.domain.tasks.TaskSetupFailure
@@ -305,14 +308,69 @@ interface TaskDao {
     @Query("SELECT * FROM tasks ORDER BY name")
     suspend fun allTasksIncludingDeleted(): List<TaskEntity>
 
-    /**
-     * Marks a task as deleted; a second call changes nothing.
-     *
-     * @return how many rows changed: 1 on the first call, 0 afterwards.
-     */
     @Query("UPDATE tasks SET deleted_at = :deletedAt, updated_at = :deletedAt WHERE id = :id AND deleted_at IS NULL")
-    suspend fun softDelete(
+    suspend fun writeTaskTombstone(
         id: EntityId,
         deletedAt: Instant,
     ): Int
+
+    /** The game a task is written in, for the history line a deletion writes. */
+    @Query(
+        """
+        SELECT game_cells.game_id FROM cell_segments
+        INNER JOIN game_cells ON game_cells.id = cell_segments.cell_id
+        WHERE cell_segments.task_id = :taskId
+        """,
+    )
+    suspend fun gameIdOfTask(taskId: EntityId): EntityId?
+
+    /**
+     * Appends one line to the history. Only [softDelete] below has one to write.
+     *
+     * Public because a Room interface has no other visibility to offer, not
+     * because anything outside this file should call it. There is no update and
+     * no delete for these rows anywhere in the application: appending is the
+     * whole of what the table supports (PLAN 385).
+     */
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun appendHistoryEvent(event: HistoryEventEntity)
+
+    /**
+     * Marks a task as deleted, and records that it happened.
+     *
+     * A second call changes nothing and writes no second line: the row count is
+     * what says whether this call was the deletion. The event carries the
+     * tombstone's own moment, so the row and the history cannot disagree about
+     * when it happened, and both are written in one transaction.
+     *
+     * A history line names the game the task was written in, and a task reaches
+     * its game through its piece of a cell. A task that is in no cell is one no
+     * screen has ever shown and no pool has ever held; it is still deleted, and
+     * it is deliberately given no history line rather than a guessed game. There
+     * is nothing lost in that: the history screen files a line under its game,
+     * and a task with no game has nowhere to appear. The tombstone on the row
+     * still records the deletion.
+     *
+     * @return how many rows changed: 1 on the first call, 0 afterwards.
+     */
+    @Transaction
+    suspend fun softDelete(
+        id: EntityId,
+        deletedAt: Instant,
+        eventId: EntityId = IdGenerator.Random.newId(),
+    ): Int {
+        val gameId = gameIdOfTask(id)
+        val changed = writeTaskTombstone(id, deletedAt)
+        if (changed == 0 || gameId == null) return changed
+        appendHistoryEvent(
+            HistoryEventEntity(
+                id = eventId,
+                kind = HistoryEventKind.TASK_DELETED,
+                occurredAt = deletedAt,
+                gameId = gameId,
+                taskId = id,
+            ),
+        )
+        return changed
+    }
 }

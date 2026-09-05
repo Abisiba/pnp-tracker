@@ -124,7 +124,9 @@ class GameCompletionQueryCountTest {
                     statement.startsWith("UPDATE") && "TASK_STAGES" in statement -> "UPDATE task_stages"
                     statement.startsWith("UPDATE") && "GAMES" in statement -> "UPDATE games"
                     statement.startsWith("UPDATE") -> "UPDATE tasks"
-                    statement.startsWith("INSERT") -> "INSERT"
+                    statement.startsWith("INSERT") && "PROGRESS_EVENTS" in statement -> "INSERT progress_events"
+                    statement.startsWith("INSERT") && "HISTORY_EVENTS" in statement -> "INSERT history_events"
+                    statement.startsWith("INSERT") -> "INSERT other"
                     else -> "other"
                 }
             }.eachCount()
@@ -171,7 +173,11 @@ class GameCompletionQueryCountTest {
 
             assertEquals(42, counted["UPDATE tasks"], "a task was left unfinished: $counted")
             assertEquals(1, counted["UPDATE games"], "the game was marked more than once: $counted")
-            assertEquals(null, counted["INSERT"], "a game with nothing owed wrote an event")
+            assertEquals(null, counted["INSERT progress_events"], "a game with nothing owed settled a debt: $counted")
+            // One history line per task that really finished, and PLAN 1118 wants
+            // every one of them. Writes are the work; it is the *reads* that must
+            // not grow with the game, and they do not.
+            assertEquals(42, counted["INSERT history_events"], "a finished task went unrecorded: $counted")
         }
 
     @Test
@@ -184,7 +190,8 @@ class GameCompletionQueryCountTest {
 
             val counted = finish(gameId)
 
-            assertEquals(42, counted["INSERT"], "the debts were not settled one event each: $counted")
+            assertEquals(42, counted["INSERT progress_events"], "the debts were not settled one event each: $counted")
+            assertEquals(42, counted["INSERT history_events"], "the finishes were not recorded one each: $counted")
             assertEquals(42, counted["UPDATE tasks"])
             assertTrue(decisions(counted).values.all { it <= 2 }, "a debt cost a question of its own: $counted")
         }
@@ -237,7 +244,8 @@ class GameCompletionQueryCountTest {
 
             assertEquals(null, counted["UPDATE games"], "a no-op wrote the game: $counted")
             assertEquals(null, counted["UPDATE tasks"], "a no-op wrote a task: $counted")
-            assertEquals(null, counted["INSERT"], "a no-op wrote an event: $counted")
+            assertEquals(null, counted["INSERT progress_events"], "a no-op settled a debt: $counted")
+            assertEquals(null, counted["INSERT history_events"], "a no-op wrote history: $counted")
         }
 
     @Test
@@ -253,6 +261,9 @@ class GameCompletionQueryCountTest {
 
             assertEquals(1, counted["UPDATE games"], "the game was not reopened with the task: $counted")
             assertEquals(1, counted["UPDATE tasks"], "more than the reported task was written: $counted")
-            assertEquals(1, counted["INSERT"], "the report was not one event: $counted")
+            assertEquals(1, counted["INSERT progress_events"], "the report was not one event: $counted")
+            // The task was finished, so the report brings it back — and PLAN 437's
+            // reopening is a history line of its own.
+            assertEquals(1, counted["INSERT history_events"], "the reopening went unrecorded: $counted")
         }
 }
