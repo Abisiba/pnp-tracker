@@ -69,8 +69,8 @@ class AppNavigationStateTest {
     @Test
     fun `the sidebar offers only the sections that have been built`() {
         // PLAN 12.1's order, as far as it has been built: the pools sit between
-        // the table and the import section, and history and settings are absent
-        // rather than present and dead.
+        // the table and the import section, the history between import and the
+        // colours, and settings is absent rather than present and dead.
         assertEquals(
             listOf(
                 Screen.Home,
@@ -80,10 +80,29 @@ class AppNavigationStateTest {
                 Screen.Pool(PoolType.BOARD),
                 Screen.Pool(PoolType.SPECIAL),
                 Screen.Import,
+                Screen.History,
                 Screen.Colors,
             ),
             Screen.all,
         )
+    }
+
+    @Test
+    fun `choosing the history opens the history screen`() {
+        val navigation = AppNavigationState()
+
+        navigation.navigateTo(Screen.History)
+
+        assertEquals(Screen.History, navigation.currentScreen)
+        assertEquals(listOf(Screen.History), Screen.all.filter(navigation::isCurrent))
+    }
+
+    @Test
+    fun `the history is offered whether or not there is special work`() {
+        // Unlike the Special pool, it is never hidden: PLAN 12.1 lists it
+        // unconditionally, and a history with nothing in it says so on the
+        // screen rather than by not being there.
+        assertTrue(Screen.History in Screen.offered(PoolNavigationSummary.EMPTY))
     }
 
     @Test

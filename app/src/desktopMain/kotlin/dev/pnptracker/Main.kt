@@ -10,6 +10,7 @@ import dev.pnptracker.data.repository.CellTextStore
 import dev.pnptracker.data.repository.ColorCatalogueStore
 import dev.pnptracker.data.repository.GameSetupStore
 import dev.pnptracker.data.repository.GameTableStore
+import dev.pnptracker.data.repository.HistoryStore
 import dev.pnptracker.data.repository.ImportConfirmationStore
 import dev.pnptracker.data.repository.ImportDraftStore
 import dev.pnptracker.data.repository.ImportReviewStore
@@ -31,6 +32,7 @@ import dev.pnptracker.ui.feature.colors.ColorCatalogueController
 import dev.pnptracker.ui.feature.export.ExportController
 import dev.pnptracker.ui.feature.export.exportNames
 import dev.pnptracker.ui.feature.games.GameTableController
+import dev.pnptracker.ui.feature.history.HistoryController
 import dev.pnptracker.ui.feature.importreview.ImportController
 import dev.pnptracker.ui.feature.importworkspace.ImportConfirmationController
 import dev.pnptracker.ui.feature.importworkspace.ImportReviewController
@@ -109,6 +111,11 @@ fun main() {
             taskProgress = taskProgress,
         )
 
+    // The history reads the same rows every write above it appends to, and can
+    // do nothing else: PLAN 385 keeps the record and the thing recorded in one
+    // transaction, so the section is given a source with no way to write.
+    val historyController = HistoryController(HistoryStore(database.historyDao()))
+
     application {
         Window(
             onCloseRequest = {
@@ -130,6 +137,7 @@ fun main() {
                 exportController,
                 colorCatalogueController,
                 poolControllers,
+                historyController,
             )
         }
     }

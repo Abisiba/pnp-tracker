@@ -48,6 +48,8 @@ import dev.pnptracker.ui.feature.export.ExportController
 import dev.pnptracker.ui.feature.export.TaskExportAction
 import dev.pnptracker.ui.feature.games.GameTableController
 import dev.pnptracker.ui.feature.games.GameTableScreen
+import dev.pnptracker.ui.feature.history.HistoryController
+import dev.pnptracker.ui.feature.history.HistoryScreen
 import dev.pnptracker.ui.feature.home.HomeScreen
 import dev.pnptracker.ui.feature.importreview.ImportController
 import dev.pnptracker.ui.feature.importworkspace.ImportConfirmationController
@@ -82,6 +84,7 @@ fun AppScaffold(
     exportController: ExportController,
     colorCatalogueController: ColorCatalogueController,
     poolControllers: PoolControllers,
+    historyController: HistoryController,
     modifier: Modifier = Modifier,
 ) {
     LaunchedEffect(poolControllers) { poolControllers.observeNavigationSummary() }
@@ -115,6 +118,7 @@ fun AppScaffold(
                             controller = gameTableController,
                             exportAction = { TaskExportAction(exportController) },
                         )
+                    Screen.History -> HistoryScreen(historyController)
                     Screen.Colors -> ColorCatalogueScreen(colorCatalogueController)
                     Screen.Import -> ImportSection(importController, reviewController, confirmationController)
                     // Keyed by the pool, so moving between two of them starts the

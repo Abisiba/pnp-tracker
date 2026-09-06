@@ -45,6 +45,13 @@ fun textsOf(screen: Screen): ScreenTexts =
                 description = Strings.ScreenDescriptions.importReview,
             )
 
+        Screen.History ->
+            ScreenTexts(
+                navigationLabel = Strings.Navigation.history,
+                title = Strings.ScreenTitles.history,
+                description = Strings.ScreenDescriptions.history,
+            )
+
         Screen.Colors ->
             ScreenTexts(
                 navigationLabel = Strings.Navigation.colors,

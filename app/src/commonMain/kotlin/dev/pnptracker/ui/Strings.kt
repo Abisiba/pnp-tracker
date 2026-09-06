@@ -266,6 +266,40 @@ import dev.pnptracker.resources.games_save
 import dev.pnptracker.resources.games_title
 import dev.pnptracker.resources.games_unavailable
 import dev.pnptracker.resources.games_unavailable_title
+import dev.pnptracker.resources.history_description
+import dev.pnptracker.resources.history_detail_card
+import dev.pnptracker.resources.history_detail_note
+import dev.pnptracker.resources.history_detail_stage
+import dev.pnptracker.resources.history_empty
+import dev.pnptracker.resources.history_empty_filtered
+import dev.pnptracker.resources.history_empty_filtered_hint
+import dev.pnptracker.resources.history_error
+import dev.pnptracker.resources.history_filter_all_games
+import dev.pnptracker.resources.history_filter_section_game
+import dev.pnptracker.resources.history_filter_section_period
+import dev.pnptracker.resources.history_game_label
+import dev.pnptracker.resources.history_game_unknown
+import dev.pnptracker.resources.history_line_game_deleted
+import dev.pnptracker.resources.history_line_game_restored
+import dev.pnptracker.resources.history_line_shortage_reported
+import dev.pnptracker.resources.history_line_shortage_resolved
+import dev.pnptracker.resources.history_line_stage_moved
+import dev.pnptracker.resources.history_line_task_completed
+import dev.pnptracker.resources.history_line_task_converted
+import dev.pnptracker.resources.history_line_task_deleted
+import dev.pnptracker.resources.history_line_task_reopened
+import dev.pnptracker.resources.history_line_task_restored
+import dev.pnptracker.resources.history_list_label
+import dev.pnptracker.resources.history_loading
+import dev.pnptracker.resources.history_moment
+import dev.pnptracker.resources.history_period_all
+import dev.pnptracker.resources.history_period_month
+import dev.pnptracker.resources.history_period_week
+import dev.pnptracker.resources.history_shown_count
+import dev.pnptracker.resources.history_summary_game
+import dev.pnptracker.resources.history_summary_period
+import dev.pnptracker.resources.history_task_unknown
+import dev.pnptracker.resources.history_title
 import dev.pnptracker.resources.home_description
 import dev.pnptracker.resources.home_title
 import dev.pnptracker.resources.import_cancel
@@ -341,6 +375,7 @@ import dev.pnptracker.resources.import_warnings_title
 import dev.pnptracker.resources.navigation_accessibility_label
 import dev.pnptracker.resources.navigation_colors
 import dev.pnptracker.resources.navigation_games
+import dev.pnptracker.resources.navigation_history
 import dev.pnptracker.resources.navigation_home
 import dev.pnptracker.resources.navigation_import
 import dev.pnptracker.resources.navigation_pool_active_badge
@@ -705,6 +740,7 @@ object Strings {
         val home = Res.string.navigation_home
         val games = Res.string.navigation_games
         val importReview = Res.string.navigation_import
+        val history = Res.string.navigation_history
         val colors = Res.string.navigation_colors
     }
 
@@ -712,6 +748,7 @@ object Strings {
         val home = Res.string.home_title
         val games = Res.string.games_title
         val importReview = Res.string.import_title
+        val history = Res.string.history_title
         val colors = Res.string.colors_title
     }
 
@@ -719,7 +756,43 @@ object Strings {
         val home = Res.string.home_description
         val games = Res.string.games_description
         val importReview = Res.string.import_description
+        val history = Res.string.history_description
         val colors = Res.string.colors_description
+    }
+
+    object History {
+        val loading = Res.string.history_loading
+        val error = Res.string.history_error
+        val empty = Res.string.history_empty
+        val emptyFiltered = Res.string.history_empty_filtered
+        val emptyFilteredHint = Res.string.history_empty_filtered_hint
+        val shownCount = Res.string.history_shown_count
+        val listLabel = Res.string.history_list_label
+        val filterSectionGame = Res.string.history_filter_section_game
+        val filterAllGames = Res.string.history_filter_all_games
+        val filterSectionPeriod = Res.string.history_filter_section_period
+        val periodAll = Res.string.history_period_all
+        val periodWeek = Res.string.history_period_week
+        val periodMonth = Res.string.history_period_month
+        val summaryGame = Res.string.history_summary_game
+        val summaryPeriod = Res.string.history_summary_period
+        val moment = Res.string.history_moment
+        val gameLabel = Res.string.history_game_label
+        val gameUnknown = Res.string.history_game_unknown
+        val taskUnknown = Res.string.history_task_unknown
+        val lineTaskCompleted = Res.string.history_line_task_completed
+        val lineTaskReopened = Res.string.history_line_task_reopened
+        val lineTaskDeleted = Res.string.history_line_task_deleted
+        val lineTaskRestored = Res.string.history_line_task_restored
+        val lineTaskConverted = Res.string.history_line_task_converted
+        val lineGameDeleted = Res.string.history_line_game_deleted
+        val lineGameRestored = Res.string.history_line_game_restored
+        val lineStageMoved = Res.string.history_line_stage_moved
+        val lineShortageReported = Res.string.history_line_shortage_reported
+        val lineShortageResolved = Res.string.history_line_shortage_resolved
+        val detailNote = Res.string.history_detail_note
+        val detailCard = Res.string.history_detail_card
+        val detailStage = Res.string.history_detail_stage
     }
 
     object Theme {

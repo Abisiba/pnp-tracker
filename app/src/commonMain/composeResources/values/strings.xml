@@ -9,16 +9,19 @@
     <string name="navigation_home">Ana Sayfa</string>
     <string name="navigation_games">Oyunlar</string>
     <string name="navigation_import">İçe Aktarma</string>
+    <string name="navigation_history">Geçmiş</string>
 
     <!-- Screen titles -->
     <string name="home_title">Ana Sayfa</string>
     <string name="games_title">Oyun Tablosu</string>
     <string name="import_title">İçe Aktarma</string>
+    <string name="history_title">Geçmiş</string>
 
     <!-- Screen descriptions -->
     <string name="home_description">Oyunların ve üretim havuzlarının özetleri bu ekranda toplanacak. Şu anda yalnızca uygulama kabuğu hazır.</string>
     <string name="games_description">Bütün çalışma buradan yürür: her oyun bir satır, her sütun o oyunun bir hücresidir.</string>
     <string name="import_description">Excel ve CSV içe aktarma taslakları bu ekranda yönetilecek. Ham hücre metni değiştirilmeden saklanır, görev taslakları ham metinden elle oluşturulur.</string>
+    <string name="history_description">Görevlerde ve oyunlarda ne olduğunun kaydı, en yenisi üstte. Bu ekran yalnızca okunur; buradan hiçbir kayıt değiştirilemez.</string>
 
     <!-- Theme -->
     <string name="theme_section_label">Görünüm</string>
@@ -758,4 +761,42 @@
     <string name="task_flag_borrowed_mark">Ödünç parça işaretli</string>
     <string name="task_flag_needs_info_mark">Bilgi eksik</string>
     <string name="task_flag_needs_classification_mark">Sınıflandırılacak</string>
+
+    <!-- History screen: the screen itself -->
+    <string name="history_loading">Geçmiş okunuyor…</string>
+    <string name="history_error">Geçmiş şu anda okunamıyor.</string>
+    <string name="history_empty">Henüz kaydedilmiş bir hareket yok. Bir görevi tamamladığında, bir aşamayı ilerlettiğinde veya bir kaydı sildiğinde burada görünür.</string>
+    <string name="history_empty_filtered">Seçilen filtrelerde hareket yok</string>
+    <string name="history_empty_filtered_hint">Daha geniş bir tarih aralığı seç veya oyun seçimini kaldır.</string>
+    <string name="history_shown_count">%1$s hareket gösteriliyor</string>
+    <string name="history_list_label">Geçmiş hareketleri</string>
+
+    <!-- History screen: filters -->
+    <string name="history_filter_section_game">Oyun</string>
+    <string name="history_filter_all_games">Bütün oyunlar</string>
+    <string name="history_filter_section_period">Tarih</string>
+    <string name="history_period_all">Tüm zamanlar</string>
+    <string name="history_period_week">Son 7 gün</string>
+    <string name="history_period_month">Son 30 gün</string>
+    <string name="history_summary_game">oyun: %1$s</string>
+    <string name="history_summary_period">tarih: %1$s</string>
+
+    <!-- History screen: one line -->
+    <string name="history_moment">%1$s.%2$s.%3$s %4$s:%5$s</string>
+    <string name="history_game_label">Oyun: %1$s</string>
+    <string name="history_game_unknown">bilinmiyor</string>
+    <string name="history_task_unknown">adı bilinmeyen görev</string>
+    <string name="history_line_task_completed">%1$s tamamlandı</string>
+    <string name="history_line_task_reopened">%1$s yeniden açıldı</string>
+    <string name="history_line_task_deleted">%1$s silindi</string>
+    <string name="history_line_task_restored">%1$s geri alındı</string>
+    <string name="history_line_task_converted">%1$s metne dönüştürüldü</string>
+    <string name="history_line_game_deleted">Oyun silindi</string>
+    <string name="history_line_game_restored">Oyun geri alındı</string>
+    <string name="history_line_stage_moved">%1$s — %2$s: %3$s → %4$s</string>
+    <string name="history_line_shortage_reported">%1$s — %2$s adet eksik/hatalı bildirildi</string>
+    <string name="history_line_shortage_resolved">%1$s — %2$s adet eksik giderildi</string>
+    <string name="history_detail_note">Not: %1$s</string>
+    <string name="history_detail_card">Kart: %1$s</string>
+    <string name="history_detail_stage">Aşama: %1$s</string>
 </resources>

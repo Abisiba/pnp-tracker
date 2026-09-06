@@ -6,9 +6,9 @@ import dev.pnptracker.domain.pools.PoolNavigationSummary
 /**
  * A section the sidebar can reach.
  *
- * The history and settings sections of the plan arrive with the work that
- * implements them, so they are deliberately absent rather than disabled. The
- * order here is the order PLAN 12.1 lists the sidebar in.
+ * The settings section of the plan arrives with the work that implements it, so
+ * it is deliberately absent rather than disabled. The order here is the order
+ * PLAN 12.1 lists the sidebar in, history included.
  *
  * A screen carries no route string and no visible text: what it is called on
  * screen comes from the Turkish text catalogue, which keeps the closed set of
@@ -32,6 +32,9 @@ sealed interface Screen {
 
     data object Import : Screen
 
+    /** What has happened, as a reading of what was recorded (PLAN 12.15). */
+    data object History : Screen
+
     data object Colors : Screen
 
     companion object {
@@ -39,7 +42,7 @@ sealed interface Screen {
 
         /** Every screen, in the order the sidebar lists them. */
         val all: List<Screen> =
-            listOf(Home, Games) + PoolType.entries.map(::Pool) + listOf(Import, Colors)
+            listOf(Home, Games) + PoolType.entries.map(::Pool) + listOf(Import, History, Colors)
 
         /**
          * The screens the sidebar is offering right now.

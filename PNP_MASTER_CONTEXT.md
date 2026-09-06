@@ -17,21 +17,20 @@
 
 # 0. GÜNCEL CHECKPOINT
 
-Aşağıdaki değerler bu dosya yazılmadan hemen önce repo üzerinde doğrulanmıştır.
-Bu commit **yalnız bu belgeyi** değiştirir; kod, şema ve test durumu aynı kalır,
-yalnız HEAD bir commit ilerler.
+Aşağıdaki değerler bu dosya commit edilmeden hemen önce repo üzerinde
+doğrulanmıştır.
 
 ```text
 branch                : main
-HEAD (bu commit öncesi): 3c3c8d1538e59da189effa673ee39975ea61df73
-son kod commit'i      : feat(history): record what changes about a task
+HEAD (bu commit öncesi): 67695dfdde633dbc4ff2bd268ee6a9b7b083bfd9
+son kod commit'i      : feat(history): show what has happened
 working tree          : temiz
-Room şema sürümü      : 7
+Room şema sürümü      : 7   (bu dilimde DEĞİŞMEDİ)
 şema dosyaları        : 1.json … 7.json  (hepsi commit'li hâlleriyle aynı)
 test durumu           : ./gradlew clean check --rerun-tasks → BUILD SUCCESSFUL
-                        2711 test / 0 failure / 0 error / 0 skipped
-üretim kodu           : 222 dosya
-test kodu             : 168 dosya
+                        2771 test / 0 failure / 0 error / 0 skipped
+üretim kodu           : 233 dosya
+test kodu             : 173 dosya
 ```
 
 ## Doğrulama hash'leri
@@ -64,7 +63,7 @@ veritabanının parmak izi orada durmamalıdır. Bunun yerine kural şudur:
 
 Gerçek DB hiçbir aşamada açılmaz, kopyalanmaz veya migrate edilmez. Bütün testler ve
 manuel turlar geçici Room veritabanları ve geçici XDG dizinleri kullanır. Bu koruma
-`assertRealApplicationDatabaseUntouched` yardımcı fonksiyonuyla **69 test sınıfında**
+`assertRealApplicationDatabaseUntouched` yardımcı fonksiyonuyla **70 test sınıfında**
 uygulanmaktadır.
 
 ---
@@ -170,6 +169,20 @@ Kaynak setleri: `commonMain`, `commonTest`, `desktopMain`, `desktopTest`.
   `desktopMain` altındadır. **POI yalnızca desktop katmanında kullanılır.**
 - Basit constructor tabanlı dependency injection; ağır DI framework'ü yoktur.
 - Yeni bağımlılık, PLAN veya ilgili dilim açıkça izin vermedikçe eklenmez.
+
+## Kimlik ve zaman tipleri — tek istisnalı kural
+
+Üretim kodunda `java.util.UUID` ve `java.time` **kullanılmaz**; kimlik `EntityId`
+(`kotlin.uuid.Uuid`), zaman `kotlin.time.Instant`'tır. Kuralı
+`ProductionSourceTypeUsageTest` kaynak ağacını tarayarak uygular.
+
+**Tek adlandırılmış istisna:** `desktopMain/.../domain/time/DesktopLocalMoment.kt`.
+Saklanan bir anı kullanıcının kendi takviminde okumak (zaman dilimi, yaz saati
+geçmişi) hiçbir Kotlin stdlib tipinin yapamadığı bir iştir ve PLAN 14.1 bunun için
+eklenecek bir tarih kütüphanesi saymaz — bu yüzden platformun takvimi, yalnız bu
+`actual` içinde sorulur. Saklanan, taşınan ve karşılaştırılan tip `Instant` olarak
+kalır; dönen şey gösterilip atılan birkaç tam sayıdır (`LocalMoment`). İkinci bir
+dosya aynı izni isterse test yine kırılır; istisnanın adla verilmesinin sebebi budur.
 
 ## Bilinen ve kusur olmayan uyarılar
 
@@ -355,13 +368,16 @@ Kartlar
 Mukavva
 Özel               (koşullu)
 İçe Aktarma
+Geçmiş             (PLAN 12.1 satır 798, PLAN 12.15)
 Renkler
 ```
+
+Sıra PLAN 12.1'in sırasıdır. `Geçmiş` koşulsuzdur: içi boşken de sidebar'dadır ve
+boşluğunu ekranda söyler — `Özel` havuzun gizlenme kuralı ona uygulanmaz.
 
 ## PLAN'da tanımlı, henüz yapılmamış olanlar
 
 ```text
-Geçmiş     (PLAN 12.1 satır 798, PLAN 12.15)
 Ayarlar    (PLAN 12.1 satır 800)
 ```
 
@@ -517,6 +533,8 @@ convertTaskToText     → TASK_CONVERTED_TO_TEXT
 TaskDao.softDelete    → TASK_DELETED
 GameDao.softDelete    → GAME_DELETED
 ```
+
+Bu satırların hepsi geçmiş ekranında görünür; ekranın nasıl okuduğu §32'dedir.
 
 ## Yazıcısı olmayan türler
 
@@ -905,6 +923,9 @@ CSV export               {SELECT tasks=1, SELECT task_colors=1}, N'den bağıms�
                          export sırasında 0 INSERT/UPDATE/DELETE
 Geçmiş yazımı            görev başına yeni SELECT yok; toplu işlemde karar sorguları
                          N ile büyümez; geçmişe yapılan tek şey INSERT'tür
+Geçmiş ekranı            2 SELECT (history_events + progress_events), satır,
+                         görev ve oyun sayısından bağımsız; süzgeç değişimi 0 ek
+                         ifade
 ```
 
 ---
@@ -998,12 +1019,12 @@ yardımcı işler
       yapılandırılmış görev CSV dışa aktarma
 ```
 
-## Faz 3 — BAŞLADI, 16 İŞTEN ~2'Sİ
+## Faz 3 — BAŞLADI, 16 İŞTEN ~3'Ü
 
 PLAN satır 1477–1494.
 
 ```text
- 1  Geçmiş ekranını tamamla ................ KISMEN — aşağıya bak
+ 1  Geçmiş ekranını tamamla ............................. TAMAM
  2  Import batch rollback ve korumalı geri alma ......... YAPILMADI
  3  Sürümlü JSON yedek/dışa aktarma ve geri yükleme ..... YAPILMADI
  4  Import ve migration öncesi otomatik snapshot ........ YAPILMADI
@@ -1024,28 +1045,61 @@ PLAN satır 1477–1494.
 16  GitHub Actions ...................................... YAPILMADI
 ```
 
-### İş 1'in durumu — dikkatle okunmalı
+### İş 1'in durumu — iki dilim, ikisi de bitti
 
-**Olay kayıt katmanı TAMAMLANDI:** `history_events` tablosu, `HistoryEventKind`,
-`Migration6To7` + backfill, ve §15'te sayılan bütün üretim yollarının olay yazması.
+**Birinci dilim — olay kayıt katmanı (`3c3c8d1`):** `history_events` tablosu,
+`HistoryEventKind`, `Migration6To7` + backfill, ve §15'te sayılan bütün üretim
+yollarının olay yazması.
 
-**Geçmiş ekranının kendisi HENÜZ YAPILMADI:**
+**İkinci dilim — geçmiş ekranı (`feat(history): show what has happened`):**
 
-- `ui/navigation/Screen.kt` yalnız `Home`, `Games`, `Import`, `Colors` içeriyor;
-  `Geçmiş` hedefi yok.
-- `historyDao()` yalnız `AppDatabase` içinde tanımlı; **hiçbir üretim kodu okumuyor.**
-- Tablo doluyor ama hiçbir yerde gösterilmiyor.
+- `Screen.History`, PLAN 12.1'in sırasında İçe Aktarma ile Renkler arasında.
+- `HistoryDao.observeHistoryEvents()` + `observeProgressHistory()` — iki gözlenen
+  okuma, isimler JOIN ile, en yeni üstte, eşitliği kimlik çözer.
+- `HistoryStore` ikisini tek `HistoryLog` olarak birleştirir; `HistoryController`
+  süzgeçleri bellekte uygular. Ekran salt okunur: yazan hiçbir yol yoktur.
+- Şema değişmedi; v7 yeterli oldu.
+
+### Geçmiş ekranının gösterdiği satır türleri
+
+PLAN 12.15'in altı maddesinden gösterilebilen hepsi gösteriliyor:
+
+```text
+Tamamlanan görevler ............ TASK_COMPLETED
+3D eksik/hatalı kayıtları ...... FAILURE_REPORTED   (progress_events)
+Eksik giderme hareketleri ...... SHORTAGE_RESOLVED  (progress_events)
+Kart/mukavva aşama değişimi .... TASK_STAGE_QUANTITY_CHANGED
+Silinen kayıtlar ............... TASK_DELETED, GAME_DELETED
+Metne dönüştürülen görevler .... TASK_CONVERTED_TO_TEXT
+Yeniden açılan görevler ........ TASK_REOPENED
+İçe aktarma ve geri alma ....... YAZAN YOL YOK — Faz 3 / İş 2'de gelecek
+```
+
+`TASK_RESTORED` ve `GAME_RESTORED` de yazılmıyor (§15, "yazıcısı olmayan
+türler"). Ekran bu üçünü **uydurmuyor**; yazan yol geldiğinde kendiliğinden
+görünürler, çünkü metinleri ve eşlemeleri hazır.
+
+### Süzgeçler ve sıralama
+
+- Sıra: `occurred_at DESC`, eşitliği `id DESC` çözer. Tek transaction'ın yazdığı
+  satırlar aynı anı taşır, aralarında **gerçek bir sıra yoktur** — kimlik yalnız
+  tekrarlanabilirlik içindir; ekranda o sıraya anlam yüklenmez.
+- Oyun süzgeci: geçmişin adını andığı oyunlar, Türkçe katlamayla sıralı.
+- Tarih süzgeci: `Tüm zamanlar`, `Son 7 gün`, `Son 30 gün`. Pencere **şu andan**
+  geriye ölçülür ve uzak ucu **dahildir** — tam yedi gün önceki satır içeridedir,
+  bir milisaniye öncesi değildir.
+- Süzgeçler bellekte, tek okumanın üstünde çalışır: fikir değiştirmek yeni sorgu
+  açmaz (PLAN 16).
 
 ## Sıradaki bağlayıcı iş
 
-> **Faz 3 / İş 1'in ikinci dilimi: geçmiş ekranı.**
+> **Faz 3 / İş 2: import batch rollback ve korumalı geri alma.**
 >
-> Kapsam: `Geçmiş` gezinme hedefi (PLAN 798), PLAN 12.15'in gösterilebilen satır
-> türleri, tek sorguyla okuma, tarih/oyun süzgeci, klavye ve erişilebilirlik.
-> Şema değişikliği gerektirmez — v7 yeterlidir.
-> Önerilen commit mesajı: `feat(history): show what has happened`
+> PLAN 1478, 16. bölüm. Bu iş büyük olasılıkla **Room v8** gerektirir; ayrıntı ve
+> çözülmemiş ürün kararları §33 R1 ve R2'dedir. Kod yazmadan önce migration
+> taslağı ve kararlar raporlanmalıdır.
 
-Sonrasında PLAN'ın bağlayıcı sırası izlenir: İş 2 → 3 → 4 → 7 → 9 + 5 → 10 →
+Sonrasında PLAN'ın bağlayıcı sırası izlenir: İş 3 → 4 → 7 → 9 + 5 → 10 →
 11-13 → 14-16.
 
 ## v7 öncesi kurtarılamayan geçmiş
@@ -1059,7 +1113,14 @@ uydurulmadıkları için açıkça kayıtlıdır:
 - v7 öncesi metne dönüştürmelerde fiziksel silinmiş görev/renk/aşama/ilerleme kayıtları.
 - Hiç yapılmamış import geri almaları.
 
-Geçmiş ekranı, v7 öncesi dönem için yalnız tamamlanma ve silme satırları gösterebilir.
+Geçmiş ekranı, v7 öncesi dönem için yalnız tamamlanma ve silme satırları
+gösterir. Bu bir eksiklik değil kayıt sınırıdır ve ekran bunu doldurmaz.
+
+Adlar da anlık görüntü değildir: bir satır, oyununu ve görevini **bugünkü**
+adlarıyla gösterir, çünkü kullanıcının arayacağı ad odur ve PLAN tarihsel ad
+yazmaz. Silinen ve metne dönüştürülen kayıtlar tombstone olduğu için adları
+durur; metne dönüştürülmüş bir görevin eski eksik bildirimleri hücre parçasını
+kaybettiğinden oyunlarını `history_events`'teki dönüştürme satırından alır.
 
 ---
 
@@ -1205,8 +1266,10 @@ Havuzlar: 3D Baskı, Kartlar, Mukavva, Özel
 Görev yaşam döngüsü ayrı bir append-only history_events tablosuna yazılır.
 
 Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
-- İş 1'in olay kayıt katmanı tamam, geçmiş EKRANI henüz yok.
-- Sıradaki bağlayıcı iş: geçmiş ekranı.
+- İş 1 (geçmiş) iki dilim hâlinde tamamlandı: olay kayıt katmanı + geçmiş ekranı.
+- Sıradaki bağlayıcı iş: İş 2, import batch rollback.
+- İş 2 büyük olasılıkla Room v8 gerektirir; kod yazmadan önce §33 R1 ve R2 okunmalı,
+  migration taslağı ve çözülmemiş ürün kararları raporlanmalıdır.
 
 Şimdi:
 1. Repo durumunu doğrula (branch/HEAD/temiz ağaç/Room sürümü/PLAN hash/schema hash).
@@ -1335,11 +1398,12 @@ Bugün çalışan hâliyle:
 - XLSX ve CSV içe aktarma aynı boru hattını kullanır.
 - Yapılandırılmış görevler deterministik, atomik ve formül-güvenli CSV'ye aktarılır.
 - Görev yaşam döngüsü append-only olarak kayda geçer.
+- Geçmiş ekranı bu kaydı okunur hâlde, oyun ve tarih süzgeçleriyle, iki sorguda
+  gösterir; silinmiş ve metne dönüştürülmüş kayıtların satırları kaybolmaz.
 
 Kalan iş ağırlıklı olarak **dayanıklılık, yedekleme, kurtarma, paketleme ve yayına
-hazırlıktır**: geçmiş ekranı, import rollback, JSON yedek/geri yükleme, otomatik
-snapshot, kurtarma akışı, loglama, performans kapısı, Linux paketi, belgeler, lisans
-ve CI.
+hazırlıktır**: import rollback, JSON yedek/geri yükleme, otomatik snapshot, kurtarma
+akışı, loglama, performans kapısı, Linux paketi, belgeler, lisans ve CI.
 
 En önemli kural:
 
