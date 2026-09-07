@@ -54,7 +54,7 @@ enum class HistoryEventKind {
      */
     TASK_REOPENED,
 
-    /** A task was removed from view, leaving its record behind (PLAN 5.2, 1123). */
+    /** A task was removed from view, leaving its record behind (PLAN 5.2, 12.15). */
     TASK_DELETED,
 
     /** A removed task was brought back into view (PLAN 12.15). */
@@ -71,22 +71,64 @@ enum class HistoryEventKind {
      */
     TASK_CONVERTED_TO_TEXT,
 
-    /** A game was removed from view, leaving its record behind (PLAN 5.2, 1123). */
+    /** A game was removed from view, leaving its record behind (PLAN 5.2, 12.15). */
     GAME_DELETED,
 
     /** A removed game was brought back into view (PLAN 12.15). */
     GAME_RESTORED,
 
+    /**
+     * An import was confirmed and wrote into this game.
+     *
+     * PLAN 12.15 asks for one line per game an import touched, not one per task:
+     * a file that fills six cells of one game is one thing the user did, and six
+     * identical lines would bury the day it happened in.
+     *
+     * It carries no count of the tasks it made. The three quantity columns
+     * belong to [TASK_STAGE_QUANTITY_CHANGED] alone, and a column that means
+     * "how far a step got" on one kind and "how many tasks arrived" on another
+     * is exactly the payload column `HistoryEventEntity` refuses to become. What
+     * the import created is already recorded, on the import.
+     */
+    IMPORT_CONFIRMED,
+
+    /**
+     * An import was taken back, and this game was one it had written into.
+     *
+     * The counterpart of [IMPORT_CONFIRMED] and, like it, one line per game
+     * (PLAN 11.4.4). Written only by a rollback that really happened: a blocked
+     * one changes nothing and records nothing, because nothing occurred.
+     */
+    IMPORT_ROLLED_BACK,
+
+    /**
+     * One task an import created was taken back out of view.
+     *
+     * Its own kind rather than a [TASK_DELETED], for the same reason
+     * [TASK_CONVERTED_TO_TEXT] is: the tombstone is the mechanism and this is
+     * the act. A user reading their history should be able to tell a task they
+     * decided to delete from one that went because they took a whole import
+     * back.
+     */
+    TASK_ROLLED_BACK,
+
     ;
 
     /**
-     * Whether this is something that happened to a game rather than to a task.
+     * Whether this kind is recorded against a game with no task named.
      *
-     * The two game kinds have no task to name, and every other kind must have
-     * one: a stage that moved, a task that finished or came back, belongs to
-     * exactly one task or it is not that event at all.
+     * Renamed from "about the game itself" when the import kinds arrived, because
+     * that is no longer what these have in common: a game being deleted is about
+     * the game, while an import being confirmed is about something that happened
+     * *in* the game. What they share is the only thing the entity needs to know —
+     * there is no one task it happened to.
+     *
+     * Every other kind must name a task: a stage that moved, a task that
+     * finished, came back or was taken back belongs to exactly one task or it is
+     * not that event at all.
      */
-    val isAboutGameItself: Boolean get() = this == GAME_DELETED || this == GAME_RESTORED
+    val namesNoTask: Boolean
+        get() = this == GAME_DELETED || this == GAME_RESTORED || this == IMPORT_CONFIRMED || this == IMPORT_ROLLED_BACK
 
     /** Whether this kind carries the counts a pipeline step moved between. */
     val carriesStageQuantities: Boolean get() = this == TASK_STAGE_QUANTITY_CHANGED

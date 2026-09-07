@@ -281,6 +281,8 @@ import dev.pnptracker.resources.history_game_label
 import dev.pnptracker.resources.history_game_unknown
 import dev.pnptracker.resources.history_line_game_deleted
 import dev.pnptracker.resources.history_line_game_restored
+import dev.pnptracker.resources.history_line_import_confirmed
+import dev.pnptracker.resources.history_line_import_rolled_back
 import dev.pnptracker.resources.history_line_shortage_reported
 import dev.pnptracker.resources.history_line_shortage_resolved
 import dev.pnptracker.resources.history_line_stage_moved
@@ -289,6 +291,7 @@ import dev.pnptracker.resources.history_line_task_converted
 import dev.pnptracker.resources.history_line_task_deleted
 import dev.pnptracker.resources.history_line_task_reopened
 import dev.pnptracker.resources.history_line_task_restored
+import dev.pnptracker.resources.history_line_task_rolled_back
 import dev.pnptracker.resources.history_list_label
 import dev.pnptracker.resources.history_loading
 import dev.pnptracker.resources.history_moment
@@ -787,6 +790,9 @@ object Strings {
         val lineTaskConverted = Res.string.history_line_task_converted
         val lineGameDeleted = Res.string.history_line_game_deleted
         val lineGameRestored = Res.string.history_line_game_restored
+        val lineImportConfirmed = Res.string.history_line_import_confirmed
+        val lineImportRolledBack = Res.string.history_line_import_rolled_back
+        val lineTaskRolledBack = Res.string.history_line_task_rolled_back
         val lineStageMoved = Res.string.history_line_stage_moved
         val lineShortageReported = Res.string.history_line_shortage_reported
         val lineShortageResolved = Res.string.history_line_shortage_resolved

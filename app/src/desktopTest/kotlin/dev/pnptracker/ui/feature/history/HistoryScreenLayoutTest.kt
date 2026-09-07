@@ -54,9 +54,32 @@ class HistoryScreenLayoutTest {
             HistoryChange.TaskConvertedToText,
             HistoryChange.GameDeleted,
             HistoryChange.GameRestored,
+            HistoryChange.ImportConfirmed,
+            HistoryChange.ImportRolledBack,
+            HistoryChange.TaskRolledBack,
             HistoryChange.ShortageReported(quantity = 4),
             HistoryChange.ShortageResolved(quantity = 2),
         )
+
+    @Test
+    fun `the list above really is every kind of thing that can happen`() {
+        // The list is hand written, so it can fall behind. Rather than reflect
+        // over the sealed interface — which would want a library this project
+        // does not carry — the declarations are counted in the source, the same
+        // way the rest of this file reads the screen it is about.
+        val declared =
+            Regex("""\n    data (?:object|class) (\w+)""")
+                .findAll(read("src/commonMain/kotlin/dev/pnptracker/domain/history/HistoryEntry.kt"))
+                .map { it.groupValues[1] }
+                .toSet()
+
+        assertTrue(declared.size > 1, "the source of HistoryChange was not readable")
+        assertEquals(
+            declared,
+            everyChange.map { it::class.simpleName.orEmpty() }.toSet(),
+            "a kind of change has no sentence checked here",
+        )
+    }
 
     private fun sentenceOf(change: HistoryChange): String {
         val stageName = (change as? HistoryChange.StageMoved)?.let { textOf(stageNameOf(it.stage)) }
@@ -67,6 +90,21 @@ class HistoryScreenLayoutTest {
     }
 
     // --------------------------------------------------------------- the words
+
+    @Test
+    fun `an import being confirmed and taken back read as three different things`() {
+        val confirmed = sentenceOf(HistoryChange.ImportConfirmed)
+        val rolledBack = sentenceOf(HistoryChange.ImportRolledBack)
+        val taskRolledBack = sentenceOf(HistoryChange.TaskRolledBack)
+
+        // The two game-level lines say nothing about a task, because the screen
+        // already shows which game the line belongs to and there is no one task.
+        assertFalse("Gri token" in confirmed, "a game's own line named a task")
+        assertFalse("Gri token" in rolledBack, "a game's own line named a task")
+        // The task-level one names the task, in the user's own words.
+        assertTrue("Gri token" in taskRolledBack, "a task taken back was not named")
+        assertTrue(confirmed != rolledBack, "confirming and taking back read the same way")
+    }
 
     @Test
     fun `every kind of thing that can happen has a sentence of its own`() {
@@ -95,18 +133,25 @@ class HistoryScreenLayoutTest {
         }
     }
 
+    /** The kinds recorded against a game alone, which have no one task to name. */
+    private val gameLevel =
+        listOf(
+            HistoryChange.GameDeleted,
+            HistoryChange.GameRestored,
+            HistoryChange.ImportConfirmed,
+            HistoryChange.ImportRolledBack,
+        )
+
     @Test
     fun `the task's own name is what a task line is about`() {
-        val aboutATask = everyChange - HistoryChange.GameDeleted - HistoryChange.GameRestored
-
-        aboutATask.forEach { change ->
+        (everyChange - gameLevel.toSet()).forEach { change ->
             assertTrue("Gri token" in sentenceOf(change), "$change does not name the task it happened to")
         }
     }
 
     @Test
-    fun `a line about the game itself names no task`() {
-        listOf(HistoryChange.GameDeleted, HistoryChange.GameRestored).forEach { change ->
+    fun `a line recorded against a game alone names no task`() {
+        gameLevel.forEach { change ->
             assertTrue(historyArgumentsOf(change, taskName = "Gri token").isEmpty())
             assertFalse("Gri token" in sentenceOf(change), "$change put a task into a line about the game")
         }

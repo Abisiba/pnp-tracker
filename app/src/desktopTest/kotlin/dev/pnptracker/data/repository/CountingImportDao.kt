@@ -5,6 +5,7 @@ import dev.pnptracker.data.database.entity.CellSegmentEntity
 import dev.pnptracker.data.database.entity.DraftTaskColorEntity
 import dev.pnptracker.data.database.entity.DraftTaskEntity
 import dev.pnptracker.data.database.entity.GameEntity
+import dev.pnptracker.data.database.entity.HistoryEventEntity
 import dev.pnptracker.data.database.entity.ImportBatchCellEntity
 import dev.pnptracker.data.database.entity.ImportBatchEntity
 import dev.pnptracker.data.database.entity.RawImportBlockEntity
@@ -13,10 +14,14 @@ import dev.pnptracker.data.database.entity.TaskEntity
 import dev.pnptracker.data.database.entity.TaskStageEntity
 import dev.pnptracker.data.database.projection.CellColumnRow
 import dev.pnptracker.data.database.projection.CellDocumentRow
+import dev.pnptracker.data.database.projection.CellGameRow
 import dev.pnptracker.data.database.projection.DraftTargetRow
+import dev.pnptracker.data.database.projection.RollbackCellRow
+import dev.pnptracker.data.database.projection.RollbackSegmentRow
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.HintDecision
+import dev.pnptracker.domain.model.HistoryEventKind
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
 import kotlinx.coroutines.flow.Flow
@@ -187,6 +192,49 @@ class CountingImportDao(
     override suspend fun insertTask(task: TaskEntity): Unit = outOfReach("insertTask")
 
     override suspend fun insertBatchCell(snapshot: ImportBatchCellEntity): Unit = outOfReach("insertBatchCell")
+
+    override suspend fun taskIdsWithProgressOfBatch(batchId: EntityId): List<EntityId> = real.taskIdsWithProgressOfBatch(batchId)
+
+    override suspend fun taskIdsWithHistoryOfBatch(batchId: EntityId): List<EntityId> = real.taskIdsWithHistoryOfBatch(batchId)
+
+    override suspend fun rollbackCellsOfBatch(batchId: EntityId): List<RollbackCellRow> = real.rollbackCellsOfBatch(batchId)
+
+    override suspend fun rollbackSegmentsOfBatch(batchId: EntityId): List<RollbackSegmentRow> = real.rollbackSegmentsOfBatch(batchId)
+
+    override suspend fun targetCellGamesOfBatch(batchId: EntityId): List<CellGameRow> = real.targetCellGamesOfBatch(batchId)
+
+    override suspend fun countTasks(): Int = outOfReach("countTasks")
+
+    override suspend fun countSegments(): Int = outOfReach("countSegments")
+
+    override suspend fun countProgressEvents(): Int = outOfReach("countProgressEvents")
+
+    override suspend fun countHistoryEvents(): Int = outOfReach("countHistoryEvents")
+
+    override suspend fun countHistoryEventsWritten(
+        eventIds: Collection<EntityId>,
+        kind: HistoryEventKind,
+        moment: Instant,
+    ): Int = outOfReach("countHistoryEventsWritten")
+
+    override suspend fun appendHistoryEvent(event: HistoryEventEntity): Unit = outOfReach("appendHistoryEvent")
+
+    override suspend fun writeTaskTombstone(
+        taskId: EntityId,
+        moment: Instant,
+    ): Int = outOfReach("writeTaskTombstone")
+
+    override suspend fun deleteSegmentRow(segmentId: EntityId): Int = outOfReach("deleteSegmentRow")
+
+    override suspend fun touchCell(
+        cellId: EntityId,
+        moment: Instant,
+    ): Int = outOfReach("touchCell")
+
+    override suspend fun markBatchRolledBack(
+        batchId: EntityId,
+        moment: Instant,
+    ): Int = outOfReach("markBatchRolledBack")
 
     override suspend fun cellSnapshotsOfBatch(batchId: EntityId): List<ImportBatchCellEntity> = real.cellSnapshotsOfBatch(batchId)
 

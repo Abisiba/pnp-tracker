@@ -108,6 +108,9 @@ class HistoryStore(
             HistoryEventKind.TASK_CONVERTED_TO_TEXT -> HistoryChange.TaskConvertedToText
             HistoryEventKind.GAME_DELETED -> HistoryChange.GameDeleted
             HistoryEventKind.GAME_RESTORED -> HistoryChange.GameRestored
+            HistoryEventKind.IMPORT_CONFIRMED -> HistoryChange.ImportConfirmed
+            HistoryEventKind.IMPORT_ROLLED_BACK -> HistoryChange.ImportRolledBack
+            HistoryEventKind.TASK_ROLLED_BACK -> HistoryChange.TaskRolledBack
         }
 
     private fun entryOf(row: ProgressHistoryRow): HistoryEntry =

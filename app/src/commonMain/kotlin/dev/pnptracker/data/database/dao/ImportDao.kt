@@ -11,6 +11,7 @@ import dev.pnptracker.data.database.entity.CellSegmentEntity
 import dev.pnptracker.data.database.entity.DraftTaskColorEntity
 import dev.pnptracker.data.database.entity.DraftTaskEntity
 import dev.pnptracker.data.database.entity.GameEntity
+import dev.pnptracker.data.database.entity.HistoryEventEntity
 import dev.pnptracker.data.database.entity.ImportBatchCellEntity
 import dev.pnptracker.data.database.entity.ImportBatchEntity
 import dev.pnptracker.data.database.entity.RawImportBlockEntity
@@ -20,7 +21,10 @@ import dev.pnptracker.data.database.entity.TaskStageEntity
 import dev.pnptracker.data.database.entity.stageRowsFor
 import dev.pnptracker.data.database.projection.CellColumnRow
 import dev.pnptracker.data.database.projection.CellDocumentRow
+import dev.pnptracker.data.database.projection.CellGameRow
 import dev.pnptracker.data.database.projection.DraftTargetRow
+import dev.pnptracker.data.database.projection.RollbackCellRow
+import dev.pnptracker.data.database.projection.RollbackSegmentRow
 import dev.pnptracker.domain.games.TASK_SEPARATOR
 import dev.pnptracker.domain.games.taskNeedsSeparatorAfter
 import dev.pnptracker.domain.importconfirm.ImportConfirmationException
@@ -31,12 +35,24 @@ import dev.pnptracker.domain.importreview.ImportReviewFailure
 import dev.pnptracker.domain.importreview.initialDraftByHand
 import dev.pnptracker.domain.importreview.initialDraftFromSelection
 import dev.pnptracker.domain.importreview.selectTaskNameIn
+import dev.pnptracker.domain.importrollback.ImportRollbackException
+import dev.pnptracker.domain.importrollback.ImportRollbackFacts
+import dev.pnptracker.domain.importrollback.ImportRollbackPlan
+import dev.pnptracker.domain.importrollback.ImportRollbackPreview
+import dev.pnptracker.domain.importrollback.ImportRollbackResult
+import dev.pnptracker.domain.importrollback.RollbackCellFacts
+import dev.pnptracker.domain.importrollback.RollbackSegmentFacts
+import dev.pnptracker.domain.importrollback.RollbackTaskFacts
+import dev.pnptracker.domain.importrollback.planImportRollback
+import dev.pnptracker.domain.importrollback.previewOf
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.HintDecision
+import dev.pnptracker.domain.model.HistoryEventKind
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.ImportBatchStatus
 import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.model.SegmentKind
 import dev.pnptracker.domain.model.SourceColumnType
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.model.stagesOf
@@ -1149,6 +1165,179 @@ abstract class ImportDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     protected abstract suspend fun insertBatchCell(snapshot: ImportBatchCellEntity)
 
+    // -------------------------------------------------- reading a rollback's facts
+
+    /**
+     * Which of this import's tasks a shortage was ever reported against.
+     *
+     * One statement for the batch rather than one per task: PLAN 16 rules out a
+     * read per record, and this is asked about every task the import made.
+     */
+    @Query(
+        """
+        SELECT DISTINCT progress_events.task_id FROM progress_events
+        INNER JOIN draft_tasks ON draft_tasks.materialized_task_id = progress_events.task_id
+        INNER JOIN raw_import_blocks ON raw_import_blocks.id = draft_tasks.raw_import_block_id
+        WHERE raw_import_blocks.import_batch_id = :batchId
+        """,
+    )
+    abstract suspend fun taskIdsWithProgressOfBatch(batchId: EntityId): List<EntityId>
+
+    /** Which of this import's tasks the history has already recorded something about. */
+    @Query(
+        """
+        SELECT DISTINCT history_events.task_id FROM history_events
+        INNER JOIN draft_tasks ON draft_tasks.materialized_task_id = history_events.task_id
+        INNER JOIN raw_import_blocks ON raw_import_blocks.id = draft_tasks.raw_import_block_id
+        WHERE raw_import_blocks.import_batch_id = :batchId
+        """,
+    )
+    abstract suspend fun taskIdsWithHistoryOfBatch(batchId: EntityId): List<EntityId>
+
+    /**
+     * Every cell this import recorded, with its game and column named.
+     *
+     * Driven from `import_batch_cells` on purpose. A batch confirmed before
+     * schema version 8 returns nothing here, and PLAN 11.4.4 turns that absence
+     * into a refusal rather than into a guess.
+     */
+    @Query(
+        """
+        SELECT import_batch_cells.cell_id AS cell_id,
+               import_batch_cells.document_before AS document_before,
+               game_cells.game_id AS game_id,
+               games.name AS game_name,
+               game_cells.column_type AS column_type
+        FROM import_batch_cells
+        LEFT JOIN game_cells ON game_cells.id = import_batch_cells.cell_id
+        LEFT JOIN games ON games.id = game_cells.game_id
+        WHERE import_batch_cells.import_batch_id = :batchId
+        ORDER BY import_batch_cells.cell_id
+        """,
+    )
+    abstract suspend fun rollbackCellsOfBatch(batchId: EntityId): List<RollbackCellRow>
+
+    /**
+     * Every piece of those cells as they stand now, in reading order.
+     *
+     * One statement for the whole batch, so a rollback touching forty-two cells
+     * asks what one asks. The join to `tasks` resolves a task piece to the words
+     * it contributes; it cannot multiply a row, because `tasks.id` is the
+     * primary key and a piece names at most one.
+     */
+    @Query(
+        """
+        SELECT cell_segments.cell_id AS cell_id,
+               cell_segments.id AS segment_id,
+               cell_segments.order_index AS order_index,
+               cell_segments.kind AS kind,
+               cell_segments.text AS text,
+               cell_segments.task_id AS task_id,
+               COALESCE(cell_segments.text, tasks.name) AS document_text
+        FROM import_batch_cells
+        INNER JOIN cell_segments ON cell_segments.cell_id = import_batch_cells.cell_id
+        LEFT JOIN tasks ON tasks.id = cell_segments.task_id
+        WHERE import_batch_cells.import_batch_id = :batchId
+        ORDER BY cell_segments.cell_id, cell_segments.order_index
+        """,
+    )
+    abstract suspend fun rollbackSegmentsOfBatch(batchId: EntityId): List<RollbackSegmentRow>
+
+    /** The games of the cells this import is about to write into, one row each. */
+    @Query(
+        """
+        SELECT game_cells.id AS cell_id, game_cells.game_id AS game_id
+        FROM game_cells
+        INNER JOIN draft_tasks ON draft_tasks.target_cell_id = game_cells.id
+        INNER JOIN raw_import_blocks ON raw_import_blocks.id = draft_tasks.raw_import_block_id
+        WHERE raw_import_blocks.import_batch_id = :batchId
+        GROUP BY game_cells.id
+        ORDER BY game_cells.id
+        """,
+    )
+    abstract suspend fun targetCellGamesOfBatch(batchId: EntityId): List<CellGameRow>
+
+    // ------------------------------------------------------- counting, for proofs
+
+    @Query("SELECT COUNT(*) FROM tasks")
+    protected abstract suspend fun countTasks(): Int
+
+    @Query("SELECT COUNT(*) FROM cell_segments")
+    protected abstract suspend fun countSegments(): Int
+
+    @Query("SELECT COUNT(*) FROM progress_events")
+    protected abstract suspend fun countProgressEvents(): Int
+
+    @Query("SELECT COUNT(*) FROM history_events")
+    protected abstract suspend fun countHistoryEvents(): Int
+
+    /**
+     * How many of the lines this transaction meant to write are really there,
+     * carrying the kind and the moment they were written with.
+     *
+     * By identity rather than by kind and time alone. Two imports confirmed
+     * inside the same millisecond — which a test with a stopped clock does on
+     * purpose, and two quick saves could do for real — would otherwise count
+     * each other's lines and let a transaction that wrote nothing look correct.
+     */
+    @Query(
+        "SELECT COUNT(*) FROM history_events " +
+            "WHERE id IN (:eventIds) AND kind = :kind AND occurred_at = :moment",
+    )
+    protected abstract suspend fun countHistoryEventsWritten(
+        eventIds: Collection<EntityId>,
+        kind: HistoryEventKind,
+        moment: Instant,
+    ): Int
+
+    // ------------------------------------------------------ writing a rollback
+
+    /**
+     * Appends one line to the history.
+     *
+     * Public only because Room offers no other visibility on an abstract member
+     * it generates. There is no update and no delete for these rows anywhere in
+     * the application: appending is the whole of what the table supports
+     * (PLAN 5.12).
+     */
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    abstract suspend fun appendHistoryEvent(event: HistoryEventEntity)
+
+    /** Takes a task out of view without destroying it (PLAN 5.2). */
+    @Query(
+        "UPDATE tasks SET deleted_at = :moment, updated_at = :moment WHERE id = :taskId AND deleted_at IS NULL",
+    )
+    protected abstract suspend fun writeTaskTombstone(
+        taskId: EntityId,
+        moment: Instant,
+    ): Int
+
+    @Query("DELETE FROM cell_segments WHERE id = :segmentId")
+    protected abstract suspend fun deleteSegmentRow(segmentId: EntityId): Int
+
+    @Query("UPDATE game_cells SET updated_at = :moment WHERE id = :cellId")
+    protected abstract suspend fun touchCell(
+        cellId: EntityId,
+        moment: Instant,
+    ): Int
+
+    /**
+     * Moves the batch to `ROLLED_BACK`, and only from `CONFIRMED`.
+     *
+     * The status is in the `WHERE` clause rather than checked beforehand, so two
+     * callers racing at the same batch cannot both succeed: the second one
+     * changes no row and the check on the count below takes its whole
+     * transaction down.
+     */
+    @Query(
+        "UPDATE import_batches SET status = 'ROLLED_BACK', updated_at = :moment " +
+            "WHERE id = :batchId AND status = 'CONFIRMED'",
+    )
+    protected abstract suspend fun markBatchRolledBack(
+        batchId: EntityId,
+        moment: Instant,
+    ): Int
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     protected abstract suspend fun insertTask(task: TaskEntity)
 
@@ -1216,6 +1405,10 @@ abstract class ImportDao {
                     separatorId = piece.separatorOrderIndex?.let { idGenerator.newId() },
                 )
             }
+        // The history lines are named here too, for the same reason: a generator
+        // that ran out after the tasks were written would leave an import that
+        // happened and a history that never heard of it.
+        val confirmationEventIds = plan.gamesWrittenInto.associateWith { idGenerator.newId() }
         // One reading of the clock for the whole act, taken once everything that
         // could still refuse has been decided.
         val moment = clock.now()
@@ -1285,8 +1478,292 @@ abstract class ImportDao {
         val confirmed = markBatchConfirmed(batchId, plan.drafts.size, moment)
         check(confirmed == 1) { "The import $batchId was no longer a draft when it was about to be confirmed." }
 
-        requireConfirmationHeld(batchId, plan)
+        // One line per game the import wrote into (PLAN 12.15), inside the very
+        // transaction that wrote it: a confirmation that failed leaves no record
+        // of having happened, because it did not.
+        plan.gamesWrittenInto.forEach { gameId ->
+            appendHistoryEvent(
+                HistoryEventEntity(
+                    id = checkNotNull(confirmationEventIds[gameId]),
+                    kind = HistoryEventKind.IMPORT_CONFIRMED,
+                    occurredAt = moment,
+                    gameId = gameId,
+                ),
+            )
+        }
+
+        requireConfirmationHeld(batchId, plan, moment, confirmationEventIds.values)
         return plan.drafts.size
+    }
+
+    // ------------------------------------------------------ taking an import back
+
+    /**
+     * Everything one rollback decision is made from, read in bulk.
+     *
+     * Seven statements for the whole batch, whether it made one task or
+     * forty-two: the batch, its drafts, its tasks, the shortages against them,
+     * the history about them, its pieces of cells, the cells it recorded and
+     * those cells' pieces as they stand. Asking any of it per task is the shape
+     * PLAN 16 rules out.
+     */
+    private suspend fun rollbackFactsOf(batchId: EntityId): ImportRollbackFacts {
+        val batch = batchById(batchId)
+        val drafts = draftTasksOfBatch(batchId)
+        val tasks = tasksOfConfirmedBatch(batchId)
+        val withProgress = taskIdsWithProgressOfBatch(batchId).toSet()
+        val withHistory = taskIdsWithHistoryOfBatch(batchId).toSet()
+        // Where each of this batch's tasks is written. Read now, because the
+        // rollback is about to take those pieces away.
+        val anchors = segmentsOfConfirmedBatch(batchId).mapNotNull { it.taskId?.let { id -> id to it.cellId } }.toMap()
+        val cells = rollbackCellsOfBatch(batchId)
+        val pieces = rollbackSegmentsOfBatch(batchId).groupBy { it.cellId }
+
+        return ImportRollbackFacts(
+            batchId = batchId,
+            status = batch?.status,
+            draftCount = drafts.size,
+            materializedDraftCount = drafts.count { it.materializedTaskId != null },
+            tasks =
+                tasks.map { task ->
+                    RollbackTaskFacts(
+                        taskId = task.id,
+                        name = task.name,
+                        createdAt = task.createdAt,
+                        updatedAt = task.updatedAt,
+                        deletedAt = task.deletedAt,
+                        hasProgressEvent = task.id in withProgress,
+                        hasHistoryEvent = task.id in withHistory,
+                    )
+                },
+            anchors = anchors,
+            cells =
+                cells.map { cell ->
+                    RollbackCellFacts(
+                        cellId = cell.cellId,
+                        gameId = cell.gameId,
+                        gameName = cell.gameName,
+                        columnType = cell.columnType,
+                        documentBefore = cell.documentBefore,
+                        segments =
+                            pieces[cell.cellId].orEmpty().map { piece ->
+                                RollbackSegmentFacts(
+                                    segmentId = piece.segmentId,
+                                    orderIndex = piece.orderIndex,
+                                    isTask = piece.kind == SegmentKind.TASK,
+                                    text = piece.text,
+                                    taskId = piece.taskId,
+                                    documentText = piece.documentText,
+                                )
+                            },
+                    )
+                },
+        )
+    }
+
+    /**
+     * What taking this import back would do right now, without doing any of it.
+     *
+     * Advisory only, exactly as `summarize` is for a confirmation. Every check in
+     * it is made again inside [rollBackConfirmedBatch], from rows read there —
+     * the database can change between showing this and acting on it, and a
+     * rollback that trusted a stale answer would be deciding on a cell somebody
+     * has since edited.
+     */
+    @Transaction
+    open suspend fun previewRollback(batchId: EntityId): ImportRollbackPreview {
+        val facts = rollbackFactsOf(batchId)
+        return previewOf(planImportRollback(facts), facts.status)
+    }
+
+    /**
+     * Takes one confirmed import back, or changes nothing at all.
+     *
+     * PLAN 11.4.4 allows no third outcome. Every guard below is inside this
+     * transaction rather than advice given beforehand, so a task cannot be
+     * edited and a cell cannot be written into between the checking and the
+     * writing; anything thrown from here — a refusal, a rejected row, a broken
+     * postcondition — takes every write with it and leaves the batch
+     * `CONFIRMED`.
+     *
+     * Nothing is destroyed. The tasks are tombstoned (PLAN 5.2), their colours,
+     * pipelines, shortages and past history rows all stay, and the only rows
+     * that really go are the pieces of a cell this import added. The games'
+     * completion marks are left exactly as they are: PLAN 5.3 makes that the
+     * user's own statement, and a rollback is not entitled to take it back.
+     *
+     * @return what was taken back.
+     * @throws ImportRollbackException if the import could not be taken back;
+     *   nothing is written in that case.
+     */
+    @Transaction
+    open suspend fun rollBackConfirmedBatch(
+        batchId: EntityId,
+        clock: Clock,
+        idGenerator: IdGenerator,
+    ): ImportRollbackResult {
+        val plan = planImportRollback(rollbackFactsOf(batchId))
+        plan.failure?.let { throw ImportRollbackException(it, plan.blockedTasks, plan.blockedCells) }
+
+        // What the rest of the database holds, so the checks at the end can say
+        // that nothing outside this batch moved. Four counts, taken once.
+        val tasksBefore = countTasks()
+        val segmentsBefore = countSegments()
+        val progressBefore = countProgressEvents()
+        val historyBefore = countHistoryEvents()
+
+        // Nothing above this line has written, read a clock or made a name. Both
+        // sets of identities are made now, before the first write: a generator
+        // that ran out half way would otherwise leave tombstones behind it and a
+        // history that stopped in the middle of a sentence.
+        val taskEventIds = plan.taskIds.associateWith { idGenerator.newId() }
+        val gameEventIds = plan.gameIds.associateWith { idGenerator.newId() }
+        // One reading of the clock for the whole act, so every line this writes
+        // carries the one moment it happened at.
+        val moment = clock.now()
+
+        plan.taskIds.forEach { taskId ->
+            val removed = writeTaskTombstone(taskId, moment)
+            check(removed == 1) { "The task $taskId was already out of view when the import was taken back." }
+            // The game was settled before any of this, because the piece of the
+            // cell that answers it is about to go.
+            val gameId = checkNotNull(plan.gameOfTask[taskId]) { "The task $taskId is in no game." }
+            appendHistoryEvent(
+                HistoryEventEntity(
+                    id = checkNotNull(taskEventIds[taskId]),
+                    kind = HistoryEventKind.TASK_ROLLED_BACK,
+                    occurredAt = moment,
+                    gameId = gameId,
+                    taskId = taskId,
+                ),
+            )
+        }
+
+        // Only the pieces this import added, which the planning proved are a
+        // suffix of each cell. What was there first keeps its rows, its
+        // identities, its order and its links to its own tasks, and the reading
+        // order stays `0..N-1` because a suffix was removed rather than a hole
+        // punched in the middle.
+        plan.cells.forEach { cell ->
+            cell.segmentIdsToRemove.forEach { segmentId ->
+                val removed = deleteSegmentRow(segmentId)
+                check(removed == 1) { "A piece of the cell ${cell.cellId} was already gone." }
+            }
+            touchCell(cell.cellId, moment)
+        }
+
+        plan.gameIds.forEach { gameId ->
+            appendHistoryEvent(
+                HistoryEventEntity(
+                    id = checkNotNull(gameEventIds[gameId]),
+                    kind = HistoryEventKind.IMPORT_ROLLED_BACK,
+                    occurredAt = moment,
+                    gameId = gameId,
+                ),
+            )
+        }
+
+        val moved = markBatchRolledBack(batchId, moment)
+        check(moved == 1) { "The import $batchId was no longer confirmed when it was about to be taken back." }
+
+        requireRollbackHeld(
+            batchId = batchId,
+            plan = plan,
+            moment = moment,
+            taskEventIds = taskEventIds.values,
+            gameEventIds = gameEventIds.values,
+            tasksBefore = tasksBefore,
+            segmentsBefore = segmentsBefore,
+            progressBefore = progressBefore,
+            historyBefore = historyBefore,
+        )
+        return ImportRollbackResult(
+            batchId = batchId,
+            removedTaskCount = plan.taskIds.size,
+            restoredCellCount = plan.cells.size,
+            affectedGameCount = plan.gameIds.size,
+        )
+    }
+
+    /**
+     * Reads back what the rollback has just done and refuses to let it stand
+     * unless it is exactly what was promised. Still inside the transaction, so a
+     * broken postcondition takes the whole rollback down.
+     *
+     * Every check is one statement for the batch or a count of a whole table.
+     * The four table counts are what prove the negative PLAN 11.4.4 cares most
+     * about: no task and no shortage was destroyed, no history line was removed,
+     * and nothing outside this import's own pieces left the cells.
+     */
+    @Suppress("LongParameterList")
+    private suspend fun requireRollbackHeld(
+        batchId: EntityId,
+        plan: ImportRollbackPlan,
+        moment: Instant,
+        taskEventIds: Collection<EntityId>,
+        gameEventIds: Collection<EntityId>,
+        tasksBefore: Int,
+        segmentsBefore: Int,
+        progressBefore: Int,
+        historyBefore: Int,
+    ) {
+        val batch = checkNotNull(batchById(batchId)) { "The import $batchId disappeared while being taken back." }
+        check(batch.status == ImportBatchStatus.ROLLED_BACK) {
+            "The import $batchId was left as ${batch.status} after being taken back."
+        }
+
+        val tasks = tasksOfConfirmedBatch(batchId)
+        check(tasks.size == plan.taskIds.size) { "The import $batchId lost or gained a task while being taken back." }
+        // What is checked is the invariant PLAN 5.2 gives — the task is out of
+        // view — and not that the moment reads back as the same object. The
+        // column holds milliseconds, so an instant carrying anything finer comes
+        // back rounded, and a comparison on it would fail for a reason that is
+        // not about anything the application means.
+        check(tasks.all { it.deletedAt != null && it.updatedAt == it.deletedAt }) {
+            "${tasks.count { it.deletedAt == null }} of the import's tasks were left in view."
+        }
+        check(segmentsOfConfirmedBatch(batchId).isEmpty()) {
+            "The import $batchId still has pieces of a cell after being taken back."
+        }
+
+        // Every cell reads what it read before the import, character for
+        // character, and holds exactly the pieces it held then.
+        val pieces = rollbackSegmentsOfBatch(batchId).groupBy { it.cellId }
+        plan.cells.forEach { cell ->
+            val now = pieces[cell.cellId].orEmpty()
+            check(now.map { it.orderIndex } == now.indices.toList()) {
+                "The cell ${cell.cellId} is numbered ${now.map { it.orderIndex }} after being put back."
+            }
+            check(now.map { it.segmentId } == cell.keptSegmentIds) {
+                "The cell ${cell.cellId} holds ${now.size} pieces where ${cell.keptSegmentIds.size} were kept."
+            }
+            check(now.none { it.taskId in plan.taskIds }) {
+                "A task the import created is still written in the cell ${cell.cellId}."
+            }
+            val document = now.joinToString(separator = "") { it.documentText }
+            // Lengths, not the writing itself: this message can reach a log, and
+            // the user's own words are not something to put there.
+            check(document == cell.documentBefore) {
+                "The cell ${cell.cellId} reads ${document.length} characters where it held " +
+                    "${cell.documentBefore.length}."
+            }
+        }
+
+        val removedSegments = plan.cells.sumOf { it.segmentIdsToRemove.size }
+        check(countTasks() == tasksBefore) { "Taking the import back destroyed a task row." }
+        check(countSegments() == segmentsBefore - removedSegments) {
+            "Taking the import back removed pieces of a cell it had no business touching."
+        }
+        check(countProgressEvents() == progressBefore) { "Taking the import back destroyed a shortage record." }
+        check(countHistoryEvents() == historyBefore + plan.taskIds.size + plan.gameIds.size) {
+            "Taking the import back left the history the wrong length."
+        }
+        check(countHistoryEventsWritten(taskEventIds, HistoryEventKind.TASK_ROLLED_BACK, moment) == plan.taskIds.size) {
+            "The history did not get one line per task taken back."
+        }
+        check(countHistoryEventsWritten(gameEventIds, HistoryEventKind.IMPORT_ROLLED_BACK, moment) == plan.gameIds.size) {
+            "The history did not get one line per game the import touched."
+        }
     }
 
     /**
@@ -1339,6 +1816,10 @@ abstract class ImportDao {
         // can never disagree about what a cell said.
         val documentTextsBefore =
             documentsBefore.mapValues { (_, rows) -> rows.joinToString(separator = "") { it.text } }
+        // Which game each target cell belongs to, in one statement. The history
+        // line PLAN 12.15 asks for is per game rather than per task, and working
+        // that out per draft is the shape PLAN 16 rules out.
+        val gameOfTargetCell = targetCellGamesOfBatch(batchId).associate { it.cellId to it.gameId }
 
         // Where the next piece goes in each cell, carried in memory: several
         // drafts aiming at one cell take consecutive places, and drafts aiming at
@@ -1436,6 +1917,7 @@ abstract class ImportDao {
             gamesToFinish = gamesToFinishFor(batchId, blocks.values),
             documentsBefore = documentsBefore,
             documentTextsBefore = documentTextsBefore,
+            gameOfTargetCell = gameOfTargetCell,
         )
     }
 
@@ -1560,7 +2042,19 @@ abstract class ImportDao {
         val documentsBefore: Map<EntityId, List<CellDocumentRow>>,
         /** The same documents as the words they read, one string per cell. */
         val documentTextsBefore: Map<EntityId, String>,
-    )
+        /** Which game each target cell belongs to, for the history line per game. */
+        val gameOfTargetCell: Map<EntityId, EntityId>,
+    ) {
+        /**
+         * The games this import writes into, each once, in the drafts' own order.
+         *
+         * PLAN 12.15 asks for one `IMPORT_CONFIRMED` line per game touched, not
+         * one per task: a file that fills six cells of one game is one thing the
+         * user did, and six identical lines would bury the day it happened in.
+         */
+        val gamesWrittenInto: List<EntityId>
+            get() = drafts.mapNotNull { gameOfTargetCell[it.targetCellId] }.distinct()
+    }
 
     /**
      * Reads back what the transaction has just written and refuses to let it
@@ -1574,6 +2068,8 @@ abstract class ImportDao {
     private suspend fun requireConfirmationHeld(
         batchId: EntityId,
         plan: PlannedConfirmation,
+        moment: Instant,
+        confirmationEventIds: Collection<EntityId>,
     ) {
         val batch = batchById(batchId)
         checkNotNull(batch) { "The import $batchId disappeared while it was being confirmed." }
@@ -1720,6 +2216,13 @@ abstract class ImportDao {
             check(kept == expected) {
                 "The cell $cellId was kept as ${kept?.length} characters where it held ${expected.length}."
             }
+        }
+
+        check(
+            countHistoryEventsWritten(confirmationEventIds, HistoryEventKind.IMPORT_CONFIRMED, moment) ==
+                plan.gamesWrittenInto.size,
+        ) {
+            "The history did not get one line per game this import wrote into."
         }
 
         if (plan.gamesToFinish.isNotEmpty()) {

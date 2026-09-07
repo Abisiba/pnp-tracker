@@ -80,7 +80,7 @@ data class HistoryEventEntity(
     /** The game this happened in, or the game this happened to. Never absent. */
     @ColumnInfo(name = "game_id")
     val gameId: EntityId,
-    /** The task this happened to; null only when the game itself is the subject. */
+    /** The task this happened to; null only on a kind recorded against a game alone. */
     @ColumnInfo(name = "task_id")
     val taskId: EntityId? = null,
     /** Which step of the pipeline moved, for a stage event only. */
@@ -94,9 +94,9 @@ data class HistoryEventEntity(
     val newQuantity: Int? = null,
 ) {
     init {
-        if (kind.isAboutGameItself) {
+        if (kind.namesNoTask) {
             require(taskId == null) {
-                "$kind is about the game itself, so it cannot also name a task ($taskId)."
+                "$kind is recorded against a game alone, so it cannot also name a task ($taskId)."
             }
         } else {
             require(taskId != null) {

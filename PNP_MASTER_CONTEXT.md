@@ -7,8 +7,8 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** Faz 3 / İş 2'nin birinci dilimi (Room v8 hücre anlık
-> görüntüsü) tamamlandıktan sonra.
+> **Son güncelleme:** Faz 3 / İş 2'nin ikinci dilimi (geri alma motoru ve
+> geçmiş olayları) tamamlandıktan sonra.
 >
 > Bu dosyanın önceki sürümü çok daha eski bir repo durumunu (Room v3, canlı `Item`
 > modeli, AP-9/AP-10 adımlandırması) güncel mimariymiş gibi anlatıyordu. O bilgiler
@@ -24,20 +24,24 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-HEAD (bu commit öncesi): fd7335c607e4cb3e1eccf5bebc6220e0e061394c
-önceki commit         : docs: define protected import rollback semantics
+HEAD (bu commit öncesi): 3e91d4f2cf098a76ab20a3df297b7e0a199a6ffa
+önceki commit         : feat(import): remember cells before confirmation
 working tree          : temiz
-Room şema sürümü      : 8   (bu commit'te 7 → 8)
-şema dosyaları        : 1.json … 7.json  bayt bayt aynı; 8.json eklendi
-test durumu           : 2796 test / 0 failure / 0 error / 0 skipped
-üretim kodu           : 235 dosya
-test kodu             : 175 dosya
+Room şema sürümü      : 8   (bu commit'te DEĞİŞMEDİ)
+şema dosyaları        : 1.json … 8.json  hepsi bayt bayt aynı
+test durumu           : 2858 test / 0 failure / 0 error / 0 skipped
+üretim kodu           : 239 dosya
+test kodu             : 180 dosya
 ```
 
-**Bu commit Faz 3 / İş 2'nin birinci dilimidir.** Room v8'e geçer,
-`import_batch_cells` tablosunu ekler ve içe aktarma onayının, yazacağı her
-hücrenin önceki metnini saklamasını sağlar. Kullanıcının gördüğü davranış
-değişmez: geri alma motoru ve arayüzü sonraki dilimlerdedir.
+**Bu commit Faz 3 / İş 2'nin ikinci dilimidir.** Geri alma motorunu, üç yeni
+geçmiş olayını ve bunların Türkçe geçmiş satırlarını ekler. Kullanıcı geri almayı
+henüz **başlatamaz**: düğme, onaylanmış içe aktarma listesi ve onay penceresi
+üçüncü dilimdedir. Bugün görülebilen tek fark, bir içe aktarma onaylandığında
+Geçmiş ekranında beliren `İçe aktarma onaylandı…` satırıdır.
+
+Yeni enum değerleri TEXT olarak saklandığı için **şema sürümü 8 kalmıştır** ve
+`8.json` değişmemiştir.
 
 `PLAN.md` bu turda **değiştirilmemiştir.** Bir önceki tur onu kullanıcının açık
 talimatıyla düzenlemişti; varsayılan kural yine dokunmamaktır.
@@ -551,10 +555,7 @@ GameDao.softDelete    → GAME_DELETED
 
 Bu satırların hepsi geçmiş ekranında görünür; ekranın nasıl okuduğu §32'dedir.
 
-## Faz 3 / İş 2 ile eklenecek türler  *(henüz YOK)*
-
-`PLAN.md` `11.4.4` ve `12.15` üç yeni tür istiyor. Hiçbiri bugün tanımlı değildir;
-İş 2'nin ikinci diliminde eklenecektir:
+## İçe aktarma türleri  *(İş 2 dilim 2 ile eklendi)*
 
 ```text
 IMPORT_CONFIRMED     onay sırasında, dokunulan her oyun için    (task_id NULL)
@@ -562,13 +563,23 @@ IMPORT_ROLLED_BACK   geri alma sırasında, her oyun için         (task_id NULL
 TASK_ROLLED_BACK     geri alınan her görev için
 ```
 
-Enum değeri TEXT olarak saklandığı için bunlar **şema değişikliği gerektirmez**;
-`7.json` ve `8.json` hash'lerini etkilemezler. `HistoryEventEntity.init`'teki
-`isAboutGameItself` yüklemi ilk ikisini de kapsamalıdır — o ad artık dar geliyor
-ve `namesNoTask` gibi bir ada geçirilmesi önerilir.
+Enum değeri TEXT olarak saklandığı için bunlar **şema değişikliği gerektirmedi**;
+`8.json` değişmedi ve sürüm 8 kaldı.
+
+`HistoryEventEntity.init`'in yüklemi `isAboutGameItself` → **`namesNoTask`**
+olarak yeniden adlandırıldı. Eski ad artık dar geliyordu: bir oyunun silinmesi
+oyunun kendisiyle ilgilidir, bir içe aktarmanın onaylanması ise oyunun *içinde*
+olan bir şeydir. Ortak yanları entity'nin bilmesi gereken tek şeydir — olayın
+düştüğü tek bir görev yoktur.
+
+`IMPORT_CONFIRMED` **görev sayısı taşımaz.** Üç adet sütunu
+`TASK_STAGE_QUANTITY_CHANGED`'e aittir ve bir türde "aşama nereye geldi", başka
+bir türde "kaç görev geldi" anlamına gelen bir sütun, `HistoryEventEntity`'nin
+olmamak için tasarlandığı payload sütunudur. İçe aktarmanın kaç görev ürettiği
+zaten `import_batches.created_task_count`'ta yazılıdır.
 
 Engellenen bir geri alma **hiçbir olay yazmaz**: gerçekleşmemiş işlem geçmişe
-girmez.
+girmez. Testle sabitlenmiştir.
 
 ## Yazıcısı olmayan türler
 
@@ -711,7 +722,59 @@ Kurallar:
   SELECT, batch büyüklüğünden bağımsız.
 - `document_after` saklanmaz: beklenen metin `document_before` + görev adları +
   `taskNeedsSeparatorAfter` ile yeniden hesaplanır. İki hesap ayrışamaz.
-- Geri alma motoru henüz **yoktur**; bu dilim yalnız kanıtı biriktirir.
+- Anlık görüntü, geri almanın dayandığı kanıttır.
+
+## Geri alma motoru  *(v8, Faz 3 / İş 2 dilim 2)*
+
+Kural metni PLAN `11.4.4`'tedir. Repo tarafındaki karşılıkları:
+
+```text
+ImportDao.previewRollback(batchId)        salt okunur; tavsiye niteliğinde
+ImportDao.rollBackConfirmedBatch(...)     tek transaction; iki sonuç, üçüncüsü yok
+ImportRollbackStore                       SQLiteException → COULD_NOT_SAVE
+planImportRollback(facts)                 SAF karar; preview ve transaction ortak
+```
+
+**Kararı tek bir saf fonksiyon verir.** `ImportRollbackFacts` toplu okumalarla
+doldurulur, `planImportRollback` hiçbir saat, veritabanı veya kimlik üretimi
+olmadan karar verir. Önizleme ve yazan transaction aynı fonksiyonu çağırır: iki
+ayrı "bu güvenli mi" uygulaması, birbirine düşmeyi bekleyen iki cevap olurdu ve
+denenmemiş olan, işe yarayan olurdu. Önizleme yine de **bağlayıcı değildir**;
+transaction bütün satırları kendi içinde yeniden okur.
+
+**Engelleyen bir plan boştur.** `failure != null` olduğunda `taskIds`, `cells` ve
+`gameIds` boş döner — "yine de yapılabilecek kısım" diye bir şey olmadığını tip
+söyler.
+
+Hücrenin nasıl geri yüklendiği:
+
+```text
+sınır  = metni tam olarak document_before'u yazan parça öneki
+önek   = kullanıcının kendi parçaları — DOKUNULMAZ, kimlikleri korunur
+sonek  = bu batch'in TASK parçaları + yazdığı tek boşluklar — yalnız bunlar silinir
+```
+
+Sınır tektir, çünkü hiçbir parça boş metin katkısı yapmaz (görevin adı vardır,
+boşalan metin satır bırakmaz — PLAN `16.`). Sonek silindiğinde önek zaten
+`0..N-1` sırasındadır; yeniden numaralama gerekmez ve yan yana düz metin
+oluşmaz.
+
+İki ayrı denetim birlikte aranır: **sözcükler** (`document_before` + görev
+adları, onayın kullandığı `taskNeedsSeparatorAfter` ile) ve **parçalar** (sonekte
+yalnız bu batch'in görevleri ve tek boşluklar; önekte bu batch'ten görev yok;
+numaralama sağlam). İlki kullanıcının yazdığı bir harfi yakalar, ikincisi aynı
+hücreye yazan ikinci bir import'u.
+
+Transaction sırası: toplu okuma → sınıflandırma → engel varsa **yazmadan** dön →
+`clock.now()` bir kez + bütün olay kimlikleri → tombstone'lar →
+`TASK_ROLLED_BACK` → sonek parçalarının silinmesi + hücre `updated_at` →
+`IMPORT_ROLLED_BACK` → koşullu `CONFIRMED → ROLLED_BACK` → postcondition.
+
+Postcondition dört tablo sayımını önce ve sonra karşılaştırır: hiçbir görev
+satırı yok olmadı, hiçbir progress olayı silinmedi, hiçbir eski geçmiş satırı
+gitmedi, ve `cell_segments`'ten yalnız planlanan sonek kadar satır eksildi.
+Yazılan geçmiş satırları **kimlikle** doğrulanır; tür ve zamanla saymak, aynı
+milisaniyede onaylanmış iki import'un birbirinin satırlarını sayması demekti.
 
 ## CSV içe aktarma sözleşmesi
 
@@ -1003,6 +1066,11 @@ Geçmiş ekranı            2 SELECT (history_events + progress_events), satır,
 İçe aktarma onayı        karar sorguları taslak sayısıyla büyümez; hücre anlık
                          görüntüsü 1 INSERT/hücre ve toplam 1 SELECT — bir
                          hücreye 42 taslak yine tek satır yazar
+Geri alma                önizleme 1 ve 42 görev için AYNI ifadeleri çalıştırır;
+                         geri alma sorguları görev/hücre sayısıyla büyümez ve
+                         geçmiş uzadıkça artmaz. Yazımlar büyür: görev başına
+                         tombstone, görev+oyun başına geçmiş satırı, sonek
+                         başına DELETE
 ```
 
 ---
@@ -1102,8 +1170,8 @@ PLAN `18.` — Faz 3 işler listesi.
 
 ```text
  1  Geçmiş ekranını tamamla ............................. TAMAM
- 2  Import batch rollback ve korumalı geri alma ... dilim 1 TAMAM (Room v8),
-                                              dilim 2-3 YAPILMADI
+ 2  Import batch rollback ve korumalı geri alma ... dilim 1-2 TAMAM,
+                                              dilim 3 (arayüz) YAPILMADI
  3  Sürümlü JSON yedek/dışa aktarma ve geri yükleme ..... YAPILMADI
  4  Import ve migration öncesi otomatik snapshot ........ YAPILMADI
  5  CSV görev dışa aktarmayı doğrula ......... özellik var, Faz 3 doğrulama
@@ -1150,7 +1218,9 @@ Kart/mukavva aşama değişimi .... TASK_STAGE_QUANTITY_CHANGED
 Silinen kayıtlar ............... TASK_DELETED, GAME_DELETED
 Metne dönüştürülen görevler .... TASK_CONVERTED_TO_TEXT
 Yeniden açılan görevler ........ TASK_REOPENED
-İçe aktarma ve geri alma ....... YAZAN YOL YOK — Faz 3 / İş 2 dilim 2'de gelecek
+İçe aktarma onaylandı .......... IMPORT_CONFIRMED
+İçe aktarma geri alındı ........ IMPORT_ROLLED_BACK
+Geri alınan görevler ........... TASK_ROLLED_BACK
 ```
 
 `TASK_RESTORED` ve `GAME_RESTORED` de yazılmıyor (§15, "yazıcısı olmayan
@@ -1171,10 +1241,11 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
 
 ## Sıradaki bağlayıcı iş
 
-> **Faz 3 / İş 2 dilim 2: geri alma motoru.**
+> **Faz 3 / İş 2 dilim 3: geri alma arayüzü.**
 >
-> Ürün kararları `PLAN.md` `11.4.4`'tedir ve yeniden tartışılmaz. Dilim 1 bitti;
-> repo tarafındaki sonuçlar §19 ve §33 R1'dedir.
+> Ürün kararları `PLAN.md` `11.4.4`'tedir ve yeniden tartışılmaz. Motor hazır ve
+> tamamen testli; eksik olan yalnız onu çağıran ekran. Repo tarafındaki
+> ayrıntılar §19'dadır.
 
 ### İş 2'nin üç atomik dilimi
 
@@ -1183,32 +1254,40 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
    import_batch_cells, Migration7To8, 8.json, onayın document_before yazması.
    Davranış değişmedi; kullanıcı hiçbir fark görmez.
 
-2  Rollback motoru ve geçmiş olayları .................. SIRADAKİ
+2  Rollback motoru ve geçmiş olayları ..................... TAMAM
    Engelleme denetimi (dokunulmuş görev VEYA değişmiş hücre), tek transaction,
    tombstone'lar, hücre geri yüklemesi, postcondition;
-   IMPORT_CONFIRMED / IMPORT_ROLLED_BACK / TASK_ROLLED_BACK. Arayüz yok.
+   IMPORT_CONFIRMED / IMPORT_ROLLED_BACK / TASK_ROLLED_BACK ve Türkçe geçmiş
+   cümleleri. Geri almayı başlatan arayüz yok.
 
-3  Arayüz ve Türkçe metinler ........................... YAPILMADI
-   Onaylanmış içe aktarma listesi, onay ve engelleme ekranları, geçmiş cümleleri.
+3  Arayüz .............................................. SIRADAKİ
+   Onaylanmış içe aktarma listesi, geri alma düğmesi, onay ve engelleme
+   ekranları. Engelleme listesi için gereken yapısal veri hazırdır:
+   ImportRollbackPreview.blockedTasks / blockedCells görev adını, oyun adını ve
+   sütun türünü taşır.
 ```
 
 Sıra bağlayıcıdır: 1 olmadan 2 tam hücre geri yüklemesi yapamaz, 2 olmadan 3'ün
 çağıracağı bir şey yoktur.
 
-### Dilim 1 ne bıraktı, dilim 2 neyi devralıyor
+### Dilim 2 ne bıraktı, dilim 3 neyi devralıyor
 
 ```text
-bıraktığı                                    dilim 2'nin kullanacağı yer
+bıraktığı                                    dilim 3'ün kullanacağı yer
 ------------------------------------------   ------------------------------------
-ImportBatchCellEntity                        hücre geri yüklemesi
-ImportDao.cellSnapshotsOfBatch(batchId)      engelleme denetimi + geri yükleme
-Migration7To8 (backfill YOK)                 kaydı olmayan batch → geri alınamaz
-onayın yazdığı document_before               beklenen metnin hesaplanması
-taskNeedsSeparatorAfter (TaskSeparation.kt)  beklenen metnin hesaplanması
+ImportRollback (arayüz) + ImportRollbackStore  controller'ın çağıracağı yüzey
+previewRollback → ImportRollbackPreview        onay penceresinin sayıları
+blockedTasks / blockedCells                    engelleme listesinin içeriği
+ImportRollbackFailure (8 değer)                her reddin kendi Türkçe cümlesi
+üç geçmiş türü + Türkçe satırları              Geçmiş ekranında zaten görünüyor
 ```
 
-Dilim 2'nin **yazmayacağı** hiçbir şey dilim 1'de yazılmadı: tombstone yok,
-`ROLLED_BACK` yazan yol yok, yeni geçmiş türü yok, yeni Türkçe metin yok.
+`ImportRollbackStore` **bilerek `Main.kt`'ye bağlanmamıştır**: onu çağıran bir
+ekran yokken bağlamak, kullanılmayan bir üretim yolu bırakmak olurdu (§33 R3).
+Dilim 3 hem bağlar hem kullanır.
+
+Dilim 3'ün yazacağı hiçbir şey burada yazılmadı: geri alma düğmesi yok,
+onaylanmış batch listesi yok, onay/engelleme penceresi yok.
 
 Sonrasında PLAN'ın bağlayıcı sırası izlenir: İş 3 → 4 → 7 → 9 + 5 → 10 →
 11-13 → 14-16.
@@ -1237,7 +1316,7 @@ kaybettiğinden oyunlarını `history_events`'teki dönüştürme satırından a
 
 # 33. RİSKLER VE VERİLMİŞ TASARIM KARARLARI
 
-## R1 — Rollback provenance  *(ÇÖZÜLDÜ ve UYGULANDI — Room v8)*
+## R1 — Rollback provenance  *(KAPANDI — tasarım uygulandı ve kullanılıyor)*
 
 > Bu maddenin önceki hâli `cell_segments.source_import_batch_id` sütunu öneriyordu.
 > **O öneri geri çekilmiştir.** Aşağıdaki inceleme bulgusu onu geçersiz kılar.
@@ -1312,7 +1391,7 @@ ImportDao.cellSnapshotsOfBatch    dilim 2'nin okuyacağı dar okuma
 `cell_segments` **değişmedi** ve provenance sütunu almadı — bu maddenin bütün
 gerekçesi buydu.
 
-## R2 — Rollback ürün kararları  *(ÇÖZÜLDÜ — PLAN 11.4.4 bağlayıcıdır)*
+## R2 — Rollback ürün kararları  *(KAPANDI — PLAN 11.4.4 uygulandı)*
 
 Bu maddenin önceki hâli sekiz açık soru listeliyordu. **Hepsi kullanıcı tarafından
 karara bağlanmıştır** ve `PLAN.md` `11.4.4`'e işlenmiştir. Burada yalnız repo
@@ -1492,9 +1571,10 @@ Görev yaşam döngüsü ayrı bir append-only history_events tablosuna yazılı
 
 Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
 - İş 1 (geçmiş) iki dilim hâlinde tamamlandı: olay kayıt katmanı + geçmiş ekranı.
-- İş 2 (import rollback) üç dilime bölündü; DİLİM 1 BİTTİ:
-  Room v8 + import_batch_cells + onayın document_before yazması.
-- Sıradaki bağlayıcı iş: İş 2 DİLİM 2 — geri alma motoru. Arayüz dilim 3'tedir.
+- İş 2 (import rollback) üç dilime bölündü; DİLİM 1 ve 2 BİTTİ:
+  Room v8 + import_batch_cells, geri alma motoru, üç geçmiş olayı.
+- Sıradaki bağlayıcı iş: İş 2 DİLİM 3 — geri alma arayüzü. Motor hazır ve testli;
+  ImportRollbackStore henüz Main.kt'ye bağlı değildir, dilim 3 bağlayacaktır.
 - İş 2'nin ürün kararları VERİLMİŞTİR ve PLAN 11.4.4'tedir; yeniden tartışma.
   Kısmi rollback yoktur, tek çakışma bütün işlemi engeller, segment kimliğine
   provenance bağlanmaz, anlık görüntüsü olmayan eski batch geri alınamaz.
@@ -1630,11 +1710,16 @@ Bugün çalışan hâliyle:
 - Görev yaşam döngüsü append-only olarak kayda geçer.
 - Geçmiş ekranı bu kaydı okunur hâlde, oyun ve tarih süzgeçleriyle, iki sorguda
   gösterir; silinmiş ve metne dönüştürülmüş kayıtların satırları kaybolmaz.
-- İçe aktarma onayı, yazdığı her hücrenin önceki metnini kalıcı olarak saklar.
-  Kullanıcı bunu görmez; geri almanın dayanacağı kanıt buradan birikir.
+- İçe aktarma onayı, yazdığı her hücrenin önceki metnini kalıcı olarak saklar ve
+  dokunduğu her oyun için geçmişe bir satır yazar.
+- Onaylanmış bir içe aktarma, hiçbir görevine ve hiçbir hücresine dokunulmamışsa
+  tek transaction'da geri alınabilir: görevler tombstone olur, hücreler harfi
+  harfine eski hâline döner, kullanıcının kendi parçaları kimlikleriyle korunur.
+  Tek bir çakışma bütün işlemi engeller ve hiçbir satır değişmez. Bunu başlatan
+  arayüz henüz yoktur.
 
 Kalan iş ağırlıklı olarak **dayanıklılık, yedekleme, kurtarma, paketleme ve yayına
-hazırlıktır**: import rollback'in motoru ve arayüzü, JSON yedek/geri yükleme,
+hazırlıktır**: import rollback'in arayüzü, JSON yedek/geri yükleme,
 otomatik snapshot, kurtarma akışı, loglama, performans kapısı, Linux paketi,
 belgeler, lisans ve CI.
 

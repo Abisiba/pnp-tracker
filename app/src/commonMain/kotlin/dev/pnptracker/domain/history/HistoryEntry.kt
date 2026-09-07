@@ -49,6 +49,15 @@ sealed interface HistoryChange {
     /** A removed game was brought back (PLAN 12.15). */
     data object GameRestored : HistoryChange
 
+    /** An import was confirmed and wrote into this game (PLAN 12.15). */
+    data object ImportConfirmed : HistoryChange
+
+    /** An import that had written into this game was taken back (PLAN 11.4.4). */
+    data object ImportRolledBack : HistoryChange
+
+    /** One task went out of view because its whole import was taken back (PLAN 11.4.4). */
+    data object TaskRolledBack : HistoryChange
+
     /**
      * Pieces came out missing or spoiled (PLAN 12.15).
      *

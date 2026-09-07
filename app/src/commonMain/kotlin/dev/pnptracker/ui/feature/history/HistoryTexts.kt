@@ -29,6 +29,9 @@ fun historySentenceOf(change: HistoryChange): StringResource =
         HistoryChange.TaskConvertedToText -> Strings.History.lineTaskConverted
         HistoryChange.GameDeleted -> Strings.History.lineGameDeleted
         HistoryChange.GameRestored -> Strings.History.lineGameRestored
+        HistoryChange.ImportConfirmed -> Strings.History.lineImportConfirmed
+        HistoryChange.ImportRolledBack -> Strings.History.lineImportRolledBack
+        HistoryChange.TaskRolledBack -> Strings.History.lineTaskRolledBack
         is HistoryChange.ShortageReported -> Strings.History.lineShortageReported
         is HistoryChange.ShortageResolved -> Strings.History.lineShortageResolved
     }
@@ -61,14 +64,21 @@ fun historyArgumentsOf(
         is HistoryChange.ShortageReported -> listOf(taskName, change.quantity.toString())
         is HistoryChange.ShortageResolved -> listOf(taskName, change.quantity.toString())
 
-        // The two that are about the game itself, and name no task at all.
-        HistoryChange.GameDeleted, HistoryChange.GameRestored -> emptyList()
+        // The ones recorded against a game alone, which name no task at all.
+        // The screen already shows which game the line belongs to, so the
+        // sentence would only be repeating it.
+        HistoryChange.GameDeleted,
+        HistoryChange.GameRestored,
+        HistoryChange.ImportConfirmed,
+        HistoryChange.ImportRolledBack,
+        -> emptyList()
 
         HistoryChange.TaskCompleted,
         HistoryChange.TaskReopened,
         HistoryChange.TaskDeleted,
         HistoryChange.TaskRestored,
         HistoryChange.TaskConvertedToText,
+        HistoryChange.TaskRolledBack,
         -> listOf(taskName)
     }
 
@@ -116,6 +126,9 @@ fun historyDetailsOf(change: HistoryChange): List<HistoryDetail> =
         HistoryChange.TaskConvertedToText,
         HistoryChange.GameDeleted,
         HistoryChange.GameRestored,
+        HistoryChange.ImportConfirmed,
+        HistoryChange.ImportRolledBack,
+        HistoryChange.TaskRolledBack,
         -> emptyList()
     }
 

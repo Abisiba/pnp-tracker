@@ -793,6 +793,9 @@
     <string name="history_line_task_converted">%1$s metne dönüştürüldü</string>
     <string name="history_line_game_deleted">Oyun silindi</string>
     <string name="history_line_game_restored">Oyun geri alındı</string>
+    <string name="history_line_import_confirmed">İçe aktarma onaylandı; bu oyuna görevler eklendi</string>
+    <string name="history_line_import_rolled_back">İçe aktarma geri alındı; bu oyuna eklenen görevler kaldırıldı</string>
+    <string name="history_line_task_rolled_back">%1$s içe aktarma geri alındığı için kaldırıldı</string>
     <string name="history_line_stage_moved">%1$s — %2$s: %3$s → %4$s</string>
     <string name="history_line_shortage_reported">%1$s — %2$s adet eksik/hatalı bildirildi</string>
     <string name="history_line_shortage_resolved">%1$s — %2$s adet eksik giderildi</string>

@@ -97,6 +97,8 @@ class ImportConfirmationQueryCountTest {
                     statement.startsWith("INSERT") && "`TASK_STAGES`" in statement -> "INSERT task_stages"
                     statement.startsWith("INSERT") && "`CELL_SEGMENTS`" in statement -> "INSERT cell_segments"
                     statement.startsWith("INSERT") && "`IMPORT_BATCH_CELLS`" in statement -> "INSERT import_batch_cells"
+                    statement.startsWith("INSERT") && "`HISTORY_EVENTS`" in statement -> "INSERT history_events"
+                    statement.startsWith("INSERT") && "`PROGRESS_EVENTS`" in statement -> "INSERT progress_events"
                     statement.startsWith("INSERT") -> "INSERT other"
                     statement.startsWith("UPDATE") && "DRAFT_TASKS" in statement -> "UPDATE draft_tasks"
                     statement.startsWith("UPDATE") && "IMPORT_BATCHES" in statement -> "UPDATE import_batches"
@@ -203,7 +205,10 @@ class ImportConfirmationQueryCountTest {
             assertEquals(decisions(one), decisions(many), "confirming forty-two drafts asked more questions than one")
             // The shape the old transaction had, named so a regression is
             // recognisable rather than merely numerically different.
-            assertEquals(1, many["SELECT game_cells"], "the per-draft cell lookup is back")
+            // Two: the targets the drafts aim at, and the games those cells
+            // belong to. Both are one statement for the batch — what this guards
+            // is that neither becomes one per draft.
+            assertEquals(2, many["SELECT game_cells"], "the per-draft cell lookup is back")
             assertEquals(1, many["SELECT cell_segments"], "the per-draft segment lookup is back")
             // The writing grows, because the writing is the work: forty-two tasks
             // and the forty-one spaces that keep their names apart.
@@ -214,6 +219,8 @@ class ImportConfirmationQueryCountTest {
             // are one cell.
             assertEquals(1, many["INSERT import_batch_cells"], "one cell was recorded once per draft")
             assertEquals(1, many["SELECT import_batch_cells"], "the records were read back per cell")
+            // Forty-two tasks in one game are one line in the history.
+            assertEquals(1, many["INSERT history_events"], "the history got a line per task")
             assertEquals(42, many["UPDATE draft_tasks"])
             assertEquals(1, many["UPDATE import_batches"])
         }
@@ -225,12 +232,15 @@ class ImportConfirmationQueryCountTest {
             val spread = confirm(aBatch(42, oneCell = false))
 
             assertEquals(decisions(one), decisions(spread), "aiming at many cells asked a question per cell")
-            assertEquals(1, spread["SELECT game_cells"])
+            assertEquals(2, spread["SELECT game_cells"])
             assertEquals(1, spread["SELECT cell_segments"])
             // Forty-two cells really are forty-two records — that is the work,
             // not a question asked about each of them.
             assertEquals(42, spread["INSERT import_batch_cells"])
             assertEquals(1, spread["SELECT import_batch_cells"], "reading the records back grew with the cells")
+            // Forty-two cells in forty-two different games are forty-two lines,
+            // because that really is forty-two games' history.
+            assertEquals(42, spread["INSERT history_events"])
         }
 
     @Test
@@ -261,7 +271,14 @@ class ImportConfirmationQueryCountTest {
             val finished = confirm(aBatch(42, completionHint = HintDecision.ACCEPTED))
 
             assertEquals(decisions(plain), decisions(finished))
-            assertEquals(null, finished["INSERT other"], "a task born finished wrote an event explaining a debt")
+            assertEquals(
+                null,
+                finished["INSERT progress_events"],
+                "a task born finished wrote an event explaining a debt",
+            )
+            // One line for the one game they all went into, however many they
+            // were: PLAN 12.15 records the import, not each task in it.
+            assertEquals(1, finished["INSERT history_events"], "the history got a line per task")
         }
 
     @Test

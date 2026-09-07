@@ -51,7 +51,7 @@ class HistoryEventEntityTest {
 
     @Test
     fun `a task event without a task is refused`() {
-        HistoryEventKind.entries.filterNot { it.isAboutGameItself }.forEach { kind ->
+        HistoryEventKind.entries.filterNot { it.namesNoTask }.forEach { kind ->
             val refusal =
                 assertFailsWith<IllegalArgumentException>("$kind was allowed to happen to no task") {
                     event(kind, taskId = null)
@@ -61,10 +61,23 @@ class HistoryEventEntityTest {
     }
 
     @Test
-    fun `a game's own event cannot also name a task`() {
-        listOf(HistoryEventKind.GAME_DELETED, HistoryEventKind.GAME_RESTORED).forEach { kind ->
+    fun `a game-level event cannot also name a task`() {
+        HistoryEventKind.entries.filter { it.namesNoTask }.forEach { kind ->
             assertFailsWith<IllegalArgumentException>("$kind was allowed to name a task") { event(kind) }
         }
+    }
+
+    @Test
+    fun `an import taken back is recorded against its game and its tasks separately`() {
+        val forTheGame = event(HistoryEventKind.IMPORT_ROLLED_BACK, taskId = null)
+        val forOneTask = event(HistoryEventKind.TASK_ROLLED_BACK)
+
+        // The two halves of one rollback: PLAN 11.4.4 writes a line per game and
+        // a line per task, and the shapes are what keep them from being confused.
+        assertEquals(gameId, forTheGame.gameId)
+        assertEquals(null, forTheGame.taskId)
+        assertEquals(taskId, forOneTask.taskId)
+        assertEquals(gameId, forOneTask.gameId, "a task's rollback line lost the game it happened in")
     }
 
     @Test
@@ -140,7 +153,7 @@ class HistoryEventEntityTest {
             assertFailsWith<IllegalArgumentException>("$kind was allowed to carry a stage") {
                 event(
                     kind,
-                    taskId = if (kind.isAboutGameItself) null else taskId,
+                    taskId = if (kind.namesNoTask) null else taskId,
                     stage = ProductionStage.PRINT,
                     previousQuantity = 0,
                     newQuantity = 1,
@@ -150,10 +163,17 @@ class HistoryEventEntityTest {
     }
 
     @Test
-    fun `only the two game kinds are about the game itself`() {
+    fun `exactly the game-level kinds name no task`() {
         assertEquals(
-            setOf(HistoryEventKind.GAME_DELETED, HistoryEventKind.GAME_RESTORED),
-            HistoryEventKind.entries.filter { it.isAboutGameItself }.toSet(),
+            setOf(
+                HistoryEventKind.GAME_DELETED,
+                HistoryEventKind.GAME_RESTORED,
+                // An import is recorded against the game it wrote into rather
+                // than against any one of the tasks it made (PLAN 12.15).
+                HistoryEventKind.IMPORT_CONFIRMED,
+                HistoryEventKind.IMPORT_ROLLED_BACK,
+            ),
+            HistoryEventKind.entries.filter { it.namesNoTask }.toSet(),
         )
     }
 
