@@ -83,7 +83,7 @@ class StoppedClock(
  * and the one that was missed would fail somewhere that has nothing to do with
  * the change.
  */
-const val CURRENT_SCHEMA_VERSION = 7L
+const val CURRENT_SCHEMA_VERSION = 8L
 
 const val EPOCH_MILLISECONDS_CREATED = 1_700_000_000_000L
 const val EPOCH_MILLISECONDS_UPDATED = 1_700_000_600_000L

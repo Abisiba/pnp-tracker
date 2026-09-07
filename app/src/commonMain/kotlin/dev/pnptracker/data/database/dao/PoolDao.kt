@@ -34,11 +34,11 @@ interface PoolDao {
      * work nobody can start yet.
      *
      * All three, from one statement, because PLAN 13 lets the user ask for any
-     * of them and PLAN 1410 says a finished task can be shown again. Which of
-     * the three the screen is showing is decided above this, in memory, over the
-     * rows this already returned — binding it into the `WHERE` clause would mean
-     * a fresh query and a fresh stream every time somebody changed their mind,
-     * which is the shape PLAN 16 rules out.
+     * of them and PLAN 18 (Faz 2, Adım 4) says a finished task can be shown
+     * again. Which of the three the screen is showing is decided above this, in
+     * memory, over the rows this already returned — binding it into the `WHERE`
+     * clause would mean a fresh query and a fresh stream every time somebody
+     * changed their mind, which is the shape PLAN 16 rules out.
      *
      * What is excluded is what could not be shown at all: a deleted task, a task
      * whose game was deleted, and a task with no piece in any cell — anchorless,

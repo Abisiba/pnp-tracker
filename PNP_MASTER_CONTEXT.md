@@ -7,7 +7,9 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** Faz 3 / İş 1'in olay kayıt katmanı tamamlandıktan sonra.
+> **Son güncelleme:** Faz 3 / İş 2'nin birinci dilimi (Room v8 hücre anlık
+> görüntüsü) tamamlandıktan sonra.
+>
 > Bu dosyanın önceki sürümü çok daha eski bir repo durumunu (Room v3, canlı `Item`
 > modeli, AP-9/AP-10 adımlandırması) güncel mimariymiş gibi anlatıyordu. O bilgiler
 > artık **§36 TARİHSEL / ARTIK GEÇERLİ DEĞİL** bölümüne taşınmıştır ve rehber olarak
@@ -22,31 +24,29 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-HEAD (bu commit öncesi): 9b332650ff8f5ff2579fded6cb52d1a044676ede
-son kod commit'i      : feat(history): show what has happened
+HEAD (bu commit öncesi): fd7335c607e4cb3e1eccf5bebc6220e0e061394c
+önceki commit         : docs: define protected import rollback semantics
 working tree          : temiz
-Room şema sürümü      : 7   (bu commit'te DEĞİŞMEDİ)
-şema dosyaları        : 1.json … 7.json  (hepsi commit'li hâlleriyle aynı)
-test durumu           : 2771 test / 0 failure / 0 error / 0 skipped
-                        (son kod commit'inde ölçüldü; bu commit kod değiştirmiyor)
-üretim kodu           : 233 dosya
-test kodu             : 173 dosya
+Room şema sürümü      : 8   (bu commit'te 7 → 8)
+şema dosyaları        : 1.json … 7.json  bayt bayt aynı; 8.json eklendi
+test durumu           : 2796 test / 0 failure / 0 error / 0 skipped
+üretim kodu           : 235 dosya
+test kodu             : 175 dosya
 ```
 
-**Bu commit yalnız `PLAN.md` ve bu belgeyi değiştirir.** Kaynak kod, Room
-entity/migration/şema dosyaları, Gradle yapılandırması, fixture ve testler
-dokunulmadan kalır; bu yüzden test sayısı yeniden ölçülmemiştir.
+**Bu commit Faz 3 / İş 2'nin birinci dilimidir.** Room v8'e geçer,
+`import_batch_cells` tablosunu ekler ve içe aktarma onayının, yazacağı her
+hücrenin önceki metnini saklamasını sağlar. Kullanıcının gördüğü davranış
+değişmez: geri alma motoru ve arayüzü sonraki dilimlerdedir.
 
-`PLAN.md` bu turda **kullanıcının açık talimatıyla** düzenlenmiştir: Faz 3 / İş 2
-için verilen bağlayıcı ürün kararları `11.4.4` bölümü olarak PLAN'a işlenmiştir.
-PLAN yalnız kullanıcı açıkça istediğinde değiştirilir; varsayılan kural hâlâ
-dokunmamaktır.
+`PLAN.md` bu turda **değiştirilmemiştir.** Bir önceki tur onu kullanıcının açık
+talimatıyla düzenlemişti; varsayılan kural yine dokunmamaktır.
 
 ## Doğrulama hash'leri
 
 ```text
 PLAN.md  66a8e42aafc7e4894182b6beaac2fcd1c0bed84db8d3d202f02a58c8fdf9525c
-         (bir önceki değer f8229e3b…0126 idi; 11.4.4 eklenmesiyle değişti)
+         (bu commit PLAN'ı değiştirmez; değer bir önceki commit'ten aynen gelir)
 
 1.json   7cafd48fb4b06ec1da00b3f15f4335aae46fb8b40fc57926cde442dda515a724
 2.json   e596d1bccc5054bf4442faff43ebdfff03ff4c5024d4afc1d8e9ddad2ed3f11a
@@ -55,6 +55,8 @@ PLAN.md  66a8e42aafc7e4894182b6beaac2fcd1c0bed84db8d3d202f02a58c8fdf9525c
 5.json   e504a0654d3db06b2be353b8fbbcdb6dfed2230f4c53e99c9280ee8f0f99d017
 6.json   aa73e89137f4b5585e4ed0c0e7bbab38aad841897cd2ce16b910c4c4cc4e2277
 7.json   690843ebbfe4d61b33bf7db2e35b3a5038ba0206dc6b4ca5484311312af298b7
+8.json   498dfef21e479209c793f731b3593dae37cf688ae7bf275775eb744255913480
+         (bu commit'te eklendi; Room'un kendi ürettiği şema)
 
 anonim fixture (sample-import.xlsx)
          314780a48e5002b2ffaef6856c63d2e42a55759d39ac485b8f00753f551d1833
@@ -238,16 +240,19 @@ metin parçaları birleştirilir. Bir `Task` tam olarak bir `TaskSegment`'e aitt
 - **`ALTERNATIVE` renk ilişkisi yoktur**; `task_colors` yalnız sıralı `REQUIRED`
   ilişkileri taşır.
 
-## Şema v7 varlıkları
+## Şema v8 varlıkları
 
 ```text
 games              game_cells         cell_segments
 colors             color_aliases
 tasks              task_colors        task_stages
 progress_events    history_events
-import_batches     raw_import_blocks
+import_batches     raw_import_blocks   import_batch_cells
 draft_tasks        draft_task_colors
 ```
+
+`import_batch_cells` v8'de eklendi: bir içe aktarmanın yazdığı her hücrenin, o
+yazımdan **önceki** tam metni. Ayrıntı §19 ve §33 R1'de; kural PLAN `11.4.4`'te.
 
 ## Enum'lar (güncel değerler)
 
@@ -665,7 +670,7 @@ DraftTask / DraftTaskColor   (inceleme ekranı)
    ↓
 kullanıcı onayı → tek transaction
    ↓
-Game / GameCell / CellSegment / Task / TaskColor / TaskStage
+ImportBatchCell (hücrelerin ÖNCEKİ metni)  →  CellSegment / Task / TaskColor / TaskStage
 ```
 
 **İkinci bir import mimarisi yazılmaz.** CSV, mevcut boru hattına referans yerleşimli
@@ -677,6 +682,36 @@ bir `SheetSnapshot` üreterek bağlanır.
 - Batch + ham bloklar tek transaction sınırında yazılır; hata durumunda rollback.
 - Tek bir hücredeki hata bütün dosya aktarımını kaybettirmemelidir.
 - Onaylanmamış taslak, uygulama kapanıp açılınca yeniden açılabilmelidir.
+
+## Onayın sakladığı hücre anlık görüntüsü  *(v8, Faz 3 / İş 2 dilim 1)*
+
+`ImportDao.confirmDraftBatch` artık, ilk domain yazımından **önce**, batch'in
+görev ekleyeceği her hücre için bir `ImportBatchCell` satırı yazar:
+
+```text
+plannedConfirmationOf → documentsBefore     zaten okunuyordu (tek toplu SELECT)
+        ↓
+documentTextsBefore   aynı satırların uç uca okunuşu, cell_id → metin
+        ↓ (üç yerde kullanılır, tek hesap)
+  1  ayırıcı gerekip gerekmediğine karar verir  (taskNeedsSeparatorAfter)
+  2  ImportBatchCell.document_before olarak saklanır
+  3  postcondition'da kullanıcı metninin korunduğunu kanıtlar
+```
+
+Kurallar:
+
+- Hücre başına **tam bir** satır; aynı hücreyi hedefleyen kaç taslak olursa olsun,
+  hepsi kendilerinden önceki tek belgeyi paylaşır (`distinct()`).
+- Boş hücre `""` olarak saklanır. Satırın **hiç olmaması** başka bir şey demektir:
+  o batch o hücreye hiç yazmadı, ya da batch v8'den önce onaylandı.
+- Metin harfi harfine saklanır: Türkçe harfler, satır sonu, çift boşluk ve iki
+  uçtaki boşluk dâhil; trim veya normalize edilmez.
+- Aynı transaction'ın içindedir; onay yarıda kalırsa anlık görüntü de kalmaz.
+- Postcondition satırları geri okur ve beklenenle karşılaştırır — **tek** ek
+  SELECT, batch büyüklüğünden bağımsız.
+- `document_after` saklanmaz: beklenen metin `document_before` + görev adları +
+  `taskNeedsSeparatorAfter` ile yeniden hesaplanır. İki hesap ayrışamaz.
+- Geri alma motoru henüz **yoktur**; bu dilim yalnız kanıtı biriktirir.
 
 ## CSV içe aktarma sözleşmesi
 
@@ -862,13 +897,13 @@ eski dosya korunur. Her hatada geçici dosya silinir ve hedef bayt bayt aynı ka
 # 26. DB / ŞEMA KORUMA
 
 ```text
-Room şema sürümü = 7
+Room şema sürümü = 8
 12 seed renk
 ```
 
 İlgili dilim **açıkça istemedikçe** dokunulmaz:
 
-- `1.json` … `7.json`
+- `1.json` … `8.json`
 - Room entity'leri, DAO'lar, migration'lar
 - `PLAN.md`
 - POI sürümü, Gradle wrapper, version catalog
@@ -883,10 +918,14 @@ Ek kurallar:
 - Entity/migration/schema JSON değişikliği gerektiğini düşünürsen **uygulamadan önce
   dur ve somut kanıtlarla bildir.**
 
-Bilinen ve **onaylanmış** tek istisna: Faz 3 / İş 2'nin birinci dilimi Room v8'e
-geçer ve `import_batch_cells` tablosunu ekler (§33 R1). Mevcut hiçbir tablo,
-sütun veya index değişmez; `1.json` … `7.json` olduğu gibi kalır ve `8.json`
-eklenir. Migration backfill yapmaz.
+Onaylanmış tek istisna **kullanılmıştır ve kapanmıştır:** Faz 3 / İş 2'nin
+birinci dilimi Room v8'e geçti ve `import_batch_cells` tablosunu ekledi. Mevcut
+hiçbir tablo, sütun veya index değişmedi; `1.json` … `7.json` bayt bayt aynı
+kaldı, `8.json` eklendi. `Migration7To8` backfill yapmaz — yalnız tabloyu ve
+`index_import_batch_cells_cell_id` indeksini oluşturur.
+
+Bundan sonrası için kural yeniden yürürlüktedir: **yeni bir şema değişikliği
+gerektiğini düşünürsen uygulamadan önce dur ve kanıtlarıyla bildir.**
 
 ## Migration testi kalıbı
 
@@ -934,9 +973,10 @@ geçmez. Hash'i dilim başında/sonunda kontrol edilir ve kapsam dışında değ
 
 ```text
 TemporaryDatabaseDirectory              geçici Room DB + gerçek DB koruma iddiası
-assertRealApplicationDatabaseUntouched  69 test sınıfında kullanılıyor
+assertRealApplicationDatabaseUntouched  73 test sınıfında kullanılıyor
 CommittedSchema                         eski sürümleri commit'li JSON'dan kurar
 LegacyRowFixtures                       v1…v6 satır yazıcıları
+                                        (v6 raw block = v7 raw block; şema aynı)
 CountingSqliteDriver                    gerçek sürücü seviyesinde ifade sayımı
 FailingSqliteDriver                     enjekte edilen depolama hataları
 ComposeSceneHarness                     gerçek Compose sahnesi (desktopTest)
@@ -960,6 +1000,9 @@ Geçmiş yazımı            görev başına yeni SELECT yok; toplu işlemde kar
 Geçmiş ekranı            2 SELECT (history_events + progress_events), satır,
                          görev ve oyun sayısından bağımsız; süzgeç değişimi 0 ek
                          ifade
+İçe aktarma onayı        karar sorguları taslak sayısıyla büyümez; hücre anlık
+                         görüntüsü 1 INSERT/hücre ve toplam 1 SELECT — bir
+                         hücreye 42 taslak yine tek satır yazar
 ```
 
 ---
@@ -1059,8 +1102,8 @@ PLAN `18.` — Faz 3 işler listesi.
 
 ```text
  1  Geçmiş ekranını tamamla ............................. TAMAM
- 2  Import batch rollback ve korumalı geri alma ... kararlar verildi
-                                              (PLAN 11.4.4), kod YAPILMADI
+ 2  Import batch rollback ve korumalı geri alma ... dilim 1 TAMAM (Room v8),
+                                              dilim 2-3 YAPILMADI
  3  Sürümlü JSON yedek/dışa aktarma ve geri yükleme ..... YAPILMADI
  4  Import ve migration öncesi otomatik snapshot ........ YAPILMADI
  5  CSV görev dışa aktarmayı doğrula ......... özellik var, Faz 3 doğrulama
@@ -1107,7 +1150,7 @@ Kart/mukavva aşama değişimi .... TASK_STAGE_QUANTITY_CHANGED
 Silinen kayıtlar ............... TASK_DELETED, GAME_DELETED
 Metne dönüştürülen görevler .... TASK_CONVERTED_TO_TEXT
 Yeniden açılan görevler ........ TASK_REOPENED
-İçe aktarma ve geri alma ....... YAZAN YOL YOK — Faz 3 / İş 2'de gelecek
+İçe aktarma ve geri alma ....... YAZAN YOL YOK — Faz 3 / İş 2 dilim 2'de gelecek
 ```
 
 `TASK_RESTORED` ve `GAME_RESTORED` de yazılmıyor (§15, "yazıcısı olmayan
@@ -1128,30 +1171,44 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
 
 ## Sıradaki bağlayıcı iş
 
-> **Faz 3 / İş 2: import batch rollback ve korumalı geri alma.**
+> **Faz 3 / İş 2 dilim 2: geri alma motoru.**
 >
-> **Ürün kararları verilmiş ve `PLAN.md` `11.4.4`'e işlenmiştir.** Kural metni
-> PLAN'dadır; repo tarafındaki sonuçlar ve gerekçeler §33 R1–R2'dedir. Kodlama
-> henüz başlamamıştır.
+> Ürün kararları `PLAN.md` `11.4.4`'tedir ve yeniden tartışılmaz. Dilim 1 bitti;
+> repo tarafındaki sonuçlar §19 ve §33 R1'dedir.
 
 ### İş 2'nin üç atomik dilimi
 
 ```text
-1  Room v8 ve hücre anlık görüntüsü
+1  Room v8 ve hücre anlık görüntüsü ....................... TAMAM
    import_batch_cells, Migration7To8, 8.json, onayın document_before yazması.
-   Davranış değişmez; kullanıcı hiçbir fark görmez.
+   Davranış değişmedi; kullanıcı hiçbir fark görmez.
 
-2  Rollback motoru ve geçmiş olayları
+2  Rollback motoru ve geçmiş olayları .................. SIRADAKİ
    Engelleme denetimi (dokunulmuş görev VEYA değişmiş hücre), tek transaction,
    tombstone'lar, hücre geri yüklemesi, postcondition;
    IMPORT_CONFIRMED / IMPORT_ROLLED_BACK / TASK_ROLLED_BACK. Arayüz yok.
 
-3  Arayüz ve Türkçe metinler
+3  Arayüz ve Türkçe metinler ........................... YAPILMADI
    Onaylanmış içe aktarma listesi, onay ve engelleme ekranları, geçmiş cümleleri.
 ```
 
 Sıra bağlayıcıdır: 1 olmadan 2 tam hücre geri yüklemesi yapamaz, 2 olmadan 3'ün
 çağıracağı bir şey yoktur.
+
+### Dilim 1 ne bıraktı, dilim 2 neyi devralıyor
+
+```text
+bıraktığı                                    dilim 2'nin kullanacağı yer
+------------------------------------------   ------------------------------------
+ImportBatchCellEntity                        hücre geri yüklemesi
+ImportDao.cellSnapshotsOfBatch(batchId)      engelleme denetimi + geri yükleme
+Migration7To8 (backfill YOK)                 kaydı olmayan batch → geri alınamaz
+onayın yazdığı document_before               beklenen metnin hesaplanması
+taskNeedsSeparatorAfter (TaskSeparation.kt)  beklenen metnin hesaplanması
+```
+
+Dilim 2'nin **yazmayacağı** hiçbir şey dilim 1'de yazılmadı: tombstone yok,
+`ROLLED_BACK` yazan yol yok, yeni geçmiş türü yok, yeni Türkçe metin yok.
 
 Sonrasında PLAN'ın bağlayıcı sırası izlenir: İş 3 → 4 → 7 → 9 + 5 → 10 →
 11-13 → 14-16.
@@ -1180,7 +1237,7 @@ kaybettiğinden oyunlarını `history_events`'teki dönüştürme satırından a
 
 # 33. RİSKLER VE VERİLMİŞ TASARIM KARARLARI
 
-## R1 — Rollback provenance  *(ÇÖZÜLDÜ — tasarım kararı verildi)*
+## R1 — Rollback provenance  *(ÇÖZÜLDÜ ve UYGULANDI — Room v8)*
 
 > Bu maddenin önceki hâli `cell_segments.source_import_batch_id` sütunu öneriyordu.
 > **O öneri geri çekilmiştir.** Aşağıdaki inceleme bulgusu onu geçersiz kılar.
@@ -1219,10 +1276,10 @@ kötüdür:
 Kimliğe bağlı provenance, kimliğin altındaki metin değişebiliyorsa güvenli
 değildir. Bu yüzden dayanak satır kimliği değil, **saklanan metnin kendisidir**.
 
-### Seçilen tasarım — Room v8
+### Uygulanan tasarım — Room v8  *(bu commit'te yazıldı)*
 
 Seçilen ürün tasarımı güvenli ve **tam** hücre geri yüklemesi istiyor; bunun için
-v8 gereklidir. Mevcut hiçbir tablo, sütun veya index değişmez; tek ekleme:
+v8 gerekliydi. Mevcut hiçbir tablo, sütun veya index değişmedi; tek ekleme:
 
 ```text
 import_batch_cells
@@ -1240,6 +1297,20 @@ kullandığı saf fonksiyonun ta kendisi, böylece iki hesap ayrışamaz.
 `Migration7To8` **backfill yapmaz.** Eski onaylar hücre metnini saklamamıştır;
 bugünkü metinden geriye çıkarmak uydurma olurdu (`Migration6To7`'nin ilkesi).
 Anlık görüntüsü olmayan batch geri alınamaz ve sebebi kullanıcıya söylenir.
+
+Dosyalar:
+
+```text
+ImportBatchCellEntity.kt          entity, bileşik PK, iki FK, cell_id indeksi
+Migration7To8.kt                  yalnız CREATE TABLE + CREATE INDEX
+8.json                            Room'un ürettiği şema; migration'ın SQL'i ile
+                                  harfi harfine aynı (Migration7To8Test kanıtlar)
+ImportDao.confirmDraftBatch       ilk domain yazımından önce anlık görüntüyü yazar
+ImportDao.cellSnapshotsOfBatch    dilim 2'nin okuyacağı dar okuma
+```
+
+`cell_segments` **değişmedi** ve provenance sütunu almadı — bu maddenin bütün
+gerekçesi buydu.
 
 ## R2 — Rollback ürün kararları  *(ÇÖZÜLDÜ — PLAN 11.4.4 bağlayıcıdır)*
 
@@ -1305,11 +1376,11 @@ bir şey yok. `nativeDistributions` bloğu tanımlı olmadığı için `packageD
 
 ---
 
-## R8 — Kod içindeki PLAN satır atıfları geçersiz  *(orta, mekanik)*
+## R8 — Kod içindeki PLAN satır atıfları  *(ÇÖZÜLDÜ — bölüm numarasına geçildi)*
 
-`PLAN.md`'ye `11.4.4` eklenmesi dosyayı 1829 satırdan 2002 satıra çıkardı ve ekleme
-noktasından sonraki bütün satır numaraları kaydı. Kaynak ve test dosyalarındaki
-**61 atıf / 24 dosya** artık yanlış satırı gösteriyor:
+`PLAN.md`'ye `11.4.4` eklenmesi dosyayı 1829 satırdan 2002 satıra çıkarmış ve
+ekleme noktasından sonraki bütün satır numaraları kaymıştı. Kaynak ve test
+dosyalarındaki **61 atıf / 24 dosya** yanlış satırı gösteriyordu:
 
 ```text
 eski → yeni    ne olduğu
@@ -1328,12 +1399,28 @@ eski → yeni    ne olduğu
 1503 → 1676    1.000+ görev performansı
 ```
 
-Bu commit dokümantasyon turudur ve kaynak kodu değiştirmez, bu yüzden atıflar
-olduğu gibi bırakılmıştır. **Kalıcı çözüm satır numarasını tazelemek değil, bölüm
-numarasına geçmektir** (`PLAN 5.2`, `PLAN 12.15` gibi) — bölüm numaraları PLAN
-büyüdüğünde kaymaz. Bu belge kendi atıflarını bu turda bölüm numarasına çevirdi.
-Kod tarafı, İş 2'nin zaten koda dokunan birinci diliminde aynı şekilde
-çevrilmelidir.
+Satır numarasını tazelemek yerine **bölüm numarasına geçildi**, çünkü bölüm
+numaraları PLAN büyüdüğünde kaymaz. 61 atfın hepsi bu commit'te çevrildi:
+
+```text
+141, 143     → PLAN 5.2
+385          → PLAN 5.12
+427, 437     → PLAN 6.3
+1118 … 1123  → PLAN 12.15
+1404, 1410   → PLAN 18 (Faz 2, Adım 4)
+1503         → PLAN 18 (Faz 3 testleri)
+```
+
+Yalnız yorum, KDoc ve test açıklamaları değişti; hiçbir üretim davranışı
+değişmedi. Aynı bölüme düşen iki atıf yan yana geldiğinde ikincisi "aynı bölümün
+anlattığı ayrı bakım işi" gibi metin içinde çözüldü, ikinci kez numara
+tekrarlanmadı.
+
+Kural bundan sonra şudur: **PLAN'a satır numarasıyla atıf yapılmaz.** Tarama:
+
+```bash
+grep -rnoE 'PLAN [0-9]{3,}' app/src/     # boş dönmelidir
+```
 
 ---
 
@@ -1388,7 +1475,7 @@ KRİTİK:
 Güncel mimari:
 - Kotlin + Compose Multiplatform + Room KMP (androidx.room3) + bundled SQLite
 - Tek modül "app", JVM hedefi "desktop", offline-first, Linux-first
-- Room şema sürümü 7
+- Room şema sürümü 8
 
 Güncel domain:
 - Game -> GameCell -> CellSegment -> Task
@@ -1405,12 +1492,13 @@ Görev yaşam döngüsü ayrı bir append-only history_events tablosuna yazılı
 
 Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
 - İş 1 (geçmiş) iki dilim hâlinde tamamlandı: olay kayıt katmanı + geçmiş ekranı.
-- Sıradaki bağlayıcı iş: İş 2, import batch rollback.
+- İş 2 (import rollback) üç dilime bölündü; DİLİM 1 BİTTİ:
+  Room v8 + import_batch_cells + onayın document_before yazması.
+- Sıradaki bağlayıcı iş: İş 2 DİLİM 2 — geri alma motoru. Arayüz dilim 3'tedir.
 - İş 2'nin ürün kararları VERİLMİŞTİR ve PLAN 11.4.4'tedir; yeniden tartışma.
   Kısmi rollback yoktur, tek çakışma bütün işlemi engeller, segment kimliğine
-  provenance bağlanmaz.
-- İş 2 Room v8 gerektirir: import_batch_cells(document_before). Ayrıntı §33 R1'de,
-  üç atomik dilim §32'de.
+  provenance bağlanmaz, anlık görüntüsü olmayan eski batch geri alınamaz.
+- PLAN'a satır numarasıyla atıf yapma; bölüm numarası kullan (PLAN 12.15 gibi).
 
 Şimdi:
 1. Repo durumunu doğrula (branch/HEAD/temiz ağaç/Room sürümü/PLAN hash/schema hash).
@@ -1451,7 +1539,7 @@ atılmıştır. Bu dosyanın önceki sürümü o anın fotoğrafıydı.
 ## Room şema v3 — geçersiz
 
 Eski metin "Room schema v3'e kadar ilerlenmiş" ve "korunması gerekenler: 1.json,
-2.json, 3.json" diyordu. **Güncel sürüm 7'dir**; korunacaklar `1.json … 7.json`'dır.
+2.json, 3.json" diyordu. **Güncel sürüm 8'dir**; korunacaklar `1.json … 8.json`'dır.
 
 Eski "gerçek XDG DB kontrolü" listesi `user_version = 3` ve "Game/Item/Task/import
 tabloları boş" bekliyordu. Bu beklentiler artık geçersizdir.
@@ -1510,6 +1598,7 @@ Her dilim sonunda:
 [ ] Seed renkler korunuyor
 [ ] Fixture hash kontrol edildi
 [ ] Sorgu sayımı invariant'ları korundu (§29)
+[ ] Kodda satır numaralı PLAN atıfı yok (§33 R8 taraması)
 [ ] Gerçek Excel / kişisel yol / e-posta / secret / build çıktısı commit edilmedi
 [ ] Yeni bağımlılık yalnızca PLAN/dilim izin veriyorsa eklendi
 [ ] Geçici dizin ve dosya kalıntısı temizlendi
@@ -1541,10 +1630,13 @@ Bugün çalışan hâliyle:
 - Görev yaşam döngüsü append-only olarak kayda geçer.
 - Geçmiş ekranı bu kaydı okunur hâlde, oyun ve tarih süzgeçleriyle, iki sorguda
   gösterir; silinmiş ve metne dönüştürülmüş kayıtların satırları kaybolmaz.
+- İçe aktarma onayı, yazdığı her hücrenin önceki metnini kalıcı olarak saklar.
+  Kullanıcı bunu görmez; geri almanın dayanacağı kanıt buradan birikir.
 
 Kalan iş ağırlıklı olarak **dayanıklılık, yedekleme, kurtarma, paketleme ve yayına
-hazırlıktır**: import rollback, JSON yedek/geri yükleme, otomatik snapshot, kurtarma
-akışı, loglama, performans kapısı, Linux paketi, belgeler, lisans ve CI.
+hazırlıktır**: import rollback'in motoru ve arayüzü, JSON yedek/geri yükleme,
+otomatik snapshot, kurtarma akışı, loglama, performans kapısı, Linux paketi,
+belgeler, lisans ve CI.
 
 En önemli kural:
 

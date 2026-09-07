@@ -361,7 +361,7 @@ class HistoryReadingTest {
     @Test
     fun `an event in a deleted game is still part of the history`() =
         runBlocking<Unit> {
-            // PLAN 141 tombstones a game rather than erasing it, and PLAN 1123
+            // PLAN 5.2 tombstones a game rather than erasing it, and PLAN 12.15
             // asks the screen for deleted records: a history that hid everything
             // in a removed game would hide the removal itself.
             val (gameId, _, taskId) = aTaskIn(gameName = "Harmonies")

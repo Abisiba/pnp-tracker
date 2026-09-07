@@ -46,7 +46,7 @@ enum class HistoryFilterSurface {
  * The filter is held apart from the reading, so a line arriving from the
  * database is not a reason to forget what somebody asked to see. Nothing here
  * can write: the screen offers no action that changes a record, because a
- * history that could be edited would not be a history (PLAN 385).
+ * history that could be edited would not be a history (PLAN 5.12).
  */
 data class HistoryScreenState(
     val content: HistoryContentState = HistoryContentState.Loading,

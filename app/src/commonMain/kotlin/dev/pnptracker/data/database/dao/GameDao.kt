@@ -55,7 +55,7 @@ interface GameDao {
      * Public because a Room interface has no other visibility to offer, not
      * because anything outside this file should call it. There is no update and
      * no delete for these rows anywhere in the application: appending is the
-     * whole of what the table supports (PLAN 385).
+     * whole of what the table supports (PLAN 5.12).
      */
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun appendHistoryEvent(event: HistoryEventEntity)

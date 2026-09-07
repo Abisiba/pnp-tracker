@@ -595,7 +595,7 @@ class TaskHistoryTest {
 
     @Test
     fun `no dao anywhere can rewrite or remove a line once written`() {
-        // Appending is the whole of what this table supports (PLAN 385), and the
+        // Appending is the whole of what this table supports (PLAN 5.12), and the
         // way that is kept true is that no statement to do anything else exists.
         // Read off the sources because it is a claim about what the application
         // *can* do, not about what one call happened to do; the behaviour that a

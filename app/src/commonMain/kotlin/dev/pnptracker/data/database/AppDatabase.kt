@@ -28,6 +28,7 @@ import dev.pnptracker.data.database.entity.DraftTaskEntity
 import dev.pnptracker.data.database.entity.GameCellEntity
 import dev.pnptracker.data.database.entity.GameEntity
 import dev.pnptracker.data.database.entity.HistoryEventEntity
+import dev.pnptracker.data.database.entity.ImportBatchCellEntity
 import dev.pnptracker.data.database.entity.ImportBatchEntity
 import dev.pnptracker.data.database.entity.ProgressEventEntity
 import dev.pnptracker.data.database.entity.RawImportBlockEntity
@@ -48,11 +49,12 @@ import dev.pnptracker.data.database.entity.TaskStageEntity
         ProgressEventEntity::class,
         HistoryEventEntity::class,
         ImportBatchEntity::class,
+        ImportBatchCellEntity::class,
         RawImportBlockEntity::class,
         DraftTaskEntity::class,
         DraftTaskColorEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 @ColumnTypeConverters(DatabaseConverters::class)

@@ -5,6 +5,7 @@ import dev.pnptracker.data.database.entity.CellSegmentEntity
 import dev.pnptracker.data.database.entity.DraftTaskColorEntity
 import dev.pnptracker.data.database.entity.DraftTaskEntity
 import dev.pnptracker.data.database.entity.GameEntity
+import dev.pnptracker.data.database.entity.ImportBatchCellEntity
 import dev.pnptracker.data.database.entity.ImportBatchEntity
 import dev.pnptracker.data.database.entity.RawImportBlockEntity
 import dev.pnptracker.data.database.entity.TaskColorEntity
@@ -184,6 +185,10 @@ class CountingImportDao(
     override suspend fun insertStage(stage: TaskStageEntity): Unit = outOfReach("insertStage")
 
     override suspend fun insertTask(task: TaskEntity): Unit = outOfReach("insertTask")
+
+    override suspend fun insertBatchCell(snapshot: ImportBatchCellEntity): Unit = outOfReach("insertBatchCell")
+
+    override suspend fun cellSnapshotsOfBatch(batchId: EntityId): List<ImportBatchCellEntity> = real.cellSnapshotsOfBatch(batchId)
 
     override suspend fun updateDraftTargetRow(
         draftId: EntityId,

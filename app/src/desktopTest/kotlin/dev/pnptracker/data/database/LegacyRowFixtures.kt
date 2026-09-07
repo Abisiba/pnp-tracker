@@ -367,6 +367,7 @@ fun insertVersion4DraftTask(
     blockId: EntityId,
     targetCellId: EntityId?,
     name: String = "Kırmızı token",
+    materializedTaskId: EntityId? = null,
 ) {
     connection
         .prepare(
@@ -392,7 +393,11 @@ fun insertVersion4DraftTask(
             statement.bindInt(14, 0)
             statement.bindInt(15, 1)
             statement.bindInt(16, 0)
-            statement.bindNull(17)
+            if (materializedTaskId == null) {
+                statement.bindNull(17)
+            } else {
+                statement.bindText(17, materializedTaskId.toString())
+            }
             statement.bindLong(18, EPOCH_MILLISECONDS_CREATED)
             statement.bindLong(19, EPOCH_MILLISECONDS_UPDATED)
             statement.step()
@@ -618,6 +623,43 @@ fun insertVersion6Task(
             statement.bindInt(15, if (isBorrowed) 1 else 0)
             statement.bindInt(16, if (needsInfo) 1 else 0)
             statement.bindInt(17, if (needsClassification) 1 else 0)
+            statement.step()
+        }
+}
+
+// ---------------------------------------------------------------------------
+// Version 6 rows. Version 6 gave a raw cell somewhere to keep which game an
+// accepted green marker was about, and nothing about raw cells has changed
+// since — so this is also the shape a version 7 database holds.
+// ---------------------------------------------------------------------------
+
+fun insertVersion6RawImportBlock(
+    connection: SQLiteConnection,
+    blockId: EntityId,
+    batchId: EntityId,
+    rawText: String = "15 KIRMIZI**",
+    sourceColumnType: String = "CARD",
+    rowIndex: Int = 1,
+    columnIndex: Int = 2,
+    isProcessed: Boolean = true,
+) {
+    connection
+        .prepare(
+            "INSERT INTO raw_import_blocks (id, import_batch_id, raw_text, sheet_name, row_index, " +
+                "column_index, source_column_type, fill_color_argb, game_completion_hint, " +
+                "completion_target_game_id, is_processed, created_at, updated_at) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'NONE', NULL, ?, ?, ?)",
+        ).use { statement ->
+            statement.bindText(1, blockId.toString())
+            statement.bindText(2, batchId.toString())
+            statement.bindText(3, rawText)
+            statement.bindText(4, "Sayfa1")
+            statement.bindInt(5, rowIndex)
+            statement.bindInt(6, columnIndex)
+            statement.bindText(7, sourceColumnType)
+            statement.bindInt(8, if (isProcessed) 1 else 0)
+            statement.bindLong(9, EPOCH_MILLISECONDS_CREATED)
+            statement.bindLong(10, EPOCH_MILLISECONDS_UPDATED)
             statement.step()
         }
 }

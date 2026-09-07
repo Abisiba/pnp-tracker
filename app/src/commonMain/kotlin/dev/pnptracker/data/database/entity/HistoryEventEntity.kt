@@ -13,8 +13,8 @@ import kotlin.time.Instant
 /**
  * One thing that happened to a task or to a game.
  *
- * Append only, like [ProgressEventEntity] and for the same reason: PLAN 385
- * makes a history something derived from what was recorded, and PLAN 1123 asks
+ * Append only, like [ProgressEventEntity] and for the same reason: PLAN 5.12
+ * makes a history something derived from what was recorded, and PLAN 12.15 asks
  * the history screen to show records that have since been deleted. Neither
  * survives a table whose rows can be edited or removed, so nothing in the
  * production API updates or deletes one.
@@ -23,13 +23,13 @@ import kotlin.time.Instant
  * and that is not a convenience. A task reaches its game through its piece of a
  * cell, and turning a task back into text takes that piece away — so a history
  * row written without the game would become a row nobody can place, on exactly
- * the event PLAN 1123 asks the screen to show. The same is true of any future
+ * the event PLAN 12.15 asks the screen to show. The same is true of any future
  * rollback that unpicks an import.
  *
  * Both foreign keys are RESTRICT. A task or a game with history cannot be erased
  * out from under it, and no cascade takes the history along when one is deleted —
- * deletion here is a tombstone (PLAN 141), which leaves both rows in place, and
- * physical removal is the separate maintenance action of PLAN 143. A cascade
+ * deletion here is a tombstone (PLAN 5.2), which leaves both rows in place, and
+ * physical removal is the separate maintenance action in the same section. A cascade
  * written today for the sake of that action would throw the history away at
  * exactly the moment PLAN wants it kept.
  *

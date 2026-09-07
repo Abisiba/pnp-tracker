@@ -174,7 +174,7 @@ class GameCompletionQueryCountTest {
             assertEquals(42, counted["UPDATE tasks"], "a task was left unfinished: $counted")
             assertEquals(1, counted["UPDATE games"], "the game was marked more than once: $counted")
             assertEquals(null, counted["INSERT progress_events"], "a game with nothing owed settled a debt: $counted")
-            // One history line per task that really finished, and PLAN 1118 wants
+            // One history line per task that really finished, and PLAN 12.15 wants
             // every one of them. Writes are the work; it is the *reads* that must
             // not grow with the game, and they do not.
             assertEquals(42, counted["INSERT history_events"], "a finished task went unrecorded: $counted")
@@ -262,7 +262,7 @@ class GameCompletionQueryCountTest {
             assertEquals(1, counted["UPDATE games"], "the game was not reopened with the task: $counted")
             assertEquals(1, counted["UPDATE tasks"], "more than the reported task was written: $counted")
             assertEquals(1, counted["INSERT progress_events"], "the report was not one event: $counted")
-            // The task was finished, so the report brings it back — and PLAN 437's
+            // The task was finished, so the report brings it back — and PLAN 6.3's
             // reopening is a history line of its own.
             assertEquals(1, counted["INSERT history_events"], "the reopening went unrecorded: $counted")
         }

@@ -348,12 +348,12 @@ abstract class TaskEditDao {
      *
      * **What it no longer does is destroy the record.** Until version 7 this
      * deleted the task row and, with it, every shortage ever reported against
-     * that task — which PLAN 385 says is history that is never deleted, and PLAN
-     * 1123 asks the history screen to show. So the task is soft deleted instead,
-     * exactly as PLAN 141 has every other deletion work: the row stays, its
+     * that task — which PLAN 5.12 says is history that is never deleted, and PLAN
+     * 12.15 asks the history screen to show. So the task is soft deleted instead,
+     * exactly as PLAN 5.2 has every other deletion work: the row stays, its
      * colours stay, its pipeline stays, its shortages stay, and `deleted_at` is
      * what takes it out of every active view. Physical removal is the separate
-     * maintenance action of PLAN 143 and is not this.
+     * maintenance action the same section describes, and is not this.
      *
      * The conversion is its own history event rather than a deletion event. They
      * are different things to have done — one takes a piece of work out of sight,

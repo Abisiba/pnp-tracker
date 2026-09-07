@@ -14,7 +14,7 @@ package dev.pnptracker.domain.model
  *
  * So these are the movements that had no record. They are kept exactly as
  * [ProgressEventKind] is kept — appended, never edited, never deleted — because
- * PLAN 385 makes history something derived from what was recorded rather than a
+ * PLAN 5.12 makes history something derived from what was recorded rather than a
  * number somebody keeps up to date, and a line that can be rewritten is not a
  * history of anything.
  *
@@ -28,7 +28,7 @@ enum class HistoryEventKind {
     /**
      * One step of a card or board pipeline was moved to a new count.
      *
-     * PLAN 1121. The only kind that carries numbers: which step, what it stood
+     * PLAN 12.15. The only kind that carries numbers: which step, what it stood
      * at, and what it stands at now. Both counts are kept because the movement
      * is the point — a step going from three to nine and one going from eight to
      * nine leave the same task behind and are not the same day's work.
@@ -38,7 +38,7 @@ enum class HistoryEventKind {
     /**
      * A task went from open to finished.
      *
-     * PLAN 1118, and PLAN 427 keeps the task in the game and in the history when
+     * PLAN 12.15, and PLAN 6.3 keeps the task in the game and in the history when
      * it does. Written whichever way the task got there — ticked by hand,
      * counted up its pipeline, settled its last shortage, or finished along with
      * its game — because from the history's side those are the same event.
@@ -48,20 +48,20 @@ enum class HistoryEventKind {
     /**
      * A finished task was made active again.
      *
-     * PLAN 437: a new shortage on a finished task brings it back, and the user
+     * PLAN 6.3: a new shortage on a finished task brings it back, and the user
      * can also simply take the tick off. Without this the previous
      * [TASK_COMPLETED] would be the last word on a task that is plainly not done.
      */
     TASK_REOPENED,
 
-    /** A task was removed from view, leaving its record behind (PLAN 141, 1123). */
+    /** A task was removed from view, leaving its record behind (PLAN 5.2, 1123). */
     TASK_DELETED,
 
-    /** A removed task was brought back into view (PLAN 1123). */
+    /** A removed task was brought back into view (PLAN 12.15). */
     TASK_RESTORED,
 
     /**
-     * A task was turned back into the words it was made from (PLAN 1123, 12.8).
+     * A task was turned back into the words it was made from (PLAN 12.15, 12.8).
      *
      * Its own kind rather than a [TASK_DELETED], because the two are different
      * things to have done: one takes a piece of work out of sight, the other
@@ -71,10 +71,10 @@ enum class HistoryEventKind {
      */
     TASK_CONVERTED_TO_TEXT,
 
-    /** A game was removed from view, leaving its record behind (PLAN 141, 1123). */
+    /** A game was removed from view, leaving its record behind (PLAN 5.2, 1123). */
     GAME_DELETED,
 
-    /** A removed game was brought back into view (PLAN 1123). */
+    /** A removed game was brought back into view (PLAN 12.15). */
     GAME_RESTORED,
 
     ;

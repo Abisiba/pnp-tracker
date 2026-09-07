@@ -82,6 +82,7 @@ class ImportConfirmationQueryCountTest {
                     statement.startsWith("SELECT") && "FROM DRAFT_TASK_COLORS" in statement -> "SELECT draft_task_colors"
                     statement.startsWith("SELECT") && "FROM DRAFT_TASKS" in statement -> "SELECT draft_tasks"
                     statement.startsWith("SELECT") && "FROM RAW_IMPORT_BLOCKS" in statement -> "SELECT raw_import_blocks"
+                    statement.startsWith("SELECT") && "FROM IMPORT_BATCH_CELLS" in statement -> "SELECT import_batch_cells"
                     statement.startsWith("SELECT") && "FROM IMPORT_BATCHES" in statement -> "SELECT import_batches"
                     statement.startsWith("SELECT") && "FROM COLORS" in statement -> "SELECT colors"
                     statement.startsWith("SELECT") && "FROM GAMES" in statement -> "SELECT games"
@@ -95,6 +96,7 @@ class ImportConfirmationQueryCountTest {
                     statement.startsWith("INSERT") && "`TASK_COLORS`" in statement -> "INSERT task_colors"
                     statement.startsWith("INSERT") && "`TASK_STAGES`" in statement -> "INSERT task_stages"
                     statement.startsWith("INSERT") && "`CELL_SEGMENTS`" in statement -> "INSERT cell_segments"
+                    statement.startsWith("INSERT") && "`IMPORT_BATCH_CELLS`" in statement -> "INSERT import_batch_cells"
                     statement.startsWith("INSERT") -> "INSERT other"
                     statement.startsWith("UPDATE") && "DRAFT_TASKS" in statement -> "UPDATE draft_tasks"
                     statement.startsWith("UPDATE") && "IMPORT_BATCHES" in statement -> "UPDATE import_batches"
@@ -207,6 +209,11 @@ class ImportConfirmationQueryCountTest {
             // and the forty-one spaces that keep their names apart.
             assertEquals(42, many["INSERT tasks"])
             assertEquals(83, many["INSERT cell_segments"])
+            // What the cells said is kept once each, not once per draft: PLAN
+            // 11.4.4 records a cell, and forty-two drafts aiming at one cell
+            // are one cell.
+            assertEquals(1, many["INSERT import_batch_cells"], "one cell was recorded once per draft")
+            assertEquals(1, many["SELECT import_batch_cells"], "the records were read back per cell")
             assertEquals(42, many["UPDATE draft_tasks"])
             assertEquals(1, many["UPDATE import_batches"])
         }
@@ -220,6 +227,10 @@ class ImportConfirmationQueryCountTest {
             assertEquals(decisions(one), decisions(spread), "aiming at many cells asked a question per cell")
             assertEquals(1, spread["SELECT game_cells"])
             assertEquals(1, spread["SELECT cell_segments"])
+            // Forty-two cells really are forty-two records — that is the work,
+            // not a question asked about each of them.
+            assertEquals(42, spread["INSERT import_batch_cells"])
+            assertEquals(1, spread["SELECT import_batch_cells"], "reading the records back grew with the cells")
         }
 
     @Test

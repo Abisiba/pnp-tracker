@@ -42,9 +42,9 @@ import androidx.sqlite.execSQL
  * * **Imports taken back.** No import has ever been rolled back — nothing writes
  *   that status — so there is no such event to recover.
  *
- * PLAN 1404 forbids a migration from quietly losing rows; it does not ask one to
- * make up history it cannot know, and a fabricated date on the history screen
- * would be worse than an honest gap.
+ * PLAN 18 (Faz 2, Adım 4) forbids a migration from quietly losing rows; it
+ * does not ask one to make up history it cannot know, and a fabricated date on
+ * the history screen would be worse than an honest gap.
  *
  * ## The identifiers
  *
@@ -106,7 +106,7 @@ private const val GAME_DELETED_MARKER = 'a'
  *
  * The join to `games` is what guarantees the foreign key: a task is only given
  * an event when the cell it is written in really does belong to a game that is
- * there. Deleted games are included on purpose — PLAN 1123 asks the history
+ * there. Deleted games are included on purpose — PLAN 12.15 asks the history
  * screen for records that have since been removed, so leaving them out would
  * empty exactly the part of it this migration exists to fill.
  */

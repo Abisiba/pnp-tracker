@@ -109,6 +109,7 @@ class ImportConfirmationRollbackTest {
         val drafts: List<Any?>,
         val draftColors: List<Any?>,
         val events: List<Any?>,
+        val snapshots: List<Any?>,
     )
 
     private suspend fun everything(): Everything =
@@ -122,6 +123,11 @@ class ImportConfirmationRollbackTest {
             drafts = importDao.draftTasksOfBatch(batchId),
             draftColors = importDao.draftColorsOfBatch(batchId),
             events = rowsOf("SELECT id, task_id, kind, quantity FROM progress_events ORDER BY id"),
+            snapshots =
+                rowsOf(
+                    "SELECT import_batch_id, cell_id, length(document_before) FROM import_batch_cells " +
+                        "ORDER BY import_batch_id, cell_id",
+                ),
         )
 
     private suspend fun rowsOf(sql: String): List<String> =
@@ -139,11 +145,13 @@ class ImportConfirmationRollbackTest {
     private var game: EntityId? = null
     private var otherGame: EntityId? = null
     private var cell: EntityId? = null
+    private var otherCell: EntityId? = null
 
     private val batchId get() = assertNotNull(batch)
     private val gameId get() = assertNotNull(game)
     private val otherGameId get() = assertNotNull(otherGame)
     private val cellId get() = assertNotNull(cell)
+    private val otherCellId get() = assertNotNull(otherCell)
 
     /**
      * Two games, one cell, four card drafts with colours, an accepted marker and
@@ -160,7 +168,9 @@ class ImportConfirmationRollbackTest {
         // A cell somewhere else too, so deleting this game leaves the
         // application with somewhere a task could have gone: the refusal then
         // really is about this target rather than about there being no cells.
-        database.gameCellDao().insert(aCell(gameId = other.id, columnType = CellColumnType.CARD))
+        val elsewhere = aCell(gameId = other.id, columnType = CellColumnType.CARD)
+        database.gameCellDao().insert(elsewhere)
+        this.otherCell = elsewhere.id
         this.game = game.id
         this.otherGame = other.id
         this.cell = cell.id
@@ -244,6 +254,35 @@ class ImportConfirmationRollbackTest {
         }
 
     // ------------------------------------------------------- the injections
+
+    @Test
+    fun `keeping what the cell said refuses to go in`() =
+        runBlocking {
+            given()
+            // The record is written before the first task, so a refusal here is
+            // the earliest point the transaction can fail with something already
+            // attempted — and it must still leave nothing behind.
+            refusedLeavesEverything(trapOn(1, "INSERT", "IMPORT_BATCH_CELLS"))
+        }
+
+    @Test
+    fun `keeping the second cell refuses, and the first cell is not kept either`() =
+        runBlocking {
+            val drafts = given()
+            // Two cells, so the record is written twice and can fail between
+            // them. What must not survive is a batch that remembers one of the
+            // cells it wrote into: PLAN 11.4.4 reads the absence of a record as
+            // "nothing is known", and a half kept batch would read as a fully
+            // known one.
+            importDao.setDraftTargetUnderReview(
+                drafts.last(),
+                otherCellId,
+                PoolType.CARD,
+                TrackingMode.PIPELINE,
+                updatedAt,
+            )
+            refusedLeavesEverything(trapOn(2, "INSERT", "IMPORT_BATCH_CELLS"))
+        }
 
     @Test
     fun `the second task refuses to go in`() =

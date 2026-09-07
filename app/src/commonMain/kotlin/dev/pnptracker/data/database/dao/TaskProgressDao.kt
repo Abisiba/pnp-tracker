@@ -115,7 +115,7 @@ abstract class TaskProgressDao {
      * A history event names the game it happened in, and only the identity is
      * wanted — reading the whole game row to take one column off it would be a
      * bigger read on every completion for nothing. The deleted games are not
-     * filtered out here on purpose: PLAN 1123 asks the history screen for
+     * filtered out here on purpose: PLAN 12.15 asks the history screen for
      * records that have since been removed, so an event in a game that later
      * goes still has a game to name.
      */
@@ -811,7 +811,7 @@ abstract class TaskProgressDao {
         if (game != null && game.isManuallyCompleted) {
             writeGameCompletion(gameId = game.id, isCompleted = false, completedAt = null, updatedAt = moment)
         }
-        // PLAN 437: a report brings a finished task back into the active pool, and
+        // PLAN 6.3: a report brings a finished task back into the active pool, and
         // that is a reopening like any other. A task that was already open is
         // simply carrying on, and carrying on is not an event. The game comes from
         // the read above rather than from a second one — and if the chain to it is

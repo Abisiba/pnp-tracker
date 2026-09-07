@@ -70,7 +70,7 @@ private const val PAGE_OVERLAP = 0.9f
  * A reading and nothing else. There is no control on this screen that changes a
  * record, and there is nothing behind one either: the section is given a source
  * that can only observe, so a screen that wanted to write would have nothing to
- * write with. PLAN 385 makes the history something appended by the transaction
+ * write with. PLAN 5.12 makes the history something appended by the transaction
  * that caused it, and a screen that could edit it would make it a second,
  * disagreeing record.
  *
@@ -264,7 +264,7 @@ private fun GameChoice(
 /**
  * The lines themselves.
  *
- * Lazy, because a history only ever grows: PLAN 1503 asks the application to
+ * Lazy, because a history only ever grows: PLAN 18 (Faz 3 testleri) asks the application to
  * hold up at a thousand tasks, and each of those leaves several lines behind it.
  * Keyed by the event's identity so scrolling does not rebuild rows that have not
  * changed, and so a line arriving at the top does not shift the ones below it

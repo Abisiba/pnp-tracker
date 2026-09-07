@@ -41,9 +41,9 @@ import kotlin.test.assertTrue
  *
  * The whole design rests on one claim: narrowing what is on screen is
  * arithmetic over rows that have already been read, so it costs nothing. PLAN 16
- * rules out reads that grow with the data, and PLAN 1503 will ask for search and
- * pool filtering to hold up at a thousand tasks — neither survives a query per
- * keystroke or a stream per choice.
+ * rules out reads that grow with the data, and PLAN 18 (Faz 3 testleri) will
+ * ask for search and pool filtering to hold up at a thousand tasks — neither
+ * survives a query per keystroke or a stream per choice.
  *
  * So this measures rather than argues. Every count is a frequency map: a set
  * would collapse four hundred runs of one statement into one and report a cost

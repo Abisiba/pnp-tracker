@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.collect
  *
  * Read only, all the way down. There is no save, no retry that writes and no
  * action that touches a record — the screen's whole job is to show what was
- * recorded, and PLAN 385 makes that record something appended by the
+ * recorded, and PLAN 5.12 makes that record something appended by the
  * transaction that caused it and never edited afterwards.
  *
  * The reading is a stream, so a task finished in the pool while this section is

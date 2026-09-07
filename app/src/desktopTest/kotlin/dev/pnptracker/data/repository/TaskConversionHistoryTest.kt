@@ -43,8 +43,8 @@ import kotlin.test.assertTrue
  * exactly what it said before, and the words stop being a piece of work. What
  * these are about is the half that has: until version 7 the task row and
  * everything hanging off it — its colours, its pipeline, every shortage ever
- * reported against it — were physically deleted. PLAN 385 says that history is
- * never deleted and PLAN 1123 asks the history screen to show conversions, so
+ * reported against it — were physically deleted. PLAN 5.12 says that history is
+ * never deleted and PLAN 12.15 asks the history screen to show conversions, so
  * the task is now soft deleted and the conversion recorded as its own kind of
  * event.
  */
@@ -308,7 +308,7 @@ class TaskConversionHistoryTest {
 
             editing.convertTaskToText(taskId)
 
-            // PLAN 1123 lists deleted records and converted tasks separately, so a
+            // PLAN 12.15 lists deleted records and converted tasks separately, so a
             // screen showing both must not show this one twice.
             assertEquals(
                 emptyList(),

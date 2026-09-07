@@ -458,10 +458,10 @@ class TaskEditStoreTest {
     fun `everything that hung off the task stays with it`() =
         runBlocking<Unit> {
             // The words go back to being words, and nothing else is destroyed.
-            // PLAN 385 keeps a shortage ever reported for the life of the record
-            // and PLAN 141 makes a deletion a tombstone, so a conversion that
+            // PLAN 5.12 keeps a shortage ever reported for the life of the record
+            // and PLAN 5.2 makes a deletion a tombstone, so a conversion that
             // erased the pipeline and the history would be throwing away exactly
-            // what PLAN 1123 asks the history screen to show.
+            // what PLAN 12.15 asks the history screen to show.
             val game = addGame()
             val cell = addCell(game.id, CellColumnType.CARD)
             addText(cell.id, "60 kart basılacak")

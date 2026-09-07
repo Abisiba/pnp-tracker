@@ -31,9 +31,9 @@ import kotlin.time.Instant
  *
  * The number that matters is not how large it is but whether it grows. A history
  * of a hundred lines across a dozen games must cost the same reads as a history
- * of one, because PLAN 16 rules out a read per record and PLAN 1503 asks the
- * application to stay usable at a thousand tasks — each of which leaves several
- * lines behind it.
+ * of one, because PLAN 16 rules out a read per record and PLAN 18 (Faz 3
+ * testleri) asks the application to stay usable at a thousand tasks — each of
+ * which leaves several lines behind it.
  *
  * The shape being ruled out is a real temptation on this screen. A progress
  * event carries no game, so "which game was this in?" has an obvious per-row

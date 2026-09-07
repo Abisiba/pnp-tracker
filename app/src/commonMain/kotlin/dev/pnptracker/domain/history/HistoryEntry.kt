@@ -21,36 +21,36 @@ import kotlin.time.Instant
  * the database's business; what it says is this.
  */
 sealed interface HistoryChange {
-    /** A card or board step moved from one count to another (PLAN 1121). */
+    /** A card or board step moved from one count to another (PLAN 12.15). */
     data class StageMoved(
         val stage: ProductionStage,
         val previousQuantity: Int,
         val newQuantity: Int,
     ) : HistoryChange
 
-    /** A task went from open to finished (PLAN 1118). */
+    /** A task went from open to finished (PLAN 12.15). */
     data object TaskCompleted : HistoryChange
 
-    /** A finished task was made active again (PLAN 437). */
+    /** A finished task was made active again (PLAN 6.3). */
     data object TaskReopened : HistoryChange
 
-    /** A task was removed from view, its record left behind (PLAN 1123). */
+    /** A task was removed from view, its record left behind (PLAN 12.15). */
     data object TaskDeleted : HistoryChange
 
-    /** A removed task was brought back (PLAN 1123). */
+    /** A removed task was brought back (PLAN 12.15). */
     data object TaskRestored : HistoryChange
 
-    /** A task was turned back into the words it was made from (PLAN 1123, 12.8). */
+    /** A task was turned back into the words it was made from (PLAN 12.15, 12.8). */
     data object TaskConvertedToText : HistoryChange
 
-    /** A game was removed from view, its record left behind (PLAN 1123). */
+    /** A game was removed from view, its record left behind (PLAN 12.15). */
     data object GameDeleted : HistoryChange
 
-    /** A removed game was brought back (PLAN 1123). */
+    /** A removed game was brought back (PLAN 12.15). */
     data object GameRestored : HistoryChange
 
     /**
-     * Pieces came out missing or spoiled (PLAN 1119).
+     * Pieces came out missing or spoiled (PLAN 12.15).
      *
      * The optional detail is what the user wrote at the time and is never made
      * up: a shortage recorded as a bare number stays a bare number.
@@ -62,7 +62,7 @@ sealed interface HistoryChange {
         val stage: ProductionStage? = null,
     ) : HistoryChange
 
-    /** Some of what was owed was made good (PLAN 1120). */
+    /** Some of what was owed was made good (PLAN 12.15). */
     data class ShortageResolved(
         val quantity: Int,
         val note: String? = null,

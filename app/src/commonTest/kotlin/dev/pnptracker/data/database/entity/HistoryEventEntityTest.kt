@@ -167,7 +167,7 @@ class HistoryEventEntityTest {
 
     @Test
     fun `converting a task to text is not the same kind as deleting one`() {
-        // They are written by different acts and PLAN 1123 lists them separately,
+        // They are written by different acts and PLAN 12.15 lists them separately,
         // so a screen that shows one must be able to tell it from the other.
         assertTrue(HistoryEventKind.TASK_CONVERTED_TO_TEXT != HistoryEventKind.TASK_DELETED)
     }

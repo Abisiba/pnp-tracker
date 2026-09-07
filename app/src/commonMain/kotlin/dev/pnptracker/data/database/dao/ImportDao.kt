@@ -11,6 +11,7 @@ import dev.pnptracker.data.database.entity.CellSegmentEntity
 import dev.pnptracker.data.database.entity.DraftTaskColorEntity
 import dev.pnptracker.data.database.entity.DraftTaskEntity
 import dev.pnptracker.data.database.entity.GameEntity
+import dev.pnptracker.data.database.entity.ImportBatchCellEntity
 import dev.pnptracker.data.database.entity.ImportBatchEntity
 import dev.pnptracker.data.database.entity.RawImportBlockEntity
 import dev.pnptracker.data.database.entity.TaskColorEntity
@@ -1134,6 +1135,20 @@ abstract class ImportDao {
     )
     abstract suspend fun segmentsOfConfirmedBatch(batchId: EntityId): List<CellSegmentEntity>
 
+    /**
+     * What every cell this import wrote into said before it did.
+     *
+     * One row per cell, in cell order, whatever the batch aimed at each of them.
+     * A confirmed batch with no rows here was confirmed before there was
+     * anywhere to keep this, which PLAN 11.4.4 makes a refusal rather than
+     * something to work out afterwards.
+     */
+    @Query("SELECT * FROM import_batch_cells WHERE import_batch_id = :batchId ORDER BY cell_id")
+    abstract suspend fun cellSnapshotsOfBatch(batchId: EntityId): List<ImportBatchCellEntity>
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    protected abstract suspend fun insertBatchCell(snapshot: ImportBatchCellEntity)
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     protected abstract suspend fun insertTask(task: TaskEntity)
 
@@ -1204,6 +1219,25 @@ abstract class ImportDao {
         // One reading of the clock for the whole act, taken once everything that
         // could still refuse has been decided.
         val moment = clock.now()
+
+        // The cells as the user left them, kept before a single character of
+        // this import goes into any of them. Written here rather than worked out
+        // later because after the first insert below the evidence is gone: PLAN
+        // 11.4.4 has a rollback restore what was there, and what was there is
+        // only knowable now. One row per cell however many drafts aim at it —
+        // they all share the one document that preceded all of them.
+        plan.drafts.map { it.targetCellId }.distinct().forEach { cellId ->
+            insertBatchCell(
+                ImportBatchCellEntity(
+                    importBatchId = batchId,
+                    cellId = cellId,
+                    // A cell nobody had written in yet is stored as the empty
+                    // string. Leaving the row out would say something else —
+                    // that this import never touched the cell.
+                    documentBefore = plan.documentTextsBefore[cellId].orEmpty(),
+                ),
+            )
+        }
 
         named.forEach { made ->
             val (piece, taskId, segmentId, separatorId) = made
@@ -1299,6 +1333,12 @@ abstract class ImportDao {
         // What each target cell reads before this import touches it, kept so the
         // postcondition can insist the user's own writing came through unchanged.
         val documentsBefore = targetCellDocumentsOfBatch(batchId).groupBy { it.cellId }
+        // The same reading as the words each cell holds. Worked out once and
+        // used three times — to decide where a separator is needed, to keep the
+        // snapshot, and to check the user's writing survived — so those three
+        // can never disagree about what a cell said.
+        val documentTextsBefore =
+            documentsBefore.mapValues { (_, rows) -> rows.joinToString(separator = "") { it.text } }
 
         // Where the next piece goes in each cell, carried in memory: several
         // drafts aiming at one cell take consecutive places, and drafts aiming at
@@ -1307,10 +1347,7 @@ abstract class ImportDao {
         // What each cell reads as the import fills it, so the second task written
         // into a cell is separated from the first one this import put there and
         // not just from whatever was in the cell to begin with.
-        val readsSoFar =
-            documentsBefore
-                .mapValues { (_, rows) -> rows.joinToString(separator = "") { it.text } }
-                .toMutableMap()
+        val readsSoFar = documentTextsBefore.toMutableMap()
         val pieces =
             drafts.map { draft ->
                 // One unready draft stops the whole batch; none is ever skipped.
@@ -1398,6 +1435,7 @@ abstract class ImportDao {
             drafts = pieces,
             gamesToFinish = gamesToFinishFor(batchId, blocks.values),
             documentsBefore = documentsBefore,
+            documentTextsBefore = documentTextsBefore,
         )
     }
 
@@ -1520,6 +1558,8 @@ abstract class ImportDao {
         val gamesToFinish: List<EntityId>,
         /** What each target cell held before any of this was written. */
         val documentsBefore: Map<EntityId, List<CellDocumentRow>>,
+        /** The same documents as the words they read, one string per cell. */
+        val documentTextsBefore: Map<EntityId, String>,
     )
 
     /**
@@ -1625,7 +1665,7 @@ abstract class ImportDao {
                 "The cell $cellId is numbered ${after.map { it.orderIndex }} after being written into."
             }
             val before = plan.documentsBefore[cellId].orEmpty()
-            val beforeText = before.joinToString(separator = "") { it.text }
+            val beforeText = plan.documentTextsBefore[cellId].orEmpty()
             val afterText = after.joinToString(separator = "") { it.text }
             // The user's own writing, character for character, still at the front
             // of the document: an import appends and never rewrites or trims.
@@ -1660,6 +1700,25 @@ abstract class ImportDao {
                         "A separator was written before ${piece.name} in the cell $cellId with no need of one."
                     }
                 }
+            }
+        }
+
+        // The cells were really kept, one each, saying what they said. Read back
+        // rather than assumed: a snapshot that did not land would leave PLAN
+        // 11.4.4 with nothing to restore from and no way to know it, and by then
+        // the cells would already have been written into. One read for the batch.
+        val aimedAt = plan.drafts.map { it.targetCellId }.distinct()
+        val snapshots = cellSnapshotsOfBatch(batchId).associateBy { it.cellId }
+        check(snapshots.keys == aimedAt.toSet()) {
+            "The import $batchId wrote into ${aimedAt.size} cells and kept ${snapshots.size} of them."
+        }
+        aimedAt.forEach { cellId ->
+            val kept = snapshots[cellId]?.documentBefore
+            val expected = plan.documentTextsBefore[cellId].orEmpty()
+            // Lengths, not the writing itself: this message can reach a log, and
+            // the user's own words are not something to put there.
+            check(kept == expected) {
+                "The cell $cellId was kept as ${kept?.length} characters where it held ${expected.length}."
             }
         }
 

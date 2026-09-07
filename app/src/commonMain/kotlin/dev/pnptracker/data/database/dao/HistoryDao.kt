@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.Flow
  * Reads the history back. It cannot write, and that is the point.
  *
  * A history event is written by the transaction that caused it — the one that
- * finishes the task, moves the pipeline or converts the words — because PLAN 385
+ * finishes the task, moves the pipeline or converts the words — because PLAN 5.12
  * has the record and the thing recorded stand or fall together. There is
  * therefore no `insert` here: a way to add a history line on its own would be a
  * way to write a past that never happened, and every caller that legitimately
@@ -63,8 +63,8 @@ interface HistoryDao {
      * keys, so each event matches exactly one of each — the task join is LEFT
      * only because the two game kinds name no task at all, never because a task
      * might be missing. A deleted task and a task turned back into words are
-     * both still here (PLAN 141 tombstones rather than erases), which is what
-     * lets PLAN 1123's lines be shown at all.
+     * both still here (PLAN 5.2 tombstones rather than erases), which is what
+     * lets PLAN 12.15's lines be shown at all.
      */
     @Query(
         """
@@ -87,7 +87,7 @@ interface HistoryDao {
     fun observeHistoryEvents(): Flow<List<HistoryEventRow>>
 
     /**
-     * The 3D shortage lines PLAN 1119 and 1120 ask the same screen for.
+     * The 3D shortage lines PLAN 12.15 asks the same screen for.
      *
      * They live in `progress_events` and always have: PLAN 5.12 records a
      * shortage and its making-good as events long before `history_events`

@@ -112,7 +112,7 @@ fun main() {
         )
 
     // The history reads the same rows every write above it appends to, and can
-    // do nothing else: PLAN 385 keeps the record and the thing recorded in one
+    // do nothing else: PLAN 5.12 keeps the record and the thing recorded in one
     // transaction, so the section is given a source with no way to write.
     val historyController = HistoryController(HistoryStore(database.historyDao()))
 

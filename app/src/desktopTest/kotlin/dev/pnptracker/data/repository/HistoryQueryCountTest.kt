@@ -29,9 +29,9 @@ import kotlin.test.assertTrue
  * Writing one line per thing that happened is the work, and the work is allowed
  * to grow: finishing forty-two tasks writes forty-two lines. What is not allowed
  * to grow is the number of *questions* asked to decide any of it. PLAN 16 rules
- * out a read per row, and PLAN 1503 will ask the application to hold up at a
- * thousand tasks; a lookup of "which game is this task in" done once per task
- * inside a bulk finish is exactly the shape that fails both.
+ * out a read per row, and PLAN 18 (Faz 3 testleri) will ask the application to
+ * hold up at a thousand tasks; a lookup of "which game is this task in" done
+ * once per task inside a bulk finish is exactly the shape that fails both.
  *
  * Every count here is a frequency map. A set would collapse forty-two runs of
  * one statement into one and report a cost nobody paid.
