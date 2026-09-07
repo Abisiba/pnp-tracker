@@ -45,7 +45,7 @@ dokunmamaktır.
 ## Doğrulama hash'leri
 
 ```text
-PLAN.md  4bf9f177975799f4b1a3f3470c139f743106febad6f237af31a095b35946632e
+PLAN.md  66a8e42aafc7e4894182b6beaac2fcd1c0bed84db8d3d202f02a58c8fdf9525c
          (bir önceki değer f8229e3b…0126 idi; 11.4.4 eklenmesiyle değişti)
 
 1.json   7cafd48fb4b06ec1da00b3f15f4335aae46fb8b40fc57926cde442dda515a724
