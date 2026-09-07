@@ -128,6 +128,7 @@ erDiagram
     TASK ||--o{ PROGRESS_EVENT : records
     TASK ||--o{ TASK_STAGE : progresses
     IMPORT_BATCH ||--o{ RAW_IMPORT_BLOCK : contains
+    IMPORT_BATCH ||--o{ IMPORT_BATCH_CELL : snapshots
     RAW_IMPORT_BLOCK ||--o{ DRAFT_TASK : produces
 ```
 
@@ -148,6 +149,9 @@ metin parçası arasında birebir ilişki vardır; arada gruplayıcı bir katman
   korunur. Ayrıntı `5.9`'dadır.
 - Bir görevi metne geri döndürme (`12.8`) silme değildir: görev kaydı kaldırılır
   fakat görevin adı aynı yerde düz metin olarak kalır.
+- İçe aktarmayı geri alma (`11.4.4`) da bu kuralın içindedir: geri alınan görevler
+  tombstone ile görünürden çıkar, fiziksel olarak silinmez. Geri alma hiçbir
+  `ProgressEvent` veya `HistoryEvent` satırını silmez.
 
 ### 5.3 Game
 
@@ -665,7 +669,7 @@ Orijinal metin hiçbir zaman sessizce değiştirilmez veya kaybedilmez.
 - Yeşil oyun hücresi ipucunu kabul et/reddet
 - Görevi hedef oyunun ilgili hücresine bağla
 - Ham bloğu işlendi olarak işaretle
-- İçe aktarma grubunu topluca onayla (geri alma Faz 2 kapsamındadır)
+- İçe aktarma grubunu topluca onayla (geri alma `11.4.4`'tedir)
 
 ### 11.4.1 Oyun ve hücre kurulumu
 
@@ -727,8 +731,150 @@ döndürür. Bu, başarılı bir tekrar uygulama değil, korumalı bir reddediş
   veritabanı durumu oluşturmaz.
 - “Yeniden açma” yalnızca `DRAFT` bir batch’i tekrar düzenleme ekranında açmaktır.
 - `CONFIRMED` bir batch’in düzenlenebilir biçimde yeniden açılması yoktur.
-- `CONFIRMED → ROLLED_BACK` geçişi ve oluşturulan kayıtların korumalı geri
-  alınması Faz 2 kapsamındadır.
+- `CONFIRMED → ROLLED_BACK` geçişinin ve oluşturulan kayıtların korumalı geri
+  alınmasının kuralları `11.4.4`'tedir.
+
+### 11.4.4 İçe aktarmayı geri alma (korumalı rollback)
+
+`CONFIRMED` bir batch geri alınabilir: geri alma, o batch'in onay sırasında
+oluşturduğu görevleri görünürden kaldırır, yazdığı hücre metnini geri yükler ve
+batch'i `ROLLED_BACK` yapar.
+
+Geri alma birimi **bütün batch'tir**. Tek tek görev seçme, kısmi geri alma ve
+“kısmen geri alınmış” bir batch durumu **yoktur**. `ImportBatchStatus` üç değerden
+ibarettir ve dördüncü bir ara durum eklenmez.
+
+#### Çakışma bütün işlemi engeller
+
+Batch'in ürettiği **herhangi bir** görev onaydan sonra dokunulmuşsa **veya**
+yazdığı **herhangi bir** hedef hücrenin metni değişmişse, geri alma **tamamen
+engellenir**:
+
+- Aynı batch'in dokunulmamış görevleri de kaldırılmaz.
+- Hiçbir satır değişmez; batch `CONFIRMED` kalır.
+- Kullanıcıya neyin engellediği gösterilir: görevler adlarıyla, hücreler oyun ve
+  sütun adlarıyla.
+
+Bu, `16.` bölümdeki “sessizce silinmez” kuralının kesinleştirilmiş hâlidir. İki
+davranış arasından seçim yapılmıştır: güvenli görünenleri kaldırmak **değil**,
+işlemi durdurmak. Yarısı geri alınmış bir içe aktarma, kullanıcının hangi görevin
+nereden geldiğini artık söyleyemediği bir durum bırakırdı.
+
+#### Bir görevin “dokunulmuş” sayılması
+
+Aşağıdakilerden **herhangi biri** doğruysa görev dokunulmuştur:
+
+1. `updatedAt` değeri `createdAt` değerinden farklıdır — ad, renk, adet, not,
+   takip kipi veya bayrak değişikliği ya da herhangi bir ilerleme yazımı.
+2. Göreve ait en az bir `ProgressEvent` vardır.
+3. Göreve ait en az bir `HistoryEvent` vardır.
+4. Görev zaten silinmiştir veya metne geri döndürülmüştür.
+
+Bu dört ölçüt görev içindir; hücre metni için ayrı bir ölçüt vardır ve aşağıda
+anlatılır. İkisi birlikte engelleme kuralının tamamını oluşturur.
+
+Ölçüt korumacıdır: şüphede kalan kayıt dokunulmuş sayılır. İçe aktarmanın kendi
+yazdıkları bu ölçütlerin hiçbirini tetiklemez — onay `updatedAt` ile `createdAt`
+değerlerini eşit yazar ve hiçbir progress veya history olayı üretmez — bu yüzden
+dokunulmamış bir görev güvenilir biçimde tanınır.
+
+Dördüncü ölçüt, ilk üçünün özel bir hâli değil, onlardan bağımsız bir güvencedir:
+silme ve metne dönüştürme bugün zaten birer `HistoryEvent` yazar, fakat kural
+geçmiş tablosunda satır bulunmasına bağlı olmamalıdır. Sonuç aynıdır ve
+**engelleyicidir**: kullanıcının silmeye veya metne döndürmeye karar verdiği bir
+görev, o kararı verilmemiş gibi geri alınamaz. Bunun bilinen sonucu şudur: bir
+batch'in tek bir görevi silinmişse o batch artık geri alınamaz. Bu kabul edilmiş
+bir bedeldir; alternatifi, kullanıcının kararlarının üzerine yazmaktır.
+
+#### Hücre metninin geri yüklenmesi
+
+İçe aktarma hedef hücreye yalnızca **ekler**: kullanıcının o hücrede yazdığı metin
+karakteri karakterine korunur ve yeni görevler sonuna yazılır. Geri alma bunun
+tersini yapar ve aynı güvenceyi taşır: kullanıcının yazdığı hiçbir karakter
+kaybolmaz.
+
+Bunu tahmine bırakmamak için onay, dokunduğu **her hücrenin import öncesi tam
+metnini** `ImportBatchCell` kaydı olarak saklar:
+
+```text
+ImportBatchCell
+  importBatchId
+  cellId
+  documentBefore     hücrenin onay anında okuduğu tam metin
+```
+
+Geri alma sırasında hücrenin bugünkü metni, `documentBefore` ile batch'in yazdığı
+görev adlarından yeniden hesaplanan **beklenen metinle** karşılaştırılır. Eşitse
+hücre `documentBefore` değerine **harfi harfine** geri yazılır.
+
+Eşit değilse hücre onaydan sonra değişmiş demektir. Bu, batch'in hiçbir görevi
+dokunulmamış olsa bile olabilir: kullanıcı bir hücrenin düz metnini, içindeki
+görevlere hiç dokunmadan düzenleyebilir. Böyle bir hücre de **engelleyicidir** —
+geri alma yapılmaz, batch `CONFIRMED` kalır ve kullanıcıya hangi hücrenin
+engellediği söylenir. Engelleme kuralı bu yüzden iki parçalıdır: **dokunulmuş
+görev veya değişmiş hedef hücre.**
+
+`ImportBatchCell` kaydı bulunmayan bir batch geri alınamaz. Bu kayıt onay yoluna
+sonradan eklenmiştir; daha eski onaylar hücrenin o günkü metnini saklamamıştır ve
+bugünkü metinden geriye çıkarmak, kullanıcının o tarihten beri yaptığı bütün
+düzenlemeleri yok saymak olurdu. Uygulama tahmin etmez: geri alma engellenir ve
+sebebi kullanıcıya söylenir.
+
+Provenance **segment kimliğine bağlanmaz**. `CellSegment` satırlarına import batch
+sütunu eklenmez: bir hücre düzenlendiğinde yan yana düz metin parçaları
+birleştirilir (`16.`), yani bir segment satırının kimliği kalıcı değildir ve
+sonradan kullanıcının kendi yazdığı metni taşıyabilir. Kimliğe bağlanan bir
+provenance, o metni import'un yazdığı sanıp silebilirdi. Bu yüzden geri almanın
+dayanağı satır kimliği değil, saklanan metnin kendisidir.
+
+#### Geri almanın yazdıkları ve yazmadıkları
+
+Geri alma **tek transaction**'dır. Yazar:
+
+- geri alınan her görev için tombstone (`5.2`);
+- her görev için `TASK_ROLLED_BACK` geçmiş olayı;
+- görevlerin hücre parçalarının kaldırılması ve hücre belgesinin yeniden yazılması;
+- dokunulan her oyun için `IMPORT_ROLLED_BACK` geçmiş olayı;
+- batch durumunun `ROLLED_BACK` olması.
+
+Yazmaz:
+
+- hiçbir `ProgressEvent` veya `HistoryEvent` satırı silinmez (`5.12`, `12.15`);
+- hiçbir görev, oyun veya hücre fiziksel olarak silinmez;
+- **oyunların tamamlanma bayrağı geri alınmaz.** Yeşil hücre ipucunu kullanıcı
+  onaylamıştır ve `5.3` tamamlanmayı kullanıcının kendi beyanı sayar; geri alma
+  bu beyanı bozmaz. Onay ekranı bunu açıkça söyler ve kullanıcı isterse işareti
+  oyun tablosundan kendisi kaldırır.
+
+#### `ROLLED_BACK` ne zaman yazılır
+
+Batch **ancak** bütün hedefleri güvenliyse ve hepsi aynı transaction içinde
+kaldırıldıysa `ROLLED_BACK` olur. Tek bir engelleyici görev veya hücre bile varsa
+durum `CONFIRMED` kalır. Kısmen geri alınmış bir batch `ROLLED_BACK` sayılmaz ve
+oluşamaz.
+
+`ROLLED_BACK` durumu transaction'ın sonunda, bütün kaldırmalar ve geçmiş satırları
+yazıldıktan sonra yazılır. Transaction'ın herhangi bir noktasında hata olursa
+hiçbir görev kaldırılmaz, hiçbir hücre değişmez, hiçbir geçmiş satırı kalmaz ve
+batch `CONFIRMED` kalır.
+
+#### İkinci geri alma ve yeniden uygulama
+
+- Zaten `ROLLED_BACK` olan bir batch'i tekrar geri alma çağrısı **korumalı bir
+  reddediştir**, sessiz başarı değildir. Kullanıcıya batch'in zaten geri alındığı
+  söylenir. Bu, `11.4.2`'deki ikinci onay davranışının aynısıdır.
+- `DRAFT` bir batch geri alınamaz: geri alınacak bir şey üretmemiştir.
+- **Geri alınmış bir batch yeniden uygulanamaz.** `ROLLED_BACK` son durumdur.
+  Kullanıcı aynı dosyayı isterse `3.2`'ye göre **yeni ve ayrı bir batch** olarak
+  yeniden içe aktarır; mevcut parmak izi uyarısı korunur ve eski batch'i durumuyla
+  birlikte listeler.
+
+#### Onay
+
+Geri alma `17.`'ye göre kullanıcı onayı ister. Onay ekranı en az şunları söyler:
+kaç görevin kaldırılacağını, tamamlanma işaretlerinin geri alınmayacağını ve
+işlemin geri alınamaz olduğunu. Engelleyici görev varsa onay ekranı yerine
+engelleme listesi gösterilir.
 
 ### 11.5 Excel biçim işaretleri
 
@@ -1122,6 +1268,17 @@ Geçmiş ekranı en az şunları gösterir:
 - İçe aktarma ve geri alma işlemleri
 - Silinen kayıtlar ve metne geri dönüştürülen görevler
 
+İçe aktarma ve geri alma satırları şu olaylardan üretilir:
+
+```text
+IMPORT_CONFIRMED     bir içe aktarma onaylandığında, dokunulan her oyun için bir satır
+IMPORT_ROLLED_BACK   bir içe aktarma geri alındığında, dokunulan her oyun için bir satır
+TASK_ROLLED_BACK     geri alınan her görev için bir satır
+```
+
+Bu olaylar da geçmişin geri kalanı gibi append-only'dur ve silinmez. Engellenmiş
+bir geri alma hiçbir olay yazmaz: gerçekleşmemiş bir işlem geçmişe girmez.
+
 ## 13. Arama, filtreleme ve sıralama
 
 İlk sürümde:
@@ -1263,7 +1420,10 @@ Tek modülle başlanabilir. Kod büyümeden gereksiz Gradle modüllerine ayrılm
 - İçe aktarma sırasında tek bir hücredeki hata bütün dosya aktarımını kaybettirmemelidir.
 - Uygulama kapanırsa onaylanmamış import taslağı yeniden açılabilmelidir.
 - Import rollback yalnızca ilgili import batch’in oluşturduğu kayıtları hedeflemelidir.
-- Kullanıcının sonradan düzenlediği kayıtlar geri alma sırasında sessizce silinmemeli; uyarı veya korumalı rollback uygulanmalıdır.
+- Kullanıcının sonradan düzenlediği kayıtlar geri alma sırasında sessizce silinmemelidir. Uygulanan kural `11.4.4`'tedir: batch'in tek bir görevi dokunulmuşsa ya da yazdığı tek bir hücrenin metni değişmişse geri alma **tamamen engellenir**; güvenli görünen görevler de kaldırılmaz.
+- Import rollback tek transaction'dır ve kısmi sonuç bırakmaz. Batch ancak bütün hedefleri güvenliyse ve hepsi kaldırıldıysa `ROLLED_BACK` olur; aksi hâlde `CONFIRMED` kalır ve hiçbir satır değişmez.
+- Geri alma hiçbir progress veya history olayını silmez; kaldırma tombstone'dur.
+- Geri almanın hücre metnini geri yüklemesi, saklanan `ImportBatchCell.documentBefore` metnine dayanır; segment kimliğine bağlı bir provenance kullanılmaz.
 
 ## 17. Erişilebilirlik ve kullanım kuralları
 
@@ -1477,7 +1637,14 @@ Kişisel kullanımda veri kaybı riski düşük, test edilmiş ve Garuda Linux�
 #### İşler
 
 1. Geçmiş ekranını tamamla.
-2. Import batch rollback ve korumalı geri alma davranışını tamamla.
+2. Import batch rollback ve korumalı geri alma davranışını tamamla (`11.4.4`).
+   Kurallar kesinleşmiştir ve iş üç atomik dilimde uygulanır:
+   1. Room v8: `import_batch_cells` anlık görüntü tablosu ve onayın
+      `documentBefore` yazması. Davranış değişmez.
+   2. Geri alma motoru: engelleme denetimi, tek transaction, tombstone'lar,
+      hücre geri yüklemesi ve üç yeni geçmiş olayı. Arayüz yok.
+   3. Arayüz: onaylanmış içe aktarma listesi, onay ve engelleme ekranları,
+      Türkçe metinler.
 3. Sürümlü JSON yedek/dışa aktarma ve geri yükleme ekle.
 4. Import ve migration öncesi otomatik snapshot oluştur.
 5. CSV görev dışa aktarmayı doğrula.
@@ -1499,7 +1666,13 @@ Kişisel kullanımda veri kaybı riski düşük, test edilmiş ve Garuda Linux�
 - CSV dışa aktarma doğruluğu
 - Migration geriye dönük fixture testleri
 - Import rollback’in yalnızca ilgili batch’i etkilemesi
-- Kullanıcı tarafından düzenlenmiş kayıtların korumalı rollback’i
+- Dokunulmuş tek bir görevin bütün geri almayı engellemesi ve hiçbir satırı değiştirmemesi
+- Görevlerine dokunulmadan metni düzenlenmiş bir hedef hücrenin de geri almayı engellemesi
+- `ImportBatchCell` kaydı olmayan eski bir batch'in geri alınamaması
+- Dokunulmamış bir batch’in geri alınmasında hücre metninin harfi harfine geri gelmesi
+- Geri almanın hiçbir progress veya history olayını silmemesi
+- Geri alınmış bir batch’in ikinci geri alma çağrısını reddetmesi
+- Geri alma transaction’ı yarıda kalırsa batch’in `CONFIRMED` kalması
 - 1.000+ görevle açılış, arama ve havuz filtreleme performansı
 - Klavye navigasyonu
 - Yüksek DPI ve büyük metin

@@ -22,21 +22,31 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-HEAD (bu commit öncesi): 67695dfdde633dbc4ff2bd268ee6a9b7b083bfd9
+HEAD (bu commit öncesi): 9b332650ff8f5ff2579fded6cb52d1a044676ede
 son kod commit'i      : feat(history): show what has happened
 working tree          : temiz
-Room şema sürümü      : 7   (bu dilimde DEĞİŞMEDİ)
+Room şema sürümü      : 7   (bu commit'te DEĞİŞMEDİ)
 şema dosyaları        : 1.json … 7.json  (hepsi commit'li hâlleriyle aynı)
-test durumu           : ./gradlew clean check --rerun-tasks → BUILD SUCCESSFUL
-                        2771 test / 0 failure / 0 error / 0 skipped
+test durumu           : 2771 test / 0 failure / 0 error / 0 skipped
+                        (son kod commit'inde ölçüldü; bu commit kod değiştirmiyor)
 üretim kodu           : 233 dosya
 test kodu             : 173 dosya
 ```
 
+**Bu commit yalnız `PLAN.md` ve bu belgeyi değiştirir.** Kaynak kod, Room
+entity/migration/şema dosyaları, Gradle yapılandırması, fixture ve testler
+dokunulmadan kalır; bu yüzden test sayısı yeniden ölçülmemiştir.
+
+`PLAN.md` bu turda **kullanıcının açık talimatıyla** düzenlenmiştir: Faz 3 / İş 2
+için verilen bağlayıcı ürün kararları `11.4.4` bölümü olarak PLAN'a işlenmiştir.
+PLAN yalnız kullanıcı açıkça istediğinde değiştirilir; varsayılan kural hâlâ
+dokunmamaktır.
+
 ## Doğrulama hash'leri
 
 ```text
-PLAN.md  f8229e3bc8ecaa220e7e1955235f3fbe6c4ec416a91426c458a2fb32ba420126
+PLAN.md  4bf9f177975799f4b1a3f3470c139f743106febad6f237af31a095b35946632e
+         (bir önceki değer f8229e3b…0126 idi; 11.4.4 eklenmesiyle değişti)
 
 1.json   7cafd48fb4b06ec1da00b3f15f4335aae46fb8b40fc57926cde442dda515a724
 2.json   e596d1bccc5054bf4442faff43ebdfff03ff4c5024d4afc1d8e9ddad2ed3f11a
@@ -469,8 +479,8 @@ ProgressEventKind:
   SHORTAGE_RESOLVED   eksiğin bir kısmı yeniden basıldı
 ```
 
-- Her olayın benzersiz UUID'si vardır; aynı olay iki kez uygulanamaz (PLAN 384).
-- `failureTotal` ve geçmiş hata toplamı olaylardan türetilir ve **silinmez** (PLAN 385).
+- Her olayın benzersiz UUID'si vardır; aynı olay iki kez uygulanamaz (PLAN `5.12`).
+- `failureTotal` ve geçmiş hata toplamı olaylardan türetilir ve **silinmez** (PLAN `5.12`).
 - Aşama sayaçları ve eksik miktarlar negatif olamaz.
 - Olaylar append-only'dur; iptal/düzeltme için üçüncü bir tür **yoktur** — hata, ters
   hareketin kaydedilmesiyle düzeltilir.
@@ -536,6 +546,25 @@ GameDao.softDelete    → GAME_DELETED
 
 Bu satırların hepsi geçmiş ekranında görünür; ekranın nasıl okuduğu §32'dedir.
 
+## Faz 3 / İş 2 ile eklenecek türler  *(henüz YOK)*
+
+`PLAN.md` `11.4.4` ve `12.15` üç yeni tür istiyor. Hiçbiri bugün tanımlı değildir;
+İş 2'nin ikinci diliminde eklenecektir:
+
+```text
+IMPORT_CONFIRMED     onay sırasında, dokunulan her oyun için    (task_id NULL)
+IMPORT_ROLLED_BACK   geri alma sırasında, her oyun için         (task_id NULL)
+TASK_ROLLED_BACK     geri alınan her görev için
+```
+
+Enum değeri TEXT olarak saklandığı için bunlar **şema değişikliği gerektirmez**;
+`7.json` ve `8.json` hash'lerini etkilemezler. `HistoryEventEntity.init`'teki
+`isAboutGameItself` yüklemi ilk ikisini de kapsamalıdır — o ad artık dar geliyor
+ve `namesNoTask` gibi bir ada geçirilmesi önerilir.
+
+Engellenen bir geri alma **hiçbir olay yazmaz**: gerçekleşmemiş işlem geçmişe
+girmez.
+
 ## Yazıcısı olmayan türler
 
 `TASK_RESTORED` ve `GAME_RESTORED` model içinde vardır ama **hiçbir üretim yolu
@@ -596,7 +625,7 @@ Test edilmesi gerekenler:
 - **Ham SQL, exception, stack trace, mutlak dosya yolu ve geliştirici mesajları
   kullanıcıya gösterilmez.**
 - Silme, renk silme, görevi metne dönüştürme, oyun toplu tamamlama, temel renkleri
-  geri yükleme ve import geri alma işlemlerinde onay istenir (PLAN 1278).
+  geri yükleme ve import geri alma işlemlerinde onay istenir (PLAN `17.`).
 - Renk hiçbir zaman tek bilgi taşıyıcısı değildir; her renk örneğinin yazılı adı vardır.
 - Klavye ile bütün ana eylemlere ulaşılabilir; odak sırası ve görünür odak göstergesi
   vardır; metin ölçekleme ve yüksek DPI desteklenir.
@@ -611,7 +640,7 @@ Test edilmesi gerekenler:
 - Veritabanında auto-increment kimlikler domain kimliği olarak kullanılmaz.
 - Silinen oyun ve görevler hemen fiziksel olarak silinmez; `deletedAt` tombstone
   kullanılır. Kalıcı fiziksel temizleme yalnız açık bir bakım işlemi olarak ve yedek
-  alındıktan sonra yapılabilir (PLAN 141–143).
+  alındıktan sonra yapılabilir (PLAN `5.2`).
 - Renk bu kuralın açık istisnasıdır (§11).
 
 Amaç: ileride sync gelirse silinen kayıtların geri dönmemesi, iki cihazın aynı kaydı
@@ -847,12 +876,17 @@ Room şema sürümü = 7
 Ek kurallar:
 
 - `fallbackToDestructiveMigration` **asla** eklenmez.
-- Şema değişikliği migration ve test olmadan commit edilmez (PLAN 1740).
+- Şema değişikliği migration ve test olmadan commit edilmez (PLAN `19.` senaryo notları).
 - Migration beklenmeyen satırlarla karşılaştığında sessizce veri silmez; ya kaydı
   korumalı biçimde dönüştürür ya da anlaşılır bir hatayla durur — hangisinin
-  seçildiği migration'ın kendi belgesinde yazılıdır (PLAN 1394, 1404).
+  seçildiği migration'ın kendi belgesinde yazılıdır (PLAN `18.` gerçek veri notları).
 - Entity/migration/schema JSON değişikliği gerektiğini düşünürsen **uygulamadan önce
   dur ve somut kanıtlarla bildir.**
+
+Bilinen ve **onaylanmış** tek istisna: Faz 3 / İş 2'nin birinci dilimi Room v8'e
+geçer ve `import_batch_cells` tablosunu ekler (§33 R1). Mevcut hiçbir tablo,
+sütun veya index değişmez; `1.json` … `7.json` olduğu gibi kalır ve `8.json`
+eklenir. Migration backfill yapmaz.
 
 ## Migration testi kalıbı
 
@@ -983,7 +1017,7 @@ PLAN.md `## 18. Üç geliştirme fazı` bölümüne göre.
 
 ## Faz 1 — TAMAMLANDI
 
-Temel, veri modeli ve içe aktarma çekirdeği. PLAN satır 1316 bunu kendi metninde
+Temel, veri modeli ve içe aktarma çekirdeği. PLAN `18.` Faz 1 bunu kendi metninde
 doğrular: *"Tarihsel not: Faz 1 tamamlanmıştır."*
 
 ## Faz 2 — TAMAMLANDI
@@ -1021,11 +1055,12 @@ yardımcı işler
 
 ## Faz 3 — BAŞLADI, 16 İŞTEN ~3'Ü
 
-PLAN satır 1477–1494.
+PLAN `18.` — Faz 3 işler listesi.
 
 ```text
  1  Geçmiş ekranını tamamla ............................. TAMAM
- 2  Import batch rollback ve korumalı geri alma ......... YAPILMADI
+ 2  Import batch rollback ve korumalı geri alma ... kararlar verildi
+                                              (PLAN 11.4.4), kod YAPILMADI
  3  Sürümlü JSON yedek/dışa aktarma ve geri yükleme ..... YAPILMADI
  4  Import ve migration öncesi otomatik snapshot ........ YAPILMADI
  5  CSV görev dışa aktarmayı doğrula ......... özellik var, Faz 3 doğrulama
@@ -1095,9 +1130,28 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
 
 > **Faz 3 / İş 2: import batch rollback ve korumalı geri alma.**
 >
-> PLAN 1478, 16. bölüm. Bu iş büyük olasılıkla **Room v8** gerektirir; ayrıntı ve
-> çözülmemiş ürün kararları §33 R1 ve R2'dedir. Kod yazmadan önce migration
-> taslağı ve kararlar raporlanmalıdır.
+> **Ürün kararları verilmiş ve `PLAN.md` `11.4.4`'e işlenmiştir.** Kural metni
+> PLAN'dadır; repo tarafındaki sonuçlar ve gerekçeler §33 R1–R2'dedir. Kodlama
+> henüz başlamamıştır.
+
+### İş 2'nin üç atomik dilimi
+
+```text
+1  Room v8 ve hücre anlık görüntüsü
+   import_batch_cells, Migration7To8, 8.json, onayın document_before yazması.
+   Davranış değişmez; kullanıcı hiçbir fark görmez.
+
+2  Rollback motoru ve geçmiş olayları
+   Engelleme denetimi (dokunulmuş görev VEYA değişmiş hücre), tek transaction,
+   tombstone'lar, hücre geri yüklemesi, postcondition;
+   IMPORT_CONFIRMED / IMPORT_ROLLED_BACK / TASK_ROLLED_BACK. Arayüz yok.
+
+3  Arayüz ve Türkçe metinler
+   Onaylanmış içe aktarma listesi, onay ve engelleme ekranları, geçmiş cümleleri.
+```
+
+Sıra bağlayıcıdır: 1 olmadan 2 tam hücre geri yüklemesi yapamaz, 2 olmadan 3'ün
+çağıracağı bir şey yoktur.
 
 Sonrasında PLAN'ın bağlayıcı sırası izlenir: İş 3 → 4 → 7 → 9 + 5 → 10 →
 11-13 → 14-16.
@@ -1124,47 +1178,99 @@ kaybettiğinden oyunlarını `history_events`'teki dönüştürme satırından a
 
 ---
 
-# 33. AÇIK RİSKLER VE ÇÖZÜLMEMİŞ ÜRÜN KARARLARI
+# 33. RİSKLER VE VERİLMİŞ TASARIM KARARLARI
 
-## R1 — Rollback için şema eksiği  *(yüksek)*
+## R1 — Rollback provenance  *(ÇÖZÜLDÜ — tasarım kararı verildi)*
 
-`cell_segments` tablosunda provenance sütunu **yoktur**. Import'un yazdığı ayırıcı
-`PLAIN_TEXT` segmentleri hiçbir batch'e bağlanamaz; PLAN 1265'in *"yalnızca ilgili
-import batch'in oluşturduğu kayıtlar"* hükmü mevcut şemayla karşılanamaz.
+> Bu maddenin önceki hâli `cell_segments.source_import_batch_id` sütunu öneriyordu.
+> **O öneri geri çekilmiştir.** Aşağıdaki inceleme bulgusu onu geçersiz kılar.
+> Bağlayıcı kurallar artık `PLAN.md` `11.4.4`'tedir.
 
-> **Faz 3 / İş 2 büyük olasılıkla Room v8 ve `cell_segments.source_import_batch_id`
-> gerektirecektir.** Kod yazılmadan önce migration taslağı ve veri koruma
-> invariant'ları ayrıca raporlanmalıdır.
+### Bugünkü provenance durumu  *(v7 üzerinde doğrulandı)*
 
-Bugünkü provenance durumu:
+`ImportDao.kt:1090–1135`'te dört batch-kapsamlı sorgu zaten var ve çalışıyor:
 
 ```text
-games        ✓  source_import_batch_id
-tasks        ✓  source_raw_import_block_id + draft_tasks.materialized_task_id
-task_colors  ✓  görev üzerinden
-task_stages  ✓  görev üzerinden
-TASK segment ✓  cell_segments.task_id → draft_tasks
-ayırıcı PLAIN_TEXT segment  ✗  hiçbir yol yok
+tasks         ✓  source_raw_import_block_id  VE  draft_tasks.materialized_task_id
+task_colors   ✓  görev üzerinden
+task_stages   ✓  görev üzerinden
+TASK segment  ✓  cell_segments.task_id → draft_tasks (UNIQUE index)
+ayırıcı PLAIN_TEXT segment   ✗  batch'e bağlanamaz
+oyun tamamlanma bayrağının çevrilmesi   ✗  iz yok
+games satırı  —  konu dışı: import oyun oluşturmaz (GameSetupStore.kt:93 null yazar)
 ```
 
-## R2 — Rollback'in çözülmemiş ürün kararları
+Yani **v7 minimal bir rollback yapabilir**: görevleri, renkleri, aşamaları ve
+TASK segmentlerini batch'e bağlamak için şema değişikliği gerekmez.
 
-PLAN kesin cevap **vermiyor**; tahmin edilmemeli, kullanıcıya sorulmalıdır:
+### Neden segment kimliğine provenance bağlanmıyor
 
-1. Sonradan düzenlenmiş görev geri alınır mı, korunur mu, sorulur mu?
-   *(PLAN 1266 "uyarı **veya** korumalı rollback" diyerek seçim bırakıyor.)*
-2. `ProgressEvent` oluşmuş görev ne olur? *(PLAN 385: olaylar silinmez.)*
-3. `TaskStage` ilerlemişse ne olur?
-4. Import'un oluşturduğu oyun sonradan kullanıcı verisi aldıysa silinir mi?
-5. Ayırıcı segment geri alınırken komşu metin nasıl korunur? *(R1'e bağlı; en yüksek
-   veri kaybı riski burada.)*
-6. Batch'e ait olmayan mevcut belge metni nasıl korunur?
-7. Geri alma tekrar çalıştırılırsa ne olur? *(`ROLLED_BACK` durumu var, yazan kod yok.)*
-8. Yarım hata tam rollback mi?
+`CellSegmentDao.rewrite` (CellSegmentDao.kt:270–313) kullanıcı bir hücreyi her
+düzenlediğinde yan yana düz metin parçalarını birleştirir, birleşen aralığın
+metnini **ilk satırın kimliğine** yazar ve kalanları siler. Sonuç iki türlü de
+kötüdür:
 
-PLAN'ın kesin söyledikleri: yalnız ilgili batch hedeflenir (1265); düzenlenmiş kayıt
-sessizce silinmez (1266); onay istenir (1278); silme tombstone'dur (141–142);
-geçmişte görünür (1122).
+- `[kullanıcı metni][ayırıcı][GÖREV]` düzeninde ilk düzenlemede **ayırıcı satırı
+  yok olur**; etiket de onunla gider.
+- `[GÖREV1][ayırıcı][GÖREV2]` düzeninde ayırıcı kimliğini korur ve kullanıcı araya
+  yazdığında **o metni kendi satırına alır**. Rollback o satırı silerse kullanıcı
+  metnini siler.
+
+Kimliğe bağlı provenance, kimliğin altındaki metin değişebiliyorsa güvenli
+değildir. Bu yüzden dayanak satır kimliği değil, **saklanan metnin kendisidir**.
+
+### Seçilen tasarım — Room v8
+
+Seçilen ürün tasarımı güvenli ve **tam** hücre geri yüklemesi istiyor; bunun için
+v8 gereklidir. Mevcut hiçbir tablo, sütun veya index değişmez; tek ekleme:
+
+```text
+import_batch_cells
+  import_batch_id  FK → import_batches(id)  ON DELETE CASCADE
+  cell_id          FK → game_cells(id)      ON DELETE RESTRICT
+  document_before  hücrenin onay anındaki tam metni
+  PRIMARY KEY (import_batch_id, cell_id)
+  INDEX (cell_id)
+```
+
+`document_after` saklanmaz: beklenen metin, `document_before` + görev adları +
+`taskNeedsSeparatorAfter` (TaskSeparation.kt:33) ile yeniden hesaplanır — onayın
+kullandığı saf fonksiyonun ta kendisi, böylece iki hesap ayrışamaz.
+
+`Migration7To8` **backfill yapmaz.** Eski onaylar hücre metnini saklamamıştır;
+bugünkü metinden geriye çıkarmak uydurma olurdu (`Migration6To7`'nin ilkesi).
+Anlık görüntüsü olmayan batch geri alınamaz ve sebebi kullanıcıya söylenir.
+
+## R2 — Rollback ürün kararları  *(ÇÖZÜLDÜ — PLAN 11.4.4 bağlayıcıdır)*
+
+Bu maddenin önceki hâli sekiz açık soru listeliyordu. **Hepsi kullanıcı tarafından
+karara bağlanmıştır** ve `PLAN.md` `11.4.4`'e işlenmiştir. Burada yalnız repo
+tarafındaki sonuçları kayıtlıdır; kural metni PLAN'dadır ve çelişkide PLAN kazanır.
+
+```text
+Engelleme         Tek bir dokunulmuş görev VEYA değişmiş hedef hücre bütün
+                  geri almayı durdurur. Kısmi rollback YOKTUR.
+Dokunulmuşluk     updated_at != created_at | ProgressEvent var | HistoryEvent var
+                  | zaten silinmiş/metne dönüştürülmüş     (dördü de engelleyici)
+Durum             ROLLED_BACK ancak bütün hedefler güvenliyse ve hepsi tek
+                  transaction'da kaldırıldıysa yazılır; aksi hâlde CONFIRMED kalır.
+                  Dördüncü bir ara durum eklenmez.
+Silme             tombstone; progress ve history olayları fiziksel silinmez.
+Oyun bayrağı      import'un çevirdiği tamamlanma işareti geri alınmaz.
+İkinci çağrı      korumalı reddediş, sessiz başarı değil.
+Yeniden uygulama  yok; aynı dosya yeni batch olarak alınır, parmak izi uyarısı durur.
+Geçmiş            IMPORT_CONFIRMED / IMPORT_ROLLED_BACK (oyun bazlı) +
+                  TASK_ROLLED_BACK (görev bazlı). Engellenen geri alma olay yazmaz.
+```
+
+Kararların bilinen sert kenarı, bilerek kabul edilmiştir: bir batch'in tek bir
+görevi silinmiş veya tek bir hedef hücresinin metni düzenlenmişse o batch artık
+geri alınamaz. Alternatifi kullanıcının kararlarının üzerine yazmaktır.
+
+Uygulama sırasında doğrulanmış iki dayanak: import `updated_at` ile `created_at`
+değerlerini eşit yazar (ImportDao.kt:1499–1500) ve `TaskEditDao.editTask` no-op'ta
+hiç yazmaz (TaskEditDao.kt:312) — bu ikisi olmadan "dokunulmuşluk" ölçütü
+güvenilir olmazdı.
 
 ## R3 — Kullanılmayan üretim API'leri  *(orta)*
 
@@ -1187,7 +1293,7 @@ Paketleme yapılandırıldığında paket sürümüyle sapabilir.
 
 ## R6 — Bu makinede doğrulanamayan madde
 
-PLAN 1491/1506 "temiz Garuda ortamında kurulum, açılış, veri dizini, güncelleme ve
+PLAN `18.` Faz 3 (İş 13 ve testleri) "temiz Garuda ortamında kurulum, açılış, veri dizini, güncelleme ve
 kaldırma testi" ayrı bir temiz ortam gerektirir.
 
 ## R7 — Paketleme yapılandırması yok
@@ -1196,6 +1302,38 @@ kaldırma testi" ayrı bir temiz ortam gerektirir.
 bir şey yok. `nativeDistributions` bloğu tanımlı olmadığı için `packageDeb` /
 `packageRpm` / `packageAppImage` görevleri **hiç oluşmuyor**. `LICENSE` dosyası ve
 `.github/` dizini de yok.
+
+---
+
+## R8 — Kod içindeki PLAN satır atıfları geçersiz  *(orta, mekanik)*
+
+`PLAN.md`'ye `11.4.4` eklenmesi dosyayı 1829 satırdan 2002 satıra çıkardı ve ekleme
+noktasından sonraki bütün satır numaraları kaydı. Kaynak ve test dosyalarındaki
+**61 atıf / 24 dosya** artık yanlış satırı gösteriyor:
+
+```text
+eski → yeni    ne olduğu
+141  → 142     silinen kayıt hemen fiziksel silinmez
+143  → 144     kalıcı fiziksel temizleme ayrı bir bakım işidir
+385  → 389     failureTotal olaylardan türetilir ve silinmez
+427  → 431     görev oyun kaydında ve geçmişte kalır
+437  → 441     tamamlanmış görevde eksik bildirimi
+1118 → 1264    geçmiş: tamamlanan görevler
+1119 → 1265    geçmiş: 3D eksik/hatalı kayıtları
+1120 → 1266    geçmiş: eksik giderme hareketleri
+1121 → 1267    geçmiş: aşama değişiklikleri
+1123 → 1269    geçmiş: silinen ve metne dönüştürülen kayıtlar
+1404 → 1564    migration sessizce veri silmez
+1410 → 1570    tamamlanan görev aktif havuzdan çıkar
+1503 → 1676    1.000+ görev performansı
+```
+
+Bu commit dokümantasyon turudur ve kaynak kodu değiştirmez, bu yüzden atıflar
+olduğu gibi bırakılmıştır. **Kalıcı çözüm satır numarasını tazelemek değil, bölüm
+numarasına geçmektir** (`PLAN 5.2`, `PLAN 12.15` gibi) — bölüm numaraları PLAN
+büyüdüğünde kaymaz. Bu belge kendi atıflarını bu turda bölüm numarasına çevirdi.
+Kod tarafı, İş 2'nin zaten koda dokunan birinci diliminde aynı şekilde
+çevrilmelidir.
 
 ---
 
@@ -1268,8 +1406,11 @@ Görev yaşam döngüsü ayrı bir append-only history_events tablosuna yazılı
 Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
 - İş 1 (geçmiş) iki dilim hâlinde tamamlandı: olay kayıt katmanı + geçmiş ekranı.
 - Sıradaki bağlayıcı iş: İş 2, import batch rollback.
-- İş 2 büyük olasılıkla Room v8 gerektirir; kod yazmadan önce §33 R1 ve R2 okunmalı,
-  migration taslağı ve çözülmemiş ürün kararları raporlanmalıdır.
+- İş 2'nin ürün kararları VERİLMİŞTİR ve PLAN 11.4.4'tedir; yeniden tartışma.
+  Kısmi rollback yoktur, tek çakışma bütün işlemi engeller, segment kimliğine
+  provenance bağlanmaz.
+- İş 2 Room v8 gerektirir: import_batch_cells(document_before). Ayrıntı §33 R1'de,
+  üç atomik dilim §32'de.
 
 Şimdi:
 1. Repo durumunu doğrula (branch/HEAD/temiz ağaç/Room sürümü/PLAN hash/schema hash).
