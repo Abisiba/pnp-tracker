@@ -1,5 +1,6 @@
 package dev.pnptracker.platform.files
 
+import dev.pnptracker.domain.backup.lowerCaseHex
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -30,8 +31,6 @@ class FileFingerprint {
                 digest.update(buffer, 0, read)
             }
         }
-        return digest.digest().joinToString("") { byte ->
-            byte.toUByte().toString(radix = 16).padStart(2, '0')
-        }
+        return lowerCaseHex(digest.digest())
     }
 }

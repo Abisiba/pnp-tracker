@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.compose.compiler)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.ksp)
     alias(libs.plugins.room)
@@ -20,6 +21,10 @@ kotlin {
             implementation(compose.components.resources)
             implementation(libs.room.runtime)
             implementation(libs.kotlinx.coroutines.core)
+            // The backup document is a common concern: PLAN 14.4.1 has one JSON
+            // contract, written and read by shared code, so the library sits here
+            // rather than in the desktop source set.
+            implementation(libs.kotlinx.serialization.json)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

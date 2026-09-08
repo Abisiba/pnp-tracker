@@ -7,10 +7,10 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** Faz 3 / İş 3'ün (sürümlü JSON yedek ve geri yükleme) ürün ve
-> mimari kararları belgelendikten sonra. **İş 2 bütünüyle bitmiştir; İş 3 için
-> kararlar verilmiştir fakat henüz tek satır kod yazılmamıştır.** Kararların
-> bağlayıcı metni PLAN `14.4`, `12.16` ve `16.`'dadır; buradaki özeti §25.1'dedir.
+> **Son güncelleme:** Faz 3 / İş 3'ün **birinci dilimi** (yedek belgesi ve
+> deterministik yazıcı) tamamlandıktan sonra. İş 2 bütünüyle bitmiştir; İş 3'ün
+> dört diliminden **biri** yapılmıştır. Kararların bağlayıcı metni PLAN `14.4`,
+> `12.16` ve `16.`'dadır; uygulanan hâli §25.1'dedir.
 >
 > Bu dosyanın önceki sürümü çok daha eski bir repo durumunu (Room v3, canlı `Item`
 > modeli, AP-9/AP-10 adımlandırması) güncel mimariymiş gibi anlatıyordu. O bilgiler
@@ -26,44 +26,42 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-HEAD (bu commit öncesi): 96915b7bf1dd046ecff76b5bae91db67b464ef58
-önceki commit         : feat(import): offer to undo a confirmed import
+HEAD (bu commit öncesi): 6d103af5f52405eb0b01d8b8e01beef5f10da66c
+önceki commit         : docs: define versioned backup and restore semantics
 working tree          : temiz
 Room şema sürümü      : 8   (bu commit'te DEĞİŞMEDİ)
 şema dosyaları        : 1.json … 8.json  hepsi bayt bayt aynı
-test durumu           : 2910 test / 0 failure / 0 error / 0 skipped
-                        (bu tur test çalıştırmadı; değer önceki commit'ten gelir)
-üretim kodu           : 244 dosya
-test kodu             : 184 dosya
+test durumu           : 2966 test / 0 failure / 0 error / 0 skipped  (184 sınıf)
+üretim kodu           : 251 dosya
+test kodu             : 196 dosya
 ```
 
-**Bu commit bir belgeleme turudur.** Faz 3 / İş 3 — sürümlü JSON yedek/dışa aktarma
-ve geri yükleme — için verilen ürün ve mimari kararlarını `PLAN.md`'ye ve bu dosyaya
-işler. **Kod, Gradle/bağımlılık dosyaları, Room şema/entity/migration'ları, fixture
-ve testler değişmemiştir**; yalnız bu iki belge değişmiştir.
+**Bu commit Faz 3 / İş 3'ün birinci dilimidir.** Room v8'in bütün verisini tek bir
+sürümlü, deterministik ve checksum'lı JSON belgesi olarak tanımlar: 15 tablonun
+yedek kayıt tipleri, tek transaction'da okuyan `BackupDao.snapshot()`, entity'den
+belgeye elle yazılmış eşleme, kanonik yazıcı ve `dataSha256`.
 
-Kararların özeti: düz UTF-8 JSON, `.json`, sıkıştırma yok, 64 MiB sınırı, sıkı
-unknown-field politikası, zorunlu `dataSha256`, 15 tablonun tamamı, merge değil
-replace, dosya takası değil canlı veritabanında tek transaction (A′ mimarisi),
-restore öncesi güvenlik yedeği ve dört atomik dilim. Ayrıntı §25.1'de; bağlayıcı
-metin PLAN `14.4`'te.
+**Salt okunurdur.** Dosya seçici, dosyaya yazma, Ayarlar ekranı, parser, geçici DB
+doğrulaması ve geri yükleme yoktur; kullanıcıya açılan yeni bir eylem yoktur.
+`DatabaseBackupExporter` bilerek `Main.kt`'ye bağlanmamıştır — çağıracak bir arayüz
+Dilim 2'de gelir (§33 R3'ün bilinen ve kabul edilmiş kalıbı).
 
-`kotlinx-serialization-json` ve Kotlin serialization derleyici eklentisi için
-**açık izin verilmiştir**; bağımlılık bu turda eklenmemiştir, Dilim 1'de
-eklenecektir (§4).
+`kotlinx-serialization-json` **1.11.0** ve Kotlin serialization derleyici eklentisi
+bu dilimde eklenmiştir; başka hiçbir bağımlılık değişmemiştir (§4).
 
-Şema **değişmemiştir** ve İş 3 boyunca da değişmeyecektir: yedekleme yalnız okur,
-geri yükleme var olan tablolara satır yazar.
+Aynı commit, master context'te açık duran **R9'u ölçümle kapatır**: yabancı
+anahtarlar üretim bağlantısında **zorlanıyor** (§33 R9).
 
-`PLAN.md` bu turda **değişmiştir**; yeni hash aşağıdadır.
+Şema **değişmemiştir**: yeni tablo, sütun veya migration yoktur; eklenen tek şey
+15 okuma sorgusudur.
+
+`PLAN.md` bu turda **değiştirilmemiştir.**
 
 ## Doğrulama hash'leri
 
 ```text
 PLAN.md  e6bc53d5f730b1b0da325da1ad29d8996a693e7945d5d2d54efeafc947392306
-         (bu commit PLAN'ı DEĞİŞTİRİR: 14.1, 12.16, 14.4.1–14.4.6, 16., 17.,
-          18. Faz 3/İş 3, 20. ve 23. bölümleri. Önceki değer
-          66a8e42aafc7e4894182b6beaac2fcd1c0bed84db8d3d202f02a58c8fdf9525c idi.)
+         (bu commit PLAN'ı değiştirmez; değer bir önceki commit'ten aynen gelir)
 
 1.json   7cafd48fb4b06ec1da00b3f15f4335aae46fb8b40fc57926cde442dda515a724
 2.json   e596d1bccc5054bf4442faff43ebdfff03ff4c5024d4afc1d8e9ddad2ed3f11a
@@ -186,6 +184,7 @@ Room KMP (androidx.room3) 3.0.1
 androidx.sqlite       2.7.0  (bundled driver)
 KSP                   2.3.11
 kotlinx-coroutines    1.11.0
+kotlinx-serialization 1.11.0  (yalnız commonMain; yedek belgesinin JSON'u)
 Apache POI            5.5.1
 ktlint-gradle         14.2.0
 Gradle wrapper        8.13
@@ -200,7 +199,7 @@ Kaynak setleri: `commonMain`, `commonTest`, `desktopMain`, `desktopTest`.
 - Basit constructor tabanlı dependency injection; ağır DI framework'ü yoktur.
 - Yeni bağımlılık, PLAN veya ilgili dilim açıkça izin vermedikçe eklenmez.
 
-## Verilmiş bağımlılık izni — henüz kullanılmadı
+## Verilmiş ve kullanılmış bağımlılık izni
 
 `kotlinx-serialization-json` ve gerektirdiği Kotlin serialization derleyici
 eklentisi **Faz 3 / İş 3 için açıkça izinlidir** (PLAN `14.1`, `14.4.1`).
@@ -208,9 +207,20 @@ Gerekçe: standart kütüphanede JSON yoktur ve güvenilmeyen bir dosyayı ayrı
 elle yazılacak bir ayrıştırıcıya bırakılmayacak kadar geniş bir yüzeydir
 (unicode kaçışları, surrogate çiftleri, yuvalama derinliği).
 
-Bağımlılık **bu belgeleme turunda eklenmemiştir.** `gradle/libs.versions.toml` ve
-`app/build.gradle.kts` değişmemiştir; ekleme **Dilim 1**'in işidir. İzin başka
-hiçbir bağımlılığa genişletilmez.
+**Dilim 1'de eklenmiştir:**
+
+```text
+kütüphane   org.jetbrains.kotlinx:kotlinx-serialization-json  1.11.0
+            (yazıldığı gün en güncel KARARLI sürüm; RC alınmadı)
+kapsam      yalnız commonMain
+eklenti     org.jetbrains.kotlin.plugin.serialization
+            version.ref = "kotlin"  → sürümü Kotlin ile aynı kaynaktan gelir
+çözüm       kotlinx-serialization-json-jvm 1.11.0 + core 1.11.0, BOM hizalı
+```
+
+Compose'un getirdiği transitif `kotlinx-serialization-core` **1.7.3'ten 1.11.0'a
+yükseldi**; bu, Gradle'ın kendi sürüm birleştirmesidir ve başka hiçbir bağımlılık
+sürümü değişmemiştir. İzin başka hiçbir bağımlılığa genişletilmez.
 
 ## Kimlik ve zaman tipleri — tek istisnalı kural
 
@@ -1058,18 +1068,21 @@ eski dosya korunur. Her hatada geçici dosya silinir ve hedef bayt bayt aynı ka
 
 ---
 
-# 25.1 JSON YEDEK VE GERİ YÜKLEME SÖZLEŞMESİ  *(Faz 3 / İş 3 — kararlar verildi, kod yok)*
+# 25.1 JSON YEDEK VE GERİ YÜKLEME SÖZLEŞMESİ  *(Faz 3 / İş 3 — Dilim 1 uygulandı)*
 
-Bu bölüm **verilmiş kararların kaydıdır**; henüz tek satır kod yazılmamıştır.
 Bağlayıcı metin PLAN `14.4` (alt bölümleri `14.4.1`–`14.4.6`), `12.16` ve `16.`
 bölümlerindedir. Çelişkide PLAN kazanır.
+
+**Dilim 1 uygulanmıştır**: belge, kapsam, sıralama, tek transaction okuma, kanonik
+yazıcı ve checksum çalışır durumdadır. Dosyaya yazma, ayrıştırma ve geri yükleme
+hâlâ yoktur; onlar Dilim 2, 3 ve 4'tür.
 
 ## Biçim
 
 ```text
 dosya            tek düz UTF-8 JSON, uzantı .json, sıkıştırma YOK
 kütüphane        kotlinx-serialization-json + Kotlin serialization derleyici eklentisi
-                 (açık izin verildi; §4'e bakınız — Dilim 1'de eklenecek)
+                 (Dilim 1'de eklendi: 1.11.0, yalnız commonMain; §4)
 boyut sınırı     64 MiB, parse BAŞLAMADAN uygulanır
 kanoniklik       alan sırası sabit, satırlar sabit anahtarla sıralı, kayan nokta yok
 determinizm      aynı DB iki kez → createdAt dışında bayt bayt aynı dosya
@@ -1174,6 +1187,37 @@ Tipli kullanıcı sonuçları PLAN `14.4.5`'te sayılıdır. Beklenmeyen
 hataları **"bozuk yedek" gibi maskelenmez** — §21'in XLSX için koyduğu kuralın
 aynısı.
 
+## Dilim 1'de uygulanan hâli
+
+```text
+domain/backup/BackupRows.kt          15 tablonun @Serializable kayıt tipleri
+domain/backup/BackupDocument.kt      BackupData, BackupEnvelopeV1, backupJson,
+                                     canonicalBackupDataJson, backupDocumentOf
+domain/backup/DatabaseBackupExporter.kt  BackupSnapshot, BackupSource, exporter
+domain/backup/Sha256.kt              expect fun sha256Of(ByteArray): String
+desktopMain/domain/backup/DesktopSha256.kt  actual + paylaşılan lowerCaseHex
+data/database/dao/BackupDao.kt       15 sıralı okuma + @Transaction snapshot()
+data/repository/BackupStore.kt       entity → yedek kaydı eşlemesi, PRAGMA user_version
+```
+
+Verilen ve testle sabitlenen biçim kararları:
+
+- **Pretty-print YOK, tek satır compact.** Sebebi okunabilirlik tercihi değil
+  checksum'dır: gömülü `data` ile hash'lenen `data` **bayt bayt aynı** olmak
+  zorundadır ve girintili yazımda iç içe nesne ile tek başına yazılmış nesne
+  farklı çıkar. `BackupDocumentTest` bunu `"data":` + kanonik metin içermesiyle
+  çiviler.
+- `createdAt` `Instant.toString()` ile ISO-8601/UTC; satır zamanları epoch millis.
+- Alan adları camelCase ve **elle beyan edilmiştir**; Room sütun adından
+  türetilmez. Eşleme `BackupManifest` (desktopTest) ile çivilenir.
+- `BackupData` alan sırası = PLAN 14.4.2 restore sırası; dosya, uygulanacağı
+  sırayla okunur.
+
+Sıralama **tek yerde**, DAO sorgularının `ORDER BY`'ında yapılır; Kotlin tarafında
+ikinci bir sıralama yoktur. PLAN 14.4.2'nin dört tabloda kullandığı anahtar
+(`cell_segments`, `task_colors`, `task_stages`, `draft_task_colors`) birincil
+anahtar değil **unique index'li iş anahtarıdır**; her biri yine tam sıra verir.
+
 ## Reddedilen alternatifler  *(tekrar önerilmesin)*
 
 ```text
@@ -1191,11 +1235,11 @@ güvenlik yedeği başarısızken devam REDDEDİLDİ  kullanıcının geri dön�
 ## Dört atomik dilim
 
 ```text
-1  JSON sözleşmesi, bütün DB snapshot'ı ve deterministik yazıcı .... SIRADAKİ
-   kullanıcıya açılan bir şey yok; yalnız okur. Şema değişmez.
+1  JSON sözleşmesi, bütün DB snapshot'ı ve deterministik yazıcı .... TAMAM
+   kullanıcıya açılan bir şey yok; yalnız okur. Şema değişmedi.
    commit: feat(backup): describe the whole database as one document
 
-2  Manuel yedek dosyası yazma + Ayarlar ekranı
+2  Manuel yedek dosyası yazma + Ayarlar ekranı ..................... SIRADAKİ
    kullanıcı yedek alabilir; geri yükleme yok. Şema değişmez.
    commit: feat(backup): save the whole database to a file
 
@@ -1304,6 +1348,12 @@ LegacyRowFixtures                       v1…v6 satır yazıcıları
                                         (v6 raw block = v7 raw block; şema aynı)
 CountingSqliteDriver                    gerçek sürücü seviyesinde ifade sayımı
 FailingSqliteDriver                     enjekte edilen depolama hataları
+PausingSqliteDriver                     transaction ortasında kontrollü araya girme
+BackupFixture                           15 tablonun hepsini dolduran, istenirse tablo
+                                        içinde TERS sırayla yazan yedek fixture'ı
+BackupManifest (desktopTest)            yedek biçiminin elle beyan edilmiş sözleşmesi;
+                                        8.json ve serializer descriptor'larıyla
+                                        karşılaştırılır
 ComposeSceneHarness                     gerçek Compose sahnesi (desktopTest)
 ```
 
@@ -1336,6 +1386,11 @@ Geri alma                önizleme 1 ve 42 görev için AYNI ifadeleri çalışt
 Onaylanmış batch listesi {SELECT import_batches = 1}, başka tablo yok. 1 ve 42
                          batch aynı ifadeleri çalıştırır; 42 görev üreten batch
                          listede tek satırdır (JOIN yok, çoğaltma yok)
+Yedek anlık görüntüsü    15 SELECT — tablo başına bir okuma, satır başına hiçbiri.
+                         3 görevli ve 1.203 görevli veritabanı AYNI ifadeleri
+                         çalıştırır. Yedek sırasında 0 INSERT / UPDATE / DELETE.
+                         Ölçüm: 1.203 görev → 1.289.227 karakter, 122 ms,
+                         ~23 MiB (bu makinede; eşik değil kayıttır)
 ```
 
 ---
@@ -1436,8 +1491,8 @@ PLAN `18.` — Faz 3 işler listesi.
 ```text
  1  Geçmiş ekranını tamamla ............................. TAMAM
  2  Import batch rollback ve korumalı geri alma ......... TAMAM (üç dilim)
- 3  Sürümlü JSON yedek/dışa aktarma ve geri yükleme ..... KARARLAR VERİLDİ,
-                                                        KOD YOK  ← SIRADAKİ
+ 3  Sürümlü JSON yedek/dışa aktarma ve geri yükleme ..... DİLİM 1 TAMAM
+                                                        (4 dilimden 1'i)  ← SIRADAKİ
  4  Import ve migration öncesi otomatik snapshot ........ YAPILMADI
  5  CSV görev dışa aktarmayı doğrula ......... özellik var, Faz 3 doğrulama
                                               testleri yazılmadı
@@ -1506,17 +1561,17 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
 
 ## Sıradaki bağlayıcı iş
 
-> **Faz 3 / İş 3 / Dilim 1: JSON sözleşmesi, bütün veritabanının anlık görüntüsü
-> ve deterministik yazıcı.**
+> **Faz 3 / İş 3 / Dilim 2: manuel yedek dosyasının yazılması ve `Ayarlar`
+> ekranının açılması.**
 >
-> İş 2 üç dilimiyle birlikte kapanmıştır. İş 3'ün ürün ve mimari kararları
-> **verilmiştir** (PLAN `14.4`, `12.16`, `16.`; özet §25.1) fakat henüz tek satır
-> kod yazılmamıştır. Sıradaki iş, dört dilimin **birincisidir**.
+> Dilim 1 tamamlandı: yedek belgesi, 15 tablonun kapsamı, tek transaction okuma,
+> kanonik yazıcı ve `dataSha256` çalışıyor ve testli (§25.1). Belge bugün yalnız
+> bellekte üretilebiliyor; hiçbir yere yazılmıyor.
 >
-> Dilim 1 kapsamı: `kotlinx-serialization-json` bağımlılığının eklenmesi, yedek
-> belgesinin DTO'ları ve v8 sütunlarına eşlemesi, tek transaction'da okuyan
-> anlık görüntü sorgusu, kanonik/deterministik yazıcı ve `dataSha256`. Kullanıcıya
-> açılan hiçbir şey yoktur; yalnız okur. Şema değişmez.
+> Dilim 2 kapsamı: `BackupFileGateway`/`Handle` ve AWT kaydetme diyaloğu,
+> `AtomicFileWriter`'ın yeniden kullanımı, üzerine yazma onayı, Türkçe metinler,
+> PLAN `12.16`'nın `Ayarlar` ekranının gerçek bir gezinme hedefi olarak açılması
+> ve `Yedek oluştur` eylemi. Geri yükleme **yok**. Şema değişmez.
 >
 > Sonraki bağlayıcı sıra PLAN'ın kendi sırasıdır: İş 3 → 4 → 7 → 9 + 5 → 10 →
 > 11-13 → 14-16.
@@ -1788,21 +1843,34 @@ grep -rnoE 'PLAN [0-9]{3,}' app/src/     # boş dönmelidir
 
 ---
 
-## R9 — Yabancı anahtarlar çalışma zamanında zorlanmıyor olabilir  *(açık, İş 3 / Dilim 1'de kesinleşecek)*
+## R9 — Yabancı anahtar zorlaması  *(KAPANDI — ölçüldü; zorlama AÇIK)*
 
-`room3-runtime` 3.0.1 jar'ının tamamında `PRAGMA foreign_keys = ON` **yoktur**
-(bulunanlar: `defer_foreign_keys = TRUE`, `foreign_key_check`, `foreign_key_list`).
-Üretim kodunda da yoktur; repoda bu pragma'yı veren tek yer `CommittedSchema` test
-yardımcısıdır. SQLite'ın kendi varsayılanı kapalıdır.
+Şüphe yanlıştı ve düzeltilmiştir. `room3-runtime` 3.0.1 jar'ında
+`PRAGMA foreign_keys = ON` bulunmaması zorlamanın kapalı olduğu anlamına gelmiyor:
+**bundled SQLite sürücüsü onu kendisi açıyor.**
 
-Anlamı: bugün kopuk bir yabancı anahtarı yazma anında engelleyen bir şey
-olmayabilir. Bulgu **jar ve kaynak incelemesiyle** elde edildi, koşturulan bir
-testle değil.
+Ölçüm (`ForeignKeyEnforcementTest`, üretim `DatabaseFactory`'siyle açılan geçici
+bir veritabanında):
 
-Sonucu ne olursa olsun İş 3'ün tasarımı değişmez — geri yükleme hem doğru sırayla
-yazar hem de commit'ten önce **açıkça** `foreign_key_check` çalıştırır (§25.1).
-Değişen yalnız o kontrolün ne kanıtladığıdır. Dilim 1'in ilk işi bunu tek bir
-testle kesinleştirmektir.
+```text
+PRAGMA foreign_keys                                  → 1
+olmayan bir oyuna işaret eden game_cells INSERT'ü    → SQLite 787
+                                                       "FOREIGN KEY constraint failed"
+sonrası game_cells satır sayısı                      → 0
+```
+
+Sonuçları:
+
+- **Mevcut veri ve migration'lar için etkisi yok.** Zorlama baştan beri açıkmış;
+  yani kopuk bir referans zaten hiçbir zaman yazılamamış, düzeltilecek bir geçmiş
+  yok.
+- Bu dilimde global davranış **değiştirilmedi**; değiştirilecek bir şey yoktu.
+- Geri yükleme tasarımı aynen geçerli ve artık daha gerekçelidir: satırlar doğru
+  sırayla yazılır, **temizleme adımında `defer_foreign_keys` gerçekten
+  gerekecektir** ve commit'ten önceki açık `foreign_key_check` kararı korunur
+  (PLAN 14.4.3).
+- Test bundan sonra tersini bekler: zorlama bir bağımlılık yükseltmesiyle sessizce
+  kapanırsa haber verir.
 
 ---
 
@@ -1883,8 +1951,8 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
 - İş 1 (geçmiş) iki dilim hâlinde tamamlandı: olay kayıt katmanı + geçmiş ekranı.
 - İş 2 (import rollback) üç dilimiyle TAMAMEN BİTTİ: Room v8 + import_batch_cells,
   geri alma motoru ve üç geçmiş olayı, ve motoru kullanan arayüz.
-- Sıradaki bağlayıcı iş: İş 3 / Dilim 1 — JSON sözleşmesi, bütün DB snapshot'ı ve
-  deterministik yazıcı.
+- Sıradaki bağlayıcı iş: İş 3 / Dilim 2 — manuel yedek dosyası yazma + Ayarlar
+  ekranı. Dilim 1 (yedek belgesi, kanonik yazıcı, dataSha256) BİTTİ.
 - İş 2'nin ürün kararları VERİLMİŞTİR ve PLAN 11.4.4'tedir; yeniden tartışma.
   Kısmi rollback yoktur, tek çakışma bütün işlemi engeller, segment kimliğine
   provenance bağlanmaz, anlık görüntüsü olmayan eski batch geri alınamaz.
@@ -1893,8 +1961,12 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   bilinmeyen alan REDDEDİLİR, dataSha256 zorunlu, 15 tablonun tamamı, merge DEĞİL
   replace, DB/WAL/SHM dosya takası YOK, canlı DB'de tek transaction, restore
   öncesi güvenlik yedeği zorunlu, restore history event YAZMAZ, dört dilim.
-- kotlinx-serialization-json ve serialization derleyici eklentisi İZİNLİDİR ve
-  Dilim 1'de eklenecektir; izin başka bağımlılığa genişletilmez.
+- kotlinx-serialization-json 1.11.0 ve serialization eklentisi Dilim 1'de
+  EKLENDİ (yalnız commonMain); izin başka bağımlılığa genişletilmez.
+- Yedek belgesi salt okunurdur ve henüz hiçbir yere yazılmaz; JSON compact
+  yazılır (pretty-print YOK) çünkü gömülü data ile hash'lenen data bayt bayt
+  aynı olmak zorundadır.
+- Yabancı anahtarlar üretim bağlantısında ZORLANIR (ölçüldü, §33 R9).
 - Batch durumu ekranda ham enum olarak GÖSTERİLMEZ; ui/PoolNames.kt içindeki
   importStatusNameOf tek kaynaktır.
 - PLAN'a satır numarasıyla atıf yapma; bölüm numarası kullan (PLAN 12.15 gibi).
@@ -2044,10 +2116,14 @@ Kalan iş ağırlıklı olarak **dayanıklılık, yedekleme, kurtarma, paketleme
 hazırlıktır**: JSON yedek/geri yükleme, otomatik snapshot, kurtarma akışı,
 loglama, performans kapısı, Linux paketi, belgeler, lisans ve CI.
 
-Bunların ilki — **sürümlü JSON yedek ve geri yükleme** — artık tasarlanmış
-durumdadır: biçim, kapsam, doğrulama hattı, restore mimarisi (A′), güvenlik yedeği
-ve dört atomik dilim PLAN `14.4` ile §25.1'de yazılıdır. **Henüz tek satır kod
-yoktur;** sıradaki iş Dilim 1'dir.
+Bunların ilki — **sürümlü JSON yedek ve geri yükleme** — tasarlanmış ve
+**başlamıştır**. Biçim, kapsam, doğrulama hattı, restore mimarisi (A′), güvenlik
+yedeği ve dört atomik dilim PLAN `14.4` ile §25.1'de yazılıdır.
+
+Dört dilimin **birincisi bitti**: uygulama artık bütün veritabanını tek bir
+sürümlü, deterministik ve checksum'lı JSON belgesi olarak, tek transaction'da,
+15 sorguyla ve hiçbir şey yazmadan tarif edebiliyor. Belge bellekte kalıyor;
+onu bir dosyaya yazmak ve `Ayarlar` ekranını açmak **Dilim 2**'nin işidir.
 
 En önemli kural:
 
