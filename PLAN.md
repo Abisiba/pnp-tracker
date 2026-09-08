@@ -152,6 +152,9 @@ metin parçası arasında birebir ilişki vardır; arada gruplayıcı bir katman
 - İçe aktarmayı geri alma (`11.4.4`) da bu kuralın içindedir: geri alınan görevler
   tombstone ile görünürden çıkar, fiziksel olarak silinmez. Geri alma hiçbir
   `ProgressEvent` veya `HistoryEvent` satırını silmez.
+- Tombstone yedeğin de parçasıdır: `14.4`'teki yedek, kaydın **silinmiş olduğu
+  bilgisini** taşır ve geri yükleme onu aynen geri koyar. Tombstone'ları atan bir
+  yedek, kullanıcının silme kararını sessizce geri alırdı.
 
 ### 5.3 Game
 
@@ -943,7 +946,7 @@ Birincil masaüstü gezinmesi sol kenar çubuğu veya eşdeğer geniş ekran nav
 - İçe Aktarma
 - Geçmiş
 - Renkler
-- Ayarlar
+- Ayarlar — Faz 3 / İş 3 ile açılır; içeriği `12.16`'dadır
 
 Ayrı bir oyun listesi ekranı ve ayrı bir oyun detay ekranı **yoktur**. Görev
 oluşturma ve düzenleme oyun tablosunun hücrelerinde yapılır.
@@ -1279,6 +1282,34 @@ TASK_ROLLED_BACK     geri alınan her görev için bir satır
 Bu olaylar da geçmişin geri kalanı gibi append-only'dur ve silinmez. Engellenmiş
 bir geri alma hiçbir olay yazmaz: gerçekleşmemiş bir işlem geçmişe girmez.
 
+### 12.16 Ayarlar
+
+`12.1`'in saydığı `Ayarlar` ekranı, yedekleme işiyle birlikte gerçek bir gezinme
+hedefi olarak açılır. İlk içeriği iki eylemdir:
+
+```text
+Yedek oluştur
+Yedekten geri yükle
+```
+
+- `Yedek oluştur`, `14.4.1`'deki dosyayı yazar. Varsayılan olarak
+  `pnp-yedek-<tarih>.json` adı önerilir; hedef konumu kullanıcı seçer ve harici
+  disk ya da başka bir klasör seçebilir. Var olan bir dosyanın üzerine yazmak
+  açık onay ister.
+- `Yedekten geri yükle`, bir `.json` dosyası seçtirir ve `14.4.3`'teki sırayı
+  yürütür.
+- **Dosya doğrulanmadan yıkıcı onay gösterilmez.** Onay ekranı ancak doğrulama
+  bittikten sonra açılır; mevcut bütün verinin bu yedeğin yerine geçeceğini ve
+  öncesinde bir güvenlik yedeği oluşturulacağını açıkça söyler.
+- Çift gönderim engellenir: ikinci bir tıklama veya tekrarlanan bir tuş, ikinci
+  bir okuma ya da ikinci bir transaction başlatamaz.
+- Kullanıcıya gösterilen bütün hata metinleri Türkçe ve eyleme dönüktür. Ham
+  enum, UUID, SQL, mutlak yol, exception metni veya başka bir kaydın içeriği
+  gösterilmez.
+- Ekran `17.`'nin klavye, odak, erişilebilirlik ve onay kurallarına uyar.
+
+Ayarların ileride kazanacağı başka içerikler bu işin kapsamında değildir.
+
 ## 13. Arama, filtreleme ve sıralama
 
 İlk sürümde:
@@ -1314,6 +1345,7 @@ Varsayılan sıralama:
 - Coroutines ve Flow
 - Compose Multiplatform Navigation veya uyumlu kararlı gezinme çözümü
 - Basit constructor tabanlı dependency injection; başlangıçta ağır DI framework’ü ekleme
+- Yedek dosyasının JSON'u için `kotlinx-serialization-json` ve Kotlin serialization derleyici eklentisi (`14.4.1`)
 
 ### 14.2 Yerel veri
 
@@ -1347,6 +1379,258 @@ XDG değişkeni tanımlı değilse standart kullanıcı dizini fallback’i kull
 - Büyük içe aktarma ve migration öncesinde otomatik snapshot alınır.
 - En az son birkaç otomatik snapshot döngüsel biçimde korunur; kesin sayı ayarlardan değiştirilebilir veya başlangıçta 7 olabilir.
 - Yapılandırılmış görevler CSV olarak dışa aktarılabilir.
+
+Yedeğin biçimi, kapsamı ve geri yüklemenin semantiği `14.4.1` ile `14.4.6`
+arasında kesinleşmiştir. Üçüncü ve dördüncü maddeler — otomatik snapshot ve
+döngüsel saklama — **ayrı bir iştir** ve `18.` bölümdeki Faz 3 / İş 4'e aittir.
+
+#### 14.4.1 Yedek dosyasının biçimi
+
+Yedek, tek bir düz UTF-8 JSON dosyasıdır. Uzantısı `.json`'dur. **Sıkıştırma
+yoktur:** dosyanın kullanıcı tarafından açılıp okunabilmesi kişisel bir yedek
+için gerçek bir güvencedir ve bu ölçekte boyut sorun değildir. Sıkıştırılmış bir
+biçim ancak yeni bir `formatVersion` ile gelebilir.
+
+JSON okuma ve yazma için `kotlinx-serialization-json` ve gerektirdiği Kotlin
+serialization derleyici eklentisi kullanılır. Bu, `1.` bölümdeki "önce mevcut
+standart kütüphanelerle çöz" kuralına verilmiş **açık izindir**: standart
+kütüphanede JSON yoktur ve güvenilmeyen bir dosyayı ayrıştırmak — unicode
+kaçışları, surrogate çiftleri, yuvalama derinliği — elle yazılacak bir
+ayrıştırıcıya bırakılmayacak kadar geniş bir yüzeydir.
+
+Dosyanın üst düzey zarfı şu kavramları taşır:
+
+```text
+format               "pnp-tracker-backup" — sabit dize
+formatVersion        yedek biçiminin sürümü; ilk sürüm 1
+appVersion           yedeği yazan uygulama sürümü; yalnız bilgi
+sourceSchemaVersion  satırların geldiği veritabanı şema sürümü
+createdAt            yedeğin alındığı an
+dataSha256           data'nın kanonik baytlarının SHA-256'sı
+data                 tablo başına bir dizi
+```
+
+Kurallar:
+
+- `formatVersion`, veritabanı şema sürümünden **bağımsızdır**; ikisi ayrı ayrı
+  ilerler ve biri diğerinden türetilmez.
+- Desteklenenden **yeni** bir `formatVersion` reddedilir ve kullanıcıdan
+  uygulamayı güncellemesi istenir. Yedek kısmen okunmaz.
+- İlk sürümde **daha eski bir format sürümü için yükseltme zinciri yoktur**; `1`
+  tek bilinen sürümdür. Zincir, ikinci bir sürüm gerçekten var olduğunda yazılır.
+- `sourceSchemaVersion` desteklenenden yeniyse yedek reddedilir.
+- `appVersion` tek başına hiçbir yedeği reddettirmez.
+- `createdAt` insanın okuyabilmesi için metin biçimindedir. **Satır zaman
+  damgaları bu istisnaya girmez:** veritabanı sütununda duran epoch milisaniye
+  değeri aynen taşınır.
+- Kimlikler kanonik UUID metni, enum değerleri enum adı olarak **kayıpsız**
+  taşınır.
+- Null bir alan **atlanmaz**, açıkça `null` yazılır. Alanın yokluğu ile null
+  olması aynı şey değildir.
+
+Biçim **kanonik ve deterministiktir**: alan sırası sabittir, her tablonun
+satırları `14.4.2`'deki anahtarla sıralanır ve hiçbir sütun kayan nokta taşımaz.
+Aynı veritabanı iki kez dışa aktarıldığında `createdAt` dışında **bayt bayt
+aynı** dosya üretilir; bu, `25.` bölümdeki CSV güvencesinin aynısıdır.
+
+`dataSha256` **zorunludur** ve yalnız `data` nesnesinin kanonik UTF-8 baytları
+üzerinden hesaplanır. Zarf kendi kendini hash'lemez. Okurken `data` aynı kanonik
+yazıcıyla yeniden yazılıp karşılaştırılır; uyuşmazlık, **kalıcı hiçbir yazma
+başlamadan** geri yüklemeyi durdurur.
+
+Okunacak dosyanın boyutu **64 MiB** ile sınırlıdır. Sınır **ayrıştırma
+başlamadan önce** uygulanır; sınırın üstündeki bir dosya belleğe alınmaz.
+
+Bilinmeyen alanlara karşı politika **sıkıdır**. Tanınmayan bir alan, tanınmayan
+bir tablo, eksik bir zorunlu alan veya tekrarlanan bir JSON anahtarı yedeği
+reddettirir. Sessizce yok saymak, o veriyi bir sonraki dışa aktarmada kaybetmek
+demektir; biçimin değiştiğini söylemenin yolu `formatVersion`'dır.
+
+#### 14.4.2 Yedeğin kapsamı
+
+Yedek uygulamanın **bütün** verisini taşır: şema sürüm 8'deki 15 tablonun
+tamamı. Eksiği olan bir yedek `20.` bölümdeki "yedek → temiz veritabanı → geri
+yükle" testini geçemez.
+
+| # | Tablo | Sıralama anahtarı | Neden yedekte |
+|---|---|---|---|
+| 1 | `colors` | `id` | Temel ve özel renklerin hepsi normal kayıttır (`5.7`) |
+| 2 | `color_aliases` | `color_id, normalized_alias` | İçe aktarmanın renk tanıma altyapısı (`5.11`) |
+| 3 | `import_batches` | `id` | `DRAFT`, `CONFIRMED` ve `ROLLED_BACK` batch'lerin hepsi (`11.2`) |
+| 4 | `games` | `id` | Silinmiş oyunlar tombstone'larıyla birlikte (`5.2`, `5.3`) |
+| 5 | `game_cells` | `id` | Oyun satırının sütunları (`5.4`) |
+| 6 | `raw_import_blocks` | `id` | Ham metin ve ipucu kararları kaynak ve denetim izidir (`11.3`, `11.4.3`) |
+| 7 | `tasks` | `id` | Silinmiş görevler tombstone'larıyla birlikte (`5.2`, `5.6`) |
+| 8 | `cell_segments` | `cell_id, order_index` | Hücre belgesinin kendisi (`5.5`) |
+| 9 | `task_colors` | `task_id, slot_index` | Renk yuvaları (`5.10`) |
+| 10 | `task_stages` | `task_id, order_index` | Kart ve mukavva aşama sayaçları (`5.12`, `7.2`) |
+| 11 | `progress_events` | `id` | Append-only; silinmez (`5.12`) |
+| 12 | `history_events` | `id` | Append-only; silinmez (`12.15`) |
+| 13 | `import_batch_cells` | `import_batch_id, cell_id` | Geri almanın dayanağı (`11.4.4`) |
+| 14 | `draft_tasks` | `id` | Onaydan sonra da korunur (`11.4.3`) |
+| 15 | `draft_task_colors` | `draft_task_id, slot_index` | Taslağın renk yuvaları |
+
+Kullanıcı verisinin hangi parçalarının yedekte olduğu bu tablodan okunur: temel
+ve özel renkler, renk alias'ları, oyunlar, hücreler ve bütün parçalar, görevler
+ile renk yuvaları ve aşamaları, progress olayları, history olayları, import
+batch'leri, ham bloklar ve ipucu kararları, taslak görevler ve taslak renkleri,
+hücre anlık görüntüleri, tombstone kayıtları, onaylanmış ve geri alınmış içe
+aktarmalar.
+
+Ekranda yeniden türetilebilen hiçbir şey **ayrı kayıt olarak yazılmaz**: havuz
+ve geçmiş projection'ları, olaylardan hesaplanan `failureTotal` gibi değerler,
+arama ve süzgeç durumu, tema ve pencere durumu yedeğin dışındadır. Sütun olarak
+saklanan sayaçlar — `import_batches.created_task_count` gibi — türetilmiş değil
+saklanan durumdur ve aynen taşınır.
+
+Geri yükleme sırası yukarıdaki numaralandırmadır ve her satırın yabancı
+anahtarlarını önceler:
+
+```text
+games              → import_batches
+game_cells         → games
+raw_import_blocks  → import_batches, games
+tasks              → raw_import_blocks
+cell_segments      → game_cells, tasks
+task_colors        → tasks, colors
+task_stages        → tasks
+progress_events    → tasks
+history_events     → games, tasks
+import_batch_cells → import_batches, game_cells
+draft_tasks        → raw_import_blocks, game_cells, tasks
+draft_task_colors  → draft_tasks, colors
+```
+
+Temizleme sırası bu sıranın **tersidir** (15 → 1).
+
+Kimlikler ve zaman damgaları **aynen** korunur, yeniden üretilmez. Bu bir tercih
+değil zorunluluktur: `5.12` aynı olayın iki kez uygulanmamasını kimliğe bağlar ve
+`11.4.4` bir görevin dokunulmamış sayılmasını `updatedAt` ile `createdAt`
+eşitliğine bağlar. Zaman damgalarını yeniden yazan bir geri yükleme, geri
+yüklediği bütün onaylanmış içe aktarmaları geri alınamaz hâle getirirdi.
+
+#### 14.4.3 Geri yükleme
+
+Geri yükleme bir **birleştirme değildir**. Yedekteki veri, mevcut uygulama
+verisinin **tamamının yerine geçer**. Bu, `3.2`'nin içe aktarma için verdiği
+kararla aynı yöndedir: uygulama kullanıcının verisini kendiliğinden
+birleştirmez, çünkü hangi kaydın kazanacağına dair bir kural yoktur ve
+uydurulmuş bir kural sessiz veri kaybıdır.
+
+Sıra kesindir:
+
+```text
+dosyayı güvenmeden oku
+→ zarf, sürüm ve checksum doğrulaması
+→ yapısal ve domain doğrulaması
+→ geçici bir veritabanına yükleme
+→ foreign_key_check ve invariant denetimleri
+→ kullanıcı onayı
+→ geri yükleme öncesi güvenlik yedeği (14.4.4)
+→ canlı veritabanında tek replace transaction
+→ yeniden okuma ve hash doğrulaması
+→ Flow ve arayüzün yenilenmesi
+```
+
+Kullanıcı onayına kadar **gerçek veritabanına tek bayt yazılmaz.** Doğrulama
+gerçek şemayla ve gerçek satırlarla, geçici bir veritabanında yapılır; o
+veritabanı geçici dizinde durur ve işlem bitince silinir.
+
+Canlı veritabanı üzerinde:
+
+- Tablolar yabancı anahtar sırasının **tersiyle** temizlenir.
+- Yedeğin satırları `14.4.2`'deki sırayla yazılır.
+- Hepsi **tek transaction**'dır.
+- Gereken yerde `defer_foreign_keys` kullanılır ve commit'ten önce **açıkça**
+  `foreign_key_check` çalıştırılır; boş dönmezse transaction düşer.
+- Herhangi bir noktadaki hata bütün transaction'ı geri alır.
+- **Yarım bir geri yükleme oluşamaz.**
+
+Veritabanı dosyası, WAL ve SHM dosyaları **dosya sistemi düzeyinde
+değiştirilmez.** Room bağlantısı kapatılıp veritabanı dosyası takas edilmez: bir
+takas tek bir atomik işlem değildir, yan dosyaları eski veritabanına ait bırakma
+riski taşır ve masaüstüne özgü olduğu için ortak katmanda yaşayamaz.
+
+Geri yüklemeden sonra **uygulamanın yeniden başlatılması gerekmez.** Gözlenen
+okumalar veritabanının kendi invalidation mekanizmasıyla tazelenir; açık ve
+bayat kalan düzenleme yüzeyleri güvenli biçimde kapatılır veya yenilenir.
+
+**Geri yükleme geçmişe olay yazmaz.** Geri yüklenen geçmiş, yedekte bulunan
+geçmişin aynısıdır. `12.15`'in listesinde geri yükleme yoktur; ayrıca bir "geri
+yükleme yapıldı" satırı bir sonraki geri yüklemede yerini yedeğin geçmişine
+bırakır ve aynı veritabanının kendi geçmişi hakkında iki farklı şey söylemesi
+anlamına gelirdi.
+
+Aynı yedeğin ikinci kez geri yüklenmesi **aynı sonucu** verir: kimlikler aynen
+taşındığı için işlem idempotenttir.
+
+#### 14.4.4 Geri yükleme öncesi güvenlik yedeği
+
+Kullanıcı geri yüklemeyi son kez onayladıktan sonra, **canlı veritabanına
+dokunulmadan önce**, mevcut verinin tarihli bir yedeği şuraya yazılır:
+
+```text
+$XDG_DATA_HOME/pnp-tracker/backups/
+```
+
+Kurallar:
+
+- Dosya, manuel yedeğin **aynı kanonik biçimini** kullanır; ayrı bir format
+  yoktur.
+- Atomik dosya yazımı kullanılır (`14.4.5`).
+- Dosya adı, çakışmaya dayanıklı bir zaman damgası veya benzersiz sonek taşır.
+- **Güvenlik yedeği oluşturulamazsa geri yükleme başlamaz.** Yazılamamış bir
+  güvenlik yedeğiyle devam etmek, kullanıcının geri dönüş yolunu sessizce
+  kaldırmak olurdu.
+- Güvenlik yedeği tamamlanmadan canlı veritabanına yazılmaz.
+- Onay ekranı, bu dosyanın kullanıcının geri dönüş yolu olduğunu söyler.
+- Döngüsel saklama, saklanacak yedek sayısı ve eski yedeklerin temizlenmesi **bu
+  işin parçası değildir**; `18.` bölümdeki Faz 3 / İş 4'e aittir.
+- Mutlak yol, kişisel veri ve dosya içeriği hiçbir hata veya log mesajına
+  sızmaz.
+
+#### 14.4.5 Dosya güvenliği ve hata sınırları
+
+Yedek dosyası yazmak `25.` bölümdeki CSV kalıbının aynısını kullanır: geçici
+dosya hedefle **aynı dizinde** açılır, tamamlanınca atomik olarak taşınır ve
+atomik taşıma desteklenmiyorsa veri kaybettiren bir fallback denenmez. Her
+hatada geçici dosya silinir ve hedef dosya bayt bayt aynı kalır.
+
+Bilinen dosya ve biçim hataları, kullanıcıya Türkçe ve eyleme dönük olarak
+söylenen **tipli sonuçlara** çevrilir:
+
+```text
+dosya bulunamadı veya okunamadı
+64 MiB sınırı aşıldı
+UTF-8 veya JSON bozuk
+yanlış format
+desteklenmeyen format veya şema sürümü
+checksum uyuşmazlığı
+bilinmeyen alan, eksik zorunlu alan veya tekrarlanan anahtar
+tekrarlanan kimlik
+geçersiz UUID, enum veya değer
+kopuk yabancı anahtar grafı
+domain invariant ihlali
+geçici veritabanı doğrulaması başarısız
+güvenlik yedeği yazılamadı
+geri yükleme transaction'ı uygulanamadı
+```
+
+Beklenmeyen `IllegalStateException`, `NullPointerException` ve diğer
+invariant/programlama hataları **"bozuk yedek" gibi maskelenmez**; oldukları gibi
+yükselirler. Bu, içe aktarma tarafında zaten yürürlükte olan kuralın aynısıdır.
+
+Kullanıcıya ham enum, UUID, SQL, mutlak yol, exception metni veya başka bir
+kaydın içeriği gösterilmez.
+
+#### 14.4.6 Bu işin dışında kalanlar
+
+- Otomatik snapshot ve tetikleyicileri (büyük içe aktarma, migration).
+- Döngüsel saklama, saklanacak yedek sayısı ve bunun ayarlardan değiştirilmesi.
+- Eski yedeklerin temizlenmesi.
+- Birleştirmeli geri yükleme, kısmi geri yükleme ve tek tablo geri yükleme.
+- Yedeğin şifrelenmesi veya sıkıştırılması.
+- Format sürümleri arasında yedek yükseltme zinciri.
 
 ### 14.5 Ağ
 
@@ -1424,6 +1708,11 @@ Tek modülle başlanabilir. Kod büyümeden gereksiz Gradle modüllerine ayrılm
 - Import rollback tek transaction'dır ve kısmi sonuç bırakmaz. Batch ancak bütün hedefleri güvenliyse ve hepsi kaldırıldıysa `ROLLED_BACK` olur; aksi hâlde `CONFIRMED` kalır ve hiçbir satır değişmez.
 - Geri alma hiçbir progress veya history olayını silmez; kaldırma tombstone'dur.
 - Geri almanın hücre metnini geri yüklemesi, saklanan `ImportBatchCell.documentBefore` metnine dayanır; segment kimliğine bağlı bir provenance kullanılmaz.
+- Yedekten geri yükleme tek transaction'dır ve kısmi sonuç bırakmaz: tablolar aynı transaction içinde temizlenir ve yedeğin satırlarıyla doldurulur, herhangi bir hata hepsini geri alır ve hiçbir satır değişmez (`14.4.3`).
+- Geri yükleme veritabanı dosyasını, WAL veya SHM dosyasını dosya sistemi düzeyinde değiştirmez; bağlantı kapatılıp dosya takas edilmez.
+- Yedek dosyası, doğrulaması bitmeden ve kullanıcı onaylamadan kalıcı hiçbir yazma tetiklemez; checksum, sürüm veya invariant hatası gerçek veritabanına dokunmadan durdurur.
+- Geri yükleme öncesi güvenlik yedeği yazılamazsa geri yükleme hiç başlamaz (`14.4.4`).
+- Yedek dosyası atomik yazılır; hata hâlinde hedef dosya bayt bayt korunur.
 
 ## 17. Erişilebilirlik ve kullanım kuralları
 
@@ -1435,7 +1724,7 @@ Tek modülle başlanabilir. Kod büyümeden gereksiz Gradle modüllerine ayrılm
 - Odak sırası ve görünür odak göstergesi bulunmalıdır.
 - Metin ölçekleme ve yüksek DPI ekranlar desteklenmelidir.
 - Sayaç düğmelerinin erişilebilir adları olmalıdır.
-- Silme, renk silme, görevi metne dönüştürme, oyun toplu tamamlama, temel renkleri geri yükleme ve import rollback işlemlerinde onay istenmelidir.
+- Silme, renk silme, görevi metne dönüştürme, oyun toplu tamamlama, temel renkleri geri yükleme, import rollback ve yedekten geri yükleme işlemlerinde onay istenmelidir. Yedekten geri yüklemede onay, ancak dosya doğrulandıktan sonra sorulur (`14.4.3`).
 - Türkçe karakterlerde büyük/küçük harf normalizasyonu doğru yapılmalıdır.
 - Uygulama metinleri kaynak dosyalarında tutulmalı, UI içine dağınık biçimde hardcode edilmemelidir.
 - İlk dil Türkçedir; yapı gelecekte başka dil eklemeyi engellememelidir.
@@ -1645,7 +1934,20 @@ Kişisel kullanımda veri kaybı riski düşük, test edilmiş ve Garuda Linux�
       hücre geri yüklemesi ve üç yeni geçmiş olayı. Arayüz yok.
    3. Arayüz: onaylanmış içe aktarma listesi, onay ve engelleme ekranları,
       Türkçe metinler.
-3. Sürümlü JSON yedek/dışa aktarma ve geri yükleme ekle.
+3. Sürümlü JSON yedek/dışa aktarma ve geri yükleme ekle (`14.4`). Kararlar
+   kesinleşmiştir ve iş dört atomik dilimde uygulanır:
+   1. JSON sözleşmesi, bütün veritabanının anlık görüntüsü ve deterministik
+      yazıcı. Kullanıcıya açılan bir şey yoktur; yalnız okur.
+   2. Manuel yedek dosyasının yazılması ve `Ayarlar` ekranının gerçek bir gezinme
+      hedefi olarak açılması (`12.16`). Kullanıcı yedek alabilir; geri yükleme
+      henüz yoktur.
+   3. Güvenilmeyen yedek dosyasının ayrıştırılması, doğrulanması ve geçici bir
+      veritabanında denenmesi. Doğrulanmış bir belgeden canlı veritabanına giden
+      yol henüz yoktur.
+   4. Geri yükleme öncesi güvenlik yedeği, canlı veritabanındaki tek replace
+      transaction'ı ve kullanıcı arayüzü.
+   Hiçbir ara commit, doğrulanmamış veya yarım bir geri yükleme yolunu kullanıcıya
+   açmaz.
 4. Import ve migration öncesi otomatik snapshot oluştur.
 5. CSV görev dışa aktarmayı doğrula.
 6. Veritabanı migration testlerini oluştur.
@@ -1663,6 +1965,19 @@ Kişisel kullanımda veri kaybı riski düşük, test edilmiş ve Garuda Linux�
 #### Faz 3 testleri
 
 - JSON yedekle/geri yükle round-trip
+- Deterministik yedek üretimi: aynı veritabanı iki kez dışa aktarıldığında `createdAt` dışında bayt bayt aynı dosya
+- Yedeğin, şema sürümündeki her tablonun her sütununu taşıdığının şemadan doğrulanması
+- Tombstone'ların, progress ve history olaylarının yedek → geri yükleme sonrası korunması
+- Geri yüklenen bir `CONFIRMED` batch'in hâlâ geri alınabilmesi
+- Bilinmeyen alan, eksik zorunlu alan, tekrarlanan JSON anahtarı, tekrarlanan kimlik, geçersiz enum/UUID, kopuk yabancı anahtar ve bozuk sıra indeksinin reddedilmesi
+- Desteklenmeyen `formatVersion` ve `sourceSchemaVersion` değerlerinin reddedilmesi
+- Checksum uyuşmazlığının ve kesilmiş dosyanın reddedilmesi
+- 64 MiB sınırının ayrıştırma başlamadan uygulanması
+- Geri yükleme transaction'ı yarıda kalırsa hiçbir satırın değişmemesi
+- Güvenlik yedeği yazılamadığında geri yüklemenin hiç başlamaması
+- Geri yükleme sonrası yeniden açılışta `foreign_key_check` ve `integrity_check`
+- Aynı yedeğin ikinci kez geri yüklenmesinin aynı sonucu vermesi
+- v1'den bugünkü sürüme yürütülmüş bir veritabanının dışa aktarılıp geri yüklenebilmesi
 - CSV dışa aktarma doğruluğu
 - Migration geriye dönük fixture testleri
 - Import rollback’in yalnızca ilgili batch’i etkilemesi
@@ -1875,6 +2190,7 @@ Beklenti:
 - Excel → RawImportBlock → DraftTask → Task → TaskSegment
 - Import rollback
 - Yedek → temiz veritabanı → geri yükle
+- Yedek → geri yükle → yeniden yedek: iki dosyanın `data` bölümü bayt bayt aynı
 - Tamamlanan görevin aktif havuz sorgusundan çıkması ve hücrede kalması
 - Oyun toplu tamamlama ve eksik parçada yeniden açılma
 - Renk silme sonrası görevlerin korunması
@@ -1994,7 +2310,7 @@ içermelidir.
 - `**`, yeşil hücre ve belirsiz renk ipuçları kullanıcı onayıyla işlenir.
 - Bilinmeyen renk/adet ve sınıflandırılmamış işler kaybolmaz.
 - Tamamlanan görev aktif havuzdan çıkar; hücrede tikli ve üstü çizili kalır, oyun ve geçmişte durur.
-- JSON yedekleme ve geri yükleme doğrulanmıştır.
+- Sürümlü JSON yedekleme ve geri yükleme doğrulanmıştır: yedek bütün uygulama verisini taşır, geri yükleme tek transaction'dır, öncesinde güvenlik yedeği alınır ve bozuk veya desteklenmeyen bir yedek hiçbir şey yazmadan reddedilir.
 - Şema migrationları testlidir.
 - Kritik domain, veritabanı ve UI testleri geçer.
 - Kullanıcı arayüzü klavye ve büyük metinle kullanılabilir.
