@@ -39,6 +39,7 @@ fun ImportSection(
     importController: ImportController,
     reviewController: ImportReviewController,
     confirmationController: ImportConfirmationController,
+    rollbackController: ImportRollbackController,
     modifier: Modifier = Modifier,
 ) {
     var openBatchId: EntityId? by remember { mutableStateOf(null) }
@@ -68,6 +69,10 @@ fun ImportSection(
             controller = reviewController,
             onOpen = { resumedBatchId -> openBatchId = resumedBatchId },
         )
+        // The two lists are different things and are labelled as such: one is a
+        // review to come back to, the other is work already done that PLAN
+        // 11.4.4 lets the user undo.
+        SettledImportsSection(controller = rollbackController)
     }
 }
 

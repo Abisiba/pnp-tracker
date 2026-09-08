@@ -145,6 +145,60 @@
     <string name="export_error_write_failed">Dosya yazılamadı. Varsa eski dosya olduğu gibi kaldı.</string>
     <string name="export_error_not_atomic">Bu konumda dosya güvenle değiştirilemiyor. Eski dosya olduğu gibi bırakıldı; başka bir klasör deneyin.</string>
 
+    <!-- Import batch status, said the same way wherever it is shown -->
+    <string name="import_status_draft">Taslak</string>
+    <string name="import_status_confirmed">Onaylandı</string>
+    <string name="import_status_rolled_back">Geri alındı</string>
+
+    <!-- Confirmed imports and taking one back -->
+    <string name="rollback_section_title">Onaylanmış içe aktarmalar</string>
+    <string name="rollback_section_hint">Onaylanmış bir içe aktarma, oluşturduğu görevlere ve yazdığı hücrelere sonradan dokunulmadıysa geri alınabilir.</string>
+    <string name="rollback_section_empty">Henüz onaylanmış bir içe aktarma yok.</string>
+    <string name="rollback_section_loading">Onaylanmış içe aktarmalar yükleniyor…</string>
+    <string name="rollback_section_unreadable">Onaylanmış içe aktarmalar okunamadı. Hiçbir şey değişmedi; daha sonra tekrar deneyin.</string>
+    <string name="rollback_list_label">Onaylanmış içe aktarmalar listesi</string>
+    <string name="rollback_entry">%1$s — %2$s</string>
+    <string name="rollback_entry_detail">Oluşturulan görev: %1$d — Durum: %2$s</string>
+    <string name="rollback_action">Geri al</string>
+    <string name="rollback_action_description">%1$s içe aktarmasını geri al</string>
+    <string name="rollback_preview_loading">Geri alma inceleniyor…</string>
+    <string name="rollback_dialog_title">İçe aktarma geri alınsın mı?</string>
+    <string name="rollback_dialog_body">Bu içe aktarmanın oluşturduğu %1$d görev aktif görünümden kaldırılacak.</string>
+    <string name="rollback_dialog_scope">İşlem içe aktarmanın bütün görevlerini kapsar; tek tek görev seçilemez.</string>
+    <string name="rollback_dialog_cells">Yazıldığı %1$d hücre eski metnine döner ve %2$d oyunun geçmişine birer satır yazılır.</string>
+    <string name="rollback_dialog_completion">Oyunların “tamamlandı” işaretleri geri alınmaz; isterseniz oyun tablosundan kendiniz kaldırabilirsiniz.</string>
+    <string name="rollback_dialog_irreversible">Bu işlem geri alınamaz.</string>
+    <string name="rollback_dialog_accept">Geri al</string>
+    <string name="rollback_dialog_cancel">Vazgeç</string>
+    <string name="rollback_running">İçe aktarma geri alınıyor…</string>
+    <string name="rollback_done_title">İçe aktarma geri alındı</string>
+    <string name="rollback_done_body">%1$d görev kaldırıldı ve %2$d hücre eski hâline döndü.</string>
+    <string name="rollback_close">Kapat</string>
+    <string name="rollback_blocked_title">Bu içe aktarma geri alınamıyor</string>
+    <string name="rollback_blocked_tasks_title">Engelleyen görevler</string>
+    <string name="rollback_blocked_task">%1$s — %2$s</string>
+    <string name="rollback_blocked_cells_title">Engelleyen hücreler</string>
+    <string name="rollback_blocked_cell">%1$s — %2$s — %3$s</string>
+    <string name="rollback_blocked_cell_unknown_game">Oyun adı okunamadı</string>
+    <string name="rollback_blocked_cell_unknown_column">Sütun okunamadı</string>
+    <string name="rollback_error_batch_not_found">Bu içe aktarma artık kayıtlı değil.</string>
+    <string name="rollback_error_not_confirmed">Bu içe aktarma henüz onaylanmadı, yani geri alınacak bir kayıt oluşturmadı.</string>
+    <string name="rollback_error_already_rolled_back">Bu içe aktarma zaten geri alındı. İkinci kez geri alınamaz.</string>
+    <string name="rollback_error_no_cell_snapshot">Bu eski bir içe aktarma: hücrelerin içe aktarmadan önceki metni kaydedilmemiş. Güvenli geri alma için gereken kayıt bulunmadığından işlem yapılmadı.</string>
+    <string name="rollback_error_tasks_were_edited">Bu içe aktarmanın oluşturduğu görevlerden en az biri sonradan değişti. Kısmi geri alma yoktur; hiçbir görev kaldırılmadı.</string>
+    <string name="rollback_error_cells_were_edited">Bu içe aktarmanın yazdığı hücrelerden en az birinin içeriği sonradan değişti. Kısmi geri alma yoktur; hiçbir satır değiştirilmedi.</string>
+    <string name="rollback_error_provenance_broken">Bu içe aktarmanın kayıt izi eksik; hangi görevlerin ona ait olduğu güvenle belirlenemedi. Hiçbir şey değiştirilmedi.</string>
+    <string name="rollback_error_could_not_save">Veritabanı bu işlemi tamamlayamadı. Hiçbir şey değişmedi; daha sonra tekrar deneyin.</string>
+    <string name="rollback_task_edited">sonradan düzenlendi</string>
+    <string name="rollback_task_has_progress">eksik/hatalı baskı kaydı var</string>
+    <string name="rollback_task_has_history">geçmişinde kendi kaydı var</string>
+    <string name="rollback_task_deleted">silinmiş</string>
+    <string name="rollback_task_not_anchored">artık bir hücrede durmuyor</string>
+    <string name="rollback_task_provenance_missing">bu içe aktarmanın yazmadığı bir hücrede duruyor</string>
+    <string name="rollback_cell_snapshot_missing">önceki metni kaydedilmemiş</string>
+    <string name="rollback_cell_document_changed">metni sonradan değişti</string>
+    <string name="rollback_cell_structure_changed">içeriği sonradan yeniden düzenlendi</string>
+
     <!-- Import review workspace -->
     <string name="review_title">İçe aktarma incelemesi</string>
     <string name="review_open">İncelemeyi aç</string>
@@ -402,7 +456,7 @@
     <string name="confirm_no_games_created">Onaylamak hiçbir oyun veya hücre oluşturmaz; görevler yalnızca sizin açtığınız hücrelere bağlanır.</string>
     <string name="confirm_action">Onayla ve görevleri oluştur</string>
     <string name="confirm_dialog_title">İçe aktarmayı onaylıyor musunuz?</string>
-    <string name="confirm_dialog_body">%1$d gerçek görev oluşturulacak. Bu işlem tek seferliktir ve bu sürümde geri alınamaz.</string>
+    <string name="confirm_dialog_body">%1$d gerçek görev oluşturulacak. Onaydan sonra bu içe aktarma, görevlerine ve hücrelerine dokunulmadığı sürece İçe Aktarma ekranından geri alınabilir.</string>
     <string name="confirm_dialog_accept">Onayla</string>
     <string name="confirm_dialog_cancel">Vazgeç</string>
     <string name="confirm_dialog_cancel_note">Vazgeçmek hiçbir şey yazmaz.</string>

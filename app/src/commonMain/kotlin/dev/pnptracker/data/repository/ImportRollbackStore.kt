@@ -8,16 +8,55 @@ import dev.pnptracker.domain.importrollback.ImportRollbackPreview
 import dev.pnptracker.domain.importrollback.ImportRollbackResult
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
+import dev.pnptracker.domain.model.ImportBatchStatus
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.map
 import kotlin.time.Clock
 
 /**
- * Taking a confirmed import back, and nothing else.
+ * One import that has already been confirmed, as the list of them needs to read.
+ *
+ * No identifier of anything inside it and no file path: a row names the file it
+ * came from, the sheet it read, how much it made and where it stands, which is
+ * everything PLAN 11.4.4 has the screen say about one.
+ */
+data class SettledImport(
+    val batchId: EntityId,
+    val fileName: String,
+    val sheetName: String,
+    val createdTaskCount: Int,
+    val status: ImportBatchStatus,
+) {
+    /**
+     * Whether taking this one back is even worth offering.
+     *
+     * Only a confirmed import can be: a draft made nothing, and one already
+     * taken back is finished (PLAN 11.4.4). This is not the decision — the
+     * engine makes that, twice — it only keeps a button off a row that could
+     * never use it.
+     */
+    val canBeTakenBack: Boolean get() = status == ImportBatchStatus.CONFIRMED
+}
+
+/**
+ * Taking a confirmed import back, and looking at the ones there are.
  *
  * Kept as an interface for the same reason [ImportConfirmation] is: the screen
- * that will drive this in the next slice can be exercised without a database,
- * and nothing above this line has to know what a Room entity looks like.
+ * driving it can be exercised without a database, and nothing above this line
+ * has to know what a Room entity looks like.
  */
 interface ImportRollback {
+    /**
+     * Every import that has been confirmed, newest first, kept fresh.
+     *
+     * One stream for the whole list rather than one per batch, and the rows
+     * carry no live decision: whether one can be taken back is asked of
+     * [previewRollback] when the user asks for it, not held in a list that would
+     * be out of date by the time they read it.
+     */
+    fun observeSettledImports(): Flow<List<SettledImport>>
+
     /**
      * What taking this import back would do right now.
      *
@@ -42,17 +81,46 @@ class ImportRollbackStore(
     private val idGenerator: IdGenerator = IdGenerator.Random,
     private val clock: Clock = Clock.System,
 ) : ImportRollback {
-    override suspend fun previewRollback(batchId: EntityId): ImportRollbackPreview = importDao.previewRollback(batchId)
+    override fun observeSettledImports(): Flow<List<SettledImport>> =
+        importDao
+            .observeSettledBatches()
+            .map { batches ->
+                batches.map {
+                    SettledImport(
+                        batchId = it.id,
+                        fileName = it.fileName,
+                        sheetName = it.sheetName,
+                        createdTaskCount = it.createdTaskCount,
+                        status = it.status,
+                    )
+                }
+            }.catch { cause ->
+                if (cause !is SQLiteException) throw cause
+                throw storageRefused(cause)
+            }
+
+    override suspend fun previewRollback(batchId: EntityId): ImportRollbackPreview =
+        try {
+            importDao.previewRollback(batchId)
+        } catch (cause: SQLiteException) {
+            throw storageRefused(cause)
+        }
 
     override suspend fun rollBack(batchId: EntityId): ImportRollbackResult =
         try {
             importDao.rollBackConfirmedBatch(batchId = batchId, clock = clock, idGenerator = idGenerator)
         } catch (cause: SQLiteException) {
-            // Storage refused, so the transaction rolled back and nothing at all
-            // was written. Only this is turned into an answer the user can be
-            // given; a broken invariant travels out as it is, because it is a
-            // defect rather than a saved-or-not, and dressing one up as "the
-            // import looks damaged" would hide a bug behind the user's data.
-            throw ImportRollbackException(ImportRollbackFailure.COULD_NOT_SAVE, cause = cause)
+            throw storageRefused(cause)
         }
+
+    /**
+     * Storage refused, so the transaction rolled back and nothing at all was
+     * written.
+     *
+     * Only this is turned into an answer the user can be given; a broken
+     * invariant travels out as it is, because it is a defect rather than a
+     * saved-or-not, and dressing one up as "the import looks damaged" would hide
+     * a bug behind the user's data.
+     */
+    private fun storageRefused(cause: SQLiteException) = ImportRollbackException(ImportRollbackFailure.COULD_NOT_SAVE, cause = cause)
 }

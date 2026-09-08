@@ -370,6 +370,9 @@ import dev.pnptracker.resources.import_sheet_visibility_visible
 import dev.pnptracker.resources.import_source_format_csv
 import dev.pnptracker.resources.import_source_format_label
 import dev.pnptracker.resources.import_source_format_xlsx
+import dev.pnptracker.resources.import_status_confirmed
+import dev.pnptracker.resources.import_status_draft
+import dev.pnptracker.resources.import_status_rolled_back
 import dev.pnptracker.resources.import_summary_title
 import dev.pnptracker.resources.import_title
 import dev.pnptracker.resources.import_warning_hidden_sheet
@@ -576,6 +579,53 @@ import dev.pnptracker.resources.review_selection_shown
 import dev.pnptracker.resources.review_title
 import dev.pnptracker.resources.review_unavailable
 import dev.pnptracker.resources.review_unavailable_title
+import dev.pnptracker.resources.rollback_action
+import dev.pnptracker.resources.rollback_action_description
+import dev.pnptracker.resources.rollback_blocked_cell
+import dev.pnptracker.resources.rollback_blocked_cell_unknown_column
+import dev.pnptracker.resources.rollback_blocked_cell_unknown_game
+import dev.pnptracker.resources.rollback_blocked_cells_title
+import dev.pnptracker.resources.rollback_blocked_task
+import dev.pnptracker.resources.rollback_blocked_tasks_title
+import dev.pnptracker.resources.rollback_blocked_title
+import dev.pnptracker.resources.rollback_cell_document_changed
+import dev.pnptracker.resources.rollback_cell_snapshot_missing
+import dev.pnptracker.resources.rollback_cell_structure_changed
+import dev.pnptracker.resources.rollback_close
+import dev.pnptracker.resources.rollback_dialog_accept
+import dev.pnptracker.resources.rollback_dialog_body
+import dev.pnptracker.resources.rollback_dialog_cancel
+import dev.pnptracker.resources.rollback_dialog_cells
+import dev.pnptracker.resources.rollback_dialog_completion
+import dev.pnptracker.resources.rollback_dialog_irreversible
+import dev.pnptracker.resources.rollback_dialog_scope
+import dev.pnptracker.resources.rollback_dialog_title
+import dev.pnptracker.resources.rollback_done_body
+import dev.pnptracker.resources.rollback_done_title
+import dev.pnptracker.resources.rollback_entry
+import dev.pnptracker.resources.rollback_entry_detail
+import dev.pnptracker.resources.rollback_error_already_rolled_back
+import dev.pnptracker.resources.rollback_error_batch_not_found
+import dev.pnptracker.resources.rollback_error_cells_were_edited
+import dev.pnptracker.resources.rollback_error_could_not_save
+import dev.pnptracker.resources.rollback_error_no_cell_snapshot
+import dev.pnptracker.resources.rollback_error_not_confirmed
+import dev.pnptracker.resources.rollback_error_provenance_broken
+import dev.pnptracker.resources.rollback_error_tasks_were_edited
+import dev.pnptracker.resources.rollback_list_label
+import dev.pnptracker.resources.rollback_preview_loading
+import dev.pnptracker.resources.rollback_running
+import dev.pnptracker.resources.rollback_section_empty
+import dev.pnptracker.resources.rollback_section_hint
+import dev.pnptracker.resources.rollback_section_loading
+import dev.pnptracker.resources.rollback_section_title
+import dev.pnptracker.resources.rollback_section_unreadable
+import dev.pnptracker.resources.rollback_task_deleted
+import dev.pnptracker.resources.rollback_task_edited
+import dev.pnptracker.resources.rollback_task_has_history
+import dev.pnptracker.resources.rollback_task_has_progress
+import dev.pnptracker.resources.rollback_task_not_anchored
+import dev.pnptracker.resources.rollback_task_provenance_missing
 import dev.pnptracker.resources.search_clear
 import dev.pnptracker.resources.search_label
 import dev.pnptracker.resources.search_placeholder
@@ -1378,6 +1428,96 @@ object Strings {
         val irreversible = Res.string.task_convert_irreversible
         val accept = Res.string.task_convert_accept
         val cancel = Res.string.task_convert_cancel
+    }
+
+    /**
+     * Where an import stands, said the same way wherever it is shown.
+     *
+     * One place for three words, because they appear in the duplicate warning
+     * and in the list of confirmed imports alike, and two spellings of one state
+     * would read as two different things.
+     */
+    object ImportStatus {
+        val draft = Res.string.import_status_draft
+        val confirmed = Res.string.import_status_confirmed
+        val rolledBack = Res.string.import_status_rolled_back
+    }
+
+    /** The confirmed imports, and taking one of them back (PLAN 11.4.4). */
+    object Rollback {
+        val sectionTitle = Res.string.rollback_section_title
+        val sectionHint = Res.string.rollback_section_hint
+        val sectionEmpty = Res.string.rollback_section_empty
+        val sectionLoading = Res.string.rollback_section_loading
+        val sectionUnreadable = Res.string.rollback_section_unreadable
+        val listLabel = Res.string.rollback_list_label
+
+        /** Takes the file name and the sheet name. */
+        val entry = Res.string.rollback_entry
+
+        /** Takes how many tasks it made and where it stands. */
+        val entryDetail = Res.string.rollback_entry_detail
+
+        val action = Res.string.rollback_action
+
+        /** Takes the file name, so every row's button is named for its own import. */
+        val actionDescription = Res.string.rollback_action_description
+
+        val previewLoading = Res.string.rollback_preview_loading
+        val dialogTitle = Res.string.rollback_dialog_title
+
+        /** Takes how many tasks would go out of view. */
+        val dialogBody = Res.string.rollback_dialog_body
+
+        val dialogScope = Res.string.rollback_dialog_scope
+
+        /** Takes how many cells would be put back and how many games get a line. */
+        val dialogCells = Res.string.rollback_dialog_cells
+
+        val dialogCompletion = Res.string.rollback_dialog_completion
+        val dialogIrreversible = Res.string.rollback_dialog_irreversible
+        val dialogAccept = Res.string.rollback_dialog_accept
+        val dialogCancel = Res.string.rollback_dialog_cancel
+        val running = Res.string.rollback_running
+        val doneTitle = Res.string.rollback_done_title
+
+        /** Takes how many tasks went and how many cells came back. */
+        val doneBody = Res.string.rollback_done_body
+
+        val close = Res.string.rollback_close
+        val blockedTitle = Res.string.rollback_blocked_title
+        val blockedTasksTitle = Res.string.rollback_blocked_tasks_title
+
+        /** Takes the task's name and why it is in the way. */
+        val blockedTask = Res.string.rollback_blocked_task
+
+        val blockedCellsTitle = Res.string.rollback_blocked_cells_title
+
+        /** Takes the game, the column and why the cell is in the way. */
+        val blockedCell = Res.string.rollback_blocked_cell
+
+        val blockedCellUnknownGame = Res.string.rollback_blocked_cell_unknown_game
+        val blockedCellUnknownColumn = Res.string.rollback_blocked_cell_unknown_column
+
+        val errorBatchNotFound = Res.string.rollback_error_batch_not_found
+        val errorNotConfirmed = Res.string.rollback_error_not_confirmed
+        val errorAlreadyRolledBack = Res.string.rollback_error_already_rolled_back
+        val errorNoCellSnapshot = Res.string.rollback_error_no_cell_snapshot
+        val errorTasksWereEdited = Res.string.rollback_error_tasks_were_edited
+        val errorCellsWereEdited = Res.string.rollback_error_cells_were_edited
+        val errorProvenanceBroken = Res.string.rollback_error_provenance_broken
+        val errorCouldNotSave = Res.string.rollback_error_could_not_save
+
+        val taskEdited = Res.string.rollback_task_edited
+        val taskHasProgress = Res.string.rollback_task_has_progress
+        val taskHasHistory = Res.string.rollback_task_has_history
+        val taskDeleted = Res.string.rollback_task_deleted
+        val taskNotAnchored = Res.string.rollback_task_not_anchored
+        val taskProvenanceMissing = Res.string.rollback_task_provenance_missing
+
+        val cellSnapshotMissing = Res.string.rollback_cell_snapshot_missing
+        val cellDocumentChanged = Res.string.rollback_cell_document_changed
+        val cellStructureChanged = Res.string.rollback_cell_structure_changed
     }
 
     /** Turning a reviewed import into real tasks. */

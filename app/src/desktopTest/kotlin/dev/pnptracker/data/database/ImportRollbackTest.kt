@@ -8,6 +8,7 @@ import dev.pnptracker.domain.importrollback.ImportRollbackFailure
 import dev.pnptracker.domain.importrollback.TaskObstacle
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.HintDecision
 import dev.pnptracker.domain.model.HistoryEventKind
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.ImportBatchStatus
@@ -79,6 +80,9 @@ class ImportRollbackTest {
     private var handwrittenTaskId: EntityId = IdGenerator.Random.newId()
     private var rows = 0
     private var batches = 0
+
+    /** The fill a spreadsheet marks a finished game with (PLAN 11.5). */
+    private val greenFill = 0xFF92D050.toInt()
 
     /** What the cell reads before any import touches it. */
     private val documentBefore = "Önce Elle görev sonra"
@@ -576,6 +580,42 @@ class ImportRollbackTest {
 
             assertEquals(1, eventKinds().count { it == HistoryEventKind.IMPORT_ROLLED_BACK })
             assertEquals(6, eventKinds().count { it == HistoryEventKind.TASK_ROLLED_BACK })
+        }
+
+    @Test
+    fun `the games the import finished stay finished`() =
+        runBlocking<Unit> {
+            givenACellTheUserFilledIn()
+            batchId = aDraftBatch("Kırmızı ev")
+            // PLAN 11.5's green cell, accepted by the user. Confirming the
+            // import is what actually finishes the game (PLAN 5.3).
+            val green =
+                aRawImportBlock(
+                    batchId,
+                    rowIndex = 99,
+                    columnIndex = 0,
+                    rawText = "Harmonies",
+                    sourceColumnType = SourceColumnType.GAME,
+                    fillColorArgb = greenFill,
+                )
+            importDao.insertRawBlock(green)
+            importDao.setGameCompletionDecisionUnderReview(green.id, HintDecision.ACCEPTED, gameId, StoppedClock(updatedAt))
+            importDao.confirmDraftBatch(batchId, true, StoppedClock(importedAt), IdGenerator.Random)
+            val marked = assertNotNull(database.gameDao().gameByIdIncludingDeleted(gameId))
+            assertNotNull(marked.completedAt, "the fixture never finished the game")
+            assertTrue(marked.isManuallyCompleted)
+
+            rollback().rollBack(batchId)
+
+            // PLAN 11.4.4 is explicit: the mark is the user's own statement and
+            // a rollback is not entitled to take it back. The moment it was made
+            // is checked too, because rewriting it would move a date they set.
+            val after = assertNotNull(database.gameDao().gameByIdIncludingDeleted(gameId))
+            assertEquals(marked.completedAt, after.completedAt, "the rollback undid a completion the user had accepted")
+            assertEquals(marked.isManuallyCompleted, after.isManuallyCompleted)
+            // And it really did take the import back, so this is not a test that
+            // passes because nothing happened.
+            assertEquals(documentBefore, documentOf())
         }
 
     @Test

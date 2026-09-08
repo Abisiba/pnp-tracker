@@ -2,6 +2,7 @@ package dev.pnptracker.ui
 
 import dev.pnptracker.domain.games.GameTableView
 import dev.pnptracker.domain.model.CellColumnType
+import dev.pnptracker.domain.model.ImportBatchStatus
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.ProductionStage
 import org.jetbrains.compose.resources.StringResource
@@ -50,6 +51,25 @@ fun viewNameOf(view: GameTableView): StringResource =
         GameTableView.ONGOING -> Strings.Table.viewOngoing
         GameTableView.COMPLETED -> Strings.Table.viewCompleted
         GameTableView.ALL -> Strings.Table.viewAll
+    }
+
+/**
+ * Where one import stands, in the user's words.
+ *
+ * The one place this mapping lives. The duplicate warning used to write the
+ * stored value straight onto the screen, which put `CONFIRMED` in front of a
+ * Turkish-speaking user in the middle of a Turkish sentence; PLAN 17 keeps the
+ * wording in the catalogue, and a status is wording like any other.
+ *
+ * Exhaustive with no fallback, so a fourth status could not reach a screen
+ * without being named first — and PLAN 11.4.4 is explicit that there is no
+ * fourth one to add.
+ */
+fun importStatusNameOf(status: ImportBatchStatus): StringResource =
+    when (status) {
+        ImportBatchStatus.DRAFT -> Strings.ImportStatus.draft
+        ImportBatchStatus.CONFIRMED -> Strings.ImportStatus.confirmed
+        ImportBatchStatus.ROLLED_BACK -> Strings.ImportStatus.rolledBack
     }
 
 /**

@@ -136,6 +136,34 @@ class ImportReviewScreenTest {
 
     private fun ComposeSceneHarness.spoken(): List<String> = spokenNodes().flatMap { it.contentDescriptions() }
 
+    // ------------------------------------------------- what the question says
+
+    @Test
+    fun `the confirmation no longer tells the user an import cannot be undone`() {
+        // It used to say "bu sürümde geri alınamaz", which stopped being true
+        // when PLAN 11.4.4's rollback reached the screen. A promise the
+        // application does not keep is worse than no promise: a user who reads
+        // it will not go looking for the way back that is now there.
+        val one = block()
+        val review = FakeReview(workspace(listOf(one), listOf(draftOf(one.id))))
+        onScreen(review) { harness, _, confirmation ->
+            confirmation.ask()
+            harness.render()
+            harness.render()
+
+            val words = harness.writtenText()
+            assertTrue(words.any { "Onayla" in it }, "the question never opened: $words")
+            assertTrue(
+                words.none { "geri alınamaz" in it },
+                "the confirmation still says the import cannot be taken back: $words",
+            )
+            assertTrue(
+                words.any { "geri alınabilir" in it },
+                "the confirmation does not say the import can be taken back: $words",
+            )
+        }
+    }
+
     // ------------------------------------------------------- real selection
 
     @Test

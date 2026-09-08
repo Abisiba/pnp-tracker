@@ -14,6 +14,7 @@ import dev.pnptracker.data.repository.HistoryStore
 import dev.pnptracker.data.repository.ImportConfirmationStore
 import dev.pnptracker.data.repository.ImportDraftStore
 import dev.pnptracker.data.repository.ImportReviewStore
+import dev.pnptracker.data.repository.ImportRollbackStore
 import dev.pnptracker.data.repository.PoolStore
 import dev.pnptracker.data.repository.TaskEditStore
 import dev.pnptracker.data.repository.TaskExportStore
@@ -36,6 +37,7 @@ import dev.pnptracker.ui.feature.history.HistoryController
 import dev.pnptracker.ui.feature.importreview.ImportController
 import dev.pnptracker.ui.feature.importworkspace.ImportConfirmationController
 import dev.pnptracker.ui.feature.importworkspace.ImportReviewController
+import dev.pnptracker.ui.feature.importworkspace.ImportRollbackController
 import dev.pnptracker.ui.feature.pools.PoolControllers
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.compose.resources.stringResource
@@ -74,6 +76,10 @@ fun main() {
         ImportConfirmationController(
             ImportConfirmationStore(database.importDao(), database.gameCellDao(), database.gameDao()),
         )
+    // Taking a confirmed import back reads and writes the very same rows the
+    // confirmation above wrote, through the very same DAO: PLAN 11.4.4 has one
+    // transaction undo the other, so there is one place both live.
+    val rollbackController = ImportRollbackController(ImportRollbackStore(database.importDao()))
     // One catalogue behind both the colour section and the task panel, so a
     // colour the user adds is offered by the panel without a second read.
     val colorCatalogue = ColorCatalogueStore(database.colorDao())
@@ -133,6 +139,7 @@ fun main() {
                 importController,
                 reviewController,
                 confirmationController,
+                rollbackController,
                 gameTableController,
                 exportController,
                 colorCatalogueController,

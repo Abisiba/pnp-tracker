@@ -101,6 +101,8 @@ class CountingImportDao(
 
     override fun observeDraftBatches(): Flow<List<ImportBatchEntity>> = real.observeDraftBatches()
 
+    override fun observeSettledBatches(): Flow<List<ImportBatchEntity>> = real.observeSettledBatches()
+
     override suspend fun markRawBlockProcessed(
         id: EntityId,
         isProcessed: Boolean,

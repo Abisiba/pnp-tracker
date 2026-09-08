@@ -193,6 +193,24 @@ abstract class ImportDao {
     @Query("SELECT * FROM import_batches WHERE status = 'DRAFT' ORDER BY imported_at DESC, id")
     abstract fun observeDraftBatches(): Flow<List<ImportBatchEntity>>
 
+    /**
+     * Every import that has been confirmed, whether or not it was taken back.
+     *
+     * One statement over one table, and no join: the row already says which file
+     * it came from, which sheet, how many tasks it made and where it stands, so
+     * a batch cannot be multiplied by anything and asking about forty-two costs
+     * what asking about one costs (PLAN 16).
+     *
+     * Newest first, with identity settling a tie, so two imports saved inside
+     * the same millisecond keep a stable order rather than swapping places
+     * between readings.
+     */
+    @Query(
+        "SELECT * FROM import_batches WHERE status IN ('CONFIRMED', 'ROLLED_BACK') " +
+            "ORDER BY imported_at DESC, id",
+    )
+    abstract fun observeSettledBatches(): Flow<List<ImportBatchEntity>>
+
     @Query("UPDATE raw_import_blocks SET is_processed = :isProcessed, updated_at = :updatedAt WHERE id = :id")
     abstract suspend fun markRawBlockProcessed(
         id: EntityId,

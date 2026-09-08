@@ -36,6 +36,7 @@ import dev.pnptracker.domain.importprep.PreparedImportDraft
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.ImportSourceFormat
 import dev.pnptracker.ui.Strings
+import dev.pnptracker.ui.importStatusNameOf
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
@@ -386,7 +387,11 @@ private fun DuplicateSection(
                         Strings.Import.duplicateEntry,
                         earlier.fileName,
                         earlier.sheetName,
-                        earlier.status.name,
+                        // The status in the user's own language. This used to be
+                        // the stored value, which put `CONFIRMED` in the middle
+                        // of a Turkish sentence; PLAN 17 keeps every word the
+                        // user reads in the catalogue.
+                        stringResource(importStatusNameOf(earlier.status)),
                     ),
                 style = MaterialTheme.typography.bodySmall,
             )

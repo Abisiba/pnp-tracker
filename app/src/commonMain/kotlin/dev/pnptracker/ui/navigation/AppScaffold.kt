@@ -54,6 +54,7 @@ import dev.pnptracker.ui.feature.home.HomeScreen
 import dev.pnptracker.ui.feature.importreview.ImportController
 import dev.pnptracker.ui.feature.importworkspace.ImportConfirmationController
 import dev.pnptracker.ui.feature.importworkspace.ImportReviewController
+import dev.pnptracker.ui.feature.importworkspace.ImportRollbackController
 import dev.pnptracker.ui.feature.importworkspace.ImportSection
 import dev.pnptracker.ui.feature.pools.PoolControllers
 import dev.pnptracker.ui.feature.pools.PoolScreen
@@ -80,6 +81,7 @@ fun AppScaffold(
     importController: ImportController,
     reviewController: ImportReviewController,
     confirmationController: ImportConfirmationController,
+    rollbackController: ImportRollbackController,
     gameTableController: GameTableController,
     exportController: ExportController,
     colorCatalogueController: ColorCatalogueController,
@@ -120,7 +122,8 @@ fun AppScaffold(
                         )
                     Screen.History -> HistoryScreen(historyController)
                     Screen.Colors -> ColorCatalogueScreen(colorCatalogueController)
-                    Screen.Import -> ImportSection(importController, reviewController, confirmationController)
+                    Screen.Import ->
+                        ImportSection(importController, reviewController, confirmationController, rollbackController)
                     // Keyed by the pool, so moving between two of them starts the
                     // new pool's reads and stops the old one's rather than
                     // leaving both running.
