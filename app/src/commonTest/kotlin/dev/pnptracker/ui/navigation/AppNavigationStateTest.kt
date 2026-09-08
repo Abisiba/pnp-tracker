@@ -33,6 +33,15 @@ class AppNavigationStateTest {
     }
 
     @Test
+    fun `settings is always offered, special is the only conditional section`() {
+        assertTrue(Screen.Settings in Screen.offered(PoolNavigationSummary.EMPTY))
+        assertEquals(
+            listOf(Screen.Pool(PoolType.SPECIAL)),
+            Screen.all - Screen.offered(PoolNavigationSummary.EMPTY).toSet(),
+        )
+    }
+
+    @Test
     fun `every screen can be reached from every other screen`() {
         val navigation = AppNavigationState()
 
@@ -68,9 +77,9 @@ class AppNavigationStateTest {
 
     @Test
     fun `the sidebar offers only the sections that have been built`() {
-        // PLAN 12.1's order, as far as it has been built: the pools sit between
-        // the table and the import section, the history between import and the
-        // colours, and settings is absent rather than present and dead.
+        // PLAN 12.1's order, all of it: the pools sit between the table and the
+        // import section, the history between import and the colours, and the
+        // settings section last. Every one of them is built.
         assertEquals(
             listOf(
                 Screen.Home,
@@ -82,6 +91,7 @@ class AppNavigationStateTest {
                 Screen.Import,
                 Screen.History,
                 Screen.Colors,
+                Screen.Settings,
             ),
             Screen.all,
         )

@@ -1,7 +1,5 @@
-package dev.pnptracker.platform.exportfiles
+package dev.pnptracker.platform.files
 
-import dev.pnptracker.domain.export.ExportFailure
-import dev.pnptracker.domain.export.TaskExportException
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.nio.file.AtomicMoveNotSupportedException
@@ -91,9 +89,9 @@ class AtomicFileWriterTest {
         val before = Files.readAllBytes(target)
         val writer = AtomicFileWriter(writeBytes = { _, _ -> throw IOException("disk full") })
 
-        val refused = assertFailsWith<TaskExportException> { writer.write(target, fresh) }
+        val refused = assertFailsWith<AtomicWriteException> { writer.write(target, fresh) }
 
-        assertEquals(ExportFailure.WRITE_FAILED, refused.failure)
+        assertEquals(AtomicWriteFailure.WRITE_FAILED, refused.failure)
         assertContentEquals(before, Files.readAllBytes(target), "the old file was damaged")
         assertEquals(emptyList(), leftovers(), "a half-written file was left behind")
     }
@@ -111,9 +109,9 @@ class AtomicFileWriterTest {
                 },
             )
 
-        val refused = assertFailsWith<TaskExportException> { writer.write(target, fresh) }
+        val refused = assertFailsWith<AtomicWriteException> { writer.write(target, fresh) }
 
-        assertEquals(ExportFailure.WRITE_FAILED, refused.failure)
+        assertEquals(AtomicWriteFailure.WRITE_FAILED, refused.failure)
         assertEquals(existing, Files.readString(target, StandardCharsets.UTF_8))
         assertEquals(emptyList(), leftovers())
     }
@@ -126,9 +124,9 @@ class AtomicFileWriterTest {
                 moveIntoPlace = { _, _ -> throw AtomicMoveNotSupportedException("t", "g", "no atomic move") },
             )
 
-        val refused = assertFailsWith<TaskExportException> { writer.write(target, fresh) }
+        val refused = assertFailsWith<AtomicWriteException> { writer.write(target, fresh) }
 
-        assertEquals(ExportFailure.NOT_ATOMIC, refused.failure)
+        assertEquals(AtomicWriteFailure.NOT_ATOMIC, refused.failure)
         assertEquals(existing, Files.readString(target, StandardCharsets.UTF_8), "the old file was deleted anyway")
         assertEquals(emptyList(), leftovers())
     }
@@ -138,9 +136,9 @@ class AtomicFileWriterTest {
         writeExisting()
         val writer = AtomicFileWriter(moveIntoPlace = { _, _ -> throw IOException("gone") })
 
-        val refused = assertFailsWith<TaskExportException> { writer.write(target, fresh) }
+        val refused = assertFailsWith<AtomicWriteException> { writer.write(target, fresh) }
 
-        assertEquals(ExportFailure.WRITE_FAILED, refused.failure)
+        assertEquals(AtomicWriteFailure.WRITE_FAILED, refused.failure)
         assertEquals(existing, Files.readString(target, StandardCharsets.UTF_8))
         assertEquals(emptyList(), leftovers())
     }
@@ -149,9 +147,9 @@ class AtomicFileWriterTest {
     fun `a place that cannot be written to is said so before anything is made`() {
         val writer = AtomicFileWriter(createTemporary = { throw IOException("read only") })
 
-        val refused = assertFailsWith<TaskExportException> { writer.write(target, fresh) }
+        val refused = assertFailsWith<AtomicWriteException> { writer.write(target, fresh) }
 
-        assertEquals(ExportFailure.NOT_WRITABLE, refused.failure)
+        assertEquals(AtomicWriteFailure.TEMPORARY_FILE_FAILED, refused.failure)
         assertTrue(!Files.exists(target), "a destination was created for a file that could not be written")
     }
 
@@ -159,7 +157,7 @@ class AtomicFileWriterTest {
     fun `the same write can simply be tried again after a failure`() {
         writeExisting()
         val failing = AtomicFileWriter(moveIntoPlace = { _, _ -> throw IOException("gone") })
-        assertFailsWith<TaskExportException> { failing.write(target, fresh) }
+        assertFailsWith<AtomicWriteException> { failing.write(target, fresh) }
 
         AtomicFileWriter().write(target, fresh)
 

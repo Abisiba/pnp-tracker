@@ -7,10 +7,10 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** Faz 3 / İş 3'ün **birinci dilimi** (yedek belgesi ve
-> deterministik yazıcı) tamamlandıktan sonra. İş 2 bütünüyle bitmiştir; İş 3'ün
-> dört diliminden **biri** yapılmıştır. Kararların bağlayıcı metni PLAN `14.4`,
-> `12.16` ve `16.`'dadır; uygulanan hâli §25.1'dedir.
+> **Son güncelleme:** Faz 3 / İş 3'ün **ikinci dilimi** (yedeğin dosyaya
+> yazılması ve `Ayarlar` ekranı) tamamlandıktan sonra. İş 2 bütünüyle bitmiştir;
+> İş 3'ün dört diliminden **ikisi** yapılmıştır. Kararların bağlayıcı metni PLAN
+> `14.4`, `12.16` ve `16.`'dadır; uygulanan hâli §25.1'dedir.
 >
 > Bu dosyanın önceki sürümü çok daha eski bir repo durumunu (Room v3, canlı `Item`
 > modeli, AP-9/AP-10 adımlandırması) güncel mimariymiş gibi anlatıyordu. O bilgiler
@@ -26,34 +26,37 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-HEAD (bu commit öncesi): 6d103af5f52405eb0b01d8b8e01beef5f10da66c
-önceki commit         : docs: define versioned backup and restore semantics
+HEAD (bu commit öncesi): dabf357177a579f1d95ccbbbca4e2c365e8d599f
+önceki commit         : feat(backup): describe the whole database as one document
 working tree          : temiz
 Room şema sürümü      : 8   (bu commit'te DEĞİŞMEDİ)
 şema dosyaları        : 1.json … 8.json  hepsi bayt bayt aynı
-test durumu           : 2966 test / 0 failure / 0 error / 0 skipped  (184 sınıf)
-üretim kodu           : 251 dosya
-test kodu             : 196 dosya
+test durumu           : 3023 test / 0 failure / 0 error / 0 skipped  (188 sınıf)
+üretim kodu           : 257 dosya
+test kodu             : 200 dosya
 ```
 
-**Bu commit Faz 3 / İş 3'ün birinci dilimidir.** Room v8'in bütün verisini tek bir
-sürümlü, deterministik ve checksum'lı JSON belgesi olarak tanımlar: 15 tablonun
-yedek kayıt tipleri, tek transaction'da okuyan `BackupDao.snapshot()`, entity'den
-belgeye elle yazılmış eşleme, kanonik yazıcı ve `dataSha256`.
+**Bu commit Faz 3 / İş 3'ün ikinci dilimidir.** Dilim 1'in bellekte ürettiği yedek
+belgesini kullanıcıya açar: PLAN `12.1`'in `Ayarlar` ekranı gerçek bir gezinme
+hedefi olarak açılır ve içindeki `Yedek oluştur` eylemi belgeyi seçilen dosyaya
+**atomik olarak** yazar.
 
-**Salt okunurdur.** Dosya seçici, dosyaya yazma, Ayarlar ekranı, parser, geçici DB
-doğrulaması ve geri yükleme yoktur; kullanıcıya açılan yeni bir eylem yoktur.
-`DatabaseBackupExporter` bilerek `Main.kt`'ye bağlanmamıştır — çağıracak bir arayüz
-Dilim 2'de gelir (§33 R3'ün bilinen ve kabul edilmiş kalıbı).
+Kullanıcının görebildiği akış: `Yedek oluştur` → kaydetme penceresi
+(`pnp-yedek-<tarih>.json` önerilir) → dosya varsa üzerine yazma onayı → veritabanı
+tek seferde okunur → kanonik baytlar aynı dizindeki geçici dosyaya yazılır →
+atomik taşıma → `Yedek oluşturuldu: <dosya adı>`.
 
-`kotlinx-serialization-json` **1.11.0** ve Kotlin serialization derleyici eklentisi
-bu dilimde eklenmiştir; başka hiçbir bağımlılık değişmemiştir (§4).
+**Geri yükleme yoktur** ve ekranda ona dair bir düğme, devre dışı kontrol veya
+"yakında" metni de yoktur: yapamadığı bir şeyi vaat eden bir ayarlar ekranı, veri
+geri getirebileceğini sanan bir kullanıcı demektir.
 
-Aynı commit, master context'te açık duran **R9'u ölçümle kapatır**: yabancı
-anahtarlar üretim bağlantısında **zorlanıyor** (§33 R9).
+`AtomicFileWriter` **taşındı ve genelleştirildi** (`platform.exportfiles` →
+`platform.files`): artık tipsiz bir `AtomicWriteException` fırlatır, `ByteArray`
+yazabilir ve geçici dosya soneki verilebilir. CSV dışa aktarma kendi
+`ExportFailure` eşlemesini kenarda yapar; davranışı ve testleri değişmedi. **Yedek
+için ikinci bir atomik yazıcı yazılmadı.**
 
-Şema **değişmemiştir**: yeni tablo, sütun veya migration yoktur; eklenen tek şey
-15 okuma sorgusudur.
+Şema **değişmemiştir**; yeni bağımlılık **eklenmemiştir**.
 
 `PLAN.md` bu turda **değiştirilmemiştir.**
 
@@ -1218,6 +1221,78 @@ ikinci bir sıralama yoktur. PLAN 14.4.2'nin dört tabloda kullandığı anahtar
 (`cell_segments`, `task_colors`, `task_stages`, `draft_task_colors`) birincil
 anahtar değil **unique index'li iş anahtarıdır**; her biri yine tam sıra verir.
 
+## Dilim 2'de uygulanan hâli
+
+```text
+ui/navigation/Screen.kt               Screen.Settings (PLAN 12.1 sırasında SON)
+ui/feature/settings/SettingsScreen.kt Ayarlar ekranı + Yedekleme bölümü
+ui/feature/settings/BackupController.kt / BackupScreenState.kt
+domain/backup/BackupFile.kt           BackupFailure, BackupException,
+                                      BackupFileGateway/Handle, ad kuralları
+platform/backupfiles/                 AwtBackupFilePicker, DesktopBackupFileGateway
+platform/files/AtomicFileWriter.kt    exportfiles'tan TAŞINDI ve genelleştirildi
+```
+
+Kullanıcı akışı ve sırası:
+
+```text
+Yedek oluştur → hedef seçimi → (varsa) üzerine yazma onayı
+→ TEK snapshot okuması → kanonik JSON baytları
+→ aynı dizinde geçici dosya → tam yazma → ATOMİK taşıma → başarı
+```
+
+Hedef seçilmeden veritabanı **okunmaz**; onay reddedilirse ne sorgu çalışır ne de
+bayt yazılır. Yazma `document.json.encodeToByteArray()` ile, Dilim 1'in checksum
+aldığı baytların **ta kendisiyle** yapılır; platform varsayılan charset'i araya
+girmez.
+
+Önerilen ad: `pnp-yedek-YYYY-AA-GG.json`. Tarih kullanıcının kendi takvim
+gününden (`localMomentOf`), sayı biçimleyici değil **padStart** ile üretilir; aynı
+gün her locale'de aynı adı verir ve adda saat, oyun adı veya makine bilgisi yoktur.
+Uzantısız ad `.json` alır, `.json` olan aynen kalır, başka uzantı **reddedilir**
+(CSV'nin `.csv` kuralının aynısı).
+
+### Atomik yazma sözleşmesi — iki özellik, tek yazıcı
+
+`AtomicFileWriter` artık `platform.files` altında ve iki özellik onu paylaşıyor.
+Tipsiz `AtomicWriteFailure` beş şey söyler; her özellik kendi cümlesine çevirir:
+
+```text
+NOT_WRITABLE          → CSV: NOT_WRITABLE      · Yedek: NOT_WRITABLE
+TEMPORARY_FILE_FAILED → CSV: NOT_WRITABLE      · Yedek: TEMPORARY_FILE_FAILED
+TARGET_UNAVAILABLE    → CSV: WRITE_FAILED      · Yedek: TARGET_UNAVAILABLE
+WRITE_FAILED          → CSV: WRITE_FAILED      · Yedek: WRITE_FAILED
+NOT_ATOMIC            → CSV: NOT_ATOMIC        · Yedek: NOT_ATOMIC
+```
+
+CSV iki ayrımı geri katlar, çünkü kullanıcının yapabileceği şey ikisinde de aynı;
+CSV'nin dışarıdan görünen davranışı **değişmedi**. Yedek ayrımları korur, çünkü
+"başka klasör seç" ile "diski geri tak" farklı işlerdir.
+
+### Durum modeli ve eşzamanlılık
+
+`BackupScreenState`: `Idle` · `ChoosingDestination` · `ConfirmingOverwrite` ·
+`Preparing` (veritabanı okunuyor) · `Writing` (dosya yazılıyor) · `Saved` ·
+`Failed`. Paralel boolean yok; imkânsız durum kurulamaz.
+
+- Çift tıklama / tekrarlanan Enter **tek** pencere ve **tek** yazma üretir.
+- Üzerine yazma onayı **sorulduğu handle'a aittir**; kullanıcı başka dosya
+  seçerse eski onay uygulanacak bir şey bulamaz.
+- Açık soru arkasındaki düğme çalışmaz.
+- Yazma sürerken ekrandan ayrılmak yazmayı yarıda bırakmaz.
+- Başarıdan ve hatadan sonra yeni yedek alınabilir.
+- Odak, kapanan her yüzeyden sonra `Yedek oluştur` düğmesine döner
+  (`focusRecall`, bir kez tüketilir).
+
+### Kullanıcıya gösterilen hata sınırları
+
+Dokuz `BackupFailure` değerinin her biri **kendi** Türkçe cümlesine exhaustive
+eşlenir (`messageFor`, `else` yok): hedef seçilemedi · uzantı `.json` değil ·
+yazılamıyor · geçici dosya · hedefe ulaşılamıyor · yazma başarısız · atomik
+taşıma yok · veritabanı okunamadı · belge hazırlanamadı. Beklenmeyen
+`IllegalStateException`/`NullPointerException` **maskelenmez**; yalnız
+`SQLiteException` ve `SerializationException` kullanıcı sonucuna çevrilir.
+
 ## Reddedilen alternatifler  *(tekrar önerilmesin)*
 
 ```text
@@ -1239,11 +1314,11 @@ güvenlik yedeği başarısızken devam REDDEDİLDİ  kullanıcının geri dön�
    kullanıcıya açılan bir şey yok; yalnız okur. Şema değişmedi.
    commit: feat(backup): describe the whole database as one document
 
-2  Manuel yedek dosyası yazma + Ayarlar ekranı ..................... SIRADAKİ
-   kullanıcı yedek alabilir; geri yükleme yok. Şema değişmez.
+2  Manuel yedek dosyası yazma + Ayarlar ekranı ..................... TAMAM
+   kullanıcı yedek alabilir; geri yükleme yok. Şema değişmedi.
    commit: feat(backup): save the whole database to a file
 
-3  Güvenilmeyen dosyayı parse etme, doğrulama, geçici DB denemesi
+3  Güvenilmeyen dosyayı parse etme, doğrulama, geçici DB denemesi ... SIRADAKİ
    doğrulanmış belgeden canlı DB'ye giden yol YOK. Şema değişmez.
    commit: feat(backup): read a backup file without trusting it
 
@@ -1391,6 +1466,10 @@ Yedek anlık görüntüsü    15 SELECT — tablo başına bir okuma, satır ba�
                          çalıştırır. Yedek sırasında 0 INSERT / UPDATE / DELETE.
                          Ölçüm: 1.203 görev → 1.289.227 karakter, 122 ms,
                          ~23 MiB (bu makinede; eşik değil kayıttır)
+Yedek dosyaya yazma      hedef seçilmeden 0 SELECT; onay reddedilirse 0 SELECT ve
+                         0 bayt; yazma sırasında DB'de 0 değişiklik. Yazıcının üç
+                         dikişinin her birinde mevcut hedef bayt bayt korunur ve
+                         geçici dosya kalmaz
 ```
 
 ---
@@ -1491,8 +1570,8 @@ PLAN `18.` — Faz 3 işler listesi.
 ```text
  1  Geçmiş ekranını tamamla ............................. TAMAM
  2  Import batch rollback ve korumalı geri alma ......... TAMAM (üç dilim)
- 3  Sürümlü JSON yedek/dışa aktarma ve geri yükleme ..... DİLİM 1 TAMAM
-                                                        (4 dilimden 1'i)  ← SIRADAKİ
+ 3  Sürümlü JSON yedek/dışa aktarma ve geri yükleme ..... DİLİM 1-2 TAMAM
+                                                        (4 dilimden 2'si)  ← SIRADAKİ
  4  Import ve migration öncesi otomatik snapshot ........ YAPILMADI
  5  CSV görev dışa aktarmayı doğrula ......... özellik var, Faz 3 doğrulama
                                               testleri yazılmadı
@@ -1561,17 +1640,18 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
 
 ## Sıradaki bağlayıcı iş
 
-> **Faz 3 / İş 3 / Dilim 2: manuel yedek dosyasının yazılması ve `Ayarlar`
-> ekranının açılması.**
+> **Faz 3 / İş 3 / Dilim 3: güvenilmeyen bir yedek dosyasını ayrıştırma,
+> doğrulama ve geçici bir veritabanında deneme.**
 >
-> Dilim 1 tamamlandı: yedek belgesi, 15 tablonun kapsamı, tek transaction okuma,
-> kanonik yazıcı ve `dataSha256` çalışıyor ve testli (§25.1). Belge bugün yalnız
-> bellekte üretilebiliyor; hiçbir yere yazılmıyor.
+> Dilim 1 ve 2 tamamlandı: kullanıcı bugün `Ayarlar` ekranından yedeğini alıp
+> istediği yere atomik olarak kaydedebiliyor (§25.1). Bir yedeği **okuyan** hiçbir
+> kod hâlâ yok.
 >
-> Dilim 2 kapsamı: `BackupFileGateway`/`Handle` ve AWT kaydetme diyaloğu,
-> `AtomicFileWriter`'ın yeniden kullanımı, üzerine yazma onayı, Türkçe metinler,
-> PLAN `12.16`'nın `Ayarlar` ekranının gerçek bir gezinme hedefi olarak açılması
-> ve `Yedek oluştur` eylemi. Geri yükleme **yok**. Şema değişmez.
+> Dilim 3 kapsamı: 64 MiB sınırı, UTF-8/JSON ayrıştırma, zarf ve sürüm kapısı,
+> checksum doğrulaması, yapısal + enum + FK + domain doğrulaması, geçici Room v8
+> veritabanına yükleme ve `foreign_key_check`. **Doğrulanmış belgeden canlı
+> veritabanına giden yol yoktur** ve kullanıcıya açılan yeni bir eylem yoktur.
+> Şema değişmez.
 >
 > Sonraki bağlayıcı sıra PLAN'ın kendi sırasıdır: İş 3 → 4 → 7 → 9 + 5 → 10 →
 > 11-13 → 14-16.
@@ -1951,8 +2031,9 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
 - İş 1 (geçmiş) iki dilim hâlinde tamamlandı: olay kayıt katmanı + geçmiş ekranı.
 - İş 2 (import rollback) üç dilimiyle TAMAMEN BİTTİ: Room v8 + import_batch_cells,
   geri alma motoru ve üç geçmiş olayı, ve motoru kullanan arayüz.
-- Sıradaki bağlayıcı iş: İş 3 / Dilim 2 — manuel yedek dosyası yazma + Ayarlar
-  ekranı. Dilim 1 (yedek belgesi, kanonik yazıcı, dataSha256) BİTTİ.
+- Sıradaki bağlayıcı iş: İş 3 / Dilim 3 — güvenilmeyen yedek dosyasını parse,
+  doğrulama ve geçici DB denemesi. Dilim 1 (belge + kanonik yazıcı + dataSha256)
+  ve Dilim 2 (Ayarlar ekranı + atomik dosya yazma) BİTTİ.
 - İş 2'nin ürün kararları VERİLMİŞTİR ve PLAN 11.4.4'tedir; yeniden tartışma.
   Kısmi rollback yoktur, tek çakışma bütün işlemi engeller, segment kimliğine
   provenance bağlanmaz, anlık görüntüsü olmayan eski batch geri alınamaz.
@@ -1963,9 +2044,12 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   öncesi güvenlik yedeği zorunlu, restore history event YAZMAZ, dört dilim.
 - kotlinx-serialization-json 1.11.0 ve serialization eklentisi Dilim 1'de
   EKLENDİ (yalnız commonMain); izin başka bağımlılığa genişletilmez.
-- Yedek belgesi salt okunurdur ve henüz hiçbir yere yazılmaz; JSON compact
-  yazılır (pretty-print YOK) çünkü gömülü data ile hash'lenen data bayt bayt
-  aynı olmak zorundadır.
+- Yedek belgesi JSON compact yazılır (pretty-print YOK) çünkü gömülü data ile
+  hash'lenen data bayt bayt aynı olmak zorundadır.
+- Ayarlar ekranı AÇIKTIR ve yalnız `Yedek oluştur` içerir; geri yükleme için
+  düğme, devre dışı kontrol veya "yakında" metni EKLEME.
+- AtomicFileWriter platform.files altındadır ve CSV ile yedek onu PAYLAŞIR;
+  ikinci bir atomik yazıcı yazma.
 - Yabancı anahtarlar üretim bağlantısında ZORLANIR (ölçüldü, §33 R9).
 - Batch durumu ekranda ham enum olarak GÖSTERİLMEZ; ui/PoolNames.kt içindeki
   importStatusNameOf tek kaynaktır.
@@ -2120,10 +2204,14 @@ Bunların ilki — **sürümlü JSON yedek ve geri yükleme** — tasarlanmış 
 **başlamıştır**. Biçim, kapsam, doğrulama hattı, restore mimarisi (A′), güvenlik
 yedeği ve dört atomik dilim PLAN `14.4` ile §25.1'de yazılıdır.
 
-Dört dilimin **birincisi bitti**: uygulama artık bütün veritabanını tek bir
-sürümlü, deterministik ve checksum'lı JSON belgesi olarak, tek transaction'da,
-15 sorguyla ve hiçbir şey yazmadan tarif edebiliyor. Belge bellekte kalıyor;
-onu bir dosyaya yazmak ve `Ayarlar` ekranını açmak **Dilim 2**'nin işidir.
+Dört dilimin **ikisi bitti**: uygulama bütün veritabanını tek bir sürümlü,
+deterministik ve checksum'lı JSON belgesi olarak tarif ediyor ve kullanıcı bunu
+`Ayarlar` ekranından, seçtiği yere, atomik olarak kaydedebiliyor. Var olan bir
+dosya ancak açık onayla değiştiriliyor ve her hata hâlinde eski dosya bayt bayt
+duruyor.
+
+Bir yedeği **geri okumak** henüz yok: ayrıştırma ve doğrulama **Dilim 3**'ün,
+canlı veritabanına uygulama **Dilim 4**'ün işidir.
 
 En önemli kural:
 

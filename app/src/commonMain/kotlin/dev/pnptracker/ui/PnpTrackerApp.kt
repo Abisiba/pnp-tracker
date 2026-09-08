@@ -15,6 +15,7 @@ import dev.pnptracker.ui.feature.importworkspace.ImportConfirmationController
 import dev.pnptracker.ui.feature.importworkspace.ImportReviewController
 import dev.pnptracker.ui.feature.importworkspace.ImportRollbackController
 import dev.pnptracker.ui.feature.pools.PoolControllers
+import dev.pnptracker.ui.feature.settings.BackupController
 import dev.pnptracker.ui.navigation.AppNavigationState
 import dev.pnptracker.ui.navigation.AppScaffold
 import dev.pnptracker.ui.theme.PnpTrackerTheme
@@ -37,6 +38,7 @@ fun PnpTrackerApp(
     rollbackController: ImportRollbackController,
     gameTableController: GameTableController,
     exportController: ExportController,
+    backupController: BackupController,
     colorCatalogueController: ColorCatalogueController,
     poolControllers: PoolControllers,
     historyController: HistoryController,
@@ -56,6 +58,7 @@ fun PnpTrackerApp(
             rollbackController = rollbackController,
             gameTableController = gameTableController,
             exportController = exportController,
+            backupController = backupController,
             colorCatalogueController = colorCatalogueController,
             poolControllers = poolControllers,
             historyController = historyController,

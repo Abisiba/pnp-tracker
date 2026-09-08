@@ -59,6 +59,13 @@ fun textsOf(screen: Screen): ScreenTexts =
                 description = Strings.ScreenDescriptions.colors,
             )
 
+        Screen.Settings ->
+            ScreenTexts(
+                navigationLabel = Strings.Navigation.settings,
+                title = Strings.ScreenTitles.settings,
+                description = Strings.ScreenDescriptions.settings,
+            )
+
         // The sidebar names a pool in the plural the plan uses for the section
         // (`Kartlar`), while the table column beside it names the one kind of
         // work a cell holds (`Kart`). The heading over the pool is the section's

@@ -6,9 +6,7 @@ import dev.pnptracker.domain.pools.PoolNavigationSummary
 /**
  * A section the sidebar can reach.
  *
- * The settings section of the plan arrives with the work that implements it, so
- * it is deliberately absent rather than disabled. The order here is the order
- * PLAN 12.1 lists the sidebar in, history included.
+ * The order here is the order PLAN 12.1 lists the sidebar in, settings included.
  *
  * A screen carries no route string and no visible text: what it is called on
  * screen comes from the Turkish text catalogue, which keeps the closed set of
@@ -37,12 +35,21 @@ sealed interface Screen {
 
     data object Colors : Screen
 
+    /**
+     * Where the application's own housekeeping lives (PLAN 12.16).
+     *
+     * It arrived with the work that gave it something to do, rather than as an
+     * empty destination waiting to be filled: today it holds saving a backup,
+     * and nothing else is drawn on it until there is something else that works.
+     */
+    data object Settings : Screen
+
     companion object {
         val threeDPool = Pool(PoolType.THREE_D)
 
         /** Every screen, in the order the sidebar lists them. */
         val all: List<Screen> =
-            listOf(Home, Games) + PoolType.entries.map(::Pool) + listOf(Import, History, Colors)
+            listOf(Home, Games) + PoolType.entries.map(::Pool) + listOf(Import, History, Colors, Settings)
 
         /**
          * The screens the sidebar is offering right now.

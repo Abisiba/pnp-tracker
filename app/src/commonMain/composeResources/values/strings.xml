@@ -540,6 +540,37 @@
     <string name="navigation_colors">Renkler</string>
     <string name="colors_title">Renkler</string>
     <string name="colors_description">Bütün oyunlarda ortak kullanılan renk kataloğu burada tutulur; yeni renk ekleyebilir ve her rengin örneğini yazılı adıyla birlikte görebilirsiniz.</string>
+
+    <string name="navigation_settings">Ayarlar</string>
+    <string name="settings_title">Ayarlar</string>
+    <string name="settings_description">Uygulamanın kendi bakım işleri burada toplanır.</string>
+
+    <string name="backup_section_title">Yedekleme</string>
+    <string name="backup_scope_note">Yedek, oyunlarınızı ve hücre metinlerinizi, görevlerinizi ve renklerini, üretim ilerlemesini, geçmiş kayıtlarını ve içe aktarma kayıtlarını tek bir JSON dosyasında toplar. Silinmiş kayıtlar da korunur.</string>
+    <string name="backup_destination_note">Dosya, seçtiğiniz konuma kaydedilir; harici bir diski veya başka bir klasörü seçebilirsiniz.</string>
+    <string name="backup_action">Yedek oluştur</string>
+    <string name="backup_action_description">Bütün verinizi tek bir JSON dosyasına kaydeder</string>
+    <string name="backup_choosing">Kaydedilecek yer seçiliyor…</string>
+    <string name="backup_preparing">Yedek hazırlanıyor…</string>
+    <string name="backup_writing">Dosya yazılıyor…</string>
+    <string name="backup_saved">Yedek oluşturuldu: %1$s</string>
+    <string name="backup_dismiss">Tamam</string>
+
+    <string name="backup_overwrite_title">Bu dosya zaten var</string>
+    <string name="backup_overwrite_question">%1$s dosyasının üzerine yazılsın mı?</string>
+    <string name="backup_overwrite_confirm">Üzerine yaz</string>
+    <string name="backup_overwrite_cancel">Vazgeç</string>
+
+    <string name="backup_error_title">Yedek oluşturulamadı</string>
+    <string name="backup_error_no_destination">Kaydedilecek yer seçilemedi. Yeniden deneyin.</string>
+    <string name="backup_error_unsupported_file_type">Yedek dosyasının adı .json ile bitmelidir. Adı değiştirip yeniden deneyin.</string>
+    <string name="backup_error_not_writable">Bu konuma yazılamıyor. Başka bir klasör seçin.</string>
+    <string name="backup_error_temporary_file">Bu konumda geçici dosya oluşturulamadı. Diskte yer olduğundan emin olun veya başka bir klasör seçin.</string>
+    <string name="backup_error_target_unavailable">Seçtiğiniz konuma artık ulaşılamıyor. Disk çıkarılmış olabilir; yeniden bağlayıp deneyin.</string>
+    <string name="backup_error_write_failed">Yedek yazılamadı. Varsa eski dosya olduğu gibi bırakıldı; yeniden deneyin.</string>
+    <string name="backup_error_not_atomic">Bu konumda dosya güvenle değiştirilemiyor. Eski dosya olduğu gibi bırakıldı; başka bir klasör deneyin.</string>
+    <string name="backup_error_database">Verileriniz okunamadı, bu yüzden yedek oluşturulmadı. Uygulamayı kapatıp yeniden açmayı deneyin.</string>
+    <string name="backup_error_document">Yedek dosyası hazırlanamadı. Hiçbir dosya oluşturulmadı; yeniden deneyin.</string>
     <string name="colors_loading">Renk kataloğu yükleniyor…</string>
     <string name="colors_count">Katalogda %1$s renk var.</string>
     <string name="colors_create">Yeni renk ekle</string>

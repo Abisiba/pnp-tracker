@@ -13,6 +13,30 @@ import dev.pnptracker.resources.aim_title
 import dev.pnptracker.resources.app_name
 import dev.pnptracker.resources.app_version_label
 import dev.pnptracker.resources.app_window_title
+import dev.pnptracker.resources.backup_action
+import dev.pnptracker.resources.backup_action_description
+import dev.pnptracker.resources.backup_choosing
+import dev.pnptracker.resources.backup_destination_note
+import dev.pnptracker.resources.backup_dismiss
+import dev.pnptracker.resources.backup_error_database
+import dev.pnptracker.resources.backup_error_document
+import dev.pnptracker.resources.backup_error_no_destination
+import dev.pnptracker.resources.backup_error_not_atomic
+import dev.pnptracker.resources.backup_error_not_writable
+import dev.pnptracker.resources.backup_error_target_unavailable
+import dev.pnptracker.resources.backup_error_temporary_file
+import dev.pnptracker.resources.backup_error_title
+import dev.pnptracker.resources.backup_error_unsupported_file_type
+import dev.pnptracker.resources.backup_error_write_failed
+import dev.pnptracker.resources.backup_overwrite_cancel
+import dev.pnptracker.resources.backup_overwrite_confirm
+import dev.pnptracker.resources.backup_overwrite_question
+import dev.pnptracker.resources.backup_overwrite_title
+import dev.pnptracker.resources.backup_preparing
+import dev.pnptracker.resources.backup_saved
+import dev.pnptracker.resources.backup_scope_note
+import dev.pnptracker.resources.backup_section_title
+import dev.pnptracker.resources.backup_writing
 import dev.pnptracker.resources.cell_discard
 import dev.pnptracker.resources.cell_edit
 import dev.pnptracker.resources.cell_edit_action
@@ -391,6 +415,7 @@ import dev.pnptracker.resources.navigation_pool_card
 import dev.pnptracker.resources.navigation_pool_special
 import dev.pnptracker.resources.navigation_pool_three_d
 import dev.pnptracker.resources.navigation_section_label
+import dev.pnptracker.resources.navigation_settings
 import dev.pnptracker.resources.navigation_state_not_selected
 import dev.pnptracker.resources.navigation_state_selected
 import dev.pnptracker.resources.pool_board
@@ -629,6 +654,8 @@ import dev.pnptracker.resources.rollback_task_provenance_missing
 import dev.pnptracker.resources.search_clear
 import dev.pnptracker.resources.search_label
 import dev.pnptracker.resources.search_placeholder
+import dev.pnptracker.resources.settings_description
+import dev.pnptracker.resources.settings_title
 import dev.pnptracker.resources.shortage_cancel
 import dev.pnptracker.resources.shortage_card_label
 import dev.pnptracker.resources.shortage_error_detail
@@ -795,6 +822,7 @@ object Strings {
         val importReview = Res.string.navigation_import
         val history = Res.string.navigation_history
         val colors = Res.string.navigation_colors
+        val settings = Res.string.navigation_settings
     }
 
     object ScreenTitles {
@@ -803,6 +831,7 @@ object Strings {
         val importReview = Res.string.import_title
         val history = Res.string.history_title
         val colors = Res.string.colors_title
+        val settings = Res.string.settings_title
     }
 
     object ScreenDescriptions {
@@ -811,6 +840,7 @@ object Strings {
         val importReview = Res.string.import_description
         val history = Res.string.history_description
         val colors = Res.string.colors_description
+        val settings = Res.string.settings_description
     }
 
     object History {
@@ -1859,6 +1889,42 @@ object Strings {
         val overwriteQuestion = Res.string.export_overwrite_question
         val overwriteConfirm = Res.string.export_overwrite_confirm
         val overwriteCancel = Res.string.export_overwrite_cancel
+    }
+
+    /** Yedekleme, the words PLAN 12.16 and 14.4 ask for on the settings screen. */
+    object Backup {
+        val sectionTitle = Res.string.backup_section_title
+        val scopeNote = Res.string.backup_scope_note
+        val destinationNote = Res.string.backup_destination_note
+        val action = Res.string.backup_action
+        val actionDescription = Res.string.backup_action_description
+        val choosing = Res.string.backup_choosing
+        val preparing = Res.string.backup_preparing
+        val writing = Res.string.backup_writing
+
+        /** Takes the file name. */
+        val saved = Res.string.backup_saved
+        val dismiss = Res.string.backup_dismiss
+
+        val overwriteTitle = Res.string.backup_overwrite_title
+
+        /** Takes the file name. */
+        val overwriteQuestion = Res.string.backup_overwrite_question
+        val overwriteConfirm = Res.string.backup_overwrite_confirm
+        val overwriteCancel = Res.string.backup_overwrite_cancel
+    }
+
+    object BackupErrors {
+        val title = Res.string.backup_error_title
+        val noDestination = Res.string.backup_error_no_destination
+        val unsupportedFileType = Res.string.backup_error_unsupported_file_type
+        val notWritable = Res.string.backup_error_not_writable
+        val temporaryFileFailed = Res.string.backup_error_temporary_file
+        val targetUnavailable = Res.string.backup_error_target_unavailable
+        val writeFailed = Res.string.backup_error_write_failed
+        val notAtomic = Res.string.backup_error_not_atomic
+        val couldNotReadDatabase = Res.string.backup_error_database
+        val couldNotBuildDocument = Res.string.backup_error_document
     }
 
     object ExportErrors {

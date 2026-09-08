@@ -58,6 +58,8 @@ import dev.pnptracker.ui.feature.importworkspace.ImportRollbackController
 import dev.pnptracker.ui.feature.importworkspace.ImportSection
 import dev.pnptracker.ui.feature.pools.PoolControllers
 import dev.pnptracker.ui.feature.pools.PoolScreen
+import dev.pnptracker.ui.feature.settings.BackupController
+import dev.pnptracker.ui.feature.settings.SettingsScreen
 import dev.pnptracker.ui.textsOf
 import dev.pnptracker.ui.theme.ThemeMode
 import org.jetbrains.compose.resources.stringResource
@@ -84,6 +86,7 @@ fun AppScaffold(
     rollbackController: ImportRollbackController,
     gameTableController: GameTableController,
     exportController: ExportController,
+    backupController: BackupController,
     colorCatalogueController: ColorCatalogueController,
     poolControllers: PoolControllers,
     historyController: HistoryController,
@@ -122,6 +125,7 @@ fun AppScaffold(
                         )
                     Screen.History -> HistoryScreen(historyController)
                     Screen.Colors -> ColorCatalogueScreen(colorCatalogueController)
+                    Screen.Settings -> SettingsScreen(backupController)
                     Screen.Import ->
                         ImportSection(importController, reviewController, confirmationController, rollbackController)
                     // Keyed by the pool, so moving between two of them starts the

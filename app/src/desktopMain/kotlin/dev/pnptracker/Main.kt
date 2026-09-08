@@ -6,6 +6,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import dev.pnptracker.data.database.DatabaseFactory
+import dev.pnptracker.data.repository.BackupStore
 import dev.pnptracker.data.repository.CellTextStore
 import dev.pnptracker.data.repository.ColorCatalogueStore
 import dev.pnptracker.data.repository.GameSetupStore
@@ -20,7 +21,10 @@ import dev.pnptracker.data.repository.TaskEditStore
 import dev.pnptracker.data.repository.TaskExportStore
 import dev.pnptracker.data.repository.TaskFromTextStore
 import dev.pnptracker.data.repository.TaskProgressStore
+import dev.pnptracker.domain.backup.DatabaseBackupExporter
 import dev.pnptracker.platform.awt.applyLinuxFileDialogPolicy
+import dev.pnptracker.platform.backupfiles.AwtBackupFilePicker
+import dev.pnptracker.platform.backupfiles.DesktopBackupFileGateway
 import dev.pnptracker.platform.exportfiles.AwtExportFilePicker
 import dev.pnptracker.platform.exportfiles.DesktopExportFileGateway
 import dev.pnptracker.platform.files.AppDirectoryInitializer
@@ -39,9 +43,11 @@ import dev.pnptracker.ui.feature.importworkspace.ImportConfirmationController
 import dev.pnptracker.ui.feature.importworkspace.ImportReviewController
 import dev.pnptracker.ui.feature.importworkspace.ImportRollbackController
 import dev.pnptracker.ui.feature.pools.PoolControllers
+import dev.pnptracker.ui.feature.settings.BackupController
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.compose.resources.stringResource
 import java.awt.Dimension
+import kotlin.time.Clock
 
 private const val MINIMUM_WINDOW_WIDTH = 640
 private const val MINIMUM_WINDOW_HEIGHT = 460
@@ -51,6 +57,9 @@ private const val FILE_DIALOG_TITLE = "Excel veya CSV dosyası seç"
 
 /** Shown by the system save dialog, which is created before the resources are. */
 private const val EXPORT_DIALOG_TITLE = "Görevleri CSV olarak kaydet"
+
+/** Shown by the system save dialog, which is created before the resources are. */
+private const val BACKUP_DIALOG_TITLE = "Yedeği JSON olarak kaydet"
 
 fun main() {
     // First of all, and before anything can touch AWT: the file dialog choice
@@ -105,6 +114,14 @@ fun main() {
             tasks = TaskExportStore(database.taskExportDao()),
             names = ::exportNames,
         )
+    // The backup reads every table there is and writes nothing at all; the only
+    // thing it can do to the database is ask it a question (PLAN 14.4.2).
+    val backupController =
+        BackupController(
+            gateway = DesktopBackupFileGateway(AwtBackupFilePicker(title = BACKUP_DIALOG_TITLE)),
+            exporter = DatabaseBackupExporter(BackupStore(database), AppInfo.Current, Clock.System),
+            clock = Clock.System,
+        )
     val colorCatalogueController = ColorCatalogueController(colorCatalogue)
     // The pools read the same tasks the table reads and write through the same
     // editing transaction, so they are given the very same store rather than one
@@ -142,6 +159,7 @@ fun main() {
                 rollbackController,
                 gameTableController,
                 exportController,
+                backupController,
                 colorCatalogueController,
                 poolControllers,
                 historyController,

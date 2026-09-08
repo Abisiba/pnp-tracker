@@ -5,6 +5,9 @@ import dev.pnptracker.domain.export.ExportFileGateway
 import dev.pnptracker.domain.export.ExportFileHandle
 import dev.pnptracker.domain.export.TaskExportException
 import dev.pnptracker.domain.export.csvFileNameOf
+import dev.pnptracker.platform.files.AtomicFileWriter
+import dev.pnptracker.platform.files.AtomicWriteException
+import dev.pnptracker.platform.files.AtomicWriteFailure
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.nio.file.Files
@@ -24,7 +27,7 @@ import java.nio.file.Path
  */
 class DesktopExportFileGateway(
     private val picker: ExportFilePicker,
-    private val writer: AtomicFileWriter = AtomicFileWriter(),
+    private val writer: AtomicFileWriter = AtomicFileWriter(temporarySuffix = ".csv.part"),
 ) : ExportFileGateway {
     override suspend fun chooseDestination(suggestedName: String): ExportFileHandle? {
         val chosen = picker.chooseDestination(suggestedName) ?: return null
@@ -45,6 +48,30 @@ private class PathExportFileHandle(
     override suspend fun exists(): Boolean = withContext(Dispatchers.IO) { Files.exists(file) }
 
     override suspend fun write(content: String) {
-        withContext(Dispatchers.IO) { writer.write(file, content) }
+        withContext(Dispatchers.IO) {
+            try {
+                writer.write(file, content)
+            } catch (refused: AtomicWriteException) {
+                throw TaskExportException(exportFailureOf(refused.failure)).apply { initCause(refused) }
+            }
+        }
     }
 }
+
+/**
+ * What the export tells the user about a file system that would not cooperate.
+ *
+ * The writer reports five things and [ExportFailure] has three names for them,
+ * because the two extra distinctions do not change what a person can do about
+ * it: a temporary file that could not be made and a folder that cannot be
+ * written to are both "this place cannot be written to", and a destination that
+ * disappeared mid-write is a write that failed.
+ */
+private fun exportFailureOf(failure: AtomicWriteFailure): ExportFailure =
+    when (failure) {
+        AtomicWriteFailure.NOT_WRITABLE -> ExportFailure.NOT_WRITABLE
+        AtomicWriteFailure.TEMPORARY_FILE_FAILED -> ExportFailure.NOT_WRITABLE
+        AtomicWriteFailure.TARGET_UNAVAILABLE -> ExportFailure.WRITE_FAILED
+        AtomicWriteFailure.WRITE_FAILED -> ExportFailure.WRITE_FAILED
+        AtomicWriteFailure.NOT_ATOMIC -> ExportFailure.NOT_ATOMIC
+    }
