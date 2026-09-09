@@ -919,4 +919,16 @@ class ColorCatalogueControllerTest {
             controller.startDeleting(controller.idOf("Gri"))
             assertIs<ColorWork.Deleting>(controller.state.work)
         }
+
+    @Test
+    fun `a restore closes the form, because the colour it was about has gone`() =
+        withCatalogue(FakeCatalogue()) { controller ->
+            controller.startComposer()
+            assertNotNull(controller.state.work)
+
+            controller.abandonOpenWork()
+
+            assertNull(controller.state.work, "a form was left open over a catalogue that had been replaced")
+            assertNull(controller.state.notice)
+        }
 }

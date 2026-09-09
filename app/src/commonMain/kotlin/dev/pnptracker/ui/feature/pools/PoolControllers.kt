@@ -46,6 +46,9 @@ class PoolControllers(
 
     fun of(poolType: PoolType): PoolController = controllers.getValue(poolType)
 
+    /** Every pool, so all four let go of what they had open when the data is replaced. */
+    val all: Collection<PoolController> get() = controllers.values
+
     /** Follows how much each pool is holding, until cancelled. */
     suspend fun observeNavigationSummary() {
         pools.observeNavigationSummary().collect { summary = it }

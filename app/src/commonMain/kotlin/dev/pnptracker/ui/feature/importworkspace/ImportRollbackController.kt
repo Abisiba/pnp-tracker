@@ -10,6 +10,7 @@ import dev.pnptracker.domain.importrollback.ImportRollbackFailure
 import dev.pnptracker.domain.importrollback.ImportRollbackPreview
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.ImportBatchStatus
+import dev.pnptracker.ui.StaleSurfaces
 
 /**
  * Drives showing the imports that have been confirmed, and taking one back.
@@ -28,7 +29,7 @@ import dev.pnptracker.domain.model.ImportBatchStatus
  */
 class ImportRollbackController(
     private val rollback: ImportRollback,
-) {
+) : StaleSurfaces {
     var imports: SettledImportsState by mutableStateOf(SettledImportsState.Loading)
         private set
 
@@ -131,6 +132,12 @@ class ImportRollbackController(
     fun close() {
         if (flow.isBusy) return
         flow = RollbackFlowState.Closed
+    }
+
+    /** Lets go of the open surface; the batch it was about belongs to another database now. */
+    override fun abandonOpenWork() {
+        flow = RollbackFlowState.Closed
+        lastAsked = null
     }
 
     private fun isStillReading(batchId: EntityId): Boolean = (flow as? RollbackFlowState.Asking)?.batchId == batchId

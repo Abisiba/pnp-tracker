@@ -23,6 +23,7 @@ import dev.pnptracker.domain.spreadsheet.CellSnapshot
 import dev.pnptracker.domain.spreadsheet.SpreadsheetCellKind
 import dev.pnptracker.domain.tasks.CellPoolChoice
 import dev.pnptracker.domain.tasks.onlyTrackingModeOf
+import dev.pnptracker.ui.StaleSurfaces
 import kotlinx.coroutines.flow.collect
 
 /**
@@ -41,7 +42,7 @@ import kotlinx.coroutines.flow.collect
  */
 class ImportReviewController(
     private val review: ImportReview,
-) {
+) : StaleSurfaces {
     var state: ImportReviewState by mutableStateOf(ImportReviewState.Loading)
         private set
 
@@ -525,6 +526,20 @@ class ImportReviewController(
                     ImportReviewSurface.None
                 }
             }
+    }
+
+    /**
+     * Lets go of the open panel and of the block it was opened from.
+     *
+     * The whole workspace is about one import batch, and after a restore that
+     * batch either is not there or is a different one carrying the same
+     * identifier. What was being typed goes with it rather than being applied to
+     * rows nobody was looking at.
+     */
+    override fun abandonOpenWork() {
+        surface = ImportReviewSurface.None
+        selection = null
+        focus = null
     }
 
     /** Sends the user to the cell and the draft one blocking problem is about. */

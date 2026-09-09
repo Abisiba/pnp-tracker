@@ -30,6 +30,7 @@ import dev.pnptracker.domain.tasks.TaskFlags
 import dev.pnptracker.domain.tasks.TaskProgressFailure
 import dev.pnptracker.domain.tasks.quantityDigitsOf
 import dev.pnptracker.domain.tasks.trackingModesOf
+import dev.pnptracker.ui.StaleSurfaces
 import dev.pnptracker.ui.feature.games.TaskEditor
 import dev.pnptracker.ui.feature.tasks.TaskEditingHost
 import dev.pnptracker.ui.feature.tasks.TaskEditingSnapshot
@@ -57,7 +58,8 @@ class PoolController(
     private val colors: ColorCatalogue,
     private val taskEditing: TaskEditing,
     private val taskProgress: TaskProgressing,
-) : TaskEditingHost {
+) : TaskEditingHost,
+    StaleSurfaces {
     var state: PoolScreenState by mutableStateOf(PoolScreenState(poolType = poolType))
         private set
 
@@ -662,6 +664,11 @@ class PoolController(
             refusal.failure
             state = state.copy(work = confirming.copy(isSaving = false), focusRecall = state.focusRecall + 1)
         }
+    }
+
+    /** Lets go of everything open; the tasks it was about are not there any more. */
+    override fun abandonOpenWork() {
+        state = state.copy(work = null, filterSurface = PoolFilterSurface.CLOSED, expandedStages = emptySet())
     }
 
     /** Closes the innermost surface, changing nothing anywhere. */

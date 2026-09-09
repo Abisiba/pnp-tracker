@@ -17,6 +17,8 @@ import dev.pnptracker.domain.backup.BackupTaskColorRow
 import dev.pnptracker.domain.backup.BackupTaskRow
 import dev.pnptracker.domain.backup.BackupTaskStageRow
 import dev.pnptracker.domain.backup.backupDocumentOf
+import dev.pnptracker.domain.backup.canonicalBackupDataJson
+import dev.pnptracker.domain.backup.sha256Of
 import kotlin.time.Instant
 
 /*
@@ -269,6 +271,9 @@ fun aSegment(
 /** The whole document, written by the real writer, checksum and all. */
 fun documentOf(data: BackupData = aWholeBackup()): String =
     backupDocumentOf(data = data, appVersion = "0.1.0", sourceSchemaVersion = 8, createdAt = moment).json
+
+/** The checksum the format defines for [data]: its canonical bytes, hashed once. */
+fun canonicalChecksumOf(data: BackupData): String = sha256Of(canonicalBackupDataJson(data).encodeToByteArray())
 
 /** A file that holds [text], with the size the file system would report for it. */
 fun fileOf(text: String): FakeBackupInput = FakeBackupInput(text.encodeToByteArray())

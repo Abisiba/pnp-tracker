@@ -1240,6 +1240,20 @@ class PoolControllerTest {
             assertEquals(card.taskId, editing.task.taskId)
             assertTrue(progress.staged.isEmpty(), "asking for a total wrote a pipeline")
         }
+
+    @Test
+    fun `a restore lets go of everything open, because the tasks underneath have been replaced`() =
+        runBlocking<Unit> {
+            val controller = controllerFor()
+            controller.openFilters()
+            assertEquals(PoolFilterSurface.OPEN, controller.state.filterSurface)
+
+            controller.abandonOpenWork()
+
+            assertEquals(PoolFilterSurface.CLOSED, controller.state.filterSurface)
+            assertNull(controller.state.work)
+            assertEquals(emptySet(), controller.state.expandedStages)
+        }
 }
 
 /** What a card pipeline in these fixtures counts up to, unless one says otherwise. */

@@ -499,4 +499,19 @@ class ImportRollbackControllerTest {
             assertTrue(fake.previewCalls == 1, "a second import was read while the first was open")
         }
     }
+
+    @Test
+    fun `a restore closes the surface, because the batch it was about has gone`() {
+        val fake = FakeRollback()
+        fake.preview = safePreview(taskCount = 6, cellCount = 2, gameCount = 2)
+        collecting(fake) { controller ->
+            controller.ask(FIRST)
+            assertIs<RollbackFlowState.Offered>(controller.flow)
+
+            controller.abandonOpenWork()
+
+            assertEquals(RollbackFlowState.Closed, controller.flow, "an offer was left open over a batch that had been replaced")
+            assertNull(controller.lastAsked)
+        }
+    }
 }

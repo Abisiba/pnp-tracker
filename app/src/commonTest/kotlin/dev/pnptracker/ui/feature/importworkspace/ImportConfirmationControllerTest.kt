@@ -27,6 +27,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -530,5 +531,16 @@ class ImportConfirmationFailureScopeTest {
             refuseWith?.let { throw ImportConfirmationException(it) }
             return ImportConfirmationResult(batchId, createdTaskCount = 1, createdGameCount = 0)
         }
+    }
+
+    @Test
+    fun `a restore closes the question, because the draft it was about has gone`() {
+        val controller = ImportConfirmationController(FakeConfirmation())
+        controller.ask()
+        assertTrue(controller.isAsking)
+
+        controller.abandonOpenWork()
+
+        assertFalse(controller.isAsking, "an 'are you sure' was left open over a draft that had been replaced")
     }
 }

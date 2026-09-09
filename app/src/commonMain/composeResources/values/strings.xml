@@ -571,6 +571,52 @@
     <string name="backup_error_not_atomic">Bu konumda dosya güvenle değiştirilemiyor. Eski dosya olduğu gibi bırakıldı; başka bir klasör deneyin.</string>
     <string name="backup_error_database">Verileriniz okunamadı, bu yüzden yedek oluşturulmadı. Uygulamayı kapatıp yeniden açmayı deneyin.</string>
     <string name="backup_error_document">Yedek dosyası hazırlanamadı. Hiçbir dosya oluşturulmadı; yeniden deneyin.</string>
+
+    <!-- Yedekten geri yükleme (PLAN 12.16, 14.4.3, 14.4.4) -->
+    <string name="restore_action">Yedekten geri yükle</string>
+    <string name="restore_action_description">Bir yedek dosyası seçer ve bütün verinizin yerine koyar</string>
+    <string name="restore_scope_note">Seçtiğiniz yedek, uygulamadaki bütün verinin yerine geçer: oyunlar, görevler, ilerleme, geçmiş ve içe aktarma kayıtları yedekteki hâliyle değiştirilir. Birleştirme yapılmaz.</string>
+    <string name="restore_safety_note">İşlemden hemen önce mevcut verilerinizin güvenlik yedeği otomatik olarak oluşturulur. Bir şey ters giderse geri dönüş yolunuz bu dosyadır.</string>
+    <string name="restore_choosing">Yedek dosyası seçiliyor…</string>
+    <string name="restore_validating">Yedek denetleniyor…</string>
+    <string name="restore_creating_safety">Güvenlik yedeği hazırlanıyor…</string>
+    <string name="restore_writing_safety">Güvenlik yedeği yazılıyor…</string>
+    <string name="restore_applying">Yedek geri yükleniyor…</string>
+    <string name="restore_dismiss">Tamam</string>
+
+    <string name="restore_confirm_title">Bu yedek geri yüklensin mi?</string>
+    <string name="restore_confirm_replace">Mevcut oyunlar, görevler, ilerleme, geçmiş ve içe aktarma kayıtları bu yedekteki verilerle tamamen değiştirilecek.</string>
+    <string name="restore_confirm_safety">İşlemden önce mevcut verilerinizin güvenlik yedeği oluşturulacak.</string>
+    <string name="restore_confirm_yes">Geri yükle</string>
+    <string name="restore_confirm_no">Vazgeç</string>
+    <string name="restore_summary_file">Dosya: %1$s</string>
+    <string name="restore_summary_taken">Alınma zamanı: %1$s</string>
+    <string name="restore_summary_counts">İçinde %1$s oyun, %2$s görev ve %3$s renk var.</string>
+
+    <string name="restore_done">Yedek geri yüklendi: %1$s</string>
+    <string name="restore_done_safety">İşlemden önceki verileriniz %1$s dosyasına yedeklendi.</string>
+
+    <string name="restore_error_title">Geri yükleme yapılmadı</string>
+    <string name="restore_error_unreadable">Dosya okunamadı. Yerinde durduğundan emin olup yeniden deneyin.</string>
+    <string name="restore_error_empty">Bu dosya boş. Başka bir yedek dosyası seçin.</string>
+    <string name="restore_error_too_large">Bu dosya bir yedek için fazla büyük, bu yüzden açılmadı. Başka bir yedek dosyası seçin.</string>
+    <string name="restore_error_broken_file">Bu dosya bozuk görünüyor ve okunamadı. Başka bir yedek dosyası seçin.</string>
+    <string name="restore_error_not_this_shape">Bu dosyanın içeriği yedek biçimine uymuyor. Elle düzenlenmiş olabilir; başka bir yedek dosyası seçin.</string>
+    <string name="restore_error_not_a_backup">Bu bir PnP Takipçisi yedeği değil. Uygulamanın oluşturduğu bir .json yedeği seçin.</string>
+    <string name="restore_error_too_new">Bu yedek uygulamanın daha yeni bir sürümüyle oluşturulmuş. Uygulamayı güncelleyip yeniden deneyin.</string>
+    <string name="restore_error_too_old">Bu yedek, bu sürümün açamayacağı kadar eski. Geri yüklenemiyor.</string>
+    <string name="restore_error_changed_file">Bu yedek dosyası oluşturulduğundan beri değişmiş. Bozulmuş olabilir; başka bir yedek dosyası seçin.</string>
+    <string name="restore_error_bad_records">Bu yedekteki bazı kayıtlar geçerli değil, bu yüzden hiçbir şey değiştirilmedi. Başka bir yedek dosyası seçin.</string>
+    <string name="restore_error_inconsistent">Bu yedekteki kayıtlar birbiriyle tutarlı değil, bu yüzden hiçbir şey değiştirilmedi. Başka bir yedek dosyası seçin.</string>
+    <string name="restore_error_did_not_pass">Bu yedek denetlemeyi geçemedi, bu yüzden verileriniz değiştirilmedi. Başka bir yedek dosyası seçin.</string>
+
+    <string name="restore_error_safety_not_made">Güvenlik yedeği hazırlanamadı, bu yüzden geri yükleme hiç başlamadı. Verileriniz olduğu gibi duruyor; yeniden deneyin.</string>
+    <string name="restore_error_safety_not_written">Güvenlik yedeği diske yazılamadı, bu yüzden geri yükleme hiç başlamadı. Verileriniz olduğu gibi duruyor; diskte yer olduğundan emin olup yeniden deneyin.</string>
+    <string name="restore_error_data_changed">Verileriniz işlem sırasında değişti, bu yüzden hiçbir şey geri yüklenmedi. Yedeği yeniden denetleyip tekrar deneyin.</string>
+    <string name="restore_error_not_applied">Geri yükleme tamamlanamadı ve tamamı geri alındı. Verileriniz işlemden önceki hâlinde; yeniden deneyin.</string>
+    <string name="restore_error_references">Yedeğin kayıtları veritabanına olduğu gibi yazılamadı ve tamamı geri alındı. Verileriniz işlemden önceki hâlinde.</string>
+    <string name="restore_error_not_verified">Geri yükleme yapıldı ama sonuç doğrulanamadı. Uygulamayı kapatıp yeniden açın; gerekirse aşağıdaki güvenlik yedeğini geri yükleyin.</string>
+    <string name="restore_error_safety_kept">İşlemden önceki verileriniz %1$s dosyasında duruyor.</string>
     <string name="colors_loading">Renk kataloğu yükleniyor…</string>
     <string name="colors_count">Katalogda %1$s renk var.</string>
     <string name="colors_create">Yeni renk ekle</string>

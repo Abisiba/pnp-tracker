@@ -10,6 +10,7 @@ import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.tasks.onlyTrackingModeOf
+import dev.pnptracker.ui.StaleSurfaces
 import kotlinx.coroutines.flow.collect
 
 /**
@@ -25,7 +26,7 @@ import kotlinx.coroutines.flow.collect
  */
 class ImportConfirmationController(
     private val confirmation: ImportConfirmation,
-) {
+) : StaleSurfaces {
     var state: ImportConfirmationState by mutableStateOf(ImportConfirmationState.Loading)
         private set
 
@@ -116,6 +117,12 @@ class ImportConfirmationController(
 
     /** Closes the "are you sure" step without confirming. Writes nothing at all. */
     fun stopAsking() {
+        isAsking = false
+        hasAcknowledgedUnprocessed = false
+    }
+
+    /** Lets go of the "are you sure", which was about a draft this database no longer has. */
+    override fun abandonOpenWork() {
         isAsking = false
         hasAcknowledgedUnprocessed = false
     }

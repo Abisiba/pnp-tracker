@@ -4994,4 +4994,21 @@ class GameTableControllerTest {
             assertEquals(Int.MAX_VALUE, progress.resolved.single().quantity)
             job.cancel()
         }
+
+    @Test
+    fun `a restore lets go of everything open, because the rows underneath have been replaced`() =
+        runBlocking<Unit> {
+            val controller = controllerOf(FakeTable())
+            controller.openFilters()
+            assertEquals(TableFilterSurface.OPEN, controller.state.filterSurface)
+
+            controller.abandonOpenWork()
+
+            // Not one layer, as Escape takes, but all of them: there is no row
+            // left for any of them to have been about.
+            assertEquals(TableFilterSurface.CLOSED, controller.state.filterSurface)
+            assertNull(controller.state.work)
+            assertNull(controller.state.rowWork)
+            assertNull(controller.state.gameComposer)
+        }
 }

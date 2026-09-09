@@ -24,5 +24,6 @@ actual fun localMomentOf(instant: Instant): LocalMoment {
         dayOfMonth = local.dayOfMonth,
         hour = local.hour,
         minute = local.minute,
+        second = local.second,
     )
 }

@@ -44,6 +44,7 @@ import dev.pnptracker.domain.tasks.TaskProgressFailure
 import dev.pnptracker.domain.tasks.onlyTrackingModeOf
 import dev.pnptracker.domain.tasks.quantityDigitsOf
 import dev.pnptracker.domain.tasks.splitForTaskName
+import dev.pnptracker.ui.StaleSurfaces
 import dev.pnptracker.ui.feature.colors.ColorComposer
 import dev.pnptracker.ui.feature.colors.baseColorsIn
 import dev.pnptracker.ui.feature.tasks.TaskEditingHost
@@ -78,7 +79,8 @@ class GameTableController(
     private val taskEditing: TaskEditing,
     private val taskProgress: TaskProgressing,
     private val idGenerator: IdGenerator = IdGenerator.Random,
-) : TaskEditingHost {
+) : TaskEditingHost,
+    StaleSurfaces {
     var state: GameTableScreenState by mutableStateOf(GameTableScreenState())
         private set
 
@@ -293,6 +295,28 @@ class GameTableController(
      * would have to go back to the mouse to get out of a state they never chose.
      */
     private fun blockedByOpenWork(): GameTableScreenState = state.copy(blockedByEditor = true, focusRecall = state.focusRecall + 1)
+
+    /**
+     * Lets go of everything open, because the rows underneath have been replaced.
+     *
+     * Not one layer like [closeInnermost] but all of them at once: a restore
+     * leaves no row for any of them to have been about, so stepping out one at a
+     * time would only walk the user through surfaces that mean nothing. The
+     * filter panel goes with them, since the colours it offers are a different
+     * catalogue now.
+     */
+    override fun abandonOpenWork() {
+        state =
+            state
+                .copy(
+                    work = null,
+                    rowWork = null,
+                    gameComposer = null,
+                    filterSurface = TableFilterSurface.CLOSED,
+                    blockedByEditor = false,
+                    failure = null,
+                ).redrawn()
+    }
 
     /**
      * Closes the innermost surface that is open.

@@ -18,7 +18,7 @@ class BackupFileNameTest {
         year: Int,
         month: Int,
         dayOfMonth: Int,
-    ) = LocalMoment(year = year, month = month, dayOfMonth = dayOfMonth, hour = 23, minute = 59)
+    ) = LocalMoment(year = year, month = month, dayOfMonth = dayOfMonth, hour = 23, minute = 59, second = 41)
 
     @Test
     fun `the offered name is the user's own calendar day`() {
@@ -33,8 +33,8 @@ class BackupFileNameTest {
 
     @Test
     fun `the time of day never reaches the name`() {
-        val early = LocalMoment(year = 2026, month = 9, dayOfMonth = 8, hour = 0, minute = 0)
-        val late = LocalMoment(year = 2026, month = 9, dayOfMonth = 8, hour = 23, minute = 59)
+        val early = LocalMoment(year = 2026, month = 9, dayOfMonth = 8, hour = 0, minute = 0, second = 0)
+        val late = LocalMoment(year = 2026, month = 9, dayOfMonth = 8, hour = 23, minute = 59, second = 41)
         assertEquals(suggestedBackupFileName(early), suggestedBackupFileName(late))
     }
 

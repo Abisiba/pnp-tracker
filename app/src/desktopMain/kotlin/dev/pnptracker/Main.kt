@@ -6,6 +6,8 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import dev.pnptracker.data.database.DatabaseFactory
+import dev.pnptracker.data.database.LiveBackupRestorer
+import dev.pnptracker.data.database.TemporaryBackupProbe
 import dev.pnptracker.data.repository.BackupStore
 import dev.pnptracker.data.repository.CellTextStore
 import dev.pnptracker.data.repository.ColorCatalogueStore
@@ -22,9 +24,13 @@ import dev.pnptracker.data.repository.TaskExportStore
 import dev.pnptracker.data.repository.TaskFromTextStore
 import dev.pnptracker.data.repository.TaskProgressStore
 import dev.pnptracker.domain.backup.DatabaseBackupExporter
+import dev.pnptracker.domain.backup.restore.UntrustedBackupReader
 import dev.pnptracker.platform.awt.applyLinuxFileDialogPolicy
 import dev.pnptracker.platform.backupfiles.AwtBackupFilePicker
+import dev.pnptracker.platform.backupfiles.AwtBackupSourcePicker
 import dev.pnptracker.platform.backupfiles.DesktopBackupFileGateway
+import dev.pnptracker.platform.backupfiles.DesktopBackupSourceGateway
+import dev.pnptracker.platform.backupfiles.DesktopSafetyBackupWriter
 import dev.pnptracker.platform.exportfiles.AwtExportFilePicker
 import dev.pnptracker.platform.exportfiles.DesktopExportFileGateway
 import dev.pnptracker.platform.files.AppDirectoryInitializer
@@ -44,6 +50,7 @@ import dev.pnptracker.ui.feature.importworkspace.ImportReviewController
 import dev.pnptracker.ui.feature.importworkspace.ImportRollbackController
 import dev.pnptracker.ui.feature.pools.PoolControllers
 import dev.pnptracker.ui.feature.settings.BackupController
+import dev.pnptracker.ui.feature.settings.RestoreController
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.compose.resources.stringResource
 import java.awt.Dimension
@@ -60,6 +67,9 @@ private const val EXPORT_DIALOG_TITLE = "Görevleri CSV olarak kaydet"
 
 /** Shown by the system save dialog, which is created before the resources are. */
 private const val BACKUP_DIALOG_TITLE = "Yedeği JSON olarak kaydet"
+
+/** What the open dialog is called when a backup is being put back. */
+private const val RESTORE_DIALOG_TITLE = "Geri yüklenecek yedeği seç"
 
 fun main() {
     // First of all, and before anything can touch AWT: the file dialog choice
@@ -122,6 +132,21 @@ fun main() {
             exporter = DatabaseBackupExporter(BackupStore(database), AppInfo.Current, Clock.System),
             clock = Clock.System,
         )
+    // The one route from a file to the user's data, and every step of it is a
+    // real collaborator: the file comes through the same picker pattern as every
+    // other, the checking is the untrusted reader with its throwaway database,
+    // the safety backup is written by the same atomic writer a manual backup
+    // uses, and the replacement is one transaction on the connection already
+    // open (PLAN 14.4.3, 14.4.4).
+    val restoreController =
+        RestoreController(
+            sources = DesktopBackupSourceGateway(AwtBackupSourcePicker(title = RESTORE_DIALOG_TITLE)),
+            reader = UntrustedBackupReader(TemporaryBackupProbe()),
+            exporter = DatabaseBackupExporter(BackupStore(database), AppInfo.Current, Clock.System),
+            safety = DesktopSafetyBackupWriter(paths.backupsDirectory),
+            restorer = LiveBackupRestorer(database),
+            clock = Clock.System,
+        )
     val colorCatalogueController = ColorCatalogueController(colorCatalogue)
     // The pools read the same tasks the table reads and write through the same
     // editing transaction, so they are given the very same store rather than one
@@ -160,6 +185,7 @@ fun main() {
                 gameTableController,
                 exportController,
                 backupController,
+                restoreController,
                 colorCatalogueController,
                 poolControllers,
                 historyController,

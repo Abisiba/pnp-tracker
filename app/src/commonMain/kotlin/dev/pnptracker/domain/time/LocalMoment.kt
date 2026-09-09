@@ -12,8 +12,11 @@ import kotlin.time.Instant
  * formatting decided yet. What the numbers are arranged into is the text
  * catalogue's business (PLAN 17), which is why nothing here produces a string.
  *
- * Seconds are left out on purpose. Nothing in PLAN 12.15 is a stopwatch, and a
- * history that showed them would be showing precision the user has no use for.
+ * Seconds are carried but never shown. Nothing in PLAN 12.15 is a stopwatch, and
+ * a history that displayed them would be showing precision the user has no use
+ * for; the one thing that needs them is the name of the backup taken just before
+ * a restore, where two in the same minute must not be the same file (PLAN
+ * 14.4.4).
  */
 data class LocalMoment(
     val year: Int,
@@ -24,6 +27,8 @@ data class LocalMoment(
     /** 0 to 23; this application never writes a twelve hour clock. */
     val hour: Int,
     val minute: Int,
+    /** 0 to 59; used to tell two files apart, never to be read out. */
+    val second: Int,
 )
 
 /**

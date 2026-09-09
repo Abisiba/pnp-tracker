@@ -47,23 +47,23 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
 /** How wide a paragraph is allowed to get before it wraps. */
-private val MaxTextWidth = 640.dp
+internal val MaxTextWidth = 640.dp
 
 /**
  * The application's own housekeeping (PLAN 12.16).
  *
- * It holds what works. Restoring from a backup is written down as this screen's
- * second action and is not drawn here yet: a disabled button or a "coming soon"
- * label would be a promise the application cannot keep, and the one thing a
- * settings screen must never do is look as though it can put somebody's data
- * back when it cannot.
+ * The two actions the plan names, in the order it names them: save everything to
+ * a file, and put a file back over everything. They sit in one section because
+ * they are one subject and because the second one is only ever as good as the
+ * first.
  *
- * The whole screen scrolls, so a short window or a large font never puts the
- * action out of reach.
+ * The whole screen scrolls, so a short window or a large font never puts either
+ * action, or the answer to a question, out of reach.
  */
 @Composable
 fun SettingsScreen(
     controller: BackupController,
+    restoreController: RestoreController,
     modifier: Modifier = Modifier,
 ) {
     val texts = textsOf(Screen.Settings)
@@ -83,6 +83,7 @@ fun SettingsScreen(
             modifier = Modifier.widthIn(max = MaxTextWidth),
         )
         BackupSection(controller, modifier = Modifier.padding(top = 12.dp))
+        RestoreSection(restoreController, modifier = Modifier.padding(top = 20.dp))
     }
 }
 

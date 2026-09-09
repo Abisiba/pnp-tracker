@@ -226,7 +226,7 @@ class HistoryScreenLayoutTest {
 
     @Test
     fun `a moment is written out in full, padded so the column lines up`() {
-        val moment = LocalMoment(year = 2026, month = 9, dayOfMonth = 6, hour = 9, minute = 5)
+        val moment = LocalMoment(year = 2026, month = 9, dayOfMonth = 6, hour = 9, minute = 5, second = 0)
 
         assertEquals("06.09.2026 09:05", textOf(Strings.History.moment, *momentArgumentsOf(moment).toTypedArray()))
     }

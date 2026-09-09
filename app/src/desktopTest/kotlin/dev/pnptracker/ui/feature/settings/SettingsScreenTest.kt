@@ -117,8 +117,9 @@ class SettingsScreenTest {
         controller: BackupController,
         width: Int = 900,
         height: Int = 700,
+        restore: RestoreController = aRestoreController(FakeSourceGateway(aRealBackupFile())),
     ) = ComposeSceneHarness(width = width, height = height) {
-        PnpTrackerTheme(ThemeMode.LIGHT) { SettingsScreen(controller) }
+        PnpTrackerTheme(ThemeMode.LIGHT) { SettingsScreen(controller, restore) }
     }
 
     private fun ComposeSceneHarness.text(): String = writtenText().joinToString(" | ")
@@ -138,10 +139,15 @@ class SettingsScreenTest {
     }
 
     @Test
-    fun `nothing promises a restore that does not exist yet`() {
+    fun `both of the actions the plan names are on the screen`() {
         harness(controller(SceneGateway(SceneFile()))).use { harness ->
             val text = harness.text()
-            assertFalse("geri yükle" in text.lowercase(), "the screen offers a restore this slice cannot do: $text")
+            assertTrue("Yedek oluştur" in text, text)
+            assertTrue("Yedekten geri yükle" in text, text)
+            // What a restore does and what it does first, said before anybody
+            // presses anything (PLAN 12.16).
+            assertTrue("yerine geçer" in text, text)
+            assertTrue("güvenlik yedeği" in text.lowercase(), text)
             assertFalse("yakında" in text.lowercase(), text)
         }
     }

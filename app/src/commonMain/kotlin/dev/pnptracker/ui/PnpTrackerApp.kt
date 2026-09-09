@@ -16,6 +16,7 @@ import dev.pnptracker.ui.feature.importworkspace.ImportReviewController
 import dev.pnptracker.ui.feature.importworkspace.ImportRollbackController
 import dev.pnptracker.ui.feature.pools.PoolControllers
 import dev.pnptracker.ui.feature.settings.BackupController
+import dev.pnptracker.ui.feature.settings.RestoreController
 import dev.pnptracker.ui.navigation.AppNavigationState
 import dev.pnptracker.ui.navigation.AppScaffold
 import dev.pnptracker.ui.theme.PnpTrackerTheme
@@ -39,12 +40,25 @@ fun PnpTrackerApp(
     gameTableController: GameTableController,
     exportController: ExportController,
     backupController: BackupController,
+    restoreController: RestoreController,
     colorCatalogueController: ColorCatalogueController,
     poolControllers: PoolControllers,
     historyController: HistoryController,
 ) {
     val navigation = remember { AppNavigationState() }
     var themeMode by remember { mutableStateOf(ThemeMode.LIGHT) }
+
+    // A restore replaces every row in the database. The screens follow, because
+    // they all read through a database flow, but a panel somebody left open is
+    // anchored to a row that has gone — so each holder of one is asked to let go
+    // (PLAN 14.4.3). Nothing navigates: the user pressed a button in the
+    // settings and that is where they stay.
+    val staleSurfaces: List<StaleSurfaces> =
+        remember(gameTableController, colorCatalogueController, poolControllers, reviewController) {
+            listOf(gameTableController, colorCatalogueController, reviewController, confirmationController, rollbackController) +
+                poolControllers.all
+        }
+    CloseStaleSurfacesAfterRestore(restoreController.restoredTick, staleSurfaces)
 
     PnpTrackerTheme(themeMode = themeMode) {
         AppScaffold(
@@ -59,6 +73,7 @@ fun PnpTrackerApp(
             gameTableController = gameTableController,
             exportController = exportController,
             backupController = backupController,
+            restoreController = restoreController,
             colorCatalogueController = colorCatalogueController,
             poolControllers = poolControllers,
             historyController = historyController,

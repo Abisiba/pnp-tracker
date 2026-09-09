@@ -10,6 +10,7 @@ import dev.pnptracker.domain.colors.ColorSummary
 import dev.pnptracker.domain.colors.WheelNudge
 import dev.pnptracker.domain.colors.WheelPoint
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.ui.StaleSurfaces
 import kotlinx.coroutines.flow.collect
 
 /**
@@ -27,7 +28,7 @@ import kotlinx.coroutines.flow.collect
  */
 class ColorCatalogueController(
     private val catalogue: ColorCatalogue,
-) {
+) : StaleSurfaces {
     var state: ColorCatalogueScreenState by mutableStateOf(ColorCatalogueScreenState())
         private set
 
@@ -158,6 +159,17 @@ class ColorCatalogueController(
         if (isSaving) return
         state = state.copy(work = null)
         focusRecall += 1
+    }
+
+    /**
+     * Lets go of the open form and any notice beside it.
+     *
+     * Unlike [cancel] this does not stand back for a save in flight, because a
+     * restore has already replaced the row that save was about; there is nothing
+     * left for it to land on either way.
+     */
+    override fun abandonOpenWork() {
+        state = state.copy(work = null, notice = null)
     }
 
     /** Puts away a message the user has read. */

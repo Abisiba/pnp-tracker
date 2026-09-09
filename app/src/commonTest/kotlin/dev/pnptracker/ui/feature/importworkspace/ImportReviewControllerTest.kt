@@ -794,4 +794,20 @@ class ImportReviewControllerTest {
             job.cancelAndJoin()
         }
     }
+
+    @Test
+    fun `a restore lets go of the workspace, because the import it was about has gone`() {
+        val one = block("bir", 1, 1)
+        val draft = ReviewDraftTask(IdGenerator.Random.newId(), one.id, "Taslak")
+        withObserving(FakeReview(workspaceOf(listOf(one), listOf(draft)))) { controller ->
+            controller.select(one.id)
+            controller.openDraft(draft)
+            assertIs<ImportReviewSurface.DraftEditor>(controller.surface)
+
+            controller.abandonOpenWork()
+
+            assertEquals(ImportReviewSurface.None, controller.surface, "a form was left open over a batch that had been replaced")
+            assertNull(controller.selection)
+        }
+    }
 }

@@ -476,6 +476,46 @@ import dev.pnptracker.resources.pool_task_quantity
 import dev.pnptracker.resources.pool_task_quantity_unknown
 import dev.pnptracker.resources.pool_task_spoken
 import dev.pnptracker.resources.pool_three_d
+import dev.pnptracker.resources.restore_action
+import dev.pnptracker.resources.restore_action_description
+import dev.pnptracker.resources.restore_applying
+import dev.pnptracker.resources.restore_choosing
+import dev.pnptracker.resources.restore_confirm_no
+import dev.pnptracker.resources.restore_confirm_replace
+import dev.pnptracker.resources.restore_confirm_safety
+import dev.pnptracker.resources.restore_confirm_title
+import dev.pnptracker.resources.restore_confirm_yes
+import dev.pnptracker.resources.restore_creating_safety
+import dev.pnptracker.resources.restore_dismiss
+import dev.pnptracker.resources.restore_done
+import dev.pnptracker.resources.restore_done_safety
+import dev.pnptracker.resources.restore_error_bad_records
+import dev.pnptracker.resources.restore_error_broken_file
+import dev.pnptracker.resources.restore_error_changed_file
+import dev.pnptracker.resources.restore_error_data_changed
+import dev.pnptracker.resources.restore_error_did_not_pass
+import dev.pnptracker.resources.restore_error_empty
+import dev.pnptracker.resources.restore_error_inconsistent
+import dev.pnptracker.resources.restore_error_not_a_backup
+import dev.pnptracker.resources.restore_error_not_applied
+import dev.pnptracker.resources.restore_error_not_this_shape
+import dev.pnptracker.resources.restore_error_not_verified
+import dev.pnptracker.resources.restore_error_references
+import dev.pnptracker.resources.restore_error_safety_kept
+import dev.pnptracker.resources.restore_error_safety_not_made
+import dev.pnptracker.resources.restore_error_safety_not_written
+import dev.pnptracker.resources.restore_error_title
+import dev.pnptracker.resources.restore_error_too_large
+import dev.pnptracker.resources.restore_error_too_new
+import dev.pnptracker.resources.restore_error_too_old
+import dev.pnptracker.resources.restore_error_unreadable
+import dev.pnptracker.resources.restore_safety_note
+import dev.pnptracker.resources.restore_scope_note
+import dev.pnptracker.resources.restore_summary_counts
+import dev.pnptracker.resources.restore_summary_file
+import dev.pnptracker.resources.restore_summary_taken
+import dev.pnptracker.resources.restore_validating
+import dev.pnptracker.resources.restore_writing_safety
 import dev.pnptracker.resources.review_back
 import dev.pnptracker.resources.review_blocker_block
 import dev.pnptracker.resources.review_blocker_draft
@@ -1912,6 +1952,67 @@ object Strings {
         val overwriteQuestion = Res.string.backup_overwrite_question
         val overwriteConfirm = Res.string.backup_overwrite_confirm
         val overwriteCancel = Res.string.backup_overwrite_cancel
+    }
+
+    /** Yedekten geri yükleme, the words PLAN 12.16 and 14.4.3 ask for. */
+    object Restore {
+        val action = Res.string.restore_action
+        val actionDescription = Res.string.restore_action_description
+        val scopeNote = Res.string.restore_scope_note
+        val safetyNote = Res.string.restore_safety_note
+        val choosing = Res.string.restore_choosing
+        val validating = Res.string.restore_validating
+        val creatingSafety = Res.string.restore_creating_safety
+        val writingSafety = Res.string.restore_writing_safety
+        val applying = Res.string.restore_applying
+        val dismiss = Res.string.restore_dismiss
+
+        val confirmTitle = Res.string.restore_confirm_title
+        val confirmReplace = Res.string.restore_confirm_replace
+        val confirmSafety = Res.string.restore_confirm_safety
+        val confirmYes = Res.string.restore_confirm_yes
+        val confirmNo = Res.string.restore_confirm_no
+
+        /** Takes the file name. */
+        val summaryFile = Res.string.restore_summary_file
+
+        /** Takes the moment the backup was taken, already arranged. */
+        val summaryTaken = Res.string.restore_summary_taken
+
+        /** Takes the number of games, tasks and colours. */
+        val summaryCounts = Res.string.restore_summary_counts
+
+        /** Takes the file name. */
+        val done = Res.string.restore_done
+
+        /** Takes the name of the safety backup. */
+        val doneSafety = Res.string.restore_done_safety
+    }
+
+    object RestoreErrors {
+        val title = Res.string.restore_error_title
+        val unreadable = Res.string.restore_error_unreadable
+        val empty = Res.string.restore_error_empty
+        val tooLarge = Res.string.restore_error_too_large
+        val brokenFile = Res.string.restore_error_broken_file
+        val notThisShape = Res.string.restore_error_not_this_shape
+        val notABackup = Res.string.restore_error_not_a_backup
+        val tooNew = Res.string.restore_error_too_new
+        val tooOld = Res.string.restore_error_too_old
+        val changedFile = Res.string.restore_error_changed_file
+        val badRecords = Res.string.restore_error_bad_records
+        val inconsistent = Res.string.restore_error_inconsistent
+        val didNotPass = Res.string.restore_error_did_not_pass
+
+        val safetyNotMade = Res.string.restore_error_safety_not_made
+        val safetyNotWritten = Res.string.restore_error_safety_not_written
+        val dataChanged = Res.string.restore_error_data_changed
+        val notApplied = Res.string.restore_error_not_applied
+        val references = Res.string.restore_error_references
+        val notVerified = Res.string.restore_error_not_verified
+
+        /** Takes the name of the safety backup that is still on disk. */
+        val safetyKept = Res.string.restore_error_safety_kept
     }
 
     object BackupErrors {
