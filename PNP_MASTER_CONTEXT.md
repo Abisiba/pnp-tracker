@@ -26,35 +26,47 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-HEAD (bu commit öncesi): dabf357177a579f1d95ccbbbca4e2c365e8d599f
-önceki commit         : feat(backup): describe the whole database as one document
+HEAD (bu commit öncesi): fccd96033ce8a87b961ab4ca2b5c665ae625245a
+önceki commit         : feat(backup): save the whole database to a file
 working tree          : temiz
 Room şema sürümü      : 8   (bu commit'te DEĞİŞMEDİ)
 şema dosyaları        : 1.json … 8.json  hepsi bayt bayt aynı
-test durumu           : 3023 test / 0 failure / 0 error / 0 skipped  (188 sınıf)
-üretim kodu           : 257 dosya
-test kodu             : 200 dosya
+test durumu           : 3124 test / 0 failure / 0 error / 0 skipped  (197 sınıf)
+üretim kodu           : 268 dosya
+test kodu             : 210 dosya
 ```
 
-**Bu commit Faz 3 / İş 3'ün ikinci dilimidir.** Dilim 1'in bellekte ürettiği yedek
-belgesini kullanıcıya açar: PLAN `12.1`'in `Ayarlar` ekranı gerçek bir gezinme
-hedefi olarak açılır ve içindeki `Yedek oluştur` eylemi belgeyi seçilen dosyaya
-**atomik olarak** yazar.
+**Bu commit Faz 3 / İş 3'ün üçüncü dilimidir.** Bir yedek dosyasını, hiçbir
+şeyine güvenmeden okur: boyut sınırı, sıkı UTF-8, tekrarlanan anahtar ve yuvalama
+taraması, zarf ve sürüm kapısı, checksum, değer/enum/kimlik doğrulaması, bellekte
+FK graf doğrulaması ve son olarak **yalnız geçici** bir Room v8 veritabanına
+yükleme ile kanonik yeniden okuma.
 
-Kullanıcının görebildiği akış: `Yedek oluştur` → kaydetme penceresi
-(`pnp-yedek-<tarih>.json` önerilir) → dosya varsa üzerine yazma onayı → veritabanı
-tek seferde okunur → kanonik baytlar aynı dizindeki geçici dosyaya yazılır →
-atomik taşıma → `Yedek oluşturuldu: <dosya adı>`.
+Boru hattı ve sırası:
 
-**Geri yükleme yoktur** ve ekranda ona dair bir düğme, devre dışı kontrol veya
-"yakında" metni de yoktur: yapamadığı bir şeyi vaat eden bir ayarlar ekranı, veri
-geri getirebileceğini sanan bir kullanıcı demektir.
+```text
+boyut       → 64 MiB; dosya açılmadan bir kez, okunurken tekrar
+baytlar     → sıkı UTF-8, yoksa ret
+metin       → tekrarlanan anahtar yok, aşırı yuvalama yok, belgeden sonrası yok
+JSON        → Dilim 1'in tek üretim `Json` yapılandırması
+şekil       → biçimin beyan ettiği her alan, fazlası yok, doğru türde
+zarf        → bizim biçim, bilinen sürüm, kanonik an, hex checksum
+checksum    → data kanonik yazıcıyla yeniden yazılıp yeniden hash'lenir
+değerler    → kimlik, enum, aralık ve her satırın kendi kuralları
+graf        → benzersiz anahtarlar, sağlam referanslar, boşluksuz sıralar
+geçici DB   → gerçek şemaya yükleme + foreign_key_check + kanonik geri okuma
+```
 
-`AtomicFileWriter` **taşındı ve genelleştirildi** (`platform.exportfiles` →
-`platform.files`): artık tipsiz bir `AtomicWriteException` fırlatır, `ByteArray`
-yazabilir ve geçici dosya soneki verilebilir. CSV dışa aktarma kendi
-`ExportFailure` eşlemesini kenarda yapar; davranışı ve testleri değişmedi. **Yedek
-için ikinci bir atomik yazıcı yazılmadı.**
+**Kullanıcıya açılan hiçbir şey yoktur.** `Ayarlar` ekranı Dilim 2'deki hâliyle
+duruyor; `Yedekten geri yükle` düğmesi, devre dışı kontrol veya "yakında" metni
+**yok**. Doğrulanmış bir belgeden canlı veritabanına giden **üretim yolu da
+yoktur**: `ValidatedBackup` bu dilimin son çıktısıdır ve onu bir yere yazacak kod
+Dilim 4'ün işidir.
+
+Geçici veritabanı sınırı üç yerden korunuyor: `TemporaryBackupProbe` **yol
+almaz** (kendi geçici dizinini yapar), **`AppDatabase` almaz** (üretim bağlantısı
+içeriye verilemez), ve kurduğu her şeyi — dosya, `-wal`, `-shm`, dizin — başarı,
+hata ve iptal yollarının hepsinde siler.
 
 Şema **değişmemiştir**; yeni bağımlılık **eklenmemiştir**.
 
@@ -1071,14 +1083,16 @@ eski dosya korunur. Her hatada geçici dosya silinir ve hedef bayt bayt aynı ka
 
 ---
 
-# 25.1 JSON YEDEK VE GERİ YÜKLEME SÖZLEŞMESİ  *(Faz 3 / İş 3 — Dilim 1 uygulandı)*
+# 25.1 JSON YEDEK VE GERİ YÜKLEME SÖZLEŞMESİ  *(Faz 3 / İş 3 — Dilim 1-3 uygulandı)*
 
 Bağlayıcı metin PLAN `14.4` (alt bölümleri `14.4.1`–`14.4.6`), `12.16` ve `16.`
 bölümlerindedir. Çelişkide PLAN kazanır.
 
-**Dilim 1 uygulanmıştır**: belge, kapsam, sıralama, tek transaction okuma, kanonik
-yazıcı ve checksum çalışır durumdadır. Dosyaya yazma, ayrıştırma ve geri yükleme
-hâlâ yoktur; onlar Dilim 2, 3 ve 4'tür.
+**Dilim 1, 2 ve 3 uygulanmıştır**: belge, kapsam, sıralama, tek transaction
+okuma, kanonik yazıcı ve checksum (Dilim 1); `Ayarlar` ekranı ve atomik dosya
+yazma (Dilim 2); güvenilmeyen dosyayı okuma, doğrulama ve geçici bir Room v8
+veritabanında deneme (Dilim 3). **Canlı veritabanına uygulama hâlâ yoktur**; o
+Dilim 4'tür.
 
 ## Biçim
 
@@ -1293,6 +1307,169 @@ taşıma yok · veritabanı okunamadı · belge hazırlanamadı. Beklenmeyen
 `IllegalStateException`/`NullPointerException` **maskelenmez**; yalnız
 `SQLiteException` ve `SerializationException` kullanıcı sonucuna çevrilir.
 
+## Dilim 3'te uygulanan hâli
+
+```text
+domain/backup/restore/BackupProblem.kt      25 tipli ret nedeni + BackupPlace/Rejection
+domain/backup/restore/BackupInput.kt        BackupInput/BackupBytes, 64 MiB'lık okuma
+domain/backup/restore/BackupText.kt         sıkı UTF-8, BOM, JSON ön taraması
+domain/backup/restore/DocumentShape.kt      serializer descriptor'larından yapı denetimi
+domain/backup/restore/EnvelopeGate.kt       zarf, sürüm kapıları ve checksum
+domain/backup/restore/BackupValues.kt       15 tablonun değer ve alan kuralları
+domain/backup/restore/BackupGraph.kt        21 referans + 25 benzersiz anahtar + sıralar
+domain/backup/restore/ValidatedBackup.kt    doğrulanmış sonuç + güvenli özet
+domain/backup/restore/UntrustedBackupReader.kt  boru hattının kendisi
+desktopMain/platform/backupfiles/PathBackupInput.kt  dosyayı bayt olarak sunar
+desktopMain/data/database/TemporaryBackupProbe.kt    geçici Room v8 denemesi
+```
+
+### 64 MiB, UTF-8 ve BOM
+
+```text
+sınır          64 MiB = 67_108_864 bayt.  PLAN 14.4.1 "en fazla 64 MiB" dediği
+               için tam sınır KABUL, bir bayt fazlası RET; ikisinin de testi var
+iki kez        bildirilen boyut dosya AÇILMADAN, sonra okunurken tekrar sayılır.
+               Bildirilen boyuta güvenilmez: kontrol ile okuma arasında dosya
+               büyüyebilir. En fazla limit+1 bayt kabul edilir, sınırsız
+               readBytes() YOKTUR ve stream bütün yollarda kapatılır
+boş dosya      MALFORMED_JSON değil, kendi sonucu (EMPTY_FILE)
+UTF-8          decodeToString(throwOnInvalidSequence = true); toleranslı okuma
+               ve platform charset'i YOK. Bozuk bayt onarılmaz, dosya reddedilir
+BOM            baştaki BİR UTF-8 BOM atlanır — `CsvParser` da atlar; bir metin
+               düzenleyicisinden geçmiş yedek üç bayt yüzünden reddedilmez.
+               İKİNCİ BOM atlanmaz ve belge JSON olmaz. Yazıcı BOM yazmaz
+UTF-16/32      BOM'lu ise INVALID_UTF8, BOM'suz ise MALFORMED_JSON; ikisi de ret
+```
+
+### Tekrarlanan anahtar ve yuvalama
+
+`kotlinx.serialization` bir nesneyi map'e okur ve map anahtar başına tek değer
+tutar; `{"formatVersion":1,"formatVersion":99}` **99 diyen sıradan bir belge
+olarak** gelir. Bu bir testle kayda geçmiştir. PLAN 14.4.1 tekrarlanan anahtarı
+reddettirdiği için karar, tekrarın atılmasından **önce** verilmek zorundadır.
+
+Bu yüzden ayrıştırmadan önce dar amaçlı bir metin taraması çalışır
+(`scanJsonText`). İkinci bir JSON parser **değildir**: sayıya, alanın yerine veya
+belgenin geçerliliğine karar vermez. Yalnız
+
+```text
+tekrarlanan object key   escape'ler ÇÖZÜLEREK karşılaştırılır ("\u0066ormat" = "format");
+                         her nesne kendi kapsamında; farklı nesnelerde aynı key SERBEST
+yuvalama derinliği       en fazla 32 (biçim en fazla 4 seviye yuvalar);
+                         parse başlamadan uygulanır, stack overflow'a fırsat kalmaz
+string kuralları         string içindeki { } : , taramayı bozmaz; ham kontrol
+                         karakteri, bozuk escape ve eşleşmeyen surrogate ret
+belgeden sonrası         en dış değer kapandıktan sonra boşluk dışında hiçbir şey
+```
+
+`kotlinx.serialization` internal API'si kullanılmaz; her şey public API üzerinden.
+
+### Zarf, sürüm ve checksum kapıları
+
+Sıra kesindir ve her biri ayrı tipli sonuç verir:
+
+```text
+format != "pnp-tracker-backup"    WRONG_FORMAT
+formatVersion > 1 / < 1           FORMAT_TOO_NEW / FORMAT_TOO_OLD
+sourceSchemaVersion > 8 / < 8     SCHEMA_TOO_NEW / SCHEMA_TOO_OLD
+createdAt kanonik UTC değil       INVALID_CREATED_AT  (parse edilir VE geri yazılıp
+                                  aynı metin olduğu doğrulanır)
+dataSha256 64 küçük harf hex yok  MALFORMED_CHECKSUM  (büyük harf hash de buraya düşer)
+data yeniden hash'i uyuşmuyor     CHECKSUM_MISMATCH
+```
+
+`appVersion` **kapı değildir**: farklı, çok yeni veya boş olması hiçbir yedeği
+reddettirmez (PLAN 14.4.1). Eski format/şema için yükseltme zinciri
+**uydurulmamıştır**; `1`/`8` tek bilinen çifttir.
+
+Checksum, Dilim 1'in kanonik yazıcısı ve `sha256Of`'u ile yeniden hesaplanır —
+ikinci bir implementasyon veya farklı bir projection yoktur. Mantıksal `data`
+üzerinden olduğu için alanları başka sırayla yazılmış bir dosya **aynı** yedektir
+ve kabul edilir; tek karakterlik veri değişikliği ise reddedilir. Bilinmeyen ve
+tekrarlanan alanlar checksum'dan **önce** reddedilir. Checksum uyuşmazlığında
+geçici veritabanı **oluşturulmaz** (testle sabit).
+
+### Değer, graf ve domain doğrulaması
+
+Doğrulama aşamalı ve açıktır: `parse edilmiş DTO → yapı → değer → kimlik/enum →
+graf → domain invariant → ValidatedBackup`. **Hiçbir şey onarılmaz** — trim,
+normalize, clamp, varsayılanla doldurma ve sessizce atlama yoktur (PLAN 14.4.2).
+
+Kurallar entity `init` bloklarının aynısıdır, fakat entity kurularak değil
+**burada tekrar söylenerek** denetlenir. İki sebep: başarısız bir `require`
+mesajında kullanıcının verisi durur ve o metin dışarı çıkamaz (PLAN 14.4.5); ve
+"yedek yanlış" ile "kod yanlış" farklı olgulardır. Son sözü yine entity'ler söyler:
+geçici veritabanı her satırı Room üzerinden geri okur, yani burada atlanmış bir
+kural orada yakalanır.
+
+Graf doğrulaması **bellekte**, set/map ile, O(n)'dir; satır başına sorgu yoktur.
+Denetlenen sözleşme elle beyan edilir ve `BackupContractCoverageTest` onu commit'li
+`8.json` ile karşılaştırır:
+
+```text
+21 yabancı anahtar   8.json'daki her FK; nullable olanı ayrıca işaretli
+25 benzersiz anahtar 15 primary key + 10 unique index; nullable kolonlarda
+                     SQL'in kuralı gibi NULL'lar muaf
+                     (cell_segments.task_id → bir Task tek TASK segmentine bağlanır;
+                      game_cells (game_id, column_type); draft_tasks.materialized_task_id)
+boşluksuz sıralar    cell_segments.order_index, task_colors.slot_index,
+                     task_stages.order_index, draft_task_colors.slot_index
+                     her grupta 0..N-1
+```
+
+Gelecekte şemaya bir FK eklenip validator unutulursa test kırılır — sessizce
+geçmez.
+
+### Geçici Room v8 denemesi
+
+```text
+yol             TemporaryBackupProbe DIŞARIDAN YOL ALMAZ; kendi geçici dizinini yapar.
+                Dizin sistem temp'i altında değilse veya uygulamanın veri dizininin
+                içindeyse IllegalStateException ile REDDEDER (kullanıcıya gösterilen
+                bir "bozuk yedek" sonucu DEĞİL — çağıran hatalıdır)
+handle          üretim AppDatabase'i içeriye verilemez; sınıf kendi açar, kendi kapatır
+temizleme       15 tablo TERS FK sırasında DELETE — Room'un yeni veritabanına ektiği
+                12 tohum renk dâhil. Merge değil replace (PLAN 14.4.3)
+yazma           PLAN 14.4.2 sırasında, tablo başına TEK prepared statement, satır
+                başına 0 SELECT
+transaction     tek immediate transaction; içinde PRAGMA defer_foreign_keys = TRUE
+                ve commit'ten önce AÇIK PRAGMA foreign_key_check
+geri okuma      BackupStore ile kanonik yeniden okuma: data ve dataSha256 kaynakla
+                birebir aynı olmalı; PRAGMA user_version == 8. Room satırları
+                entity'ler üzerinden kurduğu için bütün init invariant'ları
+                burada bir kez daha çalışır
+temizlik        db, -wal, -shm ve dizin BAŞARI, HATA ve İPTAL yollarının hepsinde silinir
+integrity_check yeni ve boş bir veritabanında sınırlı kanıt taşıdığı için
+                ÇALIŞTIRILMAZ; esas kanıt foreign_key_check, entity invariant'ları
+                ve kanonik yeniden okumanın eşitliğidir
+canlı DB        bu API canlı veritabanında replace SUNMAZ
+```
+
+### Tipli ret nedenleri
+
+`BackupProblem` 25 değer taşır ve hepsi birbirinden ayrıdır, böylece Dilim 4 doğru
+Türkçe cümleyi seçebilir:
+
+```text
+UNREADABLE · EMPTY_FILE · SAFETY_LIMIT · INVALID_UTF8 · MALFORMED_JSON ·
+TOO_DEEPLY_NESTED · DUPLICATE_KEY · UNKNOWN_FIELD · MISSING_FIELD · WRONG_TYPE ·
+WRONG_FORMAT · FORMAT_TOO_NEW · FORMAT_TOO_OLD · SCHEMA_TOO_NEW · SCHEMA_TOO_OLD ·
+INVALID_CREATED_AT · MALFORMED_CHECKSUM · CHECKSUM_MISMATCH · INVALID_ID ·
+INVALID_ENUM · INVALID_VALUE · DUPLICATE_RECORD · BROKEN_REFERENCE ·
+DOMAIN_INVARIANT · TEMP_VALIDATION_FAILED
+```
+
+`BackupRejection` yalnız bir neden ve bir `BackupPlace` taşır. `BackupPlace` iki
+alanı da biçimin **kendi sabit sözlüğünden** gelir (bir dizi adı ya da `envelope`
+/ `file`, ve kayıt tipinin bir alan adı). İçinde `Throwable` **yoktur**: bir
+`Throwable` stack trace üzerinden dosya adlarını ve kütüphane içini taşırdı.
+Bilinmeyen bir alanın **adı asla dışarı çıkmaz** — onu dosyayı yazan yazdı.
+
+Yalnız `BackupInputException`, `SerializationException`, `CharacterCodingException`,
+`SQLiteException` ve entity'lerin `IllegalArgumentException`'ı tipli sonuca
+çevrilir. `IllegalStateException`, `NullPointerException` ve `Error` **olduğu gibi
+yükselir**; hiçbir yerde `Throwable` yakalanmaz (testle sabit).
+
 ## Reddedilen alternatifler  *(tekrar önerilmesin)*
 
 ```text
@@ -1318,11 +1495,11 @@ güvenlik yedeği başarısızken devam REDDEDİLDİ  kullanıcının geri dön�
    kullanıcı yedek alabilir; geri yükleme yok. Şema değişmedi.
    commit: feat(backup): save the whole database to a file
 
-3  Güvenilmeyen dosyayı parse etme, doğrulama, geçici DB denemesi ... SIRADAKİ
-   doğrulanmış belgeden canlı DB'ye giden yol YOK. Şema değişmez.
+3  Güvenilmeyen dosyayı parse etme, doğrulama, geçici DB denemesi ... TAMAM
+   doğrulanmış belgeden canlı DB'ye giden yol YOK. Şema değişmedi.
    commit: feat(backup): read a backup file without trusting it
 
-4  Restore öncesi güvenlik yedeği + canlı replace transaction + arayüz
+4  Restore öncesi güvenlik yedeği + canlı replace transaction + arayüz  ← SIRADAKİ
    commit: feat(backup): put a backup back
 ```
 
@@ -1417,7 +1594,7 @@ geçmez. Hash'i dilim başında/sonunda kontrol edilir ve kapsam dışında değ
 
 ```text
 TemporaryDatabaseDirectory              geçici Room DB + gerçek DB koruma iddiası
-assertRealApplicationDatabaseUntouched  78 test sınıfında kullanılıyor
+assertRealApplicationDatabaseUntouched  87 test sınıfında kullanılıyor
 CommittedSchema                         eski sürümleri commit'li JSON'dan kurar
 LegacyRowFixtures                       v1…v6 satır yazıcıları
                                         (v6 raw block = v7 raw block; şema aynı)
@@ -1429,6 +1606,9 @@ BackupFixture                           15 tablonun hepsini dolduran, istenirse 
 BackupManifest (desktopTest)            yedek biçiminin elle beyan edilmiş sözleşmesi;
                                         8.json ve serializer descriptor'larıyla
                                         karşılaştırılır
+BackupDocuments (commonTest)            her tabloda satırı olan geçerli bir yedek +
+                                        boyutu/akışı yalan söyleyebilen FakeBackupInput
+                                        + sorulup sorulmadığını sayan CountingProbe
 ComposeSceneHarness                     gerçek Compose sahnesi (desktopTest)
 ```
 
@@ -1470,6 +1650,23 @@ Yedek dosyaya yazma      hedef seçilmeden 0 SELECT; onay reddedilirse 0 SELECT 
                          0 bayt; yazma sırasında DB'de 0 değişiklik. Yazıcının üç
                          dikişinin her birinde mevcut hedef bayt bayt korunur ve
                          geçici dosya kalmaz
+Yedek okuma — sınırlar   tam 64 MiB KABUL, +1 bayt RET; bildirilen boyut sınırın
+                         üstündeyse dosya AÇILMAZ; boyut, UTF-8, JSON, zarf,
+                         checksum, değer ve graf hatalarının HİÇBİRİNDE geçici
+                         veritabanı oluşturulmaz (probe 0 kez sorulur); stream
+                         başarı, ret ve yarı yolda kesilme yollarının hepsinde
+                         kapatılır
+Yedek okuma — geçici DB  yükleme tablo başına 1 prepared statement, satır başına
+                         0 SELECT; geri okuma 15 SELECT (tablo başına bir).
+                         3 görevli ve 1.003 görevli yedek AYNI ifade kümesini
+                         çalıştırır — yalnız INSERT sayısı büyür.
+                         Ölçüm (bu makinede; eşik değil kayıttır):
+                         1.003 görevli yedek → dosya 458.657 bayt (~448 KiB),
+                         64 MiB sınırının ~150'de biri. Uçtan uca
+                         yazma+okuma+geçici DB testi 0,46 s; küçük ve büyük
+                         yedeğin geçici DB denemesi birlikte 0,22 s
+Yedek okuma — temizlik   db, -wal, -shm ve geçici dizin başarı, insert hatası ve
+                         geri okuma hatası yollarının hepsinde silinir
 ```
 
 ---
@@ -1570,8 +1767,8 @@ PLAN `18.` — Faz 3 işler listesi.
 ```text
  1  Geçmiş ekranını tamamla ............................. TAMAM
  2  Import batch rollback ve korumalı geri alma ......... TAMAM (üç dilim)
- 3  Sürümlü JSON yedek/dışa aktarma ve geri yükleme ..... DİLİM 1-2 TAMAM
-                                                        (4 dilimden 2'si)  ← SIRADAKİ
+ 3  Sürümlü JSON yedek/dışa aktarma ve geri yükleme ..... DİLİM 1-3 TAMAM
+                                                        (4 dilimden 3'ü)  ← SIRADAKİ
  4  Import ve migration öncesi otomatik snapshot ........ YAPILMADI
  5  CSV görev dışa aktarmayı doğrula ......... özellik var, Faz 3 doğrulama
                                               testleri yazılmadı
@@ -1579,8 +1776,10 @@ PLAN `18.` — Faz 3 işler listesi.
  7  Beklenmeyen kapanış / bozuk import kurtarma ......... YAPILMADI
  8  Klavye, odak, renk dışı etiket, yüksek DPI .... mevcut ekranlar için
                                               büyük ölçüde tamam
- 9  Büyük veri setiyle performans testi ...... sorgu sayımı var,
-                                              süre/bellek ölçümü yok
+ 9  Büyük veri setiyle performans testi ...... sorgu sayımı var; yedek
+                                              yazma ve okuma için süre/boyut
+                                              ölçümü de var (§29), genel
+                                              performans kapısı yok
 10  Loglama ve anlaşılır hata mesajları ................. YAPILMADI
 11  Self-contained Linux dağıtımı ....................... YAPILMADI
 12  Garuda/Arch paketi .................................. YAPILMADI
@@ -1640,18 +1839,25 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
 
 ## Sıradaki bağlayıcı iş
 
-> **Faz 3 / İş 3 / Dilim 3: güvenilmeyen bir yedek dosyasını ayrıştırma,
-> doğrulama ve geçici bir veritabanında deneme.**
+> **Faz 3 / İş 3 / Dilim 4: geri yükleme öncesi güvenlik yedeği, canlı
+> veritabanındaki tek replace transaction'ı ve arayüz.**
 >
-> Dilim 1 ve 2 tamamlandı: kullanıcı bugün `Ayarlar` ekranından yedeğini alıp
-> istediği yere atomik olarak kaydedebiliyor (§25.1). Bir yedeği **okuyan** hiçbir
-> kod hâlâ yok.
+> Dilim 1, 2 ve 3 tamamlandı: kullanıcı `Ayarlar` ekranından yedeğini alıp
+> istediği yere atomik olarak kaydedebiliyor, ve uygulama bir yedek dosyasını
+> hiçbir şeyine güvenmeden okuyup geçici bir Room v8 veritabanında deneyebiliyor
+> (§25.1). Doğrulanmış bir belgeden **canlı veritabanına giden yol hâlâ yok**.
 >
-> Dilim 3 kapsamı: 64 MiB sınırı, UTF-8/JSON ayrıştırma, zarf ve sürüm kapısı,
-> checksum doğrulaması, yapısal + enum + FK + domain doğrulaması, geçici Room v8
-> veritabanına yükleme ve `foreign_key_check`. **Doğrulanmış belgeden canlı
-> veritabanına giden yol yoktur** ve kullanıcıya açılan yeni bir eylem yoktur.
-> Şema değişmez.
+> Dilim 4 kapsamı: `Yedekten geri yükle` eylemi ve dosya seçimi, doğrulama
+> sonrası onay yüzeyi, `$XDG_DATA_HOME/pnp-tracker/backups/` altına yazılan
+> zorunlu güvenlik yedeği (PLAN 14.4.4), canlı veritabanında ters FK sırasıyla
+> temizleme + PLAN 14.4.2 sırasıyla yazma tek transaction, commit öncesi açık
+> `foreign_key_check`, sonrasında yeniden okuma ve hash doğrulaması, Flow/arayüz
+> tazelenmesi ve Türkçe hata cümleleri. Şema değişmez.
+>
+> Dilim 3'ün bıraktığı ve Dilim 4'ün kullanacağı yüzey: `UntrustedBackupReader`,
+> `BackupProblem`/`BackupRejection`, `ValidatedBackup` + `BackupSummary`,
+> `PathBackupInput` ve `TemporaryBackupProbe`. Bir commit boyunca çağrılmayan
+> üretim API'si bilinen ve kabul edilmiş bir durumdur (§33 R3).
 >
 > Sonraki bağlayıcı sıra PLAN'ın kendi sırasıdır: İş 3 → 4 → 7 → 9 + 5 → 10 →
 > 11-13 → 14-16.
@@ -2031,9 +2237,10 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
 - İş 1 (geçmiş) iki dilim hâlinde tamamlandı: olay kayıt katmanı + geçmiş ekranı.
 - İş 2 (import rollback) üç dilimiyle TAMAMEN BİTTİ: Room v8 + import_batch_cells,
   geri alma motoru ve üç geçmiş olayı, ve motoru kullanan arayüz.
-- Sıradaki bağlayıcı iş: İş 3 / Dilim 3 — güvenilmeyen yedek dosyasını parse,
-  doğrulama ve geçici DB denemesi. Dilim 1 (belge + kanonik yazıcı + dataSha256)
-  ve Dilim 2 (Ayarlar ekranı + atomik dosya yazma) BİTTİ.
+- Sıradaki bağlayıcı iş: İş 3 / Dilim 4 — restore öncesi güvenlik yedeği, canlı
+  DB'de tek replace transaction ve arayüz. Dilim 1 (belge + kanonik yazıcı +
+  dataSha256), Dilim 2 (Ayarlar ekranı + atomik dosya yazma) ve Dilim 3
+  (güvenilmeyen dosyayı okuma/doğrulama + geçici Room v8 denemesi) BİTTİ.
 - İş 2'nin ürün kararları VERİLMİŞTİR ve PLAN 11.4.4'tedir; yeniden tartışma.
   Kısmi rollback yoktur, tek çakışma bütün işlemi engeller, segment kimliğine
   provenance bağlanmaz, anlık görüntüsü olmayan eski batch geri alınamaz.
@@ -2046,8 +2253,16 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   EKLENDİ (yalnız commonMain); izin başka bağımlılığa genişletilmez.
 - Yedek belgesi JSON compact yazılır (pretty-print YOK) çünkü gömülü data ile
   hash'lenen data bayt bayt aynı olmak zorundadır.
-- Ayarlar ekranı AÇIKTIR ve yalnız `Yedek oluştur` içerir; geri yükleme için
-  düğme, devre dışı kontrol veya "yakında" metni EKLEME.
+- Ayarlar ekranı AÇIKTIR ve Dilim 3 sonunda hâlâ yalnız `Yedek oluştur` içerir;
+  `Yedekten geri yükle` düğmesini Dilim 4 ekler. Dilim 4'ten önce ona dair düğme,
+  devre dışı kontrol veya "yakında" metni EKLEME.
+- Yedek OKUMA hattı hazırdır: UntrustedBackupReader + TemporaryBackupProbe +
+  PathBackupInput. Doğrulamayı yeniden yazma, ikinci bir JSON parser veya ikinci
+  bir checksum implementasyonu EKLEME; ret nedenleri BackupProblem'dedir ve
+  Dilim 4 Türkçe cümleyi ondan seçer.
+- BackupRejection'a Throwable, yol, UUID, SQL veya kullanıcı metni EKLEME.
+- TemporaryBackupProbe dışarıdan yol veya AppDatabase KABUL ETMEZ ve canlı DB'de
+  replace SUNMAZ; bu sınır Dilim 4'te de korunur (canlı yazım ayrı bir sınıftır).
 - AtomicFileWriter platform.files altındadır ve CSV ile yedek onu PAYLAŞIR;
   ikinci bir atomik yazıcı yazma.
 - Yabancı anahtarlar üretim bağlantısında ZORLANIR (ölçüldü, §33 R9).
@@ -2204,14 +2419,19 @@ Bunların ilki — **sürümlü JSON yedek ve geri yükleme** — tasarlanmış 
 **başlamıştır**. Biçim, kapsam, doğrulama hattı, restore mimarisi (A′), güvenlik
 yedeği ve dört atomik dilim PLAN `14.4` ile §25.1'de yazılıdır.
 
-Dört dilimin **ikisi bitti**: uygulama bütün veritabanını tek bir sürümlü,
-deterministik ve checksum'lı JSON belgesi olarak tarif ediyor ve kullanıcı bunu
-`Ayarlar` ekranından, seçtiği yere, atomik olarak kaydedebiliyor. Var olan bir
-dosya ancak açık onayla değiştiriliyor ve her hata hâlinde eski dosya bayt bayt
-duruyor.
+Dört dilimin **üçü bitti**: uygulama bütün veritabanını tek bir sürümlü,
+deterministik ve checksum'lı JSON belgesi olarak tarif ediyor, kullanıcı bunu
+`Ayarlar` ekranından seçtiği yere atomik olarak kaydedebiliyor, ve bir yedek
+dosyası artık **hiçbir şeyine güvenilmeden okunabiliyor**: boyut sınırı, sıkı
+UTF-8, tekrarlanan anahtar ve yuvalama taraması, zarf ve sürüm kapıları,
+checksum, değer/kimlik/enum denetimi, bellekte yabancı anahtar grafı ve son olarak
+yalnız geçici bir Room v8 veritabanına yükleme ile kanonik yeniden okuma. Var olan
+bir dosya ancak açık onayla değiştiriliyor ve her hata hâlinde eski dosya bayt
+bayt duruyor.
 
-Bir yedeği **geri okumak** henüz yok: ayrıştırma ve doğrulama **Dilim 3**'ün,
-canlı veritabanına uygulama **Dilim 4**'ün işidir.
+Yedeği **canlı veritabanına uygulamak** henüz yok ve bu bilinçlidir: doğrulanmış
+bir belgeden kullanıcının verisine giden hiçbir üretim yolu bulunmuyor. Güvenlik
+yedeği, tek replace transaction'ı ve arayüz **Dilim 4**'ün işidir.
 
 En önemli kural:
 
