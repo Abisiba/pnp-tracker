@@ -701,9 +701,19 @@ Onay, taslakları gerçek görevlere çeviren tek adımdır.
   blok sayısı ve açık bir uyarı gösterilir; devam etmek için ayrıca onay vermesi
   gerekir.
 
+Onaydan hemen önce, **domain verisine ilk yazımdan önce**, otomatik bir JSON
+snapshot alınır (`14.4.8`). Bunun eşiği yoktur ve `XLSX`/`CSV` ayrımı yapmaz:
+her onay girişimi önce yedeklenir. Onay ekranı bunu tek ve anlaşılır bir
+cümleyle söyler. Snapshot alınamaz, atomik yazılamaz veya yeniden doğrulanamazsa
+**onay hiç başlamaz**; batch `DRAFT` kalır ve hiçbir satır değişmez.
+
 Onayın kendisi:
 
 - Onay tek bir Room transaction’ında gerçekleşir.
+- Transaction’ın **ilk** aşaması, canlı veritabanını snapshot’ın kanonik
+  sözleşmesiyle yeniden okur. Veri snapshot alındıktan sonra değişmişse onay
+  hiçbir şey yazmadan reddedilir ve kullanıcıdan tekrar denemesi istenir
+  (`14.4.8`).
 - Her geçerli `DraftTask` tam olarak bir gerçek `Task` ve tam olarak bir `TaskSegment` üretir.
 - Üretilen görev, taslağın hedef hücresindeki bir `TaskSegment` üzerinden bağlanır.
 - `tasks.sourceRawImportBlockId` kaynak ham bloğu korur.
@@ -1310,6 +1320,20 @@ Yedekten geri yükle
 
 Ayarların ileride kazanacağı başka içerikler bu işin kapsamında değildir.
 
+Faz 3 / İş 4 ekrana **tek** bir ayar ekler: saklanacak otomatik yedek sayısı.
+
+- Aralık `1..50`, varsayılan `7`; `0` geçersizdir ve otomatik koruma
+  kapatılamaz (`14.4.12`).
+- Ayar `$XDG_CONFIG_HOME/pnp-tracker/settings.json` içinde tutulur, atomik
+  yazılır ve yedeğin kapsamına **girmez**.
+- Dosya bozuk veya okunamaz olduğunda varsayılanın kullanıldığı ekranda açıkça
+  gösterilir; bozuk dosyanın üzerine kendiliğinden yazılmaz.
+- Sayının azaltılması dosyaları o anda **silmez**; yeni değer kaydedilir ve
+  temizlik bir sonraki başarılı otomatik snapshot'tan sonra uygulanır. Ekran bu
+  gecikmeyi kısa bir metinle açıklar.
+- Son otomatik snapshot zamanı gösterilmez ve "yedek klasörünü aç" eylemi
+  eklenmez; ikisi de bu işin kapsamı dışındadır.
+
 ## 13. Arama, filtreleme ve sıralama
 
 İlk sürümde:
@@ -1365,6 +1389,11 @@ $XDG_CONFIG_HOME/pnp-tracker/settings.json
 
 XDG değişkeni tanımlı değilse standart kullanıcı dizini fallback’i kullanılmalıdır.
 
+`settings.json` sürümlü, düz UTF-8 bir JSON belgesidir ve **veritabanının
+dışındadır**: bir geri yükleme kullanıcının ayarını değiştirmez, ve açılış
+kapısı (`14.4.10`) ayara veritabanı açılmadan önce ulaşabilir. Sözleşmesi
+`14.4.12`'dedir.
+
 ### 14.3 Excel/CSV
 
 - JVM masaüstünde `.xlsx` okumak için Apache POI veya eşdeğer olgun JVM kütüphanesi
@@ -1376,13 +1405,20 @@ XDG değişkeni tanımlı değilse standart kullanıcı dizini fallback’i kull
 
 - Uygulama verisi sürümlü JSON olarak dışa aktarılabilir.
 - Kullanıcı manuel yedek oluşturabilir.
-- Büyük içe aktarma ve migration öncesinde otomatik snapshot alınır.
-- En az son birkaç otomatik snapshot döngüsel biçimde korunur; kesin sayı ayarlardan değiştirilebilir veya başlangıçta 7 olabilir.
+- **Her** içe aktarma onayı ve **her** migration öncesinde otomatik snapshot alınır.
+- Otomatik snapshot'lar tür başına döngüsel biçimde korunur; saklanacak sayı ayarlardan değiştirilir ve varsayılanı 7'dir.
 - Yapılandırılmış görevler CSV olarak dışa aktarılabilir.
 
 Yedeğin biçimi, kapsamı ve geri yüklemenin semantiği `14.4.1` ile `14.4.6`
 arasında kesinleşmiştir. Üçüncü ve dördüncü maddeler — otomatik snapshot ve
-döngüsel saklama — **ayrı bir iştir** ve `18.` bölümdeki Faz 3 / İş 4'e aittir.
+döngüsel saklama — **ayrı bir iştir**, `14.4.7` ile `14.4.13` arasında
+kesinleşmiştir ve `18.` bölümdeki Faz 3 / İş 4'e aittir.
+
+Üçüncü maddenin daha önceki ifadesi "**büyük** içe aktarma" idi ve bir eşik
+bırakıyordu. Eşik kaldırılmıştır: hangi içe aktarmanın büyük olduğuna dair
+savunulabilir bir sayı yoktur, ve yanlış seçilmiş bir eşik tam da korunması
+gereken içe aktarmayı korumasız bırakır. Kural artık sayıdan bağımsızdır
+(`14.4.8`).
 
 #### 14.4.1 Yedek dosyasının biçimi
 
@@ -1585,7 +1621,10 @@ Kurallar:
 - Güvenlik yedeği tamamlanmadan canlı veritabanına yazılmaz.
 - Onay ekranı, bu dosyanın kullanıcının geri dönüş yolu olduğunu söyler.
 - Döngüsel saklama, saklanacak yedek sayısı ve eski yedeklerin temizlenmesi **bu
-  işin parçası değildir**; `18.` bölümdeki Faz 3 / İş 4'e aittir.
+  işin parçası değildir**; `18.` bölümdeki Faz 3 / İş 4'e aittir ve `14.4.11` ile
+  `14.4.12`'de kesinleşmiştir. Güvenlik yedeklerinin kotası, otomatik
+  snapshot'lardan **ayrı** tutulur: bir içe aktarma yoğunluğu kullanıcının geri
+  dönüş yolunu tahliye edemez.
 - Mutlak yol, kişisel veri ve dosya içeriği hiçbir hata veya log mesajına
   sızmaz.
 
@@ -1616,6 +1655,18 @@ güvenlik yedeği yazılamadı
 geri yükleme transaction'ı uygulanamadı
 ```
 
+Otomatik snapshot'ın (`14.4.7`) kendi tipli sonuçları bunlara eklenir:
+
+```text
+otomatik yedek hazırlanamadı
+otomatik yedek diske yazılamadı
+otomatik yedek yazıldı fakat doğrulanamadı
+veriler yedek alındıktan sonra değişti
+migration öncesi ham kopya oluşturulamadı veya doğrulanamadı
+migration kopyası yürütülemedi
+ayar kaydedilemedi
+```
+
 Beklenmeyen `IllegalStateException`, `NullPointerException` ve diğer
 invariant/programlama hataları **"bozuk yedek" gibi maskelenmez**; oldukları gibi
 yükselirler. Bu, içe aktarma tarafında zaten yürürlükte olan kuralın aynısıdır.
@@ -1623,14 +1674,316 @@ yükselirler. Bu, içe aktarma tarafında zaten yürürlükte olan kuralın ayn�
 Kullanıcıya ham enum, UUID, SQL, mutlak yol, exception metni veya başka bir
 kaydın içeriği gösterilmez.
 
-#### 14.4.6 Bu işin dışında kalanlar
+#### 14.4.6 Faz 3 / İş 3'ün dışında kalanlar
 
-- Otomatik snapshot ve tetikleyicileri (büyük içe aktarma, migration).
-- Döngüsel saklama, saklanacak yedek sayısı ve bunun ayarlardan değiştirilmesi.
-- Eski yedeklerin temizlenmesi.
+İlk üçü **İş 4'e** aittir ve `14.4.7` ile `14.4.13` arasında kesinleşmiştir;
+kalanları ilk sürümün tamamen dışındadır.
+
+- Otomatik snapshot ve tetikleyicileri (içe aktarma onayı, migration) → `14.4.7`.
+- Döngüsel saklama, saklanacak yedek sayısı ve bunun ayarlardan değiştirilmesi →
+  `14.4.11`, `14.4.12`.
+- Eski yedeklerin temizlenmesi → `14.4.11`.
 - Birleştirmeli geri yükleme, kısmi geri yükleme ve tek tablo geri yükleme.
 - Yedeğin şifrelenmesi veya sıkıştırılması.
 - Format sürümleri arasında yedek yükseltme zinciri.
+
+#### 14.4.7 Otomatik snapshot: kapsam ve ortak kurallar
+
+Otomatik snapshot, kullanıcının istemediği ama uygulamanın kendiliğinden aldığı
+yedektir. İki tetikleyicisi vardır ve başka tetikleyicisi yoktur:
+
+```text
+1  bir içe aktarmanın onaylanması   → 14.4.8
+2  bir veritabanı migration'ı       → 14.4.9
+```
+
+Ortak kurallar:
+
+- Otomatik snapshot'ın JSON çıktısı **manuel yedeğin aynı kanonik biçimidir**
+  (`14.4.1`): `formatVersion` 1, 15 tablo, zorunlu `dataSha256`. İkinci bir biçim
+  yoktur.
+- Kullanıcı bu dosyayı `Ayarlar → Yedekten geri yükle` ile açabilir. Bunun tek
+  istisnası migration setinin ham `.db` eşidir (`14.4.9`).
+- Dosya, `$XDG_DATA_HOME/pnp-tracker/backups/` altına atomik olarak yazılır
+  (`14.4.5`). Hedefi kullanıcı seçmez.
+- **Yazıldığı iddia edilen her JSON snapshot, yazıldıktan sonra gerçek
+  doğrulama hattından geçirilir.** Doğrulanmamış bir dosyaya "yedek alındı"
+  denmez.
+- **Otomatik snapshot geçmişe olay yazmaz.** `12.15`'in listesinde yoktur;
+  gerekçesi geri yüklemeninkiyle aynıdır (`14.4.3`) ve ayrıca
+  `history_events.game_id` zorunlu olduğu için oyuna bağlı olmayan bir satır
+  şema değişmeden yazılamaz.
+- Dosya adına kullanıcı adı, makine adı, oyun adı, gerçek içe aktarma dosyasının
+  adı veya herhangi bir veri içeriği **girmez**.
+- Mutlak yol, kişisel veri ve dosya içeriği hiçbir hata veya log mesajına
+  sızmaz.
+
+#### 14.4.8 İçe aktarma onayı öncesi snapshot
+
+**Her başarılı olma ihtimali olan onay girişiminden önce snapshot alınır.** Eşik
+yoktur, sayı yoktur, ve `XLSX` ile `CSV` arasında **ayrım yoktur**: ikisi de
+aynı taslak borusundan geçer ve aynı transaction'la gerçek görev yazar
+(`11.4.2`, `11.8`).
+
+Snapshot'ın yeri kesindir:
+
+```text
+taslak oluşturma      → snapshot YOK
+                        (taslak satırları kullanıcının oyun/görev verisi değildir)
+kullanıcı onaylar     → SNAPSHOT BURADA
+domain yazımı         → onay transaction'ı ancak snapshot doğrulandıktan sonra başlar
+```
+
+Yani "içe aktarma öncesi", **taslak oluşturmadan önce değil, domain verisini
+değiştiren onay transaction'ından önce** demektir. Taslak satırları da yedeğin
+kapsamındadır ve onları koruyan şey aynı snapshot'tır.
+
+Onay ekranı, işlemden önce otomatik bir yedek alınacağını **tek ve anlaşılır bir
+cümleyle** söyler. Teknik terim, dosya adı veya yol kullanılmaz.
+
+**Snapshot ile onay arasındaki yarış** için geri yüklemenin güvenlik modelinin
+eşdeğeri uygulanır (`14.4.4`, `14.4.3`):
+
+```text
+1  snapshot'ın değişmez `BackupData` ve `dataSha256` değeri bellekte tutulur
+2  snapshot atomik yazılır ve gerçek okuyucuyla yeniden doğrulanır
+3  onay transaction'ının İLK aşaması canlı veritabanını aynı kanonik
+   sözleşmeyle yeniden okur ve snapshot'la karşılaştırır
+4  veri snapshot'tan sonra değişmişse HİÇBİR domain yazımı yapılmadan reddedilir
+5  kullanıcıya verilerin bu sırada değiştiği ve tekrar denemesi gerektiği söylenir
+6  oluşturulmuş snapshot geçerli bir yedek olarak kalabilir
+7  transaction'ın yazma kilidi alındıktan sonra başka hiçbir writer araya giremez
+```
+
+Global bir mutation barrier yerine **transaction içi yeniden doğrulama ve fail
+closed** davranışı seçilmiştir. Teknik olarak eşdeğer veya daha güçlü bir çözüm
+kanıtlanırsa uygulanabilir; **güvence sessizce kaldırılamaz.**
+
+Sonuçlar:
+
+- Snapshot üretilemez, atomik yazılamaz veya yeniden doğrulanamazsa **onay hiç
+  başlamaz.** Batch `DRAFT` kalır; hiçbir görev, segment, hücre parçası, oyun
+  tamamlanması veya geçmiş olayı yazılmaz.
+- Snapshot başarılı olup onay transaction'ı sonradan düşerse **snapshot
+  korunur**. Yazılmış ve doğrulanmış bir yedeği silmek, onu almamaktan beterdir.
+- Çift gönderim **tek** snapshot ve **tek** onay üretir (`12.16`'nın çift
+  gönderim kuralıyla aynı).
+
+#### 14.4.9 Migration öncesi snapshot seti — iki eşleşmiş artefakt
+
+Migration gerektiren bir veritabanı için tek bir **snapshot seti** üretilir ve
+set **iki** eşleşmiş dosyadan oluşur:
+
+```text
+1  ham .db   migration ÖNCESİNDEKİ eski şemanın tutarlı SQLite klonu
+2  .json     bu klonun AYRI bir çalışma kopyası gerçek migration zinciriyle
+             şema 8'e yürütüldükten sonra üretilen kanonik yedek
+```
+
+Amaçları farklıdır ve biri diğerinin yerine geçmez:
+
+- **Ham `.db`**, migration kodunun kendisindeki bir hataya veya veri kaybına
+  karşı eski durumu korur. Değeri, üretilirken migration kodunu hiç
+  çalıştırmamış olmasından gelir.
+- **`.json`**, `Ayarlar` ekranından normal biçimde geri yüklenebilen otomatik
+  yedektir ve `18.`'in "kullanıcı manuel ve otomatik yedeklerden verisini geri
+  yükleyebilir" ölçütünü karşılayan şeydir.
+
+Yalnız JSON üretmek, korunmak istenen migration koduna bağımlı olurdu. Yalnız
+ham `.db` üretmek, uygulama içinden geri yükleme ölçütünü karşılamazdı. **Bu
+nedenle ikisi birlikte tutulur ve set ancak ikisi de doğrulandığında başarılı
+sayılır.**
+
+Ham klon, SQLite'ın kendi tutarlı snapshot mekanizmasıyla üretilir. Veritabanı
+dosyasını, `-wal` ve `-shm` dosyalarını sırayla kopyalamak **tutarlı bir snapshot
+vermez** ve yasaktır: üç dosya arasında atomiklik yoktur. Erişilebilir sürücü
+yüzeyinde `VACUUM INTO` kullanılmasına izin verilmiştir; gerçek davranışı
+uygulamada testlerle doğrulanır ve varsayılmaz.
+
+Doğrulama:
+
+- Ham klon: SQLite biçim başlığı, `user_version`, `integrity_check` ve yabancı
+  anahtar davranışı denetlenir.
+- JSON: biçim, checksum, graf/domain denetimi ve geçici veritabanı denemesi —
+  yani `14.4.3`'ün kullandığı **gerçek** okuyucu ve geçici veritabanı hattı —
+  tamamlanır.
+
+Adlandırma, `14.4.11`'dedir. Ham `.db`, `Ayarlar` ekranındaki geri yükleme
+seçicisinde **gösterilmez**; seçici `.json` süzer ve ham dosya oraya girmez. Ham
+dosyanın uygulama içinden doğrudan geri yükleme yolu **bu işte oluşturulmaz**.
+Kullanıcıya açılış hata ekranında bu dosyanın teknik bir kurtarma amacı taşıdığı
+güvenli biçimde anlatılabilir; mutlak yol gösterilmez.
+
+#### 14.4.10 Açılış kapısı ve instance kilidi
+
+Gerçek veritabanı Room tarafından açılmadan önce sıra kesindir:
+
+```text
+ 1  uygulama instance/açılış kilidi alınır
+ 2  veritabanının varlığı ve `user_version` değeri Room AÇILMADAN belirlenir
+ 3  veritabanı yoksa normal oluşturma yoluna geçilir; snapshot alınmaz
+ 4  sürüm 8 ise migration snapshot'ı oluşturulmaz
+ 5  sürüm 1..7 ise migration snapshot seti oluşturulur (14.4.9)
+ 6  sürüm 8'den büyük veya desteklenmeyen/bozuk ise veritabanı AÇILMAZ ve
+    güvenli bir hata gösterilir
+ 7  ham klon tutarlı snapshot mekanizmasıyla üretilir
+ 8  ham klon tamamlanıp doğrulanmadan migration çalışma kopyası oluşturulmaz
+ 9  çalışma kopyası gerçek migration zinciriyle şema 8'e yürütülür
+10  yürütülmüş kopyadan kanonik JSON üretilir
+11  JSON gerçek okuyucu ve geçici veritabanı hattından geçirilir
+12  ham dosya ve JSON İKİSİ DE doğrulanmadan set başarılı sayılmaz
+13  set başarılı olmadan gerçek veritabanı açılamaz ve migration başlayamaz
+14  çalışma kopyasının migration'ı veya JSON üretimi başarısızsa GERÇEK
+    veritabanı hiç migrate edilmez
+15  set başarıyla oluşunca gerçek veritabanı normal migration zinciriyle açılır
+16  instance kilidi, snapshot ve gerçek açılış/migration bitene kadar tutulur
+17  geçici klon, çalışma veritabanı, `-wal`, `-shm` ve `.part` artefaktları
+    bütün başarı ve hata yollarında temizlenir
+```
+
+Çalışma kopyasının migration'ı başarılı olup **gerçek** migration başarısız
+olursa, her iki snapshot artefaktı da korunur ve kullanıcı güvenli açılış hata
+penceresini görür.
+
+Gerçek veritabanı dosyası, snapshot üretimi dışında hiçbir biçimde değiştirilmez.
+Bir snapshot'ı geri yüklemek için veritabanı, `-wal` veya `-shm` dosyası takas
+**edilmez** (`14.4.3`'ün aynı yasağı).
+
+#### 14.4.11 Otomatik yedek adları, sahiplik ve döngüsel saklama
+
+Adlar:
+
+```text
+içe aktarma      pnp-otomatik-import-YYYY-AA-GG-SSDDsn.json
+migration seti   pnp-otomatik-migration-v<eski>-v<yeni>-YYYY-AA-GG-SSDDsn.db
+                 pnp-otomatik-migration-v<eski>-v<yeni>-YYYY-AA-GG-SSDDsn.json
+geri yükleme     pnp-oncesi-YYYY-AA-GG-SSDDsn.json            (14.4.4)
+manuel           pnp-yedek-<tarih>.json                        (12.16)
+```
+
+Aynı saniyedeki çakışma, geri yükleme güvenlik yedeğinin kalıbıyla çözülür:
+ad, dosya **oluşturularak** sahiplenilir ve gerekirse `-2`, `-3` soneki alır.
+**Bir migration setinin iki eşi aynı sonek'i taşır** (`…-2.db` ve `…-2.json`);
+ikisi bir bütündür ve adlarından eşleştirilebilir olmaları zorunludur.
+
+**Üç ayrı kota vardır ve birbirinden bağımsızdır:**
+
+```text
+1  içe aktarma öncesi JSON snapshot'ları
+2  geri yükleme öncesi pnp-oncesi-* JSON güvenlik yedekleri
+3  migration snapshot setleri  (.db + .json = TEK set)
+```
+
+Her tür için ayrı ayrı `automaticBackupCount` kadar en yeni kayıt tutulur. **Bir
+türdeki yoğunluk başka bir türün yedeklerini silemez:** art arda yapılan içe
+aktarmalar kullanıcının geri yükleme dönüş yolunu tahliye edemez.
+
+Manuel `pnp-yedek-*` dosyaları **hiçbir otomatik kotaya girmez** ve hiçbir
+koşulda otomatik olarak silinmez.
+
+Döngüsel saklama kuralları:
+
+- Yeni snapshot ya da set **atomik olarak tamamlanıp doğrulanmadan** hiçbir eski
+  dosya silinmez.
+- Silme yalnız kendi türünü ve uygulamanın **sahipliğini kanıtladığı** dosyaları
+  hedefler. **Yalnız ad öneki eşleşmesi silme yetkisi vermeye yetmez.**
+- JSON sahipliği: beklenen ad kalıbı + normal dosya + symlink değil +
+  doğrulanmış `pnp-tracker-backup` zarfı.
+- Migration seti sahipliği: beklenen **eşleşmiş** adlar + iki dosyanın da normal
+  dosya olması + geçerli SQLite başlığı ve metadata'sı + doğrulanmış JSON.
+- Manuel dosya, bilinmeyen dosya, symlink, dizin, FIFO, `.part` dosyası veya
+  **bozuk/eksik eşi olan set** silinmez. Eksik eşli bir set normal ve başarılı
+  bir set gibi rotation adayı sayılmaz; güvenli hata/inceleme politikası
+  uygulanır.
+- Sıralama, dosya adındaki kanonik zaman damgası ve soneki üzerinden **kararlı**
+  yapılır; `mtime`'a güvenilmez, çünkü kopyalama ve eşitleme onu değiştirir,
+  adı ise değiştirmez.
+- Rotation durum tutmaz: her çalıştırmada dizini yeniden okur, dolayısıyla
+  çökme sonrası tekrar çalıştırılabilir ve **idempotenttir**.
+- Rotation dizin dışına çıkmaz ve symlink takip etmez.
+
+#### 14.4.12 Saklama ayarı ve `settings.json`
+
+Saklanacak otomatik yedek sayısı kullanıcı tarafından değiştirilir:
+
+```text
+varsayılan  7
+minimum     1
+maksimum    50
+0           GEÇERSİZ — otomatik koruma kapatılamaz
+```
+
+`0`'ın geçersiz olması `14.4`'ün "otomatik snapshot'lar döngüsel biçimde
+korunur" hükmünün doğrudan sonucudur: sıfır saklamak korumayı kaldırmaktır.
+
+Ayar **veritabanının dışında** tutulur ve bu bilinçlidir: yedeğin kapsamı
+`14.4.2`'deki 15 tablodur, dolayısıyla ayar bir tabloda dursaydı bir geri
+yükleme kullanıcının ayarını da sessizce değiştirirdi. Ayrıca migration
+kapısının (`14.4.10`) bu sayıya veritabanı açılmadan önce ihtiyacı vardır.
+
+Sözleşme:
+
+```json
+{
+  "formatVersion": 1,
+  "automaticBackupCount": 7
+}
+```
+
+- Yer: `$XDG_CONFIG_HOME/pnp-tracker/settings.json`, düz UTF-8 JSON.
+- `formatVersion` 1'dir ve yedeğin biçim sürümünden **ayrıdır**.
+- **Bilinmeyen alanlar yok sayılır.** Bu, `14.4.1`'in yedek dosyası için koyduğu
+  sıkı politikanın bilinçli olarak **tersidir**: yedek kullanıcı verisi taşır ve
+  orada sessizce yok saymak veri kaybıdır; ayar dosyası hiçbir kullanıcı verisi
+  taşımaz ve orada katı olmak, eski bir sürüme dönen kullanıcının uygulamasını
+  açılmaz hâle getirirdi.
+- Eksik, bozuk veya aralık dışı bir değer dosyayı **sessizce düzeltmez.**
+- Bozuk veya okunamayan dosyada çalışma zamanı varsayılanı `7` kullanılır,
+  uygulama açılır ve `Ayarlar` ekranında varsayılanın kullanıldığı **açıkça**
+  gösterilir.
+- Bozuk mevcut dosyanın üzerine **otomatik yazılmaz**; kullanıcı geçerli bir yeni
+  değer kaydederse dosya bilinçli olarak ve atomik biçimde değiştirilir.
+- Yazma başarısızsa eski dosya bayt bayt kalır ve çalışma zamanı değeri değişmez.
+- Aynı süreç içindeki yazımlar sıralanır; iki eşzamanlı ayar değişikliği oluşamaz.
+- Arayüz yalnız `1..50` aralığını kabul eder.
+- Ayar dosyasına yol, veritabanı hash'i veya kullanıcı içeriği **yazılmaz**.
+- Bu işte başka ayar alanı eklenmez.
+
+**Sayı azaltıldığında dosyalar hemen silinmez.** Yeni ayar atomik olarak
+kaydedilir ve rotation **bir sonraki başarılı otomatik snapshot'tan sonra**
+uygulanır. Bir ayarı değiştirmek yıkıcı bir eylem olmamalıdır; bir sayıyı
+küçültmenin kullanıcının yedeklerini o anda silmesi, geri alınamayan bir yan
+etkidir. `Ayarlar` ekranı bu gecikmeyi kısa ve anlaşılır bir metinle açıklar.
+
+#### 14.4.13 Otomatik snapshot hata sınırları
+
+**Fail closed** — kullanıcı verisi risk altındaysa işlem başlamaz:
+
+- İçe aktarma snapshot'ı üretilemez, atomik yazılamaz veya yeniden
+  doğrulanamazsa onay başlamaz (`14.4.8`).
+- Migration ham klonu veya JSON'u üretilemez, yazılamaz veya doğrulanamazsa
+  gerçek veritabanı açılmaz ve migration başlamaz (`14.4.9`, `14.4.10`).
+- Snapshot'tan sonra veritabanı değişmişse içe aktarma onayı hiçbir şey yazmadan
+  reddedilir (`14.4.8`).
+- Snapshot seti ile gerçek migration'ın başlangıcı arasındaki koruma
+  doğrulanamazsa migration başlamaz.
+
+**Fail open** — kullanıcı verisi risk altında değilse işlem sürer:
+
+- Başarılı bir yeni snapshot'tan sonra eski bir otomatik yedeğin silinememesi
+  içe aktarmayı veya migration'ı **engellemez**; rotation daha sonra yeniden
+  denenebilir ve kullanıcıya engelleyici bir hata gösterilmez.
+
+**Ayar:**
+
+- Okuma veya ayrıştırma hatasında uygulama varsayılan `7` ile açılır ve
+  `Ayarlar` ekranında uyarı görünür.
+- Yazma hatasında eski dosya ve çalışma zamanı değeri korunur.
+
+Bütün kullanıcı metinleri `14.4.5`'in sınırlarına uyar: Türkçe, eyleme dönük ve
+ham enum, UUID, SQL, mutlak yol, exception metni veya başka bir kaydın içeriği
+olmadan. Beklenmeyen `IllegalStateException`, `NullPointerException` ve diğer
+invariant/programlama hataları maskelenmez.
 
 ### 14.5 Ağ
 
@@ -1713,6 +2066,25 @@ Tek modülle başlanabilir. Kod büyümeden gereksiz Gradle modüllerine ayrılm
 - Yedek dosyası, doğrulaması bitmeden ve kullanıcı onaylamadan kalıcı hiçbir yazma tetiklemez; checksum, sürüm veya invariant hatası gerçek veritabanına dokunmadan durdurur.
 - Geri yükleme öncesi güvenlik yedeği yazılamazsa geri yükleme hiç başlamaz (`14.4.4`).
 - Yedek dosyası atomik yazılır; hata hâlinde hedef dosya bayt bayt korunur.
+- Her içe aktarma onayından önce otomatik snapshot alınır; snapshot üretilemez,
+  atomik yazılamaz veya yeniden doğrulanamazsa onay hiç başlamaz ve batch `DRAFT`
+  kalır (`14.4.8`).
+- Onay transaction'ı, ilk aşamasında canlı veritabanını snapshot'la karşılaştırır;
+  veri arada değiştiyse hiçbir domain yazımı yapılmadan reddedilir.
+- Her migration öncesinde iki eşleşmiş artefakttan oluşan bir snapshot seti
+  üretilir: eski şemanın tutarlı ham kopyası ve bu kopyanın yürütülmüş hâlinden
+  üretilen kanonik JSON. İkisi de doğrulanmadan set başarılı sayılmaz ve gerçek
+  veritabanı açılmaz (`14.4.9`, `14.4.10`).
+- Migration öncesi ham kopya, SQLite'ın tutarlı snapshot mekanizmasıyla üretilir;
+  veritabanı, `-wal` ve `-shm` dosyalarını sırayla kopyalamak tutarlı bir kopya
+  vermez ve yapılmaz.
+- Otomatik yedeklerin döngüsel saklanması, yeni yedek atomik olarak tamamlanıp
+  doğrulanmadan hiçbir eski dosyayı silmez; silme yalnız uygulamanın sahipliğini
+  kanıtladığı dosyaları hedefler ve yalnız ad öneki bunu kanıtlamaz (`14.4.11`).
+- Eski bir otomatik yedeğin silinememesi içe aktarmayı veya migration'ı
+  engellemez; kullanıcı verisi risk altında değildir (`14.4.13`).
+- Saklama ayarının yazımı atomiktir; yazma başarısızsa eski dosya bayt bayt kalır
+  ve çalışma zamanı değeri değişmez (`14.4.12`).
 
 ## 17. Erişilebilirlik ve kullanım kuralları
 
@@ -1948,7 +2320,19 @@ Kişisel kullanımda veri kaybı riski düşük, test edilmiş ve Garuda Linux�
       transaction'ı ve kullanıcı arayüzü.
    Hiçbir ara commit, doğrulanmamış veya yarım bir geri yükleme yolunu kullanıcıya
    açmaz.
-4. Import ve migration öncesi otomatik snapshot oluştur.
+4. Import ve migration öncesi otomatik snapshot oluştur (`14.4.7`–`14.4.13`).
+   Kararlar kesinleşmiştir ve iş dört atomik dilimde uygulanır:
+   1. Otomatik yedek adları, sahiplik kanıtı ve tür başına döngüsel saklama
+      motoru. Hiçbir tetikleyici bağlı değildir; kullanıcıya açılan bir şey yok.
+   2. Sürümlü `settings.json` ve saklanacak sayının `Ayarlar` ekranından
+      değiştirilmesi. Ayar gerçekten kaydedilir ve gerçekten uygulanır.
+   3. Her `XLSX`/`CSV` onayı öncesinde otomatik JSON snapshot ve snapshot ile
+      onay arasındaki yarış koruması.
+   4. Migration öncesi ham kopya + yürütülmüş kanonik JSON seti ve açılış kapısı.
+   Hiçbir ara commit: korumasız bir migration başlatmaz, doğrulanmamış bir
+   dosyaya "yedek alındı" demez, döngüsel saklamayla kullanıcı dosyası silmez,
+   kalıcılığı olmayan bir ayar arayüzü açmaz ve snapshot başarısızken bir içe
+   aktarmayı sürdürmez.
 5. CSV görev dışa aktarmayı doğrula.
 6. Veritabanı migration testlerini oluştur.
 7. Beklenmeyen kapanış ve bozuk import durumlarına karşı kurtarma akışını ekle.
@@ -1978,6 +2362,27 @@ Kişisel kullanımda veri kaybı riski düşük, test edilmiş ve Garuda Linux�
 - Geri yükleme sonrası yeniden açılışta `foreign_key_check` ve `integrity_check`
 - Aynı yedeğin ikinci kez geri yüklenmesinin aynı sonucu vermesi
 - v1'den bugünkü sürüme yürütülmüş bir veritabanının dışa aktarılıp geri yüklenebilmesi
+- Her içe aktarma onayından önce otomatik snapshot alınması; eşik olmaması ve `XLSX` ile `CSV` arasında fark olmaması
+- Otomatik snapshot alınamadığında onayın hiç başlamaması: batch `DRAFT` kalır, hiçbir görev, segment, oyun tamamlanması veya geçmiş olayı yazılmaz
+- Snapshot başarılı olup onay transaction'ı düştüğünde snapshot dosyasının korunması
+- Onay için çift gönderimin tek snapshot ve tek transaction üretmesi
+- Snapshot alındıktan sonra veritabanı değişirse onayın hiçbir şey yazmadan reddedilmesi
+- Bir içe aktarma snapshot'ının geri yüklenmesiyle içe aktarma öncesi duruma dönülmesi
+- Şema 1'den 7'ye kadar her başlangıç sürümü için migration snapshot setinin üretilmesi; şema 8'de üretilmemesi
+- Migration setinin iki eşinin de doğrulanması ve biri doğrulanamazsa gerçek veritabanının hiç açılmaması
+- Migration snapshot'ı başarısızsa gerçek veritabanının baytı, hash'i ve `user_version`'ı değişmeden kalması
+- Ham kopyanın `integrity_check`, `user_version` ve yabancı anahtar denetimlerini geçmesi
+- Yürütülmüş kopyadan üretilen JSON'un gerçek okuyucu ve geçici veritabanı hattından geçmesi
+- Geçici kopya, çalışma veritabanı, `-wal`, `-shm` ve `.part` artefaktlarının bütün başarı ve hata yollarında temizlenmesi
+- Otomatik yedeklerin tür başına kotalanması; bir türdeki yoğunluğun başka türü silmemesi
+- Manuel `pnp-yedek-*`, bilinmeyen dosya, symlink, dizin, FIFO, `.part` ve eksik eşli setin silinmemesi
+- Yeni yedek atomik olarak tamamlanmadan hiçbir eski dosyanın silinmemesi
+- Döngüsel saklamanın durum tutmadan tekrar çalıştırılabilir ve idempotent olması
+- Eski dosya silinemediğinde içe aktarmanın ve migration'ın engellenmemesi
+- Saklama sayısının `1..50` dışına çıkamaması ve `0`'ın reddedilmesi
+- Bozuk veya okunamayan `settings.json` ile uygulamanın varsayılan `7` ile açılması ve dosyanın üzerine yazılmaması
+- Ayar yazımı başarısız olduğunda eski dosyanın bayt bayt kalması
+- Sayı azaltıldığında dosyaların o anda silinmemesi
 - CSV dışa aktarma doğruluğu
 - Migration geriye dönük fixture testleri
 - Import rollback’in yalnızca ilgili batch’i etkilemesi
@@ -2191,6 +2596,8 @@ Beklenti:
 - Import rollback
 - Yedek → temiz veritabanı → geri yükle
 - Yedek → geri yükle → yeniden yedek: iki dosyanın `data` bölümü bayt bayt aynı
+- İçe aktarma onayı → otomatik snapshot → snapshot'tan geri yükle: içe aktarma öncesi durum
+- Migration öncesi snapshot seti → yürütülmüş JSON'dan geri yükle
 - Tamamlanan görevin aktif havuz sorgusundan çıkması ve hücrede kalması
 - Oyun toplu tamamlama ve eksik parçada yeniden açılma
 - Renk silme sonrası görevlerin korunması
@@ -2311,6 +2718,7 @@ içermelidir.
 - Bilinmeyen renk/adet ve sınıflandırılmamış işler kaybolmaz.
 - Tamamlanan görev aktif havuzdan çıkar; hücrede tikli ve üstü çizili kalır, oyun ve geçmişte durur.
 - Sürümlü JSON yedekleme ve geri yükleme doğrulanmıştır: yedek bütün uygulama verisini taşır, geri yükleme tek transaction'dır, öncesinde güvenlik yedeği alınır ve bozuk veya desteklenmeyen bir yedek hiçbir şey yazmadan reddedilir.
+- Otomatik snapshot doğrulanmıştır: her içe aktarma onayı ve her migration öncesinde alınır, alınamazsa işlem hiç başlamaz, tür başına döngüsel olarak saklanır ve saklanacak sayı `Ayarlar` ekranından değiştirilebilir.
 - Şema migrationları testlidir.
 - Kritik domain, veritabanı ve UI testleri geçer.
 - Kullanıcı arayüzü klavye ve büyük metinle kullanılabilir.

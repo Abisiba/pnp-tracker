@@ -7,10 +7,12 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** Faz 3 / İş 3'ün **ikinci dilimi** (yedeğin dosyaya
-> yazılması ve `Ayarlar` ekranı) tamamlandıktan sonra. İş 2 bütünüyle bitmiştir;
-> İş 3'ün dört diliminden **ikisi** yapılmıştır. Kararların bağlayıcı metni PLAN
-> `14.4`, `12.16` ve `16.`'dadır; uygulanan hâli §25.1'dedir.
+> **Son güncelleme:** Faz 3 / İş 3 bittikten sonra, **İş 4'ün tasarım kararları
+> PLAN'a işlenirken.** İş 2 ve İş 3 bütünüyle bitmiştir. Bu commit **yalnız
+> belge** commit'idir: kod, şema, bağımlılık, fixture ve test değişmemiştir.
+> İş 3'ün bağlayıcı metni PLAN `14.4.1`–`14.4.6`, `12.16` ve `16.`'dadır;
+> uygulanan hâli §25.1'dedir. **İş 4'ün** bağlayıcı metni PLAN `14.4.7`–`14.4.13`,
+> `11.4.2`, `12.16` ve `16.`'dadır; kararların özeti §25.2'dedir.
 >
 > Bu dosyanın önceki sürümü çok daha eski bir repo durumunu (Room v3, canlı `Item`
 > modeli, AP-9/AP-10 adımlandırması) güncel mimariymiş gibi anlatıyordu. O bilgiler
@@ -26,19 +28,21 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-HEAD (bu commit öncesi): 6baeb0d5d7e0abb0dd316bfa73df0bcd113b86c4
-önceki commit         : feat(backup): read a backup file without trusting it
+HEAD (bu commit öncesi): f830ac5e391641e58664086d5a3fcfcce4c63622
+önceki commit         : feat(backup): put a backup back
 working tree          : temiz
 Room şema sürümü      : 8   (bu commit'te DEĞİŞMEDİ)
 şema dosyaları        : 1.json … 8.json  hepsi bayt bayt aynı
 test durumu           : 3203 test / 0 failure / 0 error / 0 skipped  (206 sınıf)
-üretim kodu           : 279 dosya
-test kodu             : 220 dosya
+                        (bu commit test çalıştırmaz; değer bir önceki commit'ten gelir)
+üretim kodu           : 279 dosya   (bu commit'te DEĞİŞMEDİ)
+test kodu             : 220 dosya   (bu commit'te DEĞİŞMEDİ)
+değişen dosya         : YALNIZ PLAN.md ve PNP_MASTER_CONTEXT.md
 ```
 
-**Bu commit Faz 3 / İş 3'ün dördüncü ve son dilimidir; İş 3 bu commit'te
-tamamlanmıştır.** Doğrulanmış bir yedek artık canlı veritabanına uygulanabiliyor,
-ve önce kullanıcının geri dönüş yolu diske yazılıyor.
+**Bu commit bir belge commit'idir.** Faz 3 / İş 3 bir önceki commit'te
+tamamlandı; bu commit **Faz 3 / İş 4'ün tasarım kararlarını** PLAN'a ve bu
+belgeye işler. Kod yazılmamış, Dilim 1'e başlanmamıştır.
 
 Kullanıcının gördüğü akış ve sırası:
 
@@ -82,8 +86,9 @@ ayrıştırılmış belge bu API'ye giremez.
 ## Doğrulama hash'leri
 
 ```text
-PLAN.md  e6bc53d5f730b1b0da325da1ad29d8996a693e7945d5d2d54efeafc947392306
-         (bu commit PLAN'ı değiştirmez; değer bir önceki commit'ten aynen gelir)
+PLAN.md  db891ba8362bb5ee837535aa042b8414ac2062d97a8fa25bff744884b09a3455
+         (bu commit PLAN'ı DEĞİŞTİRİR: Faz 3 / İş 4 kararları işlendi.
+          önceki değer e6bc53d5f730b1b0da325da1ad29d8996a693e7945d5d2d54efeafc947392306)
 
 1.json   7cafd48fb4b06ec1da00b3f15f4335aae46fb8b40fc57926cde442dda515a724
 2.json   e596d1bccc5054bf4442faff43ebdfff03ff4c5024d4afc1d8e9ddad2ed3f11a
@@ -93,7 +98,7 @@ PLAN.md  e6bc53d5f730b1b0da325da1ad29d8996a693e7945d5d2d54efeafc947392306
 6.json   aa73e89137f4b5585e4ed0c0e7bbab38aad841897cd2ce16b910c4c4cc4e2277
 7.json   690843ebbfe4d61b33bf7db2e35b3a5038ba0206dc6b4ca5484311312af298b7
 8.json   498dfef21e479209c793f731b3593dae37cf688ae7bf275775eb744255913480
-         (bu commit'te eklendi; Room'un kendi ürettiği şema)
+         (Faz 3 / İş 2 dilim 1'de eklendi; Room'un kendi ürettiği şema)
 
 anonim fixture (sample-import.xlsx)
          314780a48e5002b2ffaef6856c63d2e42a55759d39ac485b8f00753f551d1833
@@ -115,6 +120,37 @@ manuel turlar geçici Room veritabanları ve geçici XDG dizinleri kullanır. Bu
 `assertRealApplicationDatabaseUntouched` yardımcı fonksiyonuyla **90 test sınıfında**
 uygulanmaktadır. Sayı tek bir yerde tutulur; §29 aynı değeri anar ve tarama
 `grep -rl 'assertRealApplicationDatabaseUntouched' app/src/*Test` ile yapılır.
+
+## Yaklaşan migration hakkında soyut gözlem  *(İş 4 için belirleyici)*
+
+Gerçek veritabanının **içeriği açılmadan**, yalnız dosya başlığı ve şema metni
+salt okunur incelenerek şu gözlenmiştir:
+
+```text
+user_version                 3        (kodun şema sürümü 8'dir)
+tablolar                     v3 şemasının tabloları; `items` dâhil
+domain/import tablolarında   kullanıcı verisi GÖRÜNMÜYOR; yalnız 12 tohum renge
+                             karşılık gelen kayıt izi var
+-wal / -shm                  yok
+```
+
+Bundan çıkan ve **kayda değer** olan tek şey şudur:
+
+- Uygulamanın bir sonraki normal açılışı, büyük olasılıkla **v3 → v8** bir
+  migration zincirini tetikleyecektir. Bu, İş 4'ün migration snapshot'ının ilk
+  gerçek tetiklenmesi olacaktır ve varsayımsal değildir.
+- `Migration3To4`, üretim satırı taşıyan bir v3 veritabanını **bilerek reddeder**
+  (bkz. kendi belgesi). Yalnız renk taşıyan bir veritabanı temiz göç eder.
+
+**Bu gözlem bir garanti değildir.** Veritabanı açılmadığı için "kullanıcı verisi
+yok" kesin olarak bilinemez; yalnızca dosyada görünmediği söylenebilir. Plan ve
+uygulama, veri **varmış gibi** güvenli olmak zorundadır.
+
+> **Geçici kural — Faz 3 / İş 4 / Dilim 4 tamamlanana kadar geçerlidir:**
+> gerçek uygulama **normal XDG diziniyle açılmamalıdır.** Bugün açılırsa
+> migration **snapshot'sız** çalışır ve PLAN `14.4.10`'un açılış kapısı henüz
+> yoktur. Geliştirme ve manuel doğrulama turları geçici XDG dizinleriyle
+> yapılmaya devam eder. Dilim 4 bittiğinde bu kural kalkar.
 
 ---
 
@@ -457,7 +493,9 @@ Ayarlar            (PLAN 12.16; İş 3 / Dilim 2'de açıldı, Dilim 4'te tamaml
 Sıra PLAN 12.1'in sırasıdır. `Geçmiş` koşulsuzdur: içi boşken de sidebar'dadır ve
 boşluğunu ekranda söyler — `Özel` havuzun gizlenme kuralı ona uygulanmaz.
 `Ayarlar` sırada sondadır ve PLAN 12.16'nın saydığı iki eylemi taşır: `Yedek
-oluştur` ve `Yedekten geri yükle`.
+oluştur` ve `Yedekten geri yükle`. İş 4 / Dilim 2 buraya **tek** bir ayar
+ekleyecektir — saklanacak otomatik yedek sayısı (`1..50`, varsayılan `7`); başka
+ayar alanı eklenmez (§25.2).
 
 ## PLAN'da tanımlı, henüz yapılmamış olanlar
 
@@ -1601,6 +1639,296 @@ edilmiş kalıptır; geri alma motoru da (İş 2 / Dilim 2) bilerek bağlanmamı
 
 ---
 
+# 25.2 OTOMATİK SNAPSHOT VE DÖNGÜSEL SAKLAMA  *(Faz 3 / İş 4 — KARARLAR ALINDI, UYGULANMADI)*
+
+Bağlayıcı metin PLAN `14.4.7`–`14.4.13`'tedir. Aşağısı alınan kararların özeti ve
+gerekçeleridir. **Bu commit'te hiçbir kod yazılmamıştır.**
+
+## İki tetikleyici, üç artefakt türü
+
+```text
+içe aktarma onayı → 1 JSON snapshot
+migration         → 1 SET = ham .db + yürütülmüş .json   (ikisi bir bütün)
+```
+
+## İçe aktarma öncesi snapshot
+
+```text
+eşik            YOK. "Büyük içe aktarma" ifadesi PLAN'dan KALDIRILDI
+XLSX / CSV      AYRIM YOK; ikisi de aynı taslak borusundan ve aynı
+                confirmDraftBatch transaction'ından geçer
+nerede          taslak oluşturmadan önce DEĞİL; domain verisini değiştiren
+                confirmDraftBatch çağrısından HEMEN ÖNCE
+biçim           normal kanonik formatVersion 1 JSON, 15 tablo
+geri yükleme    Ayarlar → Yedekten geri yükle ile normal biçimde açılabilir
+ekran           onay ekranı, önce otomatik yedek alınacağını TEK anlaşılır
+                cümleyle söyler
+history         olay YAZMAZ
+çift gönderim   TEK snapshot, TEK confirmation
+```
+
+Eşik neden kaldırıldı: hangi içe aktarmanın "büyük" olduğuna dair savunulabilir
+bir sayı yok, ve yanlış seçilmiş bir eşik tam da korunması gereken içe aktarmayı
+korumasız bırakır. 25 veya 50 görev gibi sayılar **reddedildi**.
+
+## Snapshot ↔ confirmation yarış modeli
+
+Restore'un (`§25.1`) güvenlik modelinin eşdeğeri uygulanır:
+
+```text
+1  snapshot'ın değişmez BackupData + dataSha256 değeri bellekte tutulur
+2  snapshot atomik yazılır VE gerçek okuyucuyla yeniden doğrulanır
+3  confirmation transaction'ının İLK aşaması canlı DB'yi aynı kanonik
+   sözleşmeyle yeniden okur
+4  DB snapshot'tan sonra değişmişse HİÇBİR domain yazımı yapılmadan reddedilir
+5  kullanıcıya verilerin bu sırada değiştiği ve tekrar denemesi söylenir
+6  oluşturulmuş snapshot geçerli bir yedek olarak kalabilir
+7  transaction'ın yazma kilidi alındıktan sonra başka writer araya giremez
+```
+
+**Global mutation barrier yerine transaction içi yeniden doğrulama + fail closed
+seçilmiştir.** Teknik olarak eşdeğer veya daha güçlü bir çözüm kanıtlanırsa
+uygulanabilir; **güvence sessizce kaldırılamaz.**
+
+## Migration öncesi çift artefakt
+
+```text
+1  ham .db    migration ÖNCESİNDEKİ eski şemanın tutarlı SQLite klonu
+              → migration KODUNUN KENDİSİNDEKİ hataya karşı korur
+              → üretilirken migration kodunu hiç çalıştırmaz
+2  .json      bu klonun AYRI çalışma kopyası gerçek migration zinciriyle v8'e
+              yürütüldükten sonra üretilen kanonik yedek
+              → Ayarlar ekranından normal biçimde geri yüklenebilir
+```
+
+**İkisi birlikte tutulur.** Yalnız JSON üretmek, korunmak istenen migration
+koduna bağımlı olurdu; yalnız ham `.db` üretmek, "kullanıcı otomatik yedeklerden
+verisini geri yükleyebilir" ölçütünü (PLAN `18.`) karşılamazdı. **Set ancak iki
+eş de doğrulandığında başarılı sayılır.**
+
+```text
+ham klon     SQLite'ın tutarlı snapshot mekanizmasıyla üretilir
+             DB + -wal + -shm'yi sırayla kopyalamak YASAK (atomik değil)
+             VACUUM INTO kullanımına izin verildi; gerçek davranış uygulamada
+             TESTLE doğrulanmalı, varsayılmamalı
+ham doğrulama  SQLite biçim başlığı + user_version + integrity_check + FK
+json doğrulama gerçek UntrustedBackupReader + TemporaryBackupProbe hattı
+ham .db        Ayarlar'daki JSON restore seçicisinde GÖSTERİLMEZ
+               (seçici .json süzer); uygulama içinden doğrudan restore yolu
+               bu işte OLUŞTURULMAZ
+```
+
+## Açılış kapısı
+
+```text
+ 1  instance/açılış kilidi alınır
+ 2  DB'nin varlığı ve user_version'ı Room AÇILMADAN belirlenir
+ 3  DB yoksa normal oluşturma yolu; snapshot yok
+ 4  sürüm 8 ise migration snapshot'ı OLUŞTURULMAZ
+ 5  sürüm 1..7 ise snapshot seti oluşturulur
+ 6  8'den büyük / desteklenmeyen / bozuk ise DB AÇILMAZ, güvenli hata gösterilir
+ 7  ham klon tamamlanıp doğrulanmadan çalışma kopyası oluşturulmaz
+ 8  çalışma kopyası gerçek migration zinciriyle v8'e yürütülür
+ 9  yürütülmüş kopyadan kanonik JSON üretilir ve gerçek hattan geçirilir
+10  iki eş de doğrulanmadan set BAŞARILI SAYILMAZ
+11  set başarılı olmadan gerçek DatabaseFactory kullanıcı DB'sini AÇAMAZ
+12  klon migration'ı veya JSON üretimi başarısızsa gerçek DB HİÇ migrate edilmez
+13  instance kilidi, snapshot ve gerçek açılış/migration bitene kadar tutulur
+14  geçici klon, çalışma DB'si, -wal, -shm ve .part bütün yollarda temizlenir
+```
+
+Çalışma kopyasının migration'ı başarılı fakat **gerçek** migration başarısızsa,
+her iki artefakt da korunur ve kullanıcı güvenli açılış hata penceresini görür.
+**Bu pencere İş 4 kapsamındadır** ve Faz 3 / İş 7'ye bırakılmaz.
+
+## Adlandırma
+
+```text
+pnp-otomatik-import-YYYY-AA-GG-SSDDsn.json
+pnp-otomatik-migration-v<eski>-v<yeni>-YYYY-AA-GG-SSDDsn.db
+pnp-otomatik-migration-v<eski>-v<yeni>-YYYY-AA-GG-SSDDsn.json
+pnp-oncesi-YYYY-AA-GG-SSDDsn.json        (restore öncesi, §25.1)
+pnp-yedek-<tarih>.json                   (manuel, hedefi kullanıcı seçer)
+```
+
+Çakışma, Dilim 4'ün atomik sahiplenme kalıbıyla çözülür (`Files.createFile`,
+sonra `-2`, `-3`). **Bir migration setinin iki eşi AYNI soneki taşır**
+(`…-2.db` + `…-2.json`); ikisi adlarından eşleştirilebilir olmalıdır.
+
+Ada **girmeyenler**: kullanıcı adı, makine adı, oyun adı, gerçek içe aktarma
+dosyasının adı, herhangi bir veri içeriği.
+
+## Üç ayrı kota  *(türler arası ortak kota REDDEDİLDİ)*
+
+```text
+1  içe aktarma öncesi JSON snapshot'ları
+2  restore öncesi pnp-oncesi-* JSON güvenlik yedekleri
+3  migration snapshot SETLERİ   (.db + .json = TEK set)
+```
+
+Her tür için ayrı ayrı `automaticBackupCount` kadar en yeni kayıt/set tutulur.
+**Bir türdeki yoğunluk başka türün yedeklerini silemez:** art arda yapılan içe
+aktarmalar kullanıcının restore dönüş yolunu tahliye edemez. Manuel
+`pnp-yedek-*` dosyaları **hiçbir otomatik kotaya girmez.**
+
+## Rotation davranışı
+
+```text
+sıra         yeni snapshot/set atomik tamamlanıp DOĞRULANMADAN eski dosya silinmez
+hedef        yalnız kendi türü + sahipliği KANITLANMIŞ dosyalar
+JSON sahiplik  beklenen ad kalıbı + normal dosya + symlink değil +
+               doğrulanmış `pnp-tracker-backup` zarfı
+set sahiplik   beklenen EŞLEŞMİŞ adlar + iki normal dosya + geçerli SQLite
+               başlığı/metadata + doğrulanmış JSON
+YETMEZ       yalnız ad öneki eşleşmesi silme yetkisi VERMEZ
+dokunulmaz   manuel dosya, bilinmeyen dosya, symlink, dizin, FIFO, .part,
+             bozuk/eksik eşli set (rotation adayı sayılmaz; güvenli hata/inceleme)
+sıralama     dosya adındaki kanonik timestamp + sonek; mtime'a GÜVENİLMEZ
+             (kopyalama/eşitleme mtime'ı değiştirir, adı değiştirmez)
+durum        rotation durum tutmaz → crash/retry idempotent
+hata         silme hatası yeni snapshot'ı, importu veya migration'ı ENGELLEMEZ
+             ve kullanıcıya blocking hata göstermez
+ayar azalışı dosyalar HEMEN silinmez; yeni değer atomik kaydedilir, temizlik
+             BİR SONRAKİ başarılı otomatik snapshot'tan sonra uygulanır
+```
+
+## `settings.json` sözleşmesi
+
+```json
+{
+  "formatVersion": 1,
+  "automaticBackupCount": 7
+}
+```
+
+```text
+yer            $XDG_CONFIG_HOME/pnp-tracker/settings.json, düz UTF-8 JSON
+aralık         default 7 · minimum 1 · maksimum 50
+0              GEÇERSİZ — otomatik koruma kapatılamaz
+bilinmeyen alan YOK SAYILIR (yedeğin katı politikasının bilinçli TERSİ:
+               ayar dosyası kullanıcı verisi taşımaz, katı olmak eski sürüme
+               dönen kullanıcının uygulamasını açılmaz yapardı)
+bozuk dosya    runtime default 7; uygulama AÇILIR; Ayarlar'da varsayılanın
+               kullanıldığı AÇIKÇA gösterilir; dosyanın ÜZERİNE YAZILMAZ
+yazma          atomik; başarısızsa eski dosya bayt bayt kalır ve runtime değeri
+               değişmez
+eşzamanlılık   aynı process içindeki yazımlar mutex/tek controller ile sıralanır
+UI             yalnız 1..50 kabul eder
+YAZILMAZ       yol, DB hash'i, kullanıcı içeriği
+kapsam         restore/yedek kapsamındaki 15 TABLOYA EKLENMEZ — bir geri yükleme
+               kullanıcının ayarını değiştirmez; ayrıca açılış kapısının ayara
+               DB açılmadan önce ulaşması gerekir
+```
+
+Bu işte **başka ayar alanı eklenmez.**
+
+## Hata semantiği
+
+```text
+FAIL CLOSED  import snapshot üretilemez/yazılamaz/doğrulanamaz → confirmation
+             HİÇ başlamaz; batch DRAFT kalır; görev, segment, completion ve
+             history YAZILMAZ
+             migration ham klon veya JSON üretilemez/yazılamaz/doğrulanamaz →
+             gerçek Room DB AÇILMAZ, migration BAŞLAMAZ
+             snapshot sonrası DB değişmişse import confirmation YAZMADAN reddedilir
+             snapshot seti ile gerçek migration arası koruma doğrulanamazsa
+             migration BAŞLAMAZ
+FAIL OPEN    başarılı yeni snapshot sonrasında eski otomatik yedeğin
+             SİLİNEMEMESİ import veya migration'ı ENGELLEMEZ
+KORUNUR      snapshot başarılı olup confirmation sonradan düşerse snapshot KALIR
+AYAR         okuma/parse hatası → default 7 ile açılır + Ayarlar'da uyarı
+             yazma hatası → eski dosya ve runtime değeri korunur
+```
+
+## Kullanıcı bildirimi
+
+```text
+gösterilir     her import confirmation onayında otomatik yedek alınacağı
+               (tek anlaşılır cümle)
+gösterilir     snapshot failure → import ekranında güvenli Türkçe hata
+gösterilir     startup migration snapshot/migration failure → GERÇEK hata penceresi
+               ("ana DB'ye geçilmedi, veri değiştirilmedi")
+gösterilmez    ham exception, SQL, UUID, mutlak yol, kullanıcı verisi, gerçek DB
+               metadata'sı
+gösterilmez    rotation failure (blocking hata YOK)
+gösterilmez    Ayarlar'da son otomatik snapshot zamanı
+eklenmez       "Yedek klasörünü aç" eylemi
+yazılmaz       otomatik snapshot history event'i
+```
+
+## Reddedilen alternatifler  *(tekrar önerilmesin)*
+
+```text
+yalnız ham migration snapshot          REDDEDİLDİ  uygulama içinden restore
+                                                   ölçütünü karşılamaz
+yalnız yürütülmüş migration JSON       REDDEDİLDİ  korunmak istenen migration
+                                                   koduna bağımlı olurdu
+25 / 50 görevlik "büyük import" eşiği  REDDEDİLDİ  savunulabilir bir sayı yok
+yalnız büyük importu yedeklemek        REDDEDİLDİ  her onay yedeklenir
+kullanıcının kapatabildiği snapshot    REDDEDİLDİ  0 geçersiz; koruma kapatılamaz
+türler arası ortak kota                REDDEDİLDİ  import yoğunluğu restore dönüş
+                                                   yolunu tahliye ederdi
+ayar değerini Room tablosunda tutmak   REDDEDİLDİ  restore ayarı da değiştirirdi;
+                                                   açılış kapısı DB'den önce okur
+sayı azalınca anında dosya silme       REDDEDİLDİ  ayar değiştirmek yıkıcı olmamalı
+rotation hatasında ana işlemi durdurma REDDEDİLDİ  kullanıcı verisi risk altında değil
+snapshot başarısızken devam etmek      REDDEDİLDİ  fail closed
+startup migration hatasını İş 7'ye     REDDEDİLDİ  hata penceresi İŞ 4 kapsamında
+  bırakmak
+global mutation barrier                SEÇİLMEDİ   transaction içi yeniden doğrulama
+                                                   tercih edildi; eşdeğer/daha güçlü
+                                                   bir çözüm kanıtlanırsa uygulanabilir
+cp ile DB + -wal + -shm kopyalama      REDDEDİLDİ  atomik değil, tutarlı snapshot vermez
+```
+
+## Dört atomik dilim
+
+```text
+1  Otomatik adlar, sahiplik ve tür başına rotation motoru ......... YAPILMADI
+   hiçbir tetikleyici bağlı değil; kullanıcıya açılan bir şey yok
+   commit: feat(backup): keep a bounded number of automatic backups
+
+2  Sürümlü settings.json + saklama sayısı Ayarlar UI'sı ........... YAPILMADI
+   ayar gerçekten kaydedilir ve gerçekten uygulanır
+   commit: feat(settings): let the number of automatic backups be chosen
+
+3  Her XLSX/CSV confirmation öncesi JSON snapshot + yarış koruması  YAPILMADI
+   commit: feat(import): save the data before an import changes it
+
+4  Migration öncesi ham DB + yürütülmüş JSON seti + açılış kapısı . YAPILMADI
+   commit: feat(backup): save the database before a migration changes it
+```
+
+Dilimler **bu sırayla** uygulanır: Dilim 3 ve 4, Dilim 1'in yazıcısını ve
+Dilim 2'nin sayısını kullanır. **Dilim 4 tamamlanana kadar gerçek uygulama normal
+kullanıcı XDG'siyle açılmaz** (§0).
+
+Hiçbir ara commit: korumasız migration başlatmaz · doğrulanmamış dosyaya
+"snapshot alındı" demez · rotation ile kullanıcı dosyası silmez · kalıcılığı
+olmayan ayar UI'si açmaz · snapshot başarısızken büyük importu sürdürmez.
+
+## İş 4'ün kullanacağı, İş 3'ün bıraktığı yüzey
+
+```text
+DatabaseBackupExporter + BackupStore   15 tablo, TEK transaction, kanonik belge,
+                                       sourceSchemaVersion'ı PRAGMA'dan okur
+AtomicFileWriter                       aynı dizinde .part → atomik move
+DesktopSafetyBackupWriter              Files.createFile ile ad sahiplenme kalıbı
+safetyBackupFileName(moment, attempt)  locale-bağımsız ad üretimi
+UntrustedBackupReader                  25 tipli ret nedeni
+TemporaryBackupProbe                   geçici dizinde DB kurma/silme kalıbı
+XdgAppPaths.backupsDirectory / settingsFile
+LiveBackupRestorer + SafetySnapshot    yarış modelinin çalışan örneği
+```
+
+`settings.json` bugün **yalnız bir yoldur**: onu okuyan veya yazan üretim kodu
+yoktur ve üç test (`AppDirectoryInitializerTest`, `BackupSmokeTest`,
+`BackupRestoreSmokeTest`, `RestoreSmokeTest`) yokluğunu **aktif olarak iddia
+eder**. Dilim 2 bu iddiaları değiştirecek ilk iştir; bu tesadüf değil, "hiçbir
+yedek turu ayar yazmaz" invariant'ıdır ve bilinçli olarak güncellenmelidir.
+
+---
+
 # 26. DB / ŞEMA KORUMA
 
 ```text
@@ -1634,11 +1962,26 @@ kaldı, `8.json` eklendi. `Migration7To8` backfill yapmaz — yalnız tabloyu ve
 Bundan sonrası için kural yeniden yürürlüktedir: **yeni bir şema değişikliği
 gerektiğini düşünürsen uygulamadan önce dur ve kanıtlarıyla bildir.**
 
-**Faz 3 / İş 3 şema değişikliği gerektirmez** ve dört diliminin hiçbirinde
-gerektirmeyecektir: yedekleme yalnız okur, geri yükleme var olan tablolara satır
+**Faz 3 / İş 3 şema değişikliği gerektirmedi** ve dört diliminin hiçbirinde
+gerektirmedi: yedekleme yalnız okur, geri yükleme var olan tablolara satır
 yazar. Bu, restore'un geçmişe olay yazmamasının da sebeplerinden biridir —
 `history_events.game_id` NOT NULL ve `games`'e FK'lidir, yani oyunu olmayan bir
 "geri yükleme yapıldı" satırı ancak Room v9 ile yazılabilirdi (§25.1).
+
+**Faz 3 / İş 4 de şema değişikliği gerektirmez** ve dört diliminin hiçbirinde
+gerektirmeyecektir:
+
+- Otomatik snapshot, manuel yedekle **aynı** okuma yolunu ve **aynı** kanonik
+  biçimi kullanır; yeni tablo, sütun veya index yoktur.
+- Saklama ayarı bilinçli olarak veritabanının **dışındadır** (`settings.json`),
+  dolayısıyla 15 tablolu yedek kapsamı da değişmez (§25.2).
+- Otomatik snapshot geçmişe olay yazmaz; aynı `history_events.game_id`
+  gerekçesiyle yazamaz da.
+- Migration snapshot'ı **var olan** migration zincirini çalıştırır; yeni bir
+  migration yazmaz. Zincir `Migration1To2` … `Migration7To8` olarak kalır.
+
+İş 4 sırasında şema değişikliği gerektiğini düşünürsen **uygulamadan önce dur ve
+kanıtlarıyla bildir.**
 
 ## Migration testi kalıbı
 
@@ -1885,7 +2228,7 @@ yardımcı işler
       yapılandırılmış görev CSV dışa aktarma
 ```
 
-## Faz 3 — BAŞLADI, 16 İŞTEN 3'Ü BİTTİ
+## Faz 3 — BAŞLADI, 16 İŞTEN 3'Ü BİTTİ; 4'ÜN KARARLARI ALINDI
 
 PLAN `18.` — Faz 3 işler listesi.
 
@@ -1893,8 +2236,9 @@ PLAN `18.` — Faz 3 işler listesi.
  1  Geçmiş ekranını tamamla ............................. TAMAM
  2  Import batch rollback ve korumalı geri alma ......... TAMAM (üç dilim)
  3  Sürümlü JSON yedek/dışa aktarma ve geri yükleme ..... TAMAM (dört dilim)
-                                                        (4 dilimden 3'ü)  ← SIRADAKİ
- 4  Import ve migration öncesi otomatik snapshot ........ YAPILMADI
+ 4  Import ve migration öncesi otomatik snapshot ........ KARARLAR ALINDI,
+                                                        UYGULANMADI  ← SIRADAKİ
+                                                        (dört dilim, §25.2)
  5  CSV görev dışa aktarmayı doğrula ......... özellik var, Faz 3 doğrulama
                                               testleri yazılmadı
  6  Veritabanı migration testlerini oluştur ............. TAMAM
@@ -1964,23 +2308,33 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
 
 ## Sıradaki bağlayıcı iş
 
-> **Faz 3 / İş 4: içe aktarma ve migration öncesi otomatik snapshot.**
+> **Faz 3 / İş 4 / Dilim 1: otomatik yedek adları, sahiplik ve tür başına
+> döngüsel saklama motoru.**
 >
-> İş 3 bitti. Kullanıcı `Ayarlar` ekranından yedeğini alabiliyor **ve** bir
-> yedekten geri yükleyebiliyor: dosya hiçbir şeyine güvenilmeden doğrulanıyor,
-> onaydan sonra mevcut verinin zorunlu güvenlik yedeği yazılıyor, ve canlı
-> veritabanı tek transaction'da yedeğin yerine geçiyor (§25.1).
+> İş 4'ün **bütün tasarım kararları alınmıştır**; bağlayıcı metni PLAN
+> `14.4.7`–`14.4.13`, özeti §25.2'dedir. Kod yazılmamıştır.
 >
-> İş 4 kapsamı PLAN `18.` Faz 3 / iş 4 ve `14.4.6`'dadır: büyük bir içe aktarma
-> ve bir migration öncesinde otomatik snapshot oluşturma. Döngüsel saklama,
-> saklanacak yedek sayısı ve eski yedeklerin temizlenmesi **bu işe aittir** ve
-> İş 3'te bilerek yapılmamıştır.
+> Dilim 1'in kapsamı:
 >
-> İş 3'ün bıraktığı ve İş 4'ün kullanacağı yüzey: `DatabaseBackupExporter` +
-> `BackupStore` (tek transaction okuma ve kanonik belge), `AtomicFileWriter`,
-> `DesktopSafetyBackupWriter` (çakışmaya dayanıklı adlandırma ve atomik yazma) ve
-> `XdgAppPaths.backupsDirectory`. Otomatik snapshot'ın yazacağı dosya, güvenlik
-> yedeğiyle aynı kanonik biçimdedir; ikinci bir biçim eklenmez.
+> - `pnp-otomatik-import-…` ve `pnp-otomatik-migration-v<eski>-v<yeni>-…` ad
+>   kuralları; migration setinin iki eşinin aynı soneki taşıması.
+> - Sahiplik kanıtı: beklenen ad kalıbı + normal dosya + symlink değil +
+>   doğrulanmış zarf/SQLite başlığı. **Yalnız ad öneki yetmez.**
+> - Tür başına ayrı kotalı rotation motoru (üç tür, ortak kota yok).
+> - Yeni yedek atomik tamamlanıp doğrulanmadan silme yok; durum tutmayan,
+>   idempotent, dizin dışına çıkmayan, symlink takip etmeyen silme.
+>
+> **Dilim 1 hiçbir tetikleyiciye bağlanmaz ve kullanıcıya hiçbir şey açmaz.**
+> Sildiği tek şey, kendi yazdığı ve sahipliğini kanıtladığı dosyalardır.
+> Saklanacak sayı Dilim 2'ye kadar sabit varsayılan `7`'dir.
+>
+> Sonra sırasıyla: Dilim 2 (`settings.json` + `Ayarlar` sayısı) → Dilim 3 (her
+> onay öncesi snapshot + yarış koruması) → Dilim 4 (migration seti + açılış
+> kapısı). Sıra zorunludur: Dilim 3 ve 4, Dilim 1'in yazıcısını ve Dilim 2'nin
+> sayısını kullanır.
+>
+> **Dilim 4 bitene kadar gerçek uygulama normal kullanıcı XDG'siyle
+> açılmamalıdır** (§0): bugün açılırsa migration snapshot'sız çalışır.
 >
 > Sonraki bağlayıcı sıra PLAN'ın kendi sırasıdır: İş 4 → 7 → 9 + 5 → 10 →
 > 11-13 → 14-16.
@@ -2308,6 +2662,47 @@ Sonuçları:
 
 ---
 
+## R10 — Gerçek veritabanı korumasız bir migration'a açık  *(AÇIK — Dilim 4'e kadar)*
+
+Gerçek kullanıcı veritabanı şema **v3**'tedir (§0), kodun şema sürümü ise 8'dir.
+Uygulamanın normal XDG diziniyle bir sonraki açılışı, v3 → v8 migration zincirini
+**snapshot olmadan** çalıştırır: PLAN `14.4.10`'un açılış kapısı henüz yoktur.
+
+```text
+etki       migration'da bir hata olursa geri dönüş yolu yok
+olasılık   Migration3To4 yalnız renk taşıyan bir DB'yi temiz göç ettirir ve
+           gözlemde kullanıcı verisi görünmüyor — fakat bu bir GARANTİ DEĞİLDİR;
+           DB açılmadığı için içeriği kesin olarak bilinmiyor
+azaltma    GEÇİCİ KURAL: Dilim 4 bitene kadar gerçek uygulama normal kullanıcı
+           XDG'siyle AÇILMAZ. Geliştirme ve manuel turlar geçici XDG kullanır
+kapanış    Dilim 4 (açılış kapısı + migration snapshot seti) tamamlandığında
+```
+
+## R11 — `VACUUM INTO`'nun bu kurulumdaki davranışı ölçülmedi  *(AÇIK — Dilim 4'te ölçülecek)*
+
+Migration öncesi ham klon için `VACUUM INTO` kullanılmasına izin verilmiştir
+(PLAN `14.4.9`). Statik olarak doğrulananlar:
+
+```text
+gömülü SQLite      3.50.1  → VACUUM INTO (3.27+) sürüm olarak mevcut
+OMIT_VACUUM        derleme seçeneklerinde YOK
+erişim yolu        sıradan SQL → SQLiteConnection.prepare()/step() ile ulaşılır
+sqlite3_backup_*   semboller .so içinde var ama JNI'ye BAĞLANMAMIŞ → ERİŞİLEMEZ
+sqlite3_serialize  iz yok → ERİŞİLEMEZ
+açılış bayrakları  SQLITE_OPEN_READONLY ve SQLITE_OPEN_NOFOLLOW mevcut
+```
+
+**Ölçülmemiş ve varsayılmayacak olan:** sıcak bir WAL taşıyan bir veritabanının
+salt okunur açılışı. SQLite bu durumda `-shm` kurtarma denemesi yapar ve salt
+okunur bir bağlantı `SQLITE_READONLY_RECOVERY` ile düşebilir. Dilim 4'ün ilk
+testi bu olmalıdır; davranış varsayılmaz, ölçülür.
+
+Ayrıca **yasak olan**, hiçbir koşulda denenmeyecek alternatif: veritabanı, `-wal`
+ve `-shm` dosyalarını sırayla kopyalamak. Üçü arasında atomiklik yoktur ve
+kopyalama sırasında araya giren bir checkpoint tutarsız bir üçlü bırakır.
+
+---
+
 # 34. TASARIM İLKELERİ
 
 ## Veri bütünlüğü
@@ -2389,8 +2784,25 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   belge + kanonik yazıcı + dataSha256, Ayarlar ekranı + atomik dosya yazma,
   güvenilmeyen dosyayı okuma/doğrulama + geçici Room v8 denemesi, ve güvenlik
   yedeği + canlı replace transaction + arayüz.
-- Sıradaki bağlayıcı iş: İş 4 — içe aktarma ve migration öncesi otomatik
-  snapshot. Döngüsel saklama ve eski yedek temizliği de bu işe aittir.
+- İş 4'ün (otomatik snapshot + döngüsel saklama) BÜTÜN TASARIM KARARLARI
+  ALINMIŞTIR: PLAN 14.4.7-14.4.13, özet §25.2. Yeniden tartışma.
+  Sıradaki bağlayıcı iş: İş 4 / DİLİM 1 — otomatik yedek adları, sahiplik
+  kanıtı ve tür başına döngüsel saklama motoru. Hiçbir tetikleyiciye bağlanmaz.
+- İş 4'ün verilmiş kararları, kısaca: eşik YOK (her içe aktarma onayı
+  yedeklenir, XLSX/CSV ayrımı yok); snapshot confirmDraftBatch'ten HEMEN ÖNCE;
+  yarış koruması restore'un modelidir (transaction içi yeniden doğrulama +
+  fail closed), global mutation barrier DEĞİL; migration için İKİ eşleşmiş
+  artefakt (ham .db + yürütülmüş .json) ve ikisi de doğrulanmadan set başarılı
+  sayılmaz; ÜÇ AYRI kota (import / pnp-oncesi / migration seti), türler arası
+  ortak kota YOK; automaticBackupCount 1..50, varsayılan 7, 0 GEÇERSİZ;
+  settings.json DB'nin DIŞINDA ve yedek kapsamına GİRMEZ; sayı azalınca dosya
+  HEMEN silinmez; rotation hatası ana işlemi ENGELLEMEZ; startup migration hata
+  penceresi İŞ 4 kapsamındadır.
+- İş 4 ŞEMA DEĞİŞİKLİĞİ GEREKTİRMEZ; Room sürümü 8 kalır ve migration zinciri
+  Migration1To2 … Migration7To8 olarak kalır.
+- GEÇİCİ KURAL: Dilim 4 bitene kadar gerçek uygulamayı normal kullanıcı XDG'siyle
+  AÇMA. Gerçek DB şema v3'tedir ve bir sonraki normal açılış v3 -> v8 migration'ı
+  snapshot'sız tetikler (§0).
 - İş 2'nin ürün kararları VERİLMİŞTİR ve PLAN 11.4.4'tedir; yeniden tartışma.
   Kısmi rollback yoktur, tek çakışma bütün işlemi engeller, segment kimliğine
   provenance bağlanmaz, anlık görüntüsü olmayan eski batch geri alınamaz.
@@ -2430,6 +2842,7 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
 2. PLAN.md'nin ilgili bölümlerini oku.
 3. Yalnız o dilimin kapsamını uygula.
 4. Testleri çalıştır: ./gradlew clean check --rerun-tasks
+   (yalnız belge turuysa test çalıştırma; tutarlılık ve hash taraması yap.)
 5. Geçici XDG ile UI smoke + DB invariant + git status doğrula.
 6. Gerekiyorsa tek atomik commit oluştur.
 7. Sonraki işe geçme.
@@ -2582,9 +2995,28 @@ Bunların ilki — **sürümlü JSON yedek ve geri yükleme** — dört atomik d
 **tamamlanmıştır**. Biçim, kapsam, doğrulama hattı, restore mimarisi (A′),
 güvenlik yedeği ve dört dilim PLAN `14.4` ile §25.1'de yazılıdır.
 
-Sıradaki iş **otomatik snapshot**'tır (PLAN Faz 3 / iş 4): büyük bir içe aktarma
-ve bir migration öncesinde, güvenlik yedeğiyle aynı kanonik biçimde. Döngüsel
-saklama ve eski yedeklerin temizlenmesi de oraya aittir.
+Sıradaki iş **otomatik snapshot**'tır (PLAN Faz 3 / iş 4) ve bu belgeyle birlikte
+**bütün tasarım kararları alınmıştır**; bağlayıcı metni PLAN `14.4.7`–`14.4.13`,
+özeti §25.2'dedir. Kod henüz yazılmamıştır.
+
+Alınan kararların özü: eşik yoktur — **her** içe aktarma onayı, `XLSX`/`CSV`
+ayrımı gözetmeden ve domain yazımından hemen önce yedeklenir; snapshot ile onay
+arasındaki yarış, geri yüklemenin kanıtlanmış modeliyle (transaction içi yeniden
+doğrulama ve fail closed) korunur; migration için **iki eşleşmiş artefakt**
+üretilir — migration kodunu hiç çalıştırmamış ham bir kopya ve yürütülmüş bir
+kopyadan üretilen, uygulama içinden geri yüklenebilir kanonik JSON — ve set ancak
+ikisi de doğrulandığında başarılı sayılır; saklama **tür başına ayrı kotalarla**
+yapılır, böylece bir içe aktarma yoğunluğu kullanıcının geri dönüş yolunu
+tahliye edemez; ve sayı `Ayarlar` ekranından `1..50` aralığında değiştirilir,
+varsayılanı `7`'dir, `0` geçersizdir.
+
+İş dört atomik dilimde uygulanacaktır ve **Dilim 1** (adlar, sahiplik ve rotation
+motoru) sıradaki bağlayıcı iştir.
+
+> **Geçici kural:** Dilim 4 tamamlanana kadar gerçek uygulama normal kullanıcı
+> XDG'siyle açılmamalıdır. Gerçek veritabanı şema v3'tedir ve bir sonraki normal
+> açılış, henüz var olmayan açılış kapısı olmadan bir v3 → v8 migration'ını
+> tetikler (§0).
 
 En önemli kural:
 
