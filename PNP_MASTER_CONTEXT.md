@@ -7,9 +7,10 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** Faz 3 / İş 4'ün **ikinci dilimi** (sürümlü `settings.json`
-> ve saklama sayısı ayarı) tamamlandıktan sonra. İş 2 ve İş 3 bütünüyle
-> bitmiştir; İş 4'ün dört diliminden **ikisi** yapılmıştır. İş 3'ün bağlayıcı metni PLAN `14.4.1`–`14.4.6`, `12.16` ve
+> **Son güncelleme:** Faz 3 / İş 4'ün **üçüncü dilimi** (her içe aktarma onayı
+> öncesinde otomatik JSON snapshot ve yarış koruması) tamamlandıktan sonra. İş 2
+> ve İş 3 bütünüyle bitmiştir; İş 4'ün dört diliminden **üçü** yapılmıştır. İş
+> 3'ün bağlayıcı metni PLAN `14.4.1`–`14.4.6`, `12.16` ve
 > `16.`'dadır; uygulanan hâli §25.1'dedir. **İş 4'ün** bağlayıcı metni PLAN
 > `14.4.7`–`14.4.13`, `11.4.2`, `12.16` ve `16.`'dadır; kararların özeti ve
 > uygulanan hâli §25.2'dedir.
@@ -28,29 +29,44 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-HEAD (bu commit öncesi): 444aa3c2fca325eb8ec46848e741b848715f4983
-önceki commit         : feat(backup): keep a bounded number of automatic backups
+HEAD (bu commit öncesi): 1e1e12b5baf2f0d12ca71b9a2fa9002133947e50
+önceki commit         : feat(settings): let the number of automatic backups be chosen
 working tree          : temiz
 Room şema sürümü      : 8   (bu commit'te DEĞİŞMEDİ)
 şema dosyaları        : 1.json … 8.json  hepsi bayt bayt aynı
-test durumu           : 3301 test / 0 failure / 0 error / 0 skipped  (216 sınıf)
-                        [önceki commit: 3248 test / 211 sınıf]
-üretim kodu           : 289 dosya
-test kodu             : 228 dosya
+test durumu           : 3327 test / 0 failure / 0 error / 0 skipped  (219 sınıf)
+                        [önceki commit: 3301 test / 216 sınıf]
 PLAN.md               : bu commit'te DEĞİŞMEDİ
 ```
 
-**Bu commit Faz 3 / İş 4'ün ikinci dilimidir.** `settings.json` sözleşmesi, atomik
-ayar deposu ve `Ayarlar` ekranındaki gerçek, kalıcı saklama sayısı yazıldı; Dilim
-1'in rotation motoru bu sayıya bağlandı ve **restore öncesi güvenlik yedeğinin**
-ardından çalışıyor.
+**Bu commit Faz 3 / İş 4'ün üçüncü dilimidir.** Artık **her** içe aktarma onayı,
+domain verisine ilk yazımdan önce, kanonik 15 tablolu bir JSON snapshot'la
+korunuyor: dosya atomik yazılıyor, **gerçek okuyucuyla geri okunup doğrulanıyor**,
+saklama sayısı uygulanıyor, ve onay transaction'ının ilk aşaması canlı
+veritabanını aynı sözleşmeyle yeniden okuyup snapshot'la karşılaştırıyor.
 
-**İçe aktarma ve migration tetikleyicileri hâlâ bağlanmadı** (Dilim 3 ve 4).
-`ImportConfirmationStore`, `ImportConfirmationController` ve `DatabaseFactory`
-housekeeping işbirlikçisini **almıyor**; bunu bir test yapısal olarak iddia
-ediyor.
+**İçe aktarma tetikleyicisi BAĞLANDI; migration tetikleyicisi hâlâ bağlanmadı**
+(Dilim 4). `ImportConfirmationStore` artık `AutomaticSnapshotTaker` ve
+`AutomaticBackupHousekeeping` alıyor; `DatabaseFactory` ve
+`ImportConfirmationController` **ikisini de almıyor** ve bunu bir test yapısal
+olarak iddia ediyor.
 
-Kullanıcının gördüğü akış ve sırası:
+İçe aktarma onayının sırası:
+
+```text
+İçe Aktarma → taslaklar hazır → `Onayla ve görevleri oluştur`
+→ onay penceresi, otomatik yedeğin alınacağını TEK cümleyle söyler
+→ [Onayla]  ← ikinci basış bu noktadan sonra hiçbir şey yapmaz
+→ 15 tablo okunur, kanonik belge üretilir                  ← DB'ye 0 bayt
+→ backups/ altına pnp-otomatik-import-* atomik yazılır
+→ dosya GERÇEK okuyucuyla geri okunur; checksum ve satırlar karşılaştırılır
+→ ayardaki sayı okunur, rotation uygulanır (hata onayı engellemez)
+→ TEK transaction: 15 tablo yeniden okunur ve snapshot'la karşılaştırılır
+→ farklıysa hiçbir domain yazımı yapılmadan reddedilir
+→ aynıysa mevcut confirmDraftBatch aynı transaction içinde sürer
+```
+
+Geri yüklemenin kullanıcıya görünen akışı ve sırası:
 
 ```text
 Ayarlar → Yedekten geri yükle → .json seçimi
@@ -787,7 +803,11 @@ RawImportBlock
    ↓
 DraftTask / DraftTaskColor   (inceleme ekranı)
    ↓
-kullanıcı onayı → tek transaction
+kullanıcı onayı
+   ↓
+otomatik JSON snapshot (yazılır + GERÇEK okuyucuyla doğrulanır)   ← Faz 3 / İş 4 dilim 3
+   ↓
+tek transaction: 15 tablo yeniden okunur, snapshot'la karşılaştırılır
    ↓
 ImportBatchCell (hücrelerin ÖNCEKİ metni)  →  CellSegment / Task / TaskColor / TaskStage
 ```
@@ -1644,10 +1664,10 @@ edilmiş kalıptır; geri alma motoru da (İş 2 / Dilim 2) bilerek bağlanmamı
 
 ---
 
-# 25.2 OTOMATİK SNAPSHOT VE DÖNGÜSEL SAKLAMA  *(Faz 3 / İş 4 — DİLİM 1 VE 2 BİTTİ)*
+# 25.2 OTOMATİK SNAPSHOT VE DÖNGÜSEL SAKLAMA  *(Faz 3 / İş 4 — DİLİM 1, 2 VE 3 BİTTİ)*
 
 Bağlayıcı metin PLAN `14.4.7`–`14.4.13`'tedir. Aşağısı alınan kararların özeti,
-gerekçeleri ve **Dilim 1 ile 2'de uygulanan hâlidir**. Dilim 3 ve 4 yapılmamıştır.
+gerekçeleri ve **Dilim 1, 2 ve 3'te uygulanan hâlidir**. Dilim 4 yapılmamıştır.
 
 ## İki tetikleyici, üç artefakt türü
 
@@ -1898,14 +1918,15 @@ cp ile DB + -wal + -shm kopyalama      REDDEDİLDİ  atomik değil, tutarlı sna
    öncesi güvenlik yedeğinin ardından bu sayıyla çalışır
    commit: feat(settings): let the number of automatic backups be chosen
 
-3  Her XLSX/CSV confirmation öncesi JSON snapshot + yarış koruması  YAPILMADI
+3  Her XLSX/CSV confirmation öncesi JSON snapshot + yarış koruması  TAMAM
+   her onay yedeklenir, dosya doğrulanır, yarış transaction içinde kapatılır
    commit: feat(import): save the data before an import changes it
 
 4  Migration öncesi ham DB + yürütülmüş JSON seti + açılış kapısı . YAPILMADI
    commit: feat(backup): save the database before a migration changes it
 ```
 
-Dilimler **bu sırayla** uygulanır: Dilim 3 ve 4, Dilim 1'in yazıcısını ve
+Dilimler **bu sırayla** uygulanır: Dilim 3 ve 4, Dilim 1'in adlarını ve
 Dilim 2'nin sayısını kullanır. **Dilim 4 tamamlanana kadar gerçek uygulama normal
 kullanıcı XDG'siyle açılmaz** (§0).
 
@@ -2121,10 +2142,122 @@ başka ayar alanı                          kapsam dışı (PLAN 14.4.12)
 son snapshot zamanı / klasörü açma        kapsam dışı (PLAN 12.16)
 ```
 
-`ImportConfirmationStore`, `ImportConfirmationController` ve `DatabaseFactory`
-`AutomaticBackupHousekeeping` almıyor; `RetentionAfterRestoreTest` bunu JVM
-refleksiyonuyla iddia ediyor (kotlin-reflect bağımlılık değil ve eklenmedi).
-Dilim 3 veya 4 geldiğinde **bu testin bilinçli olarak çevrilmesi gerekir**.
+*(Dilim 2 biterken `ImportConfirmationStore`, `ImportConfirmationController` ve
+`DatabaseFactory` `AutomaticBackupHousekeeping` almıyordu ve
+`RetentionAfterRestoreTest` bunu JVM refleksiyonuyla iddia ediyordu. Dilim 3
+geldiğinde o test — sessizce silinmek yerine — bilinçli olarak çevrildi:
+`ImportConfirmationStore` artık hem housekeeping'i hem snapshot alıcıyı
+**alıyor**, controller ve `DatabaseFactory` ise hâlâ ikisini de **almıyor**.)*
+
+---
+
+## İş 4 / Dilim 3'te uygulanan hâli
+
+```text
+domain/backup/automatic/AutomaticSnapshot.kt      AutomaticSnapshot (internal ctor),
+                                                  üç SnapshotProblem, SnapshotNotTaken,
+                                                  AutomaticSnapshotTaker + …Writer
+domain/backup/automatic/VerifiedSnapshotTaker.kt  oku → yaz → GERİ OKU → karşılaştır
+desktopMain/platform/backupfiles/ClaimedNameWriter.kt       ad sahiplenme kalıbı,
+                                                  iki otomatik yazıcının ORTAK'ı
+desktopMain/platform/backupfiles/DesktopImportSnapshotWriter.kt  pnp-otomatik-import-*
+data/repository/ImportConfirmationStore.kt        snapshot + housekeeping + yarış kapısı
+domain/importconfirm/ImportConfirmationFailure.kt dört yeni tipli ret
+ui/…/ConfirmationMessages.kt, Strings.kt, ImportReviewScreen.kt  beş yeni Türkçe metin
+```
+
+`DesktopSafetyBackupWriter` artık kendi ad sahiplenme kodunu taşımıyor,
+`ClaimedNameWriter`'ı çağırıyor. Ürettiği ad ve davranış birebir aynı; kuralın
+iki kopyası, onu iki kez yanlış yapma şansı demek olurdu.
+
+### Snapshot bir SÖZ değil, bir KANIT'tır
+
+```text
+1  DatabaseBackupExporter 15 tabloyu okur, kanonik belgeyi üretir
+2  DesktopImportSnapshotWriter adı Files.createFile ile sahiplenir, atomik yazar
+3  dosya GERÇEK UntrustedBackupReader + TemporaryBackupProbe hattından geri okunur
+4  geri okunanın dataSha256'sı VE 15 tablosu, yazılanla karşılaştırılır
+5  ancak o zaman bir AutomaticSnapshot vardır
+```
+
+4. adım okuyucunun tek başına göremediği durumu yakalar: geçerli bir yedek
+belgesi olan fakat **bu** yedek olmayan bir dosya — başka yere düşmüş bir yazma
+ya da başkasına ait çıkan bir ad. `AutomaticSnapshot`'ın yapıcısı `internal`
+olduğu için, hiç dosya yazmamış bir çağıranın onay transaction'ına verecek bir
+şeyi yoktur: PLAN 14.4.13'ün "fail closed" hükmü hatırlanacak bir kural değil,
+tiplerin bir özelliğidir.
+
+Doğrulamayı geçemeyen dosya **yerinde bırakılır**, silinmez. Canlı
+veritabanından yazılmıştır ve pekâlâ sağlam olabilir — doğrulama bu makine
+hakkında bir sebeple de düşebilir; kullanıcı verisinin bir kopyasını "geri
+okuyamadım" diye atmak yanlış yön olurdu. Hiçbir yerde ona "yedek" denmez.
+
+### Yarış koruması — somut mekanizma
+
+```text
+nerede      ImportConfirmationStore.confirm, useWriterConnection +
+            immediateTransaction (LiveBackupRestorer'ın kalıbı, ikinci bir
+            tasarım değil)
+ne          transaction'ın İLK işi 15 tabloyu yeniden okumak ve snapshot'ın
+            BackupData'sıyla TAM karşılaştırmaktır
+niçin TAM   sayım, yanlış satırların doğru sayısına "evet" derdi; verilen söz
+            verinin yedeğin ANLATTIĞI veri olmasıdır
+farklıysa   ChangedUnderneath → hiçbir DELETE/INSERT/UPDATE yapılmadan
+            DATA_CHANGED_MEANWHILE ile reddedilir, batch DRAFT kalır
+kilit       BEGIN IMMEDIATE yazma kilidini İLK OKUMADAN ÖNCE alır; Room tek
+            writer bağlantısı tuttuğu için o andan commit'e kadar bu uygulamada
+            başka hiçbir yazma araya giremez
+maliyet     iki tam okuma (biri yedek, biri kapı) — taslak sayısından BAĞIMSIZ;
+            bir sorgu sayımı testi bunu 1 ve 42 taslakla sabitliyor
+```
+
+**Global mutation barrier yine seçilmedi ve gerek de olmadı:** kapı, restore'da
+kanıtlanmış olan güvencenin aynısını veriyor. Güvence sessizce kaldırılamaz —
+kaldırılırsa `ImportSnapshotBeforeConfirmationTest`'in yarış testi düşer.
+
+### Sıra ve hata sınırları
+
+```text
+housekeeping  transaction'dan ÖNCE çalışır (PLAN'ın verdiği sıra). Böylece
+              sonradan düşen bir onay bile saklama sayısını uygulamış olur ve
+              art arda reddedilen onaylar dosya biriktirmez
+              — restore'da tersi seçilmişti; orada güvenlik yedeğiyle transaction
+              ARASI, her yazmanın restore'u reddettirdiği dar bir penceredir
+snapshot hatası  onay HİÇ başlamaz; batch DRAFT; görev/segment/hücre/tamamlanma/
+              geçmiş YAZILMAZ; dört tipli retten biri gösterilir
+rotation hatası  onayı ETKİLEMEZ (fail open); housekeeping sözleşmesi gereği
+              bir sonuç için atmaz
+sonradan düşen onay  snapshot KORUNUR (yazılmış ve doğrulanmış bir yedeği silmek,
+              onu hiç almamaktan beterdir)
+çift gönderim   controller'ın isBusy'si ikinci basışı store'a hiç sokmaz →
+              TEK snapshot, TEK confirmation
+history        otomatik snapshot geçmişe satır YAZMAZ; onayın kendi satırları yazılır
+```
+
+### Kullanıcıya söylenen
+
+Onay penceresinde tek cümle: *"Onaylamadan önce verilerinizin otomatik bir
+yedeği alınır; bu yedeği daha sonra Ayarlar ekranından geri yükleyebilirsiniz."*
+Dosya adı, klasör, biçim veya teknik terim yok.
+
+Dört yeni ret cümlesi ayrı ayrı yazıldı; hepsi aynı iki şeyi söyler (hiçbir şey
+yazılmadı, içe aktarma taslak olarak duruyor) ve sonra farklı olanı: tekrar
+dene, diskte yer aç, veya verileriniz arada değişti.
+
+### Dilim 3'ün bilerek YAPMADIKLARI
+
+```text
+migration açılış kapısı / migration snapshot seti   Dilim 4
+ham .db klonu, VACUUM INTO ölçümü                   Dilim 4
+Ayarlar'da son snapshot zamanı / klasörü açma       kapsam dışı (PLAN 12.16)
+taslak oluştururken snapshot                        PLAN 14.4.8 bunu açıkça reddeder
+```
+
+`DatabaseFactory` hâlâ ne `AutomaticSnapshotTaker` ne de
+`AutomaticBackupHousekeeping` alıyor; `RetentionAfterRestoreTest` bunu JVM
+refleksiyonuyla iddia ediyor ve aynı test artık import tarafının **aldığını**
+iddia ediyor. Dilim 4 geldiğinde bu testin yine bilinçli olarak çevrilmesi
+gerekir.
 
 ---
 
@@ -2142,11 +2275,11 @@ XdgAppPaths.backupsDirectory / settingsFile
 LiveBackupRestorer + SafetySnapshot    yarış modelinin çalışan örneği
 ```
 
-`settings.json` bugün **yalnız bir yoldur**: onu okuyan veya yazan üretim kodu
-yoktur ve üç test (`AppDirectoryInitializerTest`, `BackupSmokeTest`,
-`BackupRestoreSmokeTest`, `RestoreSmokeTest`) yokluğunu **aktif olarak iddia
-eder**. Dilim 2 bu iddiaları değiştirecek ilk iştir; bu tesadüf değil, "hiçbir
-yedek turu ayar yazmaz" invariant'ıdır ve bilinçli olarak güncellenmelidir.
+*(Tarihsel not: bu liste İş 3 biterken yazıldı. `settings.json` o gün yalnız bir
+yoldu; Dilim 2 onu gerçek bir dosya hâline getirdi ve yokluğunu iddia eden dört
+testi silmek yerine güçlendirdi. Dilim 3, `DesktopImportSnapshotWriter`'ı
+`DesktopSafetyBackupWriter`'ın yanına koydu ve ikisinin ad sahiplenme kalıbını
+`ClaimedNameWriter`'da birleştirdi.)*
 
 ---
 
@@ -2277,13 +2410,25 @@ FakeSettingsStore (commonTest)          diski olmayan ayar deposu; yazmayı bir 
                                         bekletebilir ve tipli hatayla reddedebilir
 SceneSettings (desktopTest)             Compose sahnesi için duran ayar
 NeverDeletes (desktopTest)              her silmeyi reddeden gerçek klasör sargısı
+SnapshotDoubles (commonTest)            diski olmayan snapshot yazıcıları: yazmayı
+                                        reddeden, yazdığını BOZAN (geri okunanı
+                                        değiştiren) ve gerçek adı üreten; ayrıca
+                                        sayan bir AutomaticSnapshotTaker
+ConfirmationSnapshots (desktopTest)     gerçek DB'yi okuyup dosya yazmayan
+                                        LiveSnapshotTaker — `stale = true` ile
+                                        yarış penceresini AÇIK tutar — ve her
+                                        testin kullandığı confirmationStore(...)
+RefusingWriter / RuiningWriter /        gerçek diskte: yazmayan, yazdıktan sonra
+GatedWriter (desktopTest)               dosyayı bozan, ve ikinci basış gelene
+                                        kadar yazımı bekleten yazıcılar
 ComposeSceneHarness                     gerçek Compose sahnesi (desktopTest)
 ```
 
-Üç smoke turu (`BackupSmokeTest`, `BackupRestoreSmokeTest`, `RestoreSmokeTest`)
-ve Dilim 1'in `RetentionSmokeTest`'i, `TemporaryDatabaseDirectory` örneği
-tutmadıkları için aynı iddiayı **satır içinde** kurar: gerçek veritabanının var
-olup olmadığı turdan önce ölçülür ve sonra karşılaştırılır. Bu yüzden yukarıdaki
+Beş smoke turu (`BackupSmokeTest`, `BackupRestoreSmokeTest`, `RestoreSmokeTest`,
+`RetentionSmokeTest` ve Dilim 3'ün `ImportSnapshotSmokeTest`'i),
+`TemporaryDatabaseDirectory` örneği tutmadıkları için aynı iddiayı **satır
+içinde** kurar: gerçek veritabanının var olup olmadığı turdan önce ölçülür ve
+sonra karşılaştırılır. Bu yüzden yukarıdaki
 90 sayısı yardımcı fonksiyonun kendi sayısıdır, korumanın değil.
 
 **Sorgu sayımı her zaman frekans haritasıyla yapılır**, `Set` ile değil: `Set` bir
@@ -2307,6 +2452,9 @@ Geçmiş ekranı            2 SELECT (history_events + progress_events), satır,
 İçe aktarma onayı        karar sorguları taslak sayısıyla büyümez; hücre anlık
                          görüntüsü 1 INSERT/hücre ve toplam 1 SELECT — bir
                          hücreye 42 taslak yine tek satır yazar
+Otomatik import snapshot İKİ tam okuma (yedek + transaction içi kapı), taslak
+                         sayısından BAĞIMSIZ: 1 ve 42 taslak aynı ifadeleri
+                         çalıştırır; kapı yalnız okur, yazımı değiştirmez
 Geri alma                önizleme 1 ve 42 görev için AYNI ifadeleri çalıştırır;
                          geri alma sorguları görev/hücre sayısıyla büyümez ve
                          geçmiş uzadıkça artmaz. Yazımlar büyür: görev başına
@@ -2462,7 +2610,7 @@ yardımcı işler
       yapılandırılmış görev CSV dışa aktarma
 ```
 
-## Faz 3 — BAŞLADI, 16 İŞTEN 3'Ü BİTTİ; 4'ÜN İLK İKİ DİLİMİ YAPILDI
+## Faz 3 — BAŞLADI, 16 İŞTEN 3'Ü BİTTİ; 4'ÜN İLK ÜÇ DİLİMİ YAPILDI
 
 PLAN `18.` — Faz 3 işler listesi.
 
@@ -2471,7 +2619,7 @@ PLAN `18.` — Faz 3 işler listesi.
  2  Import batch rollback ve korumalı geri alma ......... TAMAM (üç dilim)
  3  Sürümlü JSON yedek/dışa aktarma ve geri yükleme ..... TAMAM (dört dilim)
  4  Import ve migration öncesi otomatik snapshot ........ BAŞLADI  ← SIRADAKİ
-                                                        (dört dilimden 2'si, §25.2)
+                                                        (dört dilimden 3'ü, §25.2)
  5  CSV görev dışa aktarmayı doğrula ......... özellik var, Faz 3 doğrulama
                                               testleri yazılmadı
  6  Veritabanı migration testlerini oluştur ............. TAMAM
@@ -2541,45 +2689,40 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
 
 ## Sıradaki bağlayıcı iş
 
-> **Faz 3 / İş 4 / Dilim 3: her XLSX/CSV onayı öncesinde otomatik JSON snapshot
-> ve yarış koruması.**
+> **Faz 3 / İş 4 / Dilim 4: migration öncesi ham `.db` + yürütülmüş JSON seti ve
+> açılış kapısı.**
 >
 > İş 4'ün bütün tasarım kararları alınmıştır (PLAN `14.4.7`–`14.4.13`, özet
-> §25.2). **Dilim 1 ve 2 bitmiştir**: adlar, sahiplik kanıtı ve tür başına
-> rotation motoru yazıldı; `settings.json`, atomik ayar deposu ve `Ayarlar`
-> ekranındaki saklama sayısı eklendi; motor bu sayıya bağlandı ve restore öncesi
-> güvenlik yedeğinin ardından çalışıyor.
+> §25.2). **Dilim 1, 2 ve 3 bitmiştir**: adlar, sahiplik kanıtı ve tür başına
+> rotation motoru yazıldı; `settings.json` ve `Ayarlar` ekranındaki saklama
+> sayısı eklendi; ve her içe aktarma onayı artık doğrulanmış bir snapshot'ın
+> arkasında çalışıyor.
 >
-> Dilim 3'ün kapsamı (PLAN `14.4.8`, `11.4.2`):
+> Dilim 4'ün kapsamı (PLAN `14.4.9`, `14.4.10`):
 >
-> - **Her** onay girişiminden önce otomatik JSON snapshot. Eşik YOK, `XLSX`/`CSV`
->   ayrımı YOK.
-> - Snapshot `confirmDraftBatch`'ten **hemen önce** — taslak oluşturmadan önce
->   değil; taslak satırları da yedeğin kapsamındadır ve onları koruyan aynı
->   snapshot'tır.
-> - Yazıldıktan sonra **gerçek okuyucuyla** yeniden doğrulanır; doğrulanmamış bir
->   dosyaya "yedek alındı" denmez.
-> - Üretilemez / atomik yazılamaz / doğrulanamazsa **onay hiç başlamaz**: batch
->   `DRAFT` kalır, görev, segment, hücre parçası, oyun tamamlanması ve geçmiş
->   olayı YAZILMAZ.
-> - Yarış koruması restore'un modelidir: değişmez `BackupData` + `dataSha256`
->   bellekte tutulur, onay transaction'ının **ilk** aşaması canlı veritabanını
->   aynı kanonik sözleşmeyle yeniden okur, değişmişse hiçbir domain yazımı
->   yapılmadan reddedilir (fail closed). Global mutation barrier SEÇİLMEDİ.
-> - Onay ekranı, işlemden önce otomatik yedek alınacağını **tek** anlaşılır
->   cümleyle söyler.
-> - Snapshot başarılı olup transaction sonradan düşerse snapshot KORUNUR.
-> - Çift gönderim TEK snapshot ve TEK onay üretir.
-> - Snapshot geçmişe olay YAZMAZ.
+> - Migration gerektiren bir veritabanı için **iki eşleşmiş artefakt**: migration
+>   kodunu hiç çalıştırmamış ham bir SQLite klonu ve o klonun ayrı bir çalışma
+>   kopyası gerçek migration zinciriyle v8'e yürütüldükten sonra üretilen kanonik
+>   JSON. **Set ancak ikisi de doğrulandığında başarılı sayılır.**
+> - Ham klon SQLite'ın tutarlı snapshot mekanizmasıyla üretilir. `VACUUM INTO`
+>   kullanımına izin verilmiştir; **gerçek davranışı bu kurulumda ölçülmemiştir**
+>   ve varsayılmadan testle doğrulanmalıdır (§33 R11). `cp` ile DB + `-wal` +
+>   `-shm` kopyalamak **yasaktır**.
+> - PLAN `14.4.10`'un 14 adımlı açılış kapısı: instance kilidi, Room AÇILMADAN
+>   `user_version` tespiti, sürüm 1..7 ise set üretimi, set doğrulanmadan gerçek
+>   `DatabaseFactory`'nin kullanıcı DB'sini **açamaması**, ve bütün yollarda
+>   geçici dosyaların temizlenmesi.
+> - Migration seti veya gerçek migration düşerse **gerçek hata penceresi** — bu
+>   pencere İş 4 kapsamındadır ve Faz 3 / İş 7'ye bırakılmaz.
 >
-> Dilim 3, Dilim 1'in `AutomaticBackupHousekeeping`'ini içe aktarma tarafına
-> bağlayacak yerdir. Dikkat: `RetentionAfterRestoreTest`'in "nothing but a
-> restore has been given housekeeping to do" testi `ImportConfirmationStore` ve
-> `ImportConfirmationController`'ın bu işbirlikçiyi **almadığını** yapısal olarak
-> iddia ediyor; Dilim 3'te bu iddia bilinçli olarak çevrilmelidir, sessizce
-> silinmemelidir.
+> Dikkat: `RetentionAfterRestoreTest`'in yapısal testi bugün `DatabaseFactory`'nin
+> ne `AutomaticSnapshotTaker` ne `AutomaticBackupHousekeeping` **almadığını**
+> iddia ediyor, ve aynı sınıftaki `opening a database still writes no migration
+> snapshot` testi bunu davranışsal olarak gösteriyor. Dilim 4'te **ikisi de
+> bilinçli olarak çevrilmelidir**, sessizce silinmemelidir.
 >
-> Sonra: Dilim 4 (migration seti + açılış kapısı).
+> Ayrıca gerçek veritabanı şema **v3**'tedir (§0): Dilim 4'ün ilk gerçek
+> tetiklenmesi varsayımsal değildir.
 >
 > **Dilim 4 bitene kadar gerçek uygulama normal kullanıcı XDG'siyle
 > açılmamalıdır** (§0): bugün açılırsa migration snapshot'sız çalışır.
@@ -2951,6 +3094,37 @@ kopyalama sırasında araya giren bir checkpoint tutarsız bir üçlü bırakır
 
 ---
 
+## R12 — Geriye giden bir saat içe aktarmayı tamamen durdurur  *(AÇIK — ölçüldü, karar verilmedi)*
+
+Dilim 3'ün smoke turu bunu bulmuştur ve bulduğu şey testin kendi kusuru değildir:
+yedek okuyucusu `updated_at < created_at` olan bir satırı **DOMAIN_INVARIANT**
+ile reddeder (`BackupValues.checkWrittenAndChanged`, ve `raw_import_blocks` için
+`updatedAt < importedAt`). Dilim 3'ten önce bunun tek sonucu, böyle bir
+veritabanının yedeğinin geri **yüklenememesi** olurdu. Dilim 3'ten sonra sonuç
+daha ağırdır:
+
+```text
+neden olur   satır yazıldıktan sonra sistem saati GERİ giderse (NTP düzeltmesi,
+             elle değiştirme, çift boot, sanal makine anlık görüntüsü) ve satır
+             sonradan düzenlenirse
+etki         otomatik snapshot doğrulamayı geçemez → PLAN 14.4.13 fail closed →
+             kullanıcı HİÇBİR içe aktarmayı onaylayamaz; ekranda
+             "Otomatik yedek ... doğrulanamadı" görür
+kalıcılık    satır, saat yeniden ileri gidene kadar tekrar düzenlenmedikçe
+             kendiliğinden düzelmez
+ölçüm        ImportSnapshotSmokeTest'in ilk hâli, geçmişte duran bir test saatiyle
+             tam olarak bu durumu üretti: rejection =
+             BackupRejection(DOMAIN_INVARIANT, rawImportBlocks.updatedAt)
+```
+
+**Karar verilmemiştir ve bu turda uydurulmamıştır.** PLAN bu durumdan söz etmiyor;
+seçenekler (yazarken `max(now, createdAt)` uygulamak, okuyucunun kuralını
+gevşetmek, ya da kullanıcıya "saatiniz geri gitmiş" diyen ayrı bir tipli hata)
+ürün kararıdır. Not olarak burada durur; Faz 3 / İş 7 (beklenmeyen kapanış ve
+bozuk import kurtarma) veya İş 10 (anlaşılır hata mesajları) doğal yeridir.
+
+---
+
 # 34. TASARIM İLKELERİ
 
 ## Veri bütünlüğü
@@ -3074,6 +3248,13 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
 - Canlı DB'yi boşaltabilen tek üretim API'si `LiveBackupRestorer`'dır ve yalnız
   `ValidatedBackup` + `SafetySnapshot` kabul eder. AppDatabase'e restore DAO'su
   EKLEME.
+- İçe aktarma onayı ARTIK otomatik snapshot'ın arkasındadır: `ImportConfirmation`
+  bir `AutomaticSnapshotTaker` ve bir `AutomaticBackupHousekeeping` alır, ve
+  `AutomaticSnapshot` yalnız dosya yazılıp GERÇEK okuyucuyla doğrulandıktan sonra
+  üretilebilir (internal yapıcı). Bu kapıyı gevşetme, eşik ekleme, XLSX/CSV ayrımı
+  yapma, ve transaction içi yeniden doğrulamayı kaldırma (§25.2).
+- Otomatik yedeklerin adını sahiplenen tek yer `ClaimedNameWriter`'dır; üçüncü bir
+  ad sahiplenme kalıbı yazma.
 - BackupRejection'a Throwable, yol, UUID, SQL veya kullanıcı metni EKLEME.
 - TemporaryBackupProbe dışarıdan yol veya AppDatabase KABUL ETMEZ ve canlı DB'de
   replace SUNMAZ; bu sınır korunur — canlı yazım ayrı bir sınıftır
@@ -3226,6 +3407,9 @@ Bugün çalışan hâliyle:
   aktarmalar` listesinden geri alma istenir, önizleme okunur, onay verilir;
   engelleniyorsa neyin engellediği adlarıyla gösterilir ve onay düğmesi hiç
   görünmez. Sonuç Geçmiş ekranında oyun ve görev satırları olarak durur.
+- Bir içe aktarmayı onaylamak, önce bütün veritabanının doğrulanmış bir
+  yedeğini `backups/` altına yazar; yedek alınamazsa onay hiç başlamaz ve
+  hiçbir satır değişmez.
 - Kullanıcı bütün verisinin sürümlü, deterministik ve checksum'lı bir JSON
   yedeğini `Ayarlar` ekranından istediği yere atomik olarak kaydedebilir.
 - Ve o yedeği **geri yükleyebilir**. Dosya hiçbir şeyine güvenilmeden okunur;
@@ -3243,9 +3427,9 @@ Bunların ilki — **sürümlü JSON yedek ve geri yükleme** — dört atomik d
 **tamamlanmıştır**. Biçim, kapsam, doğrulama hattı, restore mimarisi (A′),
 güvenlik yedeği ve dört dilim PLAN `14.4` ile §25.1'de yazılıdır.
 
-Sıradaki iş **otomatik snapshot**'tır (PLAN Faz 3 / iş 4) ve bu belgeyle birlikte
-**bütün tasarım kararları alınmıştır**; bağlayıcı metni PLAN `14.4.7`–`14.4.13`,
-özeti §25.2'dedir. Kod henüz yazılmamıştır.
+Sıradaki iş **otomatik snapshot**'tır (PLAN Faz 3 / iş 4); bağlayıcı metni PLAN
+`14.4.7`–`14.4.13`, özeti §25.2'dedir. Bütün tasarım kararları alınmıştır ve
+dört dilimden **üçü uygulanmıştır**.
 
 Alınan kararların özü: eşik yoktur — **her** içe aktarma onayı, `XLSX`/`CSV`
 ayrımı gözetmeden ve domain yazımından hemen önce yedeklenir; snapshot ile onay
@@ -3258,7 +3442,7 @@ yapılır, böylece bir içe aktarma yoğunluğu kullanıcının geri dönüş y
 tahliye edemez; ve sayı `Ayarlar` ekranından `1..50` aralığında değiştirilir,
 varsayılanı `7`'dir, `0` geçersizdir.
 
-İş dört atomik dilimde uygulanmaktadır. **Dilim 1 ve 2 bitmiştir.**
+İş dört atomik dilimde uygulanmaktadır. **Dilim 1, 2 ve 3 bitmiştir.**
 
 Dilim 1 otomatik yedeklerin adlarını, sahipliklerinin iki bağımsız kanıtla
 doğrulanmasını ve üç bağımsız kota için döngüsel saklama motorunu getirdi. Motor
@@ -3276,8 +3460,21 @@ yalnız kullanıcı Kaydet'e bastığında oluşur. Sayıyı küçültmek hiçbi
 silmez: yeni değer kaydedilir ve fazlası bir sonraki otomatik yedeğin ardından
 temizlenir. Bugün o "sonraki otomatik yedek" restore öncesi güvenlik yedeğidir.
 
-**Dilim 3** (her onay öncesi snapshot ve yarış koruması) sıradaki bağlayıcı
-iştir.
+Dilim 3 sözü tuttu: artık **her** içe aktarma onayı — XLSX olsun CSV olsun, bir
+görevlik olsun kırk görevlik olsun — domain verisine ilk yazımdan önce kanonik
+bir JSON yedeğin arkasında çalışıyor. Yedek yazılmakla kalmıyor, **gerçek
+okuyucuyla geri okunup** satır satır ve checksum'ıyla karşılaştırılıyor; ancak
+o zaman ortada bir snapshot oluyor ve onay ancak bir snapshot varsa
+başlayabiliyor — bu, hatırlanacak bir kural değil, tiplerin bir özelliği.
+Snapshot ile transaction arasındaki yarış, geri yüklemenin kanıtlanmış modeliyle
+kapatılıyor: `BEGIN IMMEDIATE`, 15 tablonun yeniden okunması ve tam
+karşılaştırma; arada bir şey değiştiyse tek bir satır yazılmadan reddediliyor.
+Yedek alınamaz, yazılamaz veya doğrulanamazsa onay hiç başlamıyor ve kullanıcı
+dört ayrı Türkçe cümleden birini görüyor. Onay penceresi, işlemden önce yedek
+alınacağını tek bir cümleyle söylüyor.
+
+**Dilim 4** (migration öncesi iki eşleşmiş artefakt ve açılış kapısı) sıradaki
+bağlayıcı iştir.
 
 > **Geçici kural:** Dilim 4 tamamlanana kadar gerçek uygulama normal kullanıcı
 > XDG'siyle açılmamalıdır. Gerçek veritabanı şema v3'tedir ve bir sonraki normal

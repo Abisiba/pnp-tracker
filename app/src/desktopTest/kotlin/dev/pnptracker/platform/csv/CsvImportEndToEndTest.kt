@@ -7,9 +7,9 @@ import dev.pnptracker.data.database.TemporaryDatabaseDirectory
 import dev.pnptracker.data.database.aCell
 import dev.pnptracker.data.database.aGame
 import dev.pnptracker.data.repository.DraftEdit
-import dev.pnptracker.data.repository.ImportConfirmationStore
 import dev.pnptracker.data.repository.ImportDraftStore
 import dev.pnptracker.data.repository.ImportReviewStore
+import dev.pnptracker.data.repository.confirmationStore
 import dev.pnptracker.domain.importconfirm.ImportConfirmationException
 import dev.pnptracker.domain.importconfirm.ImportConfirmationFailure
 import dev.pnptracker.domain.importreview.ImportReviewWorkspace
@@ -117,8 +117,7 @@ class CsvImportEndToEndTest {
         ImportReviewStore(importDao, database.gameDao(), database.colorDao(), clock = SteppingClock(moment))
     }
 
-    private fun confirmation() =
-        ImportConfirmationStore(importDao, database.gameCellDao(), database.gameDao(), clock = StoppedClock(moment))
+    private fun confirmation() = confirmationStore(database, importDao, clock = StoppedClock(moment))
 
     private suspend fun importFile(file: Path): EntityId {
         val controller = ImportController(DesktopImportFileGateway(FixedPicker(file)), ImportDraftStore(importDao))

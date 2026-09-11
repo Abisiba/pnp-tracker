@@ -104,14 +104,7 @@ class ImportReviewQueryCountTest {
             StoppedClock(moment),
         )
 
-    private fun confirmationStore() =
-        ImportConfirmationStore(
-            importDao,
-            database.gameCellDao(),
-            database.gameDao(),
-            IdGenerator.Random,
-            StoppedClock(moment),
-        )
+    private fun confirmations() = confirmationStore(database, importDao, clock = StoppedClock(moment))
 
     /**
      * One import of [drafts] cells, each cut into one draft, each aimed at a cell
@@ -178,7 +171,7 @@ class ImportReviewQueryCountTest {
     }
 
     private suspend fun summaryReads(batchId: EntityId): Map<String, Int> {
-        val store = confirmationStore()
+        val store = confirmations()
         driver.start()
         assertNotNull(store.summarize(batchId))
         return ran(driver.stop())

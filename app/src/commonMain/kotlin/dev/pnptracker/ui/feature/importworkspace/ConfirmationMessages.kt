@@ -37,6 +37,14 @@ fun messageOf(failure: ImportConfirmationFailure): StringResource =
         ImportConfirmationFailure.COMPLETION_TARGET_GAME_NOT_AVAILABLE ->
             Strings.Confirm.errorCompletionTargetUnavailable
         ImportConfirmationFailure.COULD_NOT_SAVE -> Strings.Confirm.errorCouldNotSave
+        // The four the automatic backup adds. Each says the same two things —
+        // nothing was written, the import is still a draft — and then the one
+        // thing that differs, which is what the person can do about it
+        // (PLAN 14.4.13).
+        ImportConfirmationFailure.SNAPSHOT_NOT_MADE -> Strings.Confirm.errorSnapshotNotMade
+        ImportConfirmationFailure.SNAPSHOT_NOT_WRITTEN -> Strings.Confirm.errorSnapshotNotWritten
+        ImportConfirmationFailure.SNAPSHOT_NOT_VERIFIED -> Strings.Confirm.errorSnapshotNotVerified
+        ImportConfirmationFailure.DATA_CHANGED_MEANWHILE -> Strings.Confirm.errorDataChanged
     }
 
 /** The pool names, taken from the one place that decides them. */

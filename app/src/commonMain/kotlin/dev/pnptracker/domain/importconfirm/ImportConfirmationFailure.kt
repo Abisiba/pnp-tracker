@@ -105,6 +105,37 @@ enum class ImportConfirmationFailure {
 
     /** The database refused the confirmation, so nothing at all was written. */
     COULD_NOT_SAVE,
+
+    /**
+     * The database could not be read for the automatic backup that comes first.
+     *
+     * PLAN 14.4.13 is fail closed here: an import that cannot be backed up does
+     * not happen. The four below are the same rule seen from four sides, and
+     * every one of them leaves the batch a draft with nothing written.
+     */
+    SNAPSHOT_NOT_MADE,
+
+    /** The automatic backup could not be put in the backups folder. */
+    SNAPSHOT_NOT_WRITTEN,
+
+    /**
+     * The automatic backup was written and could not be read back as one.
+     *
+     * PLAN 14.4.7 does not let a file be called a backup until the real reader
+     * has opened it, so a file that will not come back up is a file the import
+     * may not go ahead behind.
+     */
+    SNAPSHOT_NOT_VERIFIED,
+
+    /**
+     * The data changed between the automatic backup and the transaction.
+     *
+     * The backup on disk no longer describes the database it was taken from, so
+     * going ahead would write into something the backup does not cover. Nothing
+     * was written and the backup itself stands; the remedy is to confirm again
+     * (PLAN 14.4.8).
+     */
+    DATA_CHANGED_MEANWHILE,
 }
 
 /**

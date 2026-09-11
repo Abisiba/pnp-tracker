@@ -362,6 +362,35 @@ class ImportConfirmationControllerTest {
         }
 
     @Test
+    fun `a backup that did not happen is shown as such, and leaves the import confirmable`() =
+        runBlocking {
+            // PLAN 14.4.8: every one of these leaves the batch a draft with
+            // nothing written, so the screen keeps offering the confirmation
+            // rather than sending the user away to fix something.
+            val refusals =
+                listOf(
+                    ImportConfirmationFailure.SNAPSHOT_NOT_MADE,
+                    ImportConfirmationFailure.SNAPSHOT_NOT_WRITTEN,
+                    ImportConfirmationFailure.SNAPSHOT_NOT_VERIFIED,
+                    ImportConfirmationFailure.DATA_CHANGED_MEANWHILE,
+                )
+
+            refusals.forEach { failure ->
+                val fake = FakeConfirmation()
+                fake.failWith = failure
+                val controller = ImportConfirmationController(fake)
+                controller.refresh(BATCH)
+
+                controller.confirm(BATCH)
+
+                val ready = assertIs<ImportConfirmationState.Ready>(controller.state)
+                assertEquals(failure, ready.failure, "$failure")
+                assertTrue(ready.summary.canConfirm, "$failure left the import unconfirmable")
+                assertFalse(controller.isAsking, "$failure left the question open")
+            }
+        }
+
+    @Test
     fun `a second confirmation cannot start while the first is still running`() =
         runBlocking {
             val fake = FakeConfirmation()

@@ -1,11 +1,20 @@
 package dev.pnptracker.data.repository
 
+import androidx.room3.immediateTransaction
+import androidx.room3.useWriterConnection
 import androidx.sqlite.SQLiteException
+import dev.pnptracker.data.database.AppDatabase
 import dev.pnptracker.data.database.dao.GameCellDao
 import dev.pnptracker.data.database.dao.GameDao
 import dev.pnptracker.data.database.dao.ImportDao
 import dev.pnptracker.data.database.entity.DraftTaskEntity
 import dev.pnptracker.data.database.entity.RawImportBlockEntity
+import dev.pnptracker.domain.backup.automatic.AutomaticSnapshot
+import dev.pnptracker.domain.backup.automatic.AutomaticSnapshotTaker
+import dev.pnptracker.domain.backup.automatic.SnapshotNotTaken
+import dev.pnptracker.domain.backup.automatic.SnapshotProblem
+import dev.pnptracker.domain.backup.retention.AutomaticBackupHousekeeping
+import dev.pnptracker.domain.backup.retention.automaticBackupNameOf
 import dev.pnptracker.domain.importconfirm.DraftTaskProblem
 import dev.pnptracker.domain.importconfirm.ImportConfirmationException
 import dev.pnptracker.domain.importconfirm.ImportConfirmationFailure
@@ -54,7 +63,13 @@ interface ImportConfirmation {
     )
 
     /**
-     * Turns every draft of one import into a real task, in one transaction.
+     * Backs the database up, then turns every draft of one import into a real
+     * task, in one transaction.
+     *
+     * The backup is not an aside. PLAN 14.4.8 puts an automatic snapshot in
+     * front of every confirmation — no threshold, no difference between a
+     * spreadsheet and a CSV, no way to turn it off — and a snapshot that cannot
+     * be taken stops the import rather than being skipped.
      *
      * @throws ImportConfirmationException if nothing was written, which is the
      *   only other outcome there is.
@@ -65,10 +80,16 @@ interface ImportConfirmation {
     ): ImportConfirmationResult
 }
 
+/** Raised inside the transaction when the database is no longer what was backed up. */
+private class ChangedUnderneath : Exception("The data changed after the automatic backup was taken")
+
 class ImportConfirmationStore(
+    private val database: AppDatabase,
     private val importDao: ImportDao,
     private val gameCellDao: GameCellDao,
     private val gameDao: GameDao,
+    private val snapshots: AutomaticSnapshotTaker,
+    private val housekeeping: AutomaticBackupHousekeeping,
     private val idGenerator: IdGenerator = IdGenerator.Random,
     private val clock: Clock = Clock.System,
 ) : ImportConfirmation {
@@ -238,18 +259,55 @@ class ImportConfirmationStore(
         }
     }
 
+    /**
+     * The whole of PLAN 14.4.8, in the order the plan gives it.
+     *
+     * ```text
+     * 1  the fifteen tables are read and written to a file nobody chose
+     * 2  the file is read back by the real reader and held against what went down
+     * 3  older automatic backups are cleared to the number the user chose
+     * 4  the transaction reads the fifteen tables again as its first act
+     * 5  anything that moved in between stops it, with nothing written
+     * 6  and only then does the import become tasks
+     * ```
+     *
+     * Steps 1 and 2 are somebody else's work — the snapshot has to have been
+     * *verified* before this can hold one at all, which is why the type cannot
+     * be constructed here (PLAN 14.4.13).
+     *
+     * Step 3 sits where the plan puts it, before the transaction rather than
+     * after it. A confirmation that then fails leaves the snapshot on disk, and
+     * retention has already been applied to it, so a run of refused imports
+     * cannot pile up untouched files. Nothing it does can stop the import: PLAN
+     * 14.4.13 is fail open about tidying up, and the housekeeping's own contract
+     * is that it does not throw for an outcome.
+     *
+     * Step 4 is where this differs from a plain confirmation, and it is the
+     * restore's guarantee reused rather than a second design (PLAN 14.4.4). The
+     * transaction is `BEGIN IMMEDIATE`, so the write lock is held before the
+     * first read; Room keeps one writer connection, so from that moment nothing
+     * else in this application can write; and the reading that decides whether
+     * to go ahead therefore describes the same database the writing lands on. A
+     * global mutation barrier was considered and not chosen — this is the
+     * guarantee it would have given, at the cost of one reading.
+     */
     override suspend fun confirm(
         batchId: EntityId,
         acknowledgeUnprocessedBlocks: Boolean,
     ): ImportConfirmationResult {
+        val snapshot =
+            try {
+                snapshots.takeBeforeImport()
+            } catch (notTaken: SnapshotNotTaken) {
+                throw ImportConfirmationException(failureOf(notTaken.problem), cause = notTaken)
+            }
+        automaticBackupNameOf(snapshot.fileName)?.let { housekeeping.afterWriting(it.setName) }
+
         val createdTaskCount =
             try {
-                importDao.confirmDraftBatch(
-                    batchId = batchId,
-                    acknowledgeUnprocessedBlocks = acknowledgeUnprocessedBlocks,
-                    clock = clock,
-                    idGenerator = idGenerator,
-                )
+                confirmUnlessChanged(batchId, acknowledgeUnprocessedBlocks, snapshot)
+            } catch (changed: ChangedUnderneath) {
+                throw ImportConfirmationException(ImportConfirmationFailure.DATA_CHANGED_MEANWHILE, cause = changed)
             } catch (cause: SQLiteException) {
                 // The transaction rolled back, so nothing at all was written.
                 throw ImportConfirmationException(ImportConfirmationFailure.COULD_NOT_SAVE, cause = cause)
@@ -260,4 +318,40 @@ class ImportConfirmationStore(
             createdGameCount = 0,
         )
     }
+
+    /**
+     * The confirmation, behind one reading of everything the snapshot covers.
+     *
+     * The comparison is the whole of the data rather than a count or a checksum
+     * of it. A count agrees with a database holding the right number of the
+     * wrong rows, and the thing being promised is that what is about to be
+     * written into is what was backed up. It costs fifteen queries for the whole
+     * import, however many drafts it has, so PLAN 16's shape rule holds.
+     */
+    private suspend fun confirmUnlessChanged(
+        batchId: EntityId,
+        acknowledgeUnprocessedBlocks: Boolean,
+        snapshot: AutomaticSnapshot,
+    ): Int =
+        database.useWriterConnection { transactor ->
+            transactor.immediateTransaction {
+                val before = backupDataOf(database.backupDao().snapshot())
+                if (before != snapshot.data) throw ChangedUnderneath()
+
+                importDao.confirmDraftBatch(
+                    batchId = batchId,
+                    acknowledgeUnprocessedBlocks = acknowledgeUnprocessedBlocks,
+                    clock = clock,
+                    idGenerator = idGenerator,
+                )
+            }
+        }
 }
+
+/** What a snapshot that did not happen is, in the words the import screen has. */
+private fun failureOf(problem: SnapshotProblem): ImportConfirmationFailure =
+    when (problem) {
+        SnapshotProblem.DATABASE_NOT_READ -> ImportConfirmationFailure.SNAPSHOT_NOT_MADE
+        SnapshotProblem.NOT_WRITTEN -> ImportConfirmationFailure.SNAPSHOT_NOT_WRITTEN
+        SnapshotProblem.NOT_VERIFIED -> ImportConfirmationFailure.SNAPSHOT_NOT_VERIFIED
+    }

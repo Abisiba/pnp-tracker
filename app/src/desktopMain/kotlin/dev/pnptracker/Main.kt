@@ -24,6 +24,7 @@ import dev.pnptracker.data.repository.TaskExportStore
 import dev.pnptracker.data.repository.TaskFromTextStore
 import dev.pnptracker.data.repository.TaskProgressStore
 import dev.pnptracker.domain.backup.DatabaseBackupExporter
+import dev.pnptracker.domain.backup.automatic.VerifiedSnapshotTaker
 import dev.pnptracker.domain.backup.restore.UntrustedBackupReader
 import dev.pnptracker.domain.backup.retention.AutomaticBackupRotation
 import dev.pnptracker.domain.backup.retention.SettingsDrivenHousekeeping
@@ -33,6 +34,7 @@ import dev.pnptracker.platform.backupfiles.AwtBackupSourcePicker
 import dev.pnptracker.platform.backupfiles.DesktopBackupDirectory
 import dev.pnptracker.platform.backupfiles.DesktopBackupFileGateway
 import dev.pnptracker.platform.backupfiles.DesktopBackupSourceGateway
+import dev.pnptracker.platform.backupfiles.DesktopImportSnapshotWriter
 import dev.pnptracker.platform.backupfiles.DesktopSafetyBackupWriter
 import dev.pnptracker.platform.exportfiles.AwtExportFilePicker
 import dev.pnptracker.platform.exportfiles.DesktopExportFileGateway
@@ -96,9 +98,39 @@ fun main() {
             store = ImportDraftStore(database.importDao()),
         )
     val reviewController = ImportReviewController(ImportReviewStore(database.importDao(), database.gameDao(), database.colorDao()))
+    // The one setting this application has, and the only thing that writes it is
+    // the user pressing save. Reading it creates nothing (PLAN 14.4.12).
+    val settingsStore = DesktopSettingsStore(paths.settingsFile)
+    // Clearing old automatic backups away. It reads the number each time rather
+    // than being told when it changes, which is what makes a lowered count take
+    // effect at the next automatic backup and not before (PLAN 14.4.12).
+    val housekeeping =
+        SettingsDrivenHousekeeping(
+            settings = settingsStore,
+            rotation = AutomaticBackupRotation(DesktopBackupDirectory(paths.backupsDirectory)),
+        )
+    // Confirming an import is the one thing in this application that writes a
+    // great many rows at once, so PLAN 14.4.8 puts a backup in front of every
+    // one of them. Every collaborator here is the real one: the same exporter a
+    // manual backup uses, the same atomic writer, and the same untrusted reader
+    // the user's own file goes through — because a snapshot nobody has read back
+    // is not a backup and may not be treated as one.
     val confirmationController =
         ImportConfirmationController(
-            ImportConfirmationStore(database.importDao(), database.gameCellDao(), database.gameDao()),
+            ImportConfirmationStore(
+                database = database,
+                importDao = database.importDao(),
+                gameCellDao = database.gameCellDao(),
+                gameDao = database.gameDao(),
+                snapshots =
+                    VerifiedSnapshotTaker(
+                        exporter = DatabaseBackupExporter(BackupStore(database), AppInfo.Current, Clock.System),
+                        writer = DesktopImportSnapshotWriter(paths.backupsDirectory),
+                        reader = UntrustedBackupReader(TemporaryBackupProbe()),
+                        clock = Clock.System,
+                    ),
+                housekeeping = housekeeping,
+            ),
         )
     // Taking a confirmed import back reads and writes the very same rows the
     // confirmation above wrote, through the very same DAO: PLAN 11.4.4 has one
@@ -143,17 +175,6 @@ fun main() {
     // the safety backup is written by the same atomic writer a manual backup
     // uses, and the replacement is one transaction on the connection already
     // open (PLAN 14.4.3, 14.4.4).
-    // The one setting this application has, and the only thing that writes it is
-    // the user pressing save. Reading it creates nothing (PLAN 14.4.12).
-    val settingsStore = DesktopSettingsStore(paths.settingsFile)
-    // Clearing old automatic backups away. It reads the number each time rather
-    // than being told when it changes, which is what makes a lowered count take
-    // effect at the next automatic backup and not before (PLAN 14.4.12).
-    val housekeeping =
-        SettingsDrivenHousekeeping(
-            settings = settingsStore,
-            rotation = AutomaticBackupRotation(DesktopBackupDirectory(paths.backupsDirectory)),
-        )
     val restoreController =
         RestoreController(
             sources = DesktopBackupSourceGateway(AwtBackupSourcePicker(title = RESTORE_DIALOG_TITLE)),

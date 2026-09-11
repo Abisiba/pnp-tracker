@@ -8,9 +8,9 @@ import dev.pnptracker.data.database.aCell
 import dev.pnptracker.data.database.aGame
 import dev.pnptracker.data.repository.CellTextStore
 import dev.pnptracker.data.repository.DraftEdit
-import dev.pnptracker.data.repository.ImportConfirmationStore
 import dev.pnptracker.data.repository.ImportDraftStore
 import dev.pnptracker.data.repository.ImportReviewStore
+import dev.pnptracker.data.repository.confirmationStore
 import dev.pnptracker.domain.importconfirm.ImportConfirmationException
 import dev.pnptracker.domain.importconfirm.ImportConfirmationFailure
 import dev.pnptracker.domain.importreview.ImportReviewWorkspace
@@ -114,8 +114,7 @@ class ImportReviewEndToEndTest {
     // the order their tasks are written into the cell in.
     private fun review() = ImportReviewStore(importDao, database.gameDao(), database.colorDao(), clock = SteppingClock(moment))
 
-    private fun confirmation() =
-        ImportConfirmationStore(importDao, database.gameCellDao(), database.gameDao(), clock = StoppedClock(moment))
+    private fun confirmation() = confirmationStore(database, importDao, clock = StoppedClock(moment))
 
     /** The whole real import, through the real reader, into this database. */
     private suspend fun importTheFixture(): EntityId {

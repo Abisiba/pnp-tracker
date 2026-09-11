@@ -1,7 +1,7 @@
 package dev.pnptracker.data.database
 
 import androidx.room3.useWriterConnection
-import dev.pnptracker.data.repository.ImportConfirmationStore
+import dev.pnptracker.data.repository.confirmationStore
 import dev.pnptracker.domain.importconfirm.ImportConfirmationException
 import dev.pnptracker.domain.importconfirm.ImportConfirmationFailure
 import dev.pnptracker.domain.model.CellColumnType
@@ -475,14 +475,7 @@ class ImportConfirmationRollbackTest {
         runBlocking {
             given()
             val before = everything()
-            val store =
-                ImportConfirmationStore(
-                    importDao = importDao,
-                    gameCellDao = database.gameCellDao(),
-                    gameDao = database.gameDao(),
-                    idGenerator = IdGenerator.Random,
-                    clock = BrokenClock(),
-                )
+            val store = confirmationStore(database, importDao, clock = BrokenClock())
 
             assertFailsWith<IllegalStateException> { store.confirm(batchId, acknowledgeUnprocessedBlocks = true) }
 

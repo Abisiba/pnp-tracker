@@ -10,6 +10,7 @@ import dev.pnptracker.data.database.fillWithEverything
 import dev.pnptracker.data.repository.BackupStore
 import dev.pnptracker.data.repository.ImportConfirmationStore
 import dev.pnptracker.domain.backup.DatabaseBackupExporter
+import dev.pnptracker.domain.backup.automatic.AutomaticSnapshotTaker
 import dev.pnptracker.domain.backup.backupDocumentOf
 import dev.pnptracker.domain.backup.restore.SAFETY_BACKUP_PREFIX
 import dev.pnptracker.domain.backup.restore.UntrustedBackupReader
@@ -245,27 +246,35 @@ class RetentionAfterRestoreTest {
         }
 
     @Test
-    fun `nothing but a restore has been given housekeeping to do`() {
+    fun `the restore and the import have housekeeping, and the database factory still does not`() {
         // The other half of the same claim, and the half a folder cannot show:
-        // that the import confirmation and the database factory have not been
-        // handed the collaborator at all. PLAN 14.4.8 and 14.4.9 are the next
-        // two slices, and when either lands this is the test that has to be
-        // changed on purpose rather than discovered to have gone quiet.
+        // which pieces have been handed the collaborators at all. This started
+        // out saying that only the restore had them; PLAN 14.4.8's slice added
+        // the import, and it was changed here on purpose rather than left to go
+        // quiet. PLAN 14.4.9 and 14.4.10 are the last of them, and when the
+        // migration gate lands this is again the test to change deliberately.
         // Plain JVM reflection rather than Kotlin's: kotlin-reflect is not a
         // dependency of this project and PLAN 14.1 does not add one for a test.
         val housekeeping = AutomaticBackupHousekeeping::class.java
+        val snapshots = AutomaticSnapshotTaker::class.java
 
-        listOf(ImportConfirmationStore::class.java, ImportConfirmationController::class.java, DatabaseFactory::class.java)
-            .forEach { owner ->
-                val takesIt = owner.constructors.any { made -> made.parameterTypes.any { it == housekeeping } }
-                assertFalse(takesIt, "${'$'}{owner.simpleName} has been given housekeeping before its slice")
-            }
+        fun takes(
+            owner: Class<*>,
+            collaborator: Class<*>,
+        ) = owner.constructors.any { made -> made.parameterTypes.any { it == collaborator } }
 
-        // And the one that has been.
-        assertTrue(
-            RestoreController::class.java.constructors.any { made -> made.parameterTypes.any { it == housekeeping } },
-            "the restore lost its housekeeping",
-        )
+        // Opening a database still writes nothing, and cannot: it has neither.
+        assertFalse(takes(DatabaseFactory::class.java, housekeeping), "the database factory has housekeeping early")
+        assertFalse(takes(DatabaseFactory::class.java, snapshots), "the database factory takes a snapshot early")
+        // The screen above the import has neither either. The guarantee belongs
+        // to the store, so that every caller gets it and not merely this one.
+        assertFalse(takes(ImportConfirmationController::class.java, housekeeping))
+        assertFalse(takes(ImportConfirmationController::class.java, snapshots))
+
+        // And the two that do.
+        assertTrue(takes(RestoreController::class.java, housekeeping), "the restore lost its housekeeping")
+        assertTrue(takes(ImportConfirmationStore::class.java, housekeeping), "the import lost its housekeeping")
+        assertTrue(takes(ImportConfirmationStore::class.java, snapshots), "the import can be confirmed without a backup")
     }
 
     /**

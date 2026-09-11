@@ -179,6 +179,7 @@ import dev.pnptracker.resources.colors_wheel_state
 import dev.pnptracker.resources.column_notes
 import dev.pnptracker.resources.confirm_action
 import dev.pnptracker.resources.confirm_dialog_accept
+import dev.pnptracker.resources.confirm_dialog_backup_note
 import dev.pnptracker.resources.confirm_dialog_body
 import dev.pnptracker.resources.confirm_dialog_cancel
 import dev.pnptracker.resources.confirm_dialog_cancel_note
@@ -192,12 +193,16 @@ import dev.pnptracker.resources.confirm_error_completion_hint_undecided
 import dev.pnptracker.resources.confirm_error_completion_target_required
 import dev.pnptracker.resources.confirm_error_completion_target_unavailable
 import dev.pnptracker.resources.confirm_error_could_not_save
+import dev.pnptracker.resources.confirm_error_data_changed
 import dev.pnptracker.resources.confirm_error_game_hint_undecided
 import dev.pnptracker.resources.confirm_error_no_cells
 import dev.pnptracker.resources.confirm_error_no_drafts
 import dev.pnptracker.resources.confirm_error_not_a_draft
 import dev.pnptracker.resources.confirm_error_pool_missing
 import dev.pnptracker.resources.confirm_error_selection_no_longer_fits
+import dev.pnptracker.resources.confirm_error_snapshot_not_made
+import dev.pnptracker.resources.confirm_error_snapshot_not_verified
+import dev.pnptracker.resources.confirm_error_snapshot_not_written
 import dev.pnptracker.resources.confirm_error_target_missing
 import dev.pnptracker.resources.confirm_error_target_not_task_capable
 import dev.pnptracker.resources.confirm_error_target_unavailable
@@ -1637,6 +1642,10 @@ object Strings {
         val dialogAccept = Res.string.confirm_dialog_accept
         val dialogCancel = Res.string.confirm_dialog_cancel
         val dialogCancelNote = Res.string.confirm_dialog_cancel_note
+
+        /** The one sentence PLAN 14.4.8 asks the confirmation to say about the automatic backup. */
+        val dialogBackupNote = Res.string.confirm_dialog_backup_note
+
         val running = Res.string.confirm_running
 
         /** Takes how many cells are still unreviewed. */
@@ -1670,6 +1679,10 @@ object Strings {
         val errorCompletionTargetRequired = Res.string.confirm_error_completion_target_required
         val errorCompletionTargetUnavailable = Res.string.confirm_error_completion_target_unavailable
         val errorCouldNotSave = Res.string.confirm_error_could_not_save
+        val errorSnapshotNotMade = Res.string.confirm_error_snapshot_not_made
+        val errorSnapshotNotWritten = Res.string.confirm_error_snapshot_not_written
+        val errorSnapshotNotVerified = Res.string.confirm_error_snapshot_not_verified
+        val errorDataChanged = Res.string.confirm_error_data_changed
     }
 
     /** Choosing which cell one draft's task will be written in. */

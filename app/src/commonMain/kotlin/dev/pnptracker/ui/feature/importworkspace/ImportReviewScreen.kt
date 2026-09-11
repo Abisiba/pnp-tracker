@@ -1957,6 +1957,11 @@ private fun ConfirmationDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(stringResource(Strings.Confirm.dialogBody, taskCount))
+                // PLAN 14.4.8 asks for one plain sentence about the automatic
+                // backup, in the same words and the same place every time — not
+                // a technical note, not a file name, and not something that only
+                // appears when something goes wrong.
+                Text(stringResource(Strings.Confirm.dialogBackupNote))
                 Text(
                     text = stringResource(Strings.Confirm.dialogCancelNote),
                     style = MaterialTheme.typography.labelMedium,

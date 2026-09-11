@@ -196,6 +196,42 @@ class ImportConfirmationQueryCountTest {
         return ran(driver.stop())
     }
 
+    /** The same, through the store — so the automatic backup is counted too. */
+    private suspend fun confirmThroughTheStore(batchId: EntityId): Map<String, Int> {
+        val store =
+            confirmationStore(
+                database = database,
+                importDao = importDao,
+                snapshots = LiveSnapshotTaker(database),
+                clock = StoppedClock(moment),
+            )
+        driver.start()
+        store.confirm(batchId, acknowledgeUnprocessedBlocks = true)
+        return ran(driver.stop())
+    }
+
+    @Test
+    fun `the automatic backup and its guard cost the same for one draft as for forty-two`() =
+        runBlocking<Unit> {
+            // PLAN 14.4.8 adds two whole readings of the database to every
+            // confirmation: one to make the backup and one, inside the
+            // transaction, to prove the database has not moved since. Two is the
+            // price and it is a fixed one — what PLAN 16 rules out is a cost per
+            // draft, and this is where that stays ruled out.
+            val one = confirmThroughTheStore(aBatch(1))
+            val many = confirmThroughTheStore(aBatch(42))
+
+            assertEquals(decisions(one), decisions(many), "the backup or its guard grew with the import")
+            // Two readings of a fifteen-table snapshot, plus the confirmation's
+            // own two questions of `game_cells`.
+            assertEquals(2 + 2, many["SELECT game_cells"], "the snapshot was read a different number of times")
+            assertEquals(2 + 1, many["SELECT cell_segments"])
+            assertEquals(2, many["SELECT colors"], "the backup read the catalogue more than once")
+            // And the writing is untouched: the guard reads, and nothing else.
+            assertEquals(42, many["INSERT tasks"])
+            assertEquals(1, many["UPDATE import_batches"])
+        }
+
     @Test
     fun `a batch of forty-two asks exactly what a batch of one asks`() =
         runBlocking<Unit> {

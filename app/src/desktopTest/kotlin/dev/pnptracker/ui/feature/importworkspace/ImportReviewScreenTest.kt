@@ -8,6 +8,8 @@ import dev.pnptracker.data.repository.GameChoice
 import dev.pnptracker.data.repository.ImportConfirmation
 import dev.pnptracker.data.repository.ImportReview
 import dev.pnptracker.domain.colors.ColorSummary
+import dev.pnptracker.domain.importconfirm.ImportConfirmationException
+import dev.pnptracker.domain.importconfirm.ImportConfirmationFailure
 import dev.pnptracker.domain.importconfirm.ImportConfirmationResult
 import dev.pnptracker.domain.importconfirm.ImportConfirmationSummary
 import dev.pnptracker.domain.importconfirm.TargetCellChoice
@@ -30,8 +32,13 @@ import dev.pnptracker.ui.ComposeSceneHarness
 import dev.pnptracker.ui.contentDescriptions
 import dev.pnptracker.ui.theme.PnpTrackerTheme
 import dev.pnptracker.ui.theme.ThemeMode
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -161,6 +168,92 @@ class ImportReviewScreenTest {
                 words.any { "geri alınabilir" in it },
                 "the confirmation does not say the import can be taken back: $words",
             )
+        }
+    }
+
+    @Test
+    fun `the question says an automatic backup will be taken first`() {
+        // PLAN 14.4.8: one plain sentence, in the same place every time, before
+        // the user agrees to anything. Not a warning and not a technical note —
+        // the whole of what it has to convey is that they are not about to lose
+        // what they have.
+        val one = block()
+        val review = FakeReview(workspace(listOf(one), listOf(draftOf(one.id))))
+        onScreen(review) { harness, _, confirmation ->
+            confirmation.ask()
+            harness.render()
+            harness.render()
+
+            val words = harness.writtenText()
+            assertTrue(words.any { "otomatik bir yedeği alınır" in it }, "the backup is never mentioned: $words")
+            assertTrue(words.any { "Ayarlar" in it }, "the user is not told where the backup can be used: $words")
+            // And nothing technical: no file name, no folder, no format. ("/"
+            // is not in the list because the screen behind the question counts
+            // processed cells as "0 / 1"; a path would show up as one of these.)
+            listOf("pnp-otomatik", ".json", "JSON", "backups", "/home", "XDG").forEach { leak ->
+                assertTrue(words.none { leak in it }, "$leak leaked into the question: $words")
+            }
+        }
+    }
+
+    @Test
+    fun `every reason a backup stops an import has its own sentence, and none of them leak`() {
+        val refusals =
+            mapOf(
+                ImportConfirmationFailure.SNAPSHOT_NOT_MADE to "Otomatik yedek alınamadı",
+                ImportConfirmationFailure.SNAPSHOT_NOT_WRITTEN to "diske yazılamadı",
+                ImportConfirmationFailure.SNAPSHOT_NOT_VERIFIED to "doğrulanamadı",
+                ImportConfirmationFailure.DATA_CHANGED_MEANWHILE to "verileriniz değişti",
+            )
+
+        refusals.forEach { (failure, expected) ->
+            val one = block()
+            val review = FakeReview(workspace(listOf(one), listOf(draftOf(one.id))))
+            val store = FakeConfirmation()
+            store.failWith = failure
+            onScreen(review, store) { harness, _, confirmation ->
+                runBlocking { confirmation.confirm(batchId) }
+                harness.render()
+                harness.render()
+
+                val words = harness.writtenText()
+                assertTrue(words.any { expected in it }, "$failure: $words")
+                // Whatever else it says, it says these two things: nothing was
+                // written, and the import is still there to try again.
+                assertTrue(words.any { "taslak" in it || "başlatılmadı" in it }, "$failure: $words")
+                listOf("SNAPSHOT", "DATA_CHANGED", "Exception", "SELECT", "/home", ".json").forEach { leak ->
+                    assertTrue(words.none { leak in it }, "$leak leaked for $failure: $words")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `while the backup and the import are running the screen says so and takes no second press`() {
+        // The automatic backup is the slowest part of a confirmation — it reads
+        // the whole database, writes a file and reads it back — so this is the
+        // window a second press really arrives in. PLAN 14.4.8 allows one
+        // snapshot and one confirmation however many times the button is hit,
+        // and the screen's part of that is to stop offering it.
+        val one = block()
+        val review = FakeReview(workspace(listOf(one), listOf(draftOf(one.id))))
+        val store = FakeConfirmation()
+        store.gate = CompletableDeferred()
+        onScreen(review, store) { harness, _, confirmation ->
+            confirmation.ask()
+            harness.render()
+            val running = CoroutineScope(Job() + Dispatchers.Unconfined).launch { confirmation.confirm(batchId) }
+            harness.render()
+            harness.render()
+
+            assertTrue(confirmation.isBusy, "the confirmation was over before anything could be seen")
+            assertTrue(harness.writtenText().any { "Onaylanıyor" in it }, "nothing says the import is running")
+
+            runBlocking { confirmation.confirm(batchId) }
+            assertEquals(1, store.confirms, "a second press started a second confirmation")
+
+            store.gate?.complete(Unit)
+            runBlocking { running.join() }
         }
     }
 
@@ -703,6 +796,16 @@ class ImportReviewScreenTest {
     }
 
     private inner class FakeConfirmation : ImportConfirmation {
+        /** What the next confirmation refuses with; null means it goes through. */
+        var failWith: ImportConfirmationFailure? = null
+
+        /** Held open, this is what "a confirmation is in flight" looks like on screen. */
+        var gate: CompletableDeferred<Unit>? = null
+
+        /** How many confirmations reached the store, counted before anything waits. */
+        var confirms = 0
+            private set
+
         override fun observeTargetCells(): Flow<List<TargetCellChoice>> =
             MutableStateFlow(listOf(TargetCellChoice(cellId, gameId, "Wingspan", CellColumnType.THREE_D)))
 
@@ -727,6 +830,11 @@ class ImportReviewScreenTest {
         override suspend fun confirm(
             batchId: EntityId,
             acknowledgeUnprocessedBlocks: Boolean,
-        ): ImportConfirmationResult = ImportConfirmationResult(batchId, 0, 0)
+        ): ImportConfirmationResult {
+            confirms++
+            gate?.await()
+            failWith?.let { throw ImportConfirmationException(it) }
+            return ImportConfirmationResult(batchId, 0, 0)
+        }
     }
 }

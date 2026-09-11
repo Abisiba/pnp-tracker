@@ -69,14 +69,7 @@ class ImportConfirmationStoreTest {
         directory.delete()
     }
 
-    private fun newStore(idGenerator: IdGenerator) =
-        ImportConfirmationStore(
-            importDao = database.importDao(),
-            gameCellDao = database.gameCellDao(),
-            gameDao = database.gameDao(),
-            idGenerator = idGenerator,
-            clock = StoppedClock(moment),
-        )
+    private fun newStore(idGenerator: IdGenerator) = confirmationStore(database, idGenerator = idGenerator, clock = StoppedClock(moment))
 
     // ----------------------------------------------------------------- setup
 
@@ -718,13 +711,7 @@ class ImportConfirmationStoreTest {
             // hundred. Counting the reads is the only way to hold that: the
             // answers below would look the same either way.
             val counter = CountingImportDao(database.importDao())
-            val counted =
-                ImportConfirmationStore(
-                    importDao = counter,
-                    gameCellDao = database.gameCellDao(),
-                    gameDao = database.gameDao(),
-                    clock = StoppedClock(moment),
-                )
+            val counted = confirmationStore(database, importDao = counter, clock = StoppedClock(moment))
 
             val summary = assertNotNull(counted.summarize(fixture.batchId))
 

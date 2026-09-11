@@ -460,6 +460,7 @@
     <string name="confirm_dialog_accept">Onayla</string>
     <string name="confirm_dialog_cancel">Vazgeç</string>
     <string name="confirm_dialog_cancel_note">Vazgeçmek hiçbir şey yazmaz.</string>
+    <string name="confirm_dialog_backup_note">Onaylamadan önce verilerinizin otomatik bir yedeği alınır; bu yedeği daha sonra Ayarlar ekranından geri yükleyebilirsiniz.</string>
     <string name="confirm_running">Onaylanıyor…</string>
     <string name="confirm_unprocessed_warning">Henüz incelemediğiniz %1$d hücre var. Onaylamak bu hücreleri görev hâline getirmez.</string>
     <string name="confirm_unprocessed_acknowledge">İncelenmemiş hücrelere rağmen devam etmek istiyorum.</string>
@@ -482,6 +483,10 @@
     <string name="confirm_error_pool_missing">Bu taslağa üretim havuzu seçilmedi.</string>
     <string name="confirm_error_tracking_missing">Bu taslağa takip biçimi seçilmedi.</string>
     <string name="confirm_error_could_not_save">Onay kaydedilemedi; hiçbir görev oluşturulmadı ve içe aktarma taslak olarak kaldı.</string>
+    <string name="confirm_error_snapshot_not_made">Otomatik yedek alınamadı, bu yüzden içe aktarma başlatılmadı. Hiçbir görev oluşturulmadı ve içe aktarma taslak olarak kaldı. Biraz sonra tekrar deneyin.</string>
+    <string name="confirm_error_snapshot_not_written">Otomatik yedek diske yazılamadı, bu yüzden içe aktarma başlatılmadı. Diskte yer olduğundan emin olup tekrar deneyin; içe aktarma taslak olarak duruyor.</string>
+    <string name="confirm_error_snapshot_not_verified">Otomatik yedek yazıldı fakat geri okunup doğrulanamadı, bu yüzden içe aktarma başlatılmadı. Hiçbir göreviniz değişmedi; tekrar deneyin.</string>
+    <string name="confirm_error_data_changed">Yedek alındıktan sonra verileriniz değişti, bu yüzden onay hiçbir şey yazmadan durduruldu. İçe aktarma taslak olarak duruyor; tekrar onaylayın.</string>
     <string name="confirm_error_color_unavailable">Bu taslağa seçilmiş bir renk artık katalogda yok; rengi yeniden seçin.</string>
     <string name="confirm_error_selection_no_longer_fits">Bu taslağın seçtiği metin, geldiği hücreye artık uymuyor.</string>
     <string name="confirm_error_completion_target_required">Yeşil oyun hücresi kabul edilmiş fakat hangi oyunu bitirdiği seçilmemiş. Önce oyunu seçin.</string>
