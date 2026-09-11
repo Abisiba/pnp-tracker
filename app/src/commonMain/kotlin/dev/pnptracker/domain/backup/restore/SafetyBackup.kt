@@ -1,6 +1,7 @@
 package dev.pnptracker.domain.backup.restore
 
 import dev.pnptracker.domain.backup.BACKUP_EXTENSION
+import dev.pnptracker.domain.backup.backupStampOf
 import dev.pnptracker.domain.time.LocalMoment
 
 /** What every automatic pre-restore backup is called before the date. */
@@ -27,11 +28,10 @@ const val SAFETY_BACKUP_NAME_ATTEMPTS: Int = 16
  * quietly replace each other — the whole reason one exists is that it is
  * somebody's way back.
  *
- * Built by padding numbers rather than by formatting them, for the same reason
- * the manual name is: a formatter follows the machine's language, and the same
- * moment has to produce the same name in every locale. Nothing from the data is
- * in it — not a game, not a count, not the machine — because a file name travels
- * further than a file's contents do.
+ * The stamp is [backupStampOf]'s, shared with every other automatic name, so all
+ * of them sort against each other by the same rule (PLAN 14.4.11). Nothing from
+ * the data is in it — not a game, not a count, not the machine — because a file
+ * name travels further than a file's contents do.
  *
  * @param attempt 1 for the plain name, 2 upwards for the ones that follow it.
  */
@@ -40,14 +40,8 @@ fun safetyBackupFileName(
     attempt: Int = 1,
 ): String {
     require(attempt >= 1) { "There is no attempt before the first" }
-    val year = moment.year.toString().padStart(4, '0')
-    val month = moment.month.toString().padStart(2, '0')
-    val day = moment.dayOfMonth.toString().padStart(2, '0')
-    val hour = moment.hour.toString().padStart(2, '0')
-    val minute = moment.minute.toString().padStart(2, '0')
-    val second = moment.second.toString().padStart(2, '0')
     val ordinal = if (attempt == 1) "" else "-$attempt"
-    return "$SAFETY_BACKUP_PREFIX$year-$month-$day-$hour$minute$second$ordinal$BACKUP_EXTENSION"
+    return "$SAFETY_BACKUP_PREFIX${backupStampOf(moment)}$ordinal$BACKUP_EXTENSION"
 }
 
 /**
