@@ -19,13 +19,17 @@ import dev.pnptracker.domain.backup.canonicalBackupDataJson
 import dev.pnptracker.domain.backup.restore.BackupReadResult
 import dev.pnptracker.domain.backup.restore.SAFETY_BACKUP_PREFIX
 import dev.pnptracker.domain.backup.restore.UntrustedBackupReader
+import dev.pnptracker.domain.backup.retention.AutomaticBackupRotation
+import dev.pnptracker.domain.backup.retention.SettingsDrivenHousekeeping
 import dev.pnptracker.domain.backup.sha256Of
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.platform.backupfiles.BackupSourcePicker
+import dev.pnptracker.platform.backupfiles.DesktopBackupDirectory
 import dev.pnptracker.platform.backupfiles.DesktopBackupSourceGateway
 import dev.pnptracker.platform.backupfiles.DesktopSafetyBackupWriter
 import dev.pnptracker.platform.backupfiles.PathBackupInput
+import dev.pnptracker.platform.settings.DesktopSettingsStore
 import dev.pnptracker.ui.feature.settings.RestoreController
 import dev.pnptracker.ui.feature.settings.RestoreScreenState
 import kotlinx.coroutines.runBlocking
@@ -244,10 +248,23 @@ class RestoreSmokeTest {
             )
             assertTrue(names.none { it.endsWith(".part") }, "a half-written file was left behind: $names")
             probeRoots.forEach { assertTrue(Files.notExists(it), "a throwaway database outlived the smoke") }
-            assertTrue(Files.notExists(paths.settingsFile), "the smoke wrote settings it has no business writing")
+            // Three restores have now run through the real housekeeping, which
+            // reads the retention number every time. Reading it creates nothing:
+            // the settings file appears when somebody presses save and at no
+            // other moment (PLAN 14.4.12).
+            assertTrue(Files.notExists(paths.settingsFile), "a restore created the settings file by itself")
         }
 
-    /** The controller the settings screen would drive, pointed at one file. */
+    /**
+     * The controller the settings screen would drive, pointed at one file.
+     *
+     * The housekeeping is the real one, settings file and all: the retention
+     * number comes from [DesktopSettingsStore] and the clearing from
+     * [AutomaticBackupRotation] over the real folder. That is what lets this
+     * smoke say something worth saying about the settings file — a whole restore
+     * runs through the thing that reads it, and the file still does not exist
+     * afterwards (PLAN 14.4.12).
+     */
     private fun controllerFor(
         file: Path,
         paths: XdgAppPaths,
@@ -259,6 +276,11 @@ class RestoreSmokeTest {
         exporter = DatabaseBackupExporter(BackupStore(database), AppInfo.Current, Clock.System),
         safety = DesktopSafetyBackupWriter(paths.backupsDirectory),
         restorer = LiveBackupRestorer(database),
+        housekeeping =
+            SettingsDrivenHousekeeping(
+                settings = DesktopSettingsStore(paths.settingsFile),
+                rotation = AutomaticBackupRotation(DesktopBackupDirectory(paths.backupsDirectory)),
+            ),
         clock = Clock.System,
     )
 

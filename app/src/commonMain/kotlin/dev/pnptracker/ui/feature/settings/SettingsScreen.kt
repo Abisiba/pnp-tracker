@@ -55,7 +55,9 @@ internal val MaxTextWidth = 640.dp
  * The two actions the plan names, in the order it names them: save everything to
  * a file, and put a file back over everything. They sit in one section because
  * they are one subject and because the second one is only ever as good as the
- * first.
+ * first. Under them is the one setting this application has — how many of the
+ * backups it takes by itself to keep (PLAN 14.4.12) — which belongs here for the
+ * same reason: it is about the same files.
  *
  * The whole screen scrolls, so a short window or a large font never puts either
  * action, or the answer to a question, out of reach.
@@ -64,6 +66,7 @@ internal val MaxTextWidth = 640.dp
 fun SettingsScreen(
     controller: BackupController,
     restoreController: RestoreController,
+    retentionController: RetentionController,
     modifier: Modifier = Modifier,
 ) {
     val texts = textsOf(Screen.Settings)
@@ -84,6 +87,7 @@ fun SettingsScreen(
         )
         BackupSection(controller, modifier = Modifier.padding(top = 12.dp))
         RestoreSection(restoreController, modifier = Modifier.padding(top = 20.dp))
+        RetentionSection(retentionController, modifier = Modifier.padding(top = 20.dp))
     }
 }
 

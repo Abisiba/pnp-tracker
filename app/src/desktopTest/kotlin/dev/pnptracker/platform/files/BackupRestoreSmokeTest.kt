@@ -173,6 +173,8 @@ class BackupRestoreSmokeTest {
             probeRoots.forEach { root ->
                 assertTrue(Files.notExists(root), "the probe left a database behind at the end of the smoke")
             }
-            assertTrue(Files.notExists(paths.settingsFile), "the smoke wrote settings it has no business writing")
+            // Reading and checking a backup is not choosing a setting; the
+            // settings file comes from a save and nothing else (PLAN 14.4.12).
+            assertTrue(Files.notExists(paths.settingsFile), "reading a backup created the settings file")
         }
 }

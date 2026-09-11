@@ -60,6 +60,7 @@ import dev.pnptracker.ui.feature.pools.PoolControllers
 import dev.pnptracker.ui.feature.pools.PoolScreen
 import dev.pnptracker.ui.feature.settings.BackupController
 import dev.pnptracker.ui.feature.settings.RestoreController
+import dev.pnptracker.ui.feature.settings.RetentionController
 import dev.pnptracker.ui.feature.settings.SettingsScreen
 import dev.pnptracker.ui.textsOf
 import dev.pnptracker.ui.theme.ThemeMode
@@ -89,6 +90,7 @@ fun AppScaffold(
     exportController: ExportController,
     backupController: BackupController,
     restoreController: RestoreController,
+    retentionController: RetentionController,
     colorCatalogueController: ColorCatalogueController,
     poolControllers: PoolControllers,
     historyController: HistoryController,
@@ -127,7 +129,7 @@ fun AppScaffold(
                         )
                     Screen.History -> HistoryScreen(historyController)
                     Screen.Colors -> ColorCatalogueScreen(colorCatalogueController)
-                    Screen.Settings -> SettingsScreen(backupController, restoreController)
+                    Screen.Settings -> SettingsScreen(backupController, restoreController, retentionController)
                     Screen.Import ->
                         ImportSection(importController, reviewController, confirmationController, rollbackController)
                     // Keyed by the pool, so moving between two of them starts the

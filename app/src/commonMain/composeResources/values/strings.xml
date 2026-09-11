@@ -617,6 +617,35 @@
     <string name="restore_error_references">Yedeğin kayıtları veritabanına olduğu gibi yazılamadı ve tamamı geri alındı. Verileriniz işlemden önceki hâlinde.</string>
     <string name="restore_error_not_verified">Geri yükleme yapıldı ama sonuç doğrulanamadı. Uygulamayı kapatıp yeniden açın; gerekirse aşağıdaki güvenlik yedeğini geri yükleyin.</string>
     <string name="restore_error_safety_kept">İşlemden önceki verileriniz %1$s dosyasında duruyor.</string>
+
+    <!-- Settings: how many automatic backups to keep (PLAN 12.16, 14.4.12) -->
+    <string name="retention_section_title">Otomatik yedeklerin saklanması</string>
+    <string name="retention_explains">Uygulama bazı işlemlerden önce kendiliğinden yedek alır. Bu yedekler Ayarlar ekranından geri yüklenebilir.</string>
+    <string name="retention_scope_note">Sayı üç tür için ayrı ayrı uygulanır: içe aktarma öncesi, geri yükleme öncesi ve sürüm yükseltme öncesi alınan yedekler. Bir türdeki yoğunluk başka bir türün yedeklerini eksiltmez.</string>
+    <string name="retention_manual_note">Kendi aldığınız yedekler bu sayıya dâhil değildir ve hiçbir zaman kendiliğinden silinmez.</string>
+    <string name="retention_delay_note">Sayıyı azaltmak dosyaları o anda silmez. Yeni sayı kaydedilir ve fazlası, bir sonraki otomatik yedek başarıyla alındıktan sonra temizlenir.</string>
+    <string name="retention_loading">Ayar okunuyor…</string>
+    <string name="retention_count_label">Saklanacak otomatik yedek sayısı</string>
+    <string name="retention_range_hint">1 ile 50 arasında bir sayı yazın. Varsayılan 7\'dir.</string>
+    <string name="retention_current">Şu anda her tür için en yeni %1$s yedek saklanıyor.</string>
+    <string name="retention_decrease">Saklanacak yedek sayısını bir azalt</string>
+    <string name="retention_increase">Saklanacak yedek sayısını bir artır</string>
+    <string name="retention_save">Sayıyı kaydet</string>
+    <string name="retention_saving">Sayı kaydediliyor…</string>
+    <string name="retention_saved">Saklanacak otomatik yedek sayısı %1$s olarak kaydedildi.</string>
+    <string name="retention_invalid">Sayı 1 ile 50 arasında olmalıdır. Otomatik yedekleme kapatılamaz.</string>
+
+    <string name="retention_problem_title">Ayar dosyanız kullanılamadı</string>
+    <string name="retention_problem_could_not_read">Ayar dosyası okunamadı.</string>
+    <string name="retention_problem_not_expected_shape">Ayar dosyasının içeriği tanınmadı.</string>
+    <string name="retention_problem_version">Ayar dosyası bu sürümün tanımadığı bir biçimde.</string>
+    <string name="retention_problem_value">Ayar dosyasındaki sayı geçerli aralıkta değil.</string>
+    <string name="retention_problem_default_note">Şimdilik varsayılan %1$s kullanılıyor. Dosyanız olduğu gibi bırakıldı; yeni bir sayı kaydederseniz üzerine yazılır.</string>
+
+    <string name="retention_error_title">Sayı kaydedilemedi</string>
+    <string name="retention_error_not_writable">Ayar klasörüne yazılamıyor. Klasörün izinlerini ve diskte yer olup olmadığını denetleyin.</string>
+    <string name="retention_error_could_not_write">Yazma tamamlanamadı. Biraz sonra tekrar deneyin.</string>
+    <string name="retention_error_kept">Önceki ayarınız olduğu gibi duruyor; uygulama %1$s saklamaya devam ediyor.</string>
     <string name="colors_loading">Renk kataloğu yükleniyor…</string>
     <string name="colors_count">Katalogda %1$s renk var.</string>
     <string name="colors_create">Yeni renk ekle</string>

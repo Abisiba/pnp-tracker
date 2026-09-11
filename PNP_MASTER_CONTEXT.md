@@ -7,10 +7,9 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** Faz 3 / İş 4'ün **birinci dilimi** (otomatik yedek adları,
-> sahiplik kanıtı ve tür başına döngüsel saklama motoru) tamamlandıktan sonra.
-> İş 2 ve İş 3 bütünüyle bitmiştir; İş 4'ün dört diliminden **biri**
-> yapılmıştır. İş 3'ün bağlayıcı metni PLAN `14.4.1`–`14.4.6`, `12.16` ve
+> **Son güncelleme:** Faz 3 / İş 4'ün **ikinci dilimi** (sürümlü `settings.json`
+> ve saklama sayısı ayarı) tamamlandıktan sonra. İş 2 ve İş 3 bütünüyle
+> bitmiştir; İş 4'ün dört diliminden **ikisi** yapılmıştır. İş 3'ün bağlayıcı metni PLAN `14.4.1`–`14.4.6`, `12.16` ve
 > `16.`'dadır; uygulanan hâli §25.1'dedir. **İş 4'ün** bağlayıcı metni PLAN
 > `14.4.7`–`14.4.13`, `11.4.2`, `12.16` ve `16.`'dadır; kararların özeti ve
 > uygulanan hâli §25.2'dedir.
@@ -29,24 +28,27 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-HEAD (bu commit öncesi): a4c6761e0ddc9a36ef8b05ca92c267e903ffcfc6
-önceki commit         : docs: define automatic snapshot and retention semantics
+HEAD (bu commit öncesi): 444aa3c2fca325eb8ec46848e741b848715f4983
+önceki commit         : feat(backup): keep a bounded number of automatic backups
 working tree          : temiz
 Room şema sürümü      : 8   (bu commit'te DEĞİŞMEDİ)
 şema dosyaları        : 1.json … 8.json  hepsi bayt bayt aynı
-test durumu           : 3248 test / 0 failure / 0 error / 0 skipped  (211 sınıf)
-                        [önceki commit: 3203 test / 206 sınıf]
-üretim kodu           : 284 dosya
-test kodu             : 224 dosya
+test durumu           : 3301 test / 0 failure / 0 error / 0 skipped  (216 sınıf)
+                        [önceki commit: 3248 test / 211 sınıf]
+üretim kodu           : 289 dosya
+test kodu             : 228 dosya
 PLAN.md               : bu commit'te DEĞİŞMEDİ
 ```
 
-**Bu commit Faz 3 / İş 4'ün birinci dilimidir.** Otomatik yedeklerin adları,
-sahipliklerinin kanıtlanması ve üç bağımsız kota için döngüsel saklama motoru
-yazıldı. **Hiçbir üretim tetikleyicisi bağlanmadı:** ne içe aktarma onayı, ne
-migration, ne de `Ayarlar` ekranı bu koda dokunuyor — `Main.kt` değişmedi ve
-`AutomaticBackupRotation` üretim yollarından çağrılmıyor. `settings.json` hâlâ
-yalnız bir yoldur; okunmuyor ve yazılmıyor (Dilim 2).
+**Bu commit Faz 3 / İş 4'ün ikinci dilimidir.** `settings.json` sözleşmesi, atomik
+ayar deposu ve `Ayarlar` ekranındaki gerçek, kalıcı saklama sayısı yazıldı; Dilim
+1'in rotation motoru bu sayıya bağlandı ve **restore öncesi güvenlik yedeğinin**
+ardından çalışıyor.
+
+**İçe aktarma ve migration tetikleyicileri hâlâ bağlanmadı** (Dilim 3 ve 4).
+`ImportConfirmationStore`, `ImportConfirmationController` ve `DatabaseFactory`
+housekeeping işbirlikçisini **almıyor**; bunu bir test yapısal olarak iddia
+ediyor.
 
 Kullanıcının gördüğü akış ve sırası:
 
@@ -497,8 +499,8 @@ Sıra PLAN 12.1'in sırasıdır. `Geçmiş` koşulsuzdur: içi boşken de sideba
 boşluğunu ekranda söyler — `Özel` havuzun gizlenme kuralı ona uygulanmaz.
 `Ayarlar` sırada sondadır ve PLAN 12.16'nın saydığı iki eylemi taşır: `Yedek
 oluştur` ve `Yedekten geri yükle`. İş 4 / Dilim 2 buraya **tek** bir ayar
-ekleyecektir — saklanacak otomatik yedek sayısı (`1..50`, varsayılan `7`); başka
-ayar alanı eklenmez (§25.2).
+ekledi — saklanacak otomatik yedek sayısı (`1..50`, varsayılan `7`, `0`
+geçersiz); başka ayar alanı eklenmez (§25.2).
 
 ## PLAN'da tanımlı, henüz yapılmamış olanlar
 
@@ -1642,10 +1644,10 @@ edilmiş kalıptır; geri alma motoru da (İş 2 / Dilim 2) bilerek bağlanmamı
 
 ---
 
-# 25.2 OTOMATİK SNAPSHOT VE DÖNGÜSEL SAKLAMA  *(Faz 3 / İş 4 — DİLİM 1 BİTTİ)*
+# 25.2 OTOMATİK SNAPSHOT VE DÖNGÜSEL SAKLAMA  *(Faz 3 / İş 4 — DİLİM 1 VE 2 BİTTİ)*
 
 Bağlayıcı metin PLAN `14.4.7`–`14.4.13`'tedir. Aşağısı alınan kararların özeti,
-gerekçeleri ve **Dilim 1'de uygulanan hâlidir**. Dilim 2, 3 ve 4 yapılmamıştır.
+gerekçeleri ve **Dilim 1 ile 2'de uygulanan hâlidir**. Dilim 3 ve 4 yapılmamıştır.
 
 ## İki tetikleyici, üç artefakt türü
 
@@ -1891,8 +1893,9 @@ cp ile DB + -wal + -shm kopyalama      REDDEDİLDİ  atomik değil, tutarlı sna
    hiçbir tetikleyici bağlı değil; kullanıcıya açılan bir şey yok
    commit: feat(backup): keep a bounded number of automatic backups
 
-2  Sürümlü settings.json + saklama sayısı Ayarlar UI'sı ........... YAPILMADI
-   ayar gerçekten kaydedilir ve gerçekten uygulanır
+2  Sürümlü settings.json + saklama sayısı Ayarlar UI'sı ........... TAMAM
+   ayar gerçekten kaydedilir ve gerçekten uygulanır; rotation restore
+   öncesi güvenlik yedeğinin ardından bu sayıyla çalışır
    commit: feat(settings): let the number of automatic backups be chosen
 
 3  Her XLSX/CSV confirmation öncesi JSON snapshot + yarış koruması  YAPILMADI
@@ -2017,6 +2020,111 @@ otomatik yedeği YAZAN kod                 Dilim 3 ve 4 (bu dilim yalnız SİLER
 `Main.kt` değişmedi; `AutomaticBackupRotation` ve `DesktopBackupDirectory` hiçbir
 üretim yolundan çağrılmıyor. Bu, İş 2 / Dilim 2 ve İş 3 / Dilim 3'teki kabul
 edilmiş kalıptır (§33 R3).
+
+---
+
+## İş 4 / Dilim 2'de uygulanan hâli
+
+```text
+domain/settings/AutomaticBackupSettings.kt        belge, settingsJson, dört
+                                                  SettingsProblem, iki
+                                                  SettingsWriteFailure, SettingsStore,
+                                                  settingsIn / settingsDocumentFor
+domain/backup/retention/AutomaticBackupHousekeeping.kt  AutomaticBackupHousekeeping +
+                                                  SettingsDrivenHousekeeping
+ui/feature/settings/RetentionScreenState.kt       Loading · Ready · Saving · Failed
+ui/feature/settings/RetentionController.kt        akışın kendisi
+ui/feature/settings/RetentionSection.kt           Ayarlar'daki alan, adımlar ve kayıt
+desktopMain/platform/settings/DesktopSettingsStore.kt  tek dosya sistemi teması
+```
+
+### Dosya yalnız kaydetmeyle oluşur
+
+```text
+okuma                 dosya YOKSA varsayılan 7 ve dosya OLUŞTURULMAZ
+ekranı açmak          yazmaz
+yedek almak           yazmaz
+yedek okumak          yazmaz
+restore               yazmaz  (housekeeping sayıyı her seferinde okur)
+rotation              yazmaz
+kullanıcı Kaydet'e basar → dosya ATOMİK olarak yazılır; tek yazan yol budur
+```
+
+Bu iddiayı Dilim 1'de duran dört test koruyordu. Silinmediler: her biri artık
+**daha güçlü** bir şey söylüyor, çünkü artık dosyanın bir sahibi var.
+`RestoreSmokeTest` ve `RetentionSmokeTest` gerçek `DesktopSettingsStore`'u
+akışa soktu — üç restore ayar dosyasını okuyan koddan geçiyor ve dosya yine de
+oluşmuyor.
+
+### Sözleşme ve okuma politikası
+
+```json
+{"formatVersion":1,"automaticBackupCount":7}
+```
+
+```text
+yer            $XDG_CONFIG_HOME/pnp-tracker/settings.json, düz UTF-8 JSON
+aralık         1..50 · varsayılan 7 · 0 GEÇERSİZ (koruma kapatılamaz)
+bilinmeyen alan YOK SAYILIR — yedeğin katı politikasının bilinçli TERSİ
+tırnaklı sayı  `"7"` yedi olarak okunur (ÖLÇÜLDÜ, varsayılmadı; kendi testi var)
+bozuk dosya    varsayılan 7 + Ayarlar'da açık uyarı + dosya OLDUĞU GİBİ kalır
+dört sebep     COULD_NOT_READ · NOT_THE_EXPECTED_SHAPE · VERSION_NOT_SUPPORTED
+               · VALUE_OUT_OF_RANGE — dördü de AYRI Türkçe cümle
+yazma hatası   eski dosya bayt bayt kalır, çalışan değer değişmez
+               iki SettingsWriteFailure: NOT_WRITABLE · COULD_NOT_WRITE
+               (atomik yazıcının beş ayrımı ikiye indirildi: bir ayar için
+                kullanıcının yapacağı iki farklı şey var)
+eşzamanlılık   store'da Mutex + controller'da isBusy — iki bağımsız koruma
+```
+
+### Ayarın veritabanı dışında olması
+
+Bilinçli ve iki sebebi var: yedeğin kapsamı 15 tablodur, dolayısıyla ayar bir
+tabloda dursaydı bir **geri yükleme kullanıcının ayarını da sessizce
+değiştirirdi**; ve Dilim 4'ün açılış kapısının bu sayıya veritabanı açılmadan
+önce ulaşması gerekiyor.
+
+### Ayar → rotation bağlantısı
+
+```text
+SettingsDrivenHousekeeping  sayıyı HER SEFERİNDE okur, hatırlamaz
+                            → küçültülmüş sayı bir sonraki otomatik yedekte
+                              kendiliğinden geçerli olur; kimsenin haber
+                              vermesi gerekmez
+nerede çalışır              RestoreController.confirmRestore'un SONUNDA, restore
+                            sonucu ekrana yazıldıktan sonra
+neden orada                 (1) housekeeping kullanıcıyı bekletmemeli ve sonucu
+                            değiştirmemeli; (2) güvenlik yedeğiyle transaction
+                            ARASINA konsaydı, o aralıkta yapılan her yazma
+                            restore'u reddettirdiği için pencere gereksiz yere
+                            genişlerdi
+başarısız restore            güvenlik yedeği yine diskte, dolayısıyla retention
+                            yine ona uygulanır
+silme hatası                 restore'u ve güvenlik yedeğini ETKİLEMEZ (fail open)
+```
+
+### Kaydetmek yıkıcı değildir
+
+Sayıyı küçültmek dosyaları o anda **silmez**. Yeni değer atomik kaydedilir ve
+fazlası bir sonraki başarılı otomatik yedeğin ardından temizlenir; ekran bunu
+kısa bir cümleyle söyler. Bir testi, dolu bir klasörde 7'den 2'ye inip klasörün
+bir dosya bile kaybetmediğini, sonraki restore'da ise her türün 2'ye indiğini
+gösteriyor.
+
+### Dilim 2'nin bilerek YAPMADIKLARI
+
+```text
+XLSX/CSV onay akışına bağlanma            Dilim 3
+migration açılış kapısı / gerçek snapshot Dilim 4
+otomatik yedeği YAZAN kod                 Dilim 3 ve 4
+başka ayar alanı                          kapsam dışı (PLAN 14.4.12)
+son snapshot zamanı / klasörü açma        kapsam dışı (PLAN 12.16)
+```
+
+`ImportConfirmationStore`, `ImportConfirmationController` ve `DatabaseFactory`
+`AutomaticBackupHousekeeping` almıyor; `RetentionAfterRestoreTest` bunu JVM
+refleksiyonuyla iddia ediyor (kotlin-reflect bağımlılık değil ve eklenmedi).
+Dilim 3 veya 4 geldiğinde **bu testin bilinçli olarak çevrilmesi gerekir**.
 
 ---
 
@@ -2165,6 +2273,10 @@ RestoreDoubles (commonTest)             restore akışının dışındaki her ş
 FakeBackupDirectory (commonTest)        diski olmayan bir yedek klasörü; belirli
                                         dosyaların silinmesini REDDEDEBİLİR, böylece
                                         fail-open ve crash/retry davranışı ölçülebilir
+FakeSettingsStore (commonTest)          diski olmayan ayar deposu; yazmayı bir kapıda
+                                        bekletebilir ve tipli hatayla reddedebilir
+SceneSettings (desktopTest)             Compose sahnesi için duran ayar
+NeverDeletes (desktopTest)              her silmeyi reddeden gerçek klasör sargısı
 ComposeSceneHarness                     gerçek Compose sahnesi (desktopTest)
 ```
 
@@ -2350,7 +2462,7 @@ yardımcı işler
       yapılandırılmış görev CSV dışa aktarma
 ```
 
-## Faz 3 — BAŞLADI, 16 İŞTEN 3'Ü BİTTİ; 4'ÜN İLK DİLİMİ YAPILDI
+## Faz 3 — BAŞLADI, 16 İŞTEN 3'Ü BİTTİ; 4'ÜN İLK İKİ DİLİMİ YAPILDI
 
 PLAN `18.` — Faz 3 işler listesi.
 
@@ -2359,7 +2471,7 @@ PLAN `18.` — Faz 3 işler listesi.
  2  Import batch rollback ve korumalı geri alma ......... TAMAM (üç dilim)
  3  Sürümlü JSON yedek/dışa aktarma ve geri yükleme ..... TAMAM (dört dilim)
  4  Import ve migration öncesi otomatik snapshot ........ BAŞLADI  ← SIRADAKİ
-                                                        (dört dilimden 1'i, §25.2)
+                                                        (dört dilimden 2'si, §25.2)
  5  CSV görev dışa aktarmayı doğrula ......... özellik var, Faz 3 doğrulama
                                               testleri yazılmadı
  6  Veritabanı migration testlerini oluştur ............. TAMAM
@@ -2429,35 +2541,45 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
 
 ## Sıradaki bağlayıcı iş
 
-> **Faz 3 / İş 4 / Dilim 2: sürümlü `settings.json` ve saklama sayısı ayarı.**
+> **Faz 3 / İş 4 / Dilim 3: her XLSX/CSV onayı öncesinde otomatik JSON snapshot
+> ve yarış koruması.**
 >
 > İş 4'ün bütün tasarım kararları alınmıştır (PLAN `14.4.7`–`14.4.13`, özet
-> §25.2) ve **Dilim 1 bitmiştir**: adlar, sahiplik kanıtı ve tür başına döngüsel
-> saklama motoru yazıldı, hiçbir tetikleyiciye bağlanmadı.
+> §25.2). **Dilim 1 ve 2 bitmiştir**: adlar, sahiplik kanıtı ve tür başına
+> rotation motoru yazıldı; `settings.json`, atomik ayar deposu ve `Ayarlar`
+> ekranındaki saklama sayısı eklendi; motor bu sayıya bağlandı ve restore öncesi
+> güvenlik yedeğinin ardından çalışıyor.
 >
-> Dilim 2'nin kapsamı:
+> Dilim 3'ün kapsamı (PLAN `14.4.8`, `11.4.2`):
 >
-> - `$XDG_CONFIG_HOME/pnp-tracker/settings.json`: `formatVersion` 1 ve
->   `automaticBackupCount` (`1..50`, varsayılan `7`, `0` geçersiz).
-> - Bilinmeyen alan yok sayılır; bozuk dosyada varsayılan `7` ile açılır,
->   `Ayarlar` ekranında bu açıkça gösterilir ve **dosyanın üzerine yazılmaz**.
-> - Atomik yazma (`AtomicFileWriter`); yazma başarısızsa eski dosya bayt bayt
->   kalır ve çalışma zamanı değeri değişmez.
-> - `Ayarlar` ekranında tek yeni alan; aralık dışı değer kabul edilmez.
-> - Sayı azaltıldığında dosyalar **hemen silinmez**; ekran bu gecikmeyi kısa bir
->   metinle açıklar.
+> - **Her** onay girişiminden önce otomatik JSON snapshot. Eşik YOK, `XLSX`/`CSV`
+>   ayrımı YOK.
+> - Snapshot `confirmDraftBatch`'ten **hemen önce** — taslak oluşturmadan önce
+>   değil; taslak satırları da yedeğin kapsamındadır ve onları koruyan aynı
+>   snapshot'tır.
+> - Yazıldıktan sonra **gerçek okuyucuyla** yeniden doğrulanır; doğrulanmamış bir
+>   dosyaya "yedek alındı" denmez.
+> - Üretilemez / atomik yazılamaz / doğrulanamazsa **onay hiç başlamaz**: batch
+>   `DRAFT` kalır, görev, segment, hücre parçası, oyun tamamlanması ve geçmiş
+>   olayı YAZILMAZ.
+> - Yarış koruması restore'un modelidir: değişmez `BackupData` + `dataSha256`
+>   bellekte tutulur, onay transaction'ının **ilk** aşaması canlı veritabanını
+>   aynı kanonik sözleşmeyle yeniden okur, değişmişse hiçbir domain yazımı
+>   yapılmadan reddedilir (fail closed). Global mutation barrier SEÇİLMEDİ.
+> - Onay ekranı, işlemden önce otomatik yedek alınacağını **tek** anlaşılır
+>   cümleyle söyler.
+> - Snapshot başarılı olup transaction sonradan düşerse snapshot KORUNUR.
+> - Çift gönderim TEK snapshot ve TEK onay üretir.
+> - Snapshot geçmişe olay YAZMAZ.
 >
-> Dilim 2, Dilim 1'in `rotateAfter(justWritten, keep)` parametresine gerçek
-> `automaticBackupCount`'u bağlayacak yerdir; ama rotation'ı **tetiklemez** —
-> tetikleyiciler Dilim 3 ve 4'tedir.
+> Dilim 3, Dilim 1'in `AutomaticBackupHousekeeping`'ini içe aktarma tarafına
+> bağlayacak yerdir. Dikkat: `RetentionAfterRestoreTest`'in "nothing but a
+> restore has been given housekeeping to do" testi `ImportConfirmationStore` ve
+> `ImportConfirmationController`'ın bu işbirlikçiyi **almadığını** yapısal olarak
+> iddia ediyor; Dilim 3'te bu iddia bilinçli olarak çevrilmelidir, sessizce
+> silinmemelidir.
 >
-> Dikkat: `settings.json`'ın yokluğunu **aktif olarak iddia eden** testler var
-> (`AppDirectoryInitializerTest`, üç smoke turu ve `RetentionSmokeTest`). Bunlar
-> "hiçbir yedek turu ayar yazmaz" invariant'ıdır ve Dilim 2'de bilinçli olarak
-> güncellenmelidir; sessizce silinmemelidir.
->
-> Sonra: Dilim 3 (her onay öncesi snapshot + yarış koruması) → Dilim 4
-> (migration seti + açılış kapısı).
+> Sonra: Dilim 4 (migration seti + açılış kapısı).
 >
 > **Dilim 4 bitene kadar gerçek uygulama normal kullanıcı XDG'siyle
 > açılmamalıdır** (§0): bugün açılırsa migration snapshot'sız çalışır.
@@ -3136,13 +3258,26 @@ yapılır, böylece bir içe aktarma yoğunluğu kullanıcının geri dönüş y
 tahliye edemez; ve sayı `Ayarlar` ekranından `1..50` aralığında değiştirilir,
 varsayılanı `7`'dir, `0` geçersizdir.
 
-İş dört atomik dilimde uygulanmaktadır. **Dilim 1 bitmiştir:** otomatik
-yedeklerin adları, sahipliklerinin iki bağımsız kanıtla doğrulanması ve üç
-bağımsız kota için döngüsel saklama motoru yazıldı. Motor hiçbir tetikleyiciye
-bağlı değildir ve sildiği tek şey, adının kalıbıyla **ve** ilk baytlarıyla
-kendisinin olduğunu gösterebildiği dosyalardır; manuel yedekler, bilinmeyen
-dosyalar, bağlantılar ve eksik eşli migration setleri erişiminin dışındadır.
-**Dilim 2** (`settings.json` ve saklama sayısı ayarı) sıradaki bağlayıcı iştir.
+İş dört atomik dilimde uygulanmaktadır. **Dilim 1 ve 2 bitmiştir.**
+
+Dilim 1 otomatik yedeklerin adlarını, sahipliklerinin iki bağımsız kanıtla
+doğrulanmasını ve üç bağımsız kota için döngüsel saklama motorunu getirdi. Motor
+yalnız adının kalıbıyla **ve** ilk baytlarıyla kendisinin olduğunu
+gösterebildiği dosyaları siler; manuel yedekler, bilinmeyen dosyalar,
+bağlantılar ve eksik eşli migration setleri erişiminin dışındadır.
+
+Dilim 2 kullanıcıya o sayıyı verdi. `Ayarlar` ekranında `1..50` aralığında,
+varsayılanı `7` olan gerçek ve kalıcı bir ayar var; `0` geçersizdir ve otomatik
+koruma kapatılamaz. Ayar veritabanının **dışında**, sürümlü ve atomik yazılan bir
+`settings.json` dosyasında durur — bir geri yükleme onu değiştirmez. Dosya yoksa
+varsayılan kullanılır ve **dosya oluşturulmaz**; bozuksa varsayılan kullanılır,
+sebebi ekranda Türkçe olarak söylenir ve **dosyanın üzerine yazılmaz**. Dosya
+yalnız kullanıcı Kaydet'e bastığında oluşur. Sayıyı küçültmek hiçbir şeyi o anda
+silmez: yeni değer kaydedilir ve fazlası bir sonraki otomatik yedeğin ardından
+temizlenir. Bugün o "sonraki otomatik yedek" restore öncesi güvenlik yedeğidir.
+
+**Dilim 3** (her onay öncesi snapshot ve yarış koruması) sıradaki bağlayıcı
+iştir.
 
 > **Geçici kural:** Dilim 4 tamamlanana kadar gerçek uygulama normal kullanıcı
 > XDG'siyle açılmamalıdır. Gerçek veritabanı şema v3'tedir ve bir sonraki normal

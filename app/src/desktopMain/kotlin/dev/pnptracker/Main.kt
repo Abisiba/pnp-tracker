@@ -25,9 +25,12 @@ import dev.pnptracker.data.repository.TaskFromTextStore
 import dev.pnptracker.data.repository.TaskProgressStore
 import dev.pnptracker.domain.backup.DatabaseBackupExporter
 import dev.pnptracker.domain.backup.restore.UntrustedBackupReader
+import dev.pnptracker.domain.backup.retention.AutomaticBackupRotation
+import dev.pnptracker.domain.backup.retention.SettingsDrivenHousekeeping
 import dev.pnptracker.platform.awt.applyLinuxFileDialogPolicy
 import dev.pnptracker.platform.backupfiles.AwtBackupFilePicker
 import dev.pnptracker.platform.backupfiles.AwtBackupSourcePicker
+import dev.pnptracker.platform.backupfiles.DesktopBackupDirectory
 import dev.pnptracker.platform.backupfiles.DesktopBackupFileGateway
 import dev.pnptracker.platform.backupfiles.DesktopBackupSourceGateway
 import dev.pnptracker.platform.backupfiles.DesktopSafetyBackupWriter
@@ -37,6 +40,7 @@ import dev.pnptracker.platform.files.AppDirectoryInitializer
 import dev.pnptracker.platform.files.XdgAppPathsResolver
 import dev.pnptracker.platform.importfiles.AwtImportFilePicker
 import dev.pnptracker.platform.importfiles.DesktopImportFileGateway
+import dev.pnptracker.platform.settings.DesktopSettingsStore
 import dev.pnptracker.ui.PnpTrackerApp
 import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.feature.colors.ColorCatalogueController
@@ -51,6 +55,7 @@ import dev.pnptracker.ui.feature.importworkspace.ImportRollbackController
 import dev.pnptracker.ui.feature.pools.PoolControllers
 import dev.pnptracker.ui.feature.settings.BackupController
 import dev.pnptracker.ui.feature.settings.RestoreController
+import dev.pnptracker.ui.feature.settings.RetentionController
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.compose.resources.stringResource
 import java.awt.Dimension
@@ -138,6 +143,17 @@ fun main() {
     // the safety backup is written by the same atomic writer a manual backup
     // uses, and the replacement is one transaction on the connection already
     // open (PLAN 14.4.3, 14.4.4).
+    // The one setting this application has, and the only thing that writes it is
+    // the user pressing save. Reading it creates nothing (PLAN 14.4.12).
+    val settingsStore = DesktopSettingsStore(paths.settingsFile)
+    // Clearing old automatic backups away. It reads the number each time rather
+    // than being told when it changes, which is what makes a lowered count take
+    // effect at the next automatic backup and not before (PLAN 14.4.12).
+    val housekeeping =
+        SettingsDrivenHousekeeping(
+            settings = settingsStore,
+            rotation = AutomaticBackupRotation(DesktopBackupDirectory(paths.backupsDirectory)),
+        )
     val restoreController =
         RestoreController(
             sources = DesktopBackupSourceGateway(AwtBackupSourcePicker(title = RESTORE_DIALOG_TITLE)),
@@ -145,8 +161,10 @@ fun main() {
             exporter = DatabaseBackupExporter(BackupStore(database), AppInfo.Current, Clock.System),
             safety = DesktopSafetyBackupWriter(paths.backupsDirectory),
             restorer = LiveBackupRestorer(database),
+            housekeeping = housekeeping,
             clock = Clock.System,
         )
+    val retentionController = RetentionController(settingsStore)
     val colorCatalogueController = ColorCatalogueController(colorCatalogue)
     // The pools read the same tasks the table reads and write through the same
     // editing transaction, so they are given the very same store rather than one
@@ -186,6 +204,7 @@ fun main() {
                 exportController,
                 backupController,
                 restoreController,
+                retentionController,
                 colorCatalogueController,
                 poolControllers,
                 historyController,

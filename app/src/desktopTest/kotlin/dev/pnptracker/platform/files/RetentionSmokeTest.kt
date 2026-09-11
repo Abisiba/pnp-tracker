@@ -13,6 +13,7 @@ import dev.pnptracker.domain.backup.retention.importSnapshotFileName
 import dev.pnptracker.domain.backup.retention.migrationSnapshotSetName
 import dev.pnptracker.domain.time.LocalMoment
 import dev.pnptracker.platform.backupfiles.DesktopBackupDirectory
+import dev.pnptracker.platform.settings.DesktopSettingsStore
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
@@ -113,10 +114,13 @@ class RetentionSmokeTest {
             val theirs = backups.resolve("pnp-otomatik-import-2026-09-09-235959.json")
             Files.write(theirs, "bu benim dosyam, adı benziyor".encodeToByteArray())
 
-            // 5. Housekeeping, keeping the number that stands until somebody
-            // chooses another.
+            // 5. Housekeeping, through the real settings store — which finds no
+            // settings file and answers with the number that stands until
+            // somebody chooses another.
             val rotation = AutomaticBackupRotation(DesktopBackupDirectory(backups))
-            val outcome = rotation.rotateAfter(imports.last().removeSuffix(".json"), keep = DEFAULT_AUTOMATIC_BACKUPS)
+            val settings = DesktopSettingsStore(paths.settingsFile)
+            assertEquals(DEFAULT_AUTOMATIC_BACKUPS, settings.read().automaticBackupCount)
+            val outcome = rotation.rotateAfter(imports.last().removeSuffix(".json"), keep = settings.read().automaticBackupCount)
 
             assertFalse(outcome.refused)
             assertEquals(emptyList(), outcome.couldNotRemove)
@@ -148,7 +152,10 @@ class RetentionSmokeTest {
             // 9. Nothing was written outside the backups folder, and no database
             // was made anywhere.
             assertTrue(Files.notExists(paths.databaseFile), "the smoke made a database it has no business making")
-            assertTrue(Files.notExists(paths.settingsFile), "the smoke wrote settings that belong to the next slice")
+            // Reading the retention number does not create the file it is kept
+            // in: that happens when somebody presses save and at no other
+            // moment (PLAN 14.4.12).
+            assertTrue(Files.notExists(paths.settingsFile), "housekeeping created the settings file by itself")
             assertTrue(left.none { it.endsWith(".part") && !it.startsWith(IMPORT_SNAPSHOT_PREFIX) })
         }
 

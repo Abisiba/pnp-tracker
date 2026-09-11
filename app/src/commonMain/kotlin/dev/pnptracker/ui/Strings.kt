@@ -516,6 +516,31 @@ import dev.pnptracker.resources.restore_summary_file
 import dev.pnptracker.resources.restore_summary_taken
 import dev.pnptracker.resources.restore_validating
 import dev.pnptracker.resources.restore_writing_safety
+import dev.pnptracker.resources.retention_count_label
+import dev.pnptracker.resources.retention_current
+import dev.pnptracker.resources.retention_decrease
+import dev.pnptracker.resources.retention_delay_note
+import dev.pnptracker.resources.retention_error_could_not_write
+import dev.pnptracker.resources.retention_error_kept
+import dev.pnptracker.resources.retention_error_not_writable
+import dev.pnptracker.resources.retention_error_title
+import dev.pnptracker.resources.retention_explains
+import dev.pnptracker.resources.retention_increase
+import dev.pnptracker.resources.retention_invalid
+import dev.pnptracker.resources.retention_loading
+import dev.pnptracker.resources.retention_manual_note
+import dev.pnptracker.resources.retention_problem_could_not_read
+import dev.pnptracker.resources.retention_problem_default_note
+import dev.pnptracker.resources.retention_problem_not_expected_shape
+import dev.pnptracker.resources.retention_problem_title
+import dev.pnptracker.resources.retention_problem_value
+import dev.pnptracker.resources.retention_problem_version
+import dev.pnptracker.resources.retention_range_hint
+import dev.pnptracker.resources.retention_save
+import dev.pnptracker.resources.retention_saved
+import dev.pnptracker.resources.retention_saving
+import dev.pnptracker.resources.retention_scope_note
+import dev.pnptracker.resources.retention_section_title
 import dev.pnptracker.resources.review_back
 import dev.pnptracker.resources.review_blocker_block
 import dev.pnptracker.resources.review_blocker_draft
@@ -2013,6 +2038,45 @@ object Strings {
 
         /** Takes the name of the safety backup that is still on disk. */
         val safetyKept = Res.string.restore_error_safety_kept
+    }
+
+    /** Choosing how many automatic backups to keep (PLAN 12.16, 14.4.12). */
+    object Retention {
+        val sectionTitle = Res.string.retention_section_title
+        val explains = Res.string.retention_explains
+        val scopeNote = Res.string.retention_scope_note
+        val manualNote = Res.string.retention_manual_note
+        val delayNote = Res.string.retention_delay_note
+        val loading = Res.string.retention_loading
+        val countLabel = Res.string.retention_count_label
+        val rangeHint = Res.string.retention_range_hint
+        val decrease = Res.string.retention_decrease
+        val increase = Res.string.retention_increase
+        val save = Res.string.retention_save
+        val saving = Res.string.retention_saving
+        val invalid = Res.string.retention_invalid
+
+        /** Takes the number now in use. */
+        val current = Res.string.retention_current
+
+        /** Takes the number that was saved. */
+        val saved = Res.string.retention_saved
+
+        val problemTitle = Res.string.retention_problem_title
+        val problemCouldNotRead = Res.string.retention_problem_could_not_read
+        val problemNotExpectedShape = Res.string.retention_problem_not_expected_shape
+        val problemVersion = Res.string.retention_problem_version
+        val problemValue = Res.string.retention_problem_value
+
+        /** Takes the default that is standing in. */
+        val problemDefaultNote = Res.string.retention_problem_default_note
+
+        val errorTitle = Res.string.retention_error_title
+        val errorNotWritable = Res.string.retention_error_not_writable
+        val errorCouldNotWrite = Res.string.retention_error_could_not_write
+
+        /** Takes the number still in use. */
+        val errorKept = Res.string.retention_error_kept
     }
 
     object BackupErrors {

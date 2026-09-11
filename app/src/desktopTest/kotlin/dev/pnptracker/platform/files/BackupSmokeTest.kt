@@ -173,7 +173,11 @@ class BackupSmokeTest {
 
             // And the database is exactly as it was.
             assertEquals(before, TABLES.map { it to rowCount(opened, it) })
-            assertFalse(Files.exists(paths.settingsFile), "the smoke wrote settings it has no business writing")
+            // Taking a backup is not choosing a setting. The settings file is
+            // created by one thing only — somebody pressing save on the retention
+            // number — and this whole tour must leave a machine that has never
+            // done that without one (PLAN 14.4.12).
+            assertFalse(Files.exists(paths.settingsFile), "taking a backup created the settings file")
             assertEquals(
                 emptyList(),
                 Files.list(paths.backupsDirectory).use { it.toList() },

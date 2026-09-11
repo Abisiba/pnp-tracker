@@ -23,6 +23,7 @@ import dev.pnptracker.domain.backup.restore.aWholeBackup
 import dev.pnptracker.domain.backup.restore.canonicalChecksumOf
 import dev.pnptracker.domain.backup.restore.documentOf
 import dev.pnptracker.domain.backup.restore.fileOf
+import dev.pnptracker.domain.backup.retention.AutomaticBackupHousekeeping
 import dev.pnptracker.domain.time.LocalMoment
 import kotlinx.coroutines.CompletableDeferred
 import kotlin.time.Clock
@@ -174,6 +175,7 @@ fun aRestoreController(
     restorer: FakeRestorer = FakeRestorer(),
     source: FakeBackupSource = FakeBackupSource(),
     probe: CountingProbe = CountingProbe(),
+    housekeeping: AutomaticBackupHousekeeping = RecordingHousekeeping(),
     clock: Clock = StoppedRestoreClock(),
 ) = RestoreController(
     sources = gateway,
@@ -181,5 +183,25 @@ fun aRestoreController(
     exporter = DatabaseBackupExporter(source, AppInfo.Current, clock),
     safety = safety,
     restorer = restorer,
+    housekeeping = housekeeping,
     clock = clock,
 )
+
+/**
+ * Housekeeping that only remembers being asked.
+ *
+ * What matters at this level is *which* backup retention was told about and
+ * *when*, not what it then removed — that is the rotation's own test. [failWith]
+ * is how "clearing up went wrong" is put in front of the restore, which PLAN
+ * 14.4.13 says must change nothing about it.
+ */
+class RecordingHousekeeping(
+    private val failWith: (() -> Throwable)? = null,
+) : AutomaticBackupHousekeeping {
+    val askedAbout = mutableListOf<String>()
+
+    override suspend fun afterWriting(setName: String) {
+        askedAbout += setName
+        failWith?.let { throw it() }
+    }
+}

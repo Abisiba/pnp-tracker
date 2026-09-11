@@ -413,6 +413,7 @@ class RestoreControllerTest {
                         exporter = DatabaseBackupExporter(FakeBackupSource(), AppInfo.Current, StoppedRestoreClock()),
                         safety = safety,
                         restorer = BrokenRestorer(make),
+                        housekeeping = RecordingHousekeeping(),
                         clock = StoppedRestoreClock(),
                     )
                 broken.chooseBackup()
@@ -434,6 +435,7 @@ class RestoreControllerTest {
                     exporter = DatabaseBackupExporter(FakeBackupSource(), AppInfo.Current, StoppedRestoreClock()),
                     safety = FakeSafetyWriter(),
                     restorer = BrokenRestorer { StackOverflowError("out of room") },
+                    housekeeping = RecordingHousekeeping(),
                     clock = StoppedRestoreClock(),
                 )
             controller.chooseBackup()

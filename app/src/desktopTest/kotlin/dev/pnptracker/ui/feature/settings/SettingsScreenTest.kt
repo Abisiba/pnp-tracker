@@ -118,8 +118,9 @@ class SettingsScreenTest {
         width: Int = 900,
         height: Int = 700,
         restore: RestoreController = aRestoreController(FakeSourceGateway(aRealBackupFile())),
+        retention: RetentionController = RetentionController(SceneSettings()),
     ) = ComposeSceneHarness(width = width, height = height) {
-        PnpTrackerTheme(ThemeMode.LIGHT) { SettingsScreen(controller, restore) }
+        PnpTrackerTheme(ThemeMode.LIGHT) { SettingsScreen(controller, restore, retention) }
     }
 
     private fun ComposeSceneHarness.text(): String = writtenText().joinToString(" | ")

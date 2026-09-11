@@ -15,6 +15,8 @@ import dev.pnptracker.domain.backup.restore.SafetyBackupWriter
 import dev.pnptracker.domain.backup.restore.SafetySnapshot
 import dev.pnptracker.domain.backup.restore.UntrustedBackupReader
 import dev.pnptracker.domain.backup.restore.ValidatedBackup
+import dev.pnptracker.domain.backup.retention.AutomaticBackupHousekeeping
+import dev.pnptracker.domain.backup.retention.automaticBackupNameOf
 import dev.pnptracker.domain.time.localMomentOf
 import kotlinx.serialization.SerializationException
 import kotlin.time.Clock
@@ -52,6 +54,7 @@ class RestoreController(
     private val exporter: DatabaseBackupExporter,
     private val safety: SafetyBackupWriter,
     private val restorer: BackupRestorer,
+    private val housekeeping: AutomaticBackupHousekeeping,
     private val clock: Clock,
 ) {
     var state: RestoreScreenState by mutableStateOf(RestoreScreenState.Idle)
@@ -187,13 +190,25 @@ class RestoreController(
         val problem = restorer.restore(backup, asItWas)
         if (problem != null) {
             fail(problem, safetyFileName)
-            return
+        } else {
+            pending = null
+            state = RestoreScreenState.Restored(fileName = backup.fileName, safetyFileName = safetyFileName)
+            restoredTick++
+            focusRecall++
         }
 
-        pending = null
-        state = RestoreScreenState.Restored(fileName = backup.fileName, safetyFileName = safetyFileName)
-        restoredTick++
-        focusRecall++
+        // Last, and after the answer is on screen. The safety backup is on disk
+        // whichever way the restore went, so the user's retention policy applies
+        // to it either way — and clearing older ones is housekeeping that must
+        // never delay what somebody is waiting for, change what they are told,
+        // or undo a restore that has already happened (PLAN 14.4.11, 14.4.13).
+        //
+        // It also goes after the transaction rather than beside the safety
+        // backup on purpose. Between writing that file and beginning the
+        // transaction there is a window in which a write by anybody else makes
+        // the restore refuse; putting a directory listing and a handful of
+        // deletions into that window would widen it for no gain.
+        automaticBackupNameOf(safetyFileName)?.let { housekeeping.afterWriting(it.setName) }
     }
 
     /** Puts the screen back to its starting point. */

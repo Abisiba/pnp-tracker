@@ -79,6 +79,8 @@ class AppDirectoryInitializerTest {
         initializer.ensureDirectories(paths)
 
         assertFalse(Files.exists(paths.databaseFile), "pnp.db must not be created here")
+        // It has an owner now — DesktopSettingsStore — and that one creates
+        // it only when somebody saves a retention number (PLAN 14.4.12).
         assertFalse(Files.exists(paths.settingsFile), "settings.json must not be created here")
     }
 
