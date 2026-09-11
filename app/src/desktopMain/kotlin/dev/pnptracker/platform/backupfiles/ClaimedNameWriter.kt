@@ -1,7 +1,9 @@
 package dev.pnptracker.platform.backupfiles
 
+import dev.pnptracker.domain.backup.BACKUP_EXTENSION
 import dev.pnptracker.domain.backup.BackupException
 import dev.pnptracker.domain.backup.BackupFailure
+import dev.pnptracker.domain.backup.retention.MIGRATION_DATABASE_EXTENSION
 import dev.pnptracker.platform.files.AtomicFileWriter
 import dev.pnptracker.platform.files.AtomicWriteException
 import dev.pnptracker.platform.files.AtomicWriteFailure
@@ -97,6 +99,65 @@ internal class ClaimedNameWriter(
         // user could do differently about it.
         throw BackupException(BackupFailure.WRITE_FAILED)
     }
+}
+
+/**
+ * The two names one migration snapshot set is known by, both taken at once.
+ *
+ * A set is two files and PLAN 14.4.11 requires them to carry the **same**
+ * ordinal, so they cannot be claimed one at a time and hoped to agree: the
+ * `.db` could take the plain name while something else already held the `.json`,
+ * and what was left would be two halves that nothing can pair up again.
+ *
+ * So an attempt is all or nothing. Both names are created for the same ordinal,
+ * and if the second one is already taken the first is given back before the next
+ * ordinal is tried. What comes out is a pair that nothing else can be holding,
+ * claimed by the same indivisible [Files.createFile] a single backup uses.
+ */
+internal class ClaimedSetNames(
+    val setName: String,
+    val database: Path,
+    val document: Path,
+)
+
+/**
+ * Takes the first pair of names for this set that nothing else has taken.
+ *
+ * @param nameFor the set name, without extension, for a given attempt from 1 up.
+ * @throws BackupException if no pair could be claimed.
+ */
+internal fun claimSetNames(
+    folder: Path,
+    attempts: Int = AUTOMATIC_NAME_ATTEMPTS,
+    nameFor: (Int) -> String,
+): ClaimedSetNames {
+    repeat(attempts) { attempt ->
+        val setName = nameFor(attempt + 1)
+        val database = folder.resolve("$setName$MIGRATION_DATABASE_EXTENSION")
+        val document = folder.resolve("$setName$BACKUP_EXTENSION")
+        val tookTheDatabase =
+            try {
+                Files.createFile(database)
+                true
+            } catch (taken: FileAlreadyExistsException) {
+                false
+            } catch (cannot: IOException) {
+                throw BackupException(BackupFailure.NOT_WRITABLE, cannot)
+            }
+        if (!tookTheDatabase) return@repeat
+        try {
+            Files.createFile(document)
+            return ClaimedSetNames(setName, database, document)
+        } catch (taken: FileAlreadyExistsException) {
+            // Half a claim is worse than none: give back the half we took so the
+            // folder does not collect empty files nobody will ever pair up.
+            runCatching { Files.deleteIfExists(database) }
+        } catch (cannot: IOException) {
+            runCatching { Files.deleteIfExists(database) }
+            throw BackupException(BackupFailure.NOT_WRITABLE, cannot)
+        }
+    }
+    throw BackupException(BackupFailure.WRITE_FAILED)
 }
 
 /**

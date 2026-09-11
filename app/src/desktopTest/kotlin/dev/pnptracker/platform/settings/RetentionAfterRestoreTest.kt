@@ -34,6 +34,8 @@ import dev.pnptracker.platform.files.AppDirectoryInitializer
 import dev.pnptracker.platform.files.AtomicFileWriter
 import dev.pnptracker.platform.files.XdgAppPaths
 import dev.pnptracker.platform.files.XdgAppPathsResolver
+import dev.pnptracker.platform.startup.MigrationSnapshotSetWriter
+import dev.pnptracker.platform.startup.StartupGate
 import dev.pnptracker.ui.feature.importworkspace.ImportConfirmationController
 import dev.pnptracker.ui.feature.settings.RestoreController
 import dev.pnptracker.ui.feature.settings.RestoreScreenState
@@ -230,29 +232,35 @@ class RetentionAfterRestoreTest {
         }
 
     @Test
-    fun `opening a database still writes no migration snapshot`() =
+    fun `the plain factory still writes no migration snapshot, which is what the gate depends on`() =
         runBlocking<Unit> {
-            // PLAN 14.4.9 and 14.4.10 are Dilim 4's work, and this is what says
-            // so in a way that cannot quietly stop being true: a real database
-            // is created and opened through the real factory, migrations and
-            // seed and all, and the backups folder is exactly as it was.
+            // This used to say that nothing anywhere wrote a migration snapshot,
+            // because nothing did. PLAN 14.4.10's gate landed and it was changed
+            // on purpose rather than left to go quiet — and what it says now is
+            // narrower and more useful: `DatabaseFactory` on its own is still
+            // inert. That is not a leftover. The gate migrates a *working copy*
+            // through this very factory while building the set, and a factory
+            // that took snapshots of its own would take one of the copy.
+            //
+            // What the gate does instead is `StartupGateTest`'s subject.
             val before = namesIn(paths.backupsDirectory)
 
             openDatabase()
 
-            assertEquals(before, namesIn(paths.backupsDirectory), "opening a database wrote a migration snapshot")
+            assertEquals(before, namesIn(paths.backupsDirectory), "the plain factory wrote a migration snapshot")
             assertTrue(namesIn(paths.backupsDirectory).none { it.startsWith(MIGRATION_SNAPSHOT_PREFIX) })
             assertTrue(Files.notExists(paths.settingsFile))
         }
 
     @Test
-    fun `the restore and the import have housekeeping, and the database factory still does not`() {
-        // The other half of the same claim, and the half a folder cannot show:
-        // which pieces have been handed the collaborators at all. This started
-        // out saying that only the restore had them; PLAN 14.4.8's slice added
-        // the import, and it was changed here on purpose rather than left to go
-        // quiet. PLAN 14.4.9 and 14.4.10 are the last of them, and when the
-        // migration gate lands this is again the test to change deliberately.
+    fun `every automatic backup has an owner, and the database factory is not one of them`() {
+        // Which pieces have been handed the collaborators at all, asked
+        // structurally because a folder cannot show it. The claim has been
+        // rewritten deliberately at each slice rather than left to go quiet:
+        // first only the restore had housekeeping, then PLAN 14.4.8 gave the
+        // import a snapshot taker too, and now PLAN 14.4.10's gate is the third
+        // and last owner. With job 4 finished there is no next one.
+        //
         // Plain JVM reflection rather than Kotlin's: kotlin-reflect is not a
         // dependency of this project and PLAN 14.1 does not add one for a test.
         val housekeeping = AutomaticBackupHousekeeping::class.java
@@ -263,18 +271,28 @@ class RetentionAfterRestoreTest {
             collaborator: Class<*>,
         ) = owner.constructors.any { made -> made.parameterTypes.any { it == collaborator } }
 
-        // Opening a database still writes nothing, and cannot: it has neither.
-        assertFalse(takes(DatabaseFactory::class.java, housekeeping), "the database factory has housekeeping early")
-        assertFalse(takes(DatabaseFactory::class.java, snapshots), "the database factory takes a snapshot early")
-        // The screen above the import has neither either. The guarantee belongs
-        // to the store, so that every caller gets it and not merely this one.
+        // The factory stays inert, and that is load-bearing rather than tidy:
+        // the gate migrates a working copy through it, and a factory that took
+        // snapshots would take one of the copy.
+        assertFalse(takes(DatabaseFactory::class.java, housekeeping), "the database factory took on housekeeping")
+        assertFalse(takes(DatabaseFactory::class.java, snapshots), "the database factory took on snapshots")
+        // The screen above the import has neither. The guarantee belongs to the
+        // store, so that every caller gets it and not merely this one.
         assertFalse(takes(ImportConfirmationController::class.java, housekeeping))
         assertFalse(takes(ImportConfirmationController::class.java, snapshots))
 
-        // And the two that do.
+        // And the three that do.
         assertTrue(takes(RestoreController::class.java, housekeeping), "the restore lost its housekeeping")
         assertTrue(takes(ImportConfirmationStore::class.java, housekeeping), "the import lost its housekeeping")
         assertTrue(takes(ImportConfirmationStore::class.java, snapshots), "the import can be confirmed without a backup")
+        assertTrue(takes(StartupGate::class.java, housekeeping), "the startup gate lost its housekeeping")
+        // The gate's own snapshot is a matched pair rather than one document, so
+        // what it holds is the writer of that pair — and it cannot open the
+        // database without one.
+        assertTrue(
+            takes(StartupGate::class.java, MigrationSnapshotSetWriter::class.java),
+            "a database can be migrated without a snapshot set",
+        )
     }
 
     /**

@@ -754,6 +754,17 @@ import dev.pnptracker.resources.stage_cut
 import dev.pnptracker.resources.stage_glue
 import dev.pnptracker.resources.stage_laminate
 import dev.pnptracker.resources.stage_print
+import dev.pnptracker.resources.startup_another_copy
+import dev.pnptracker.resources.startup_close
+import dev.pnptracker.resources.startup_data_safe
+import dev.pnptracker.resources.startup_migration_failed
+import dev.pnptracker.resources.startup_not_cloned
+import dev.pnptracker.resources.startup_not_migrated
+import dev.pnptracker.resources.startup_not_readable
+import dev.pnptracker.resources.startup_not_verified
+import dev.pnptracker.resources.startup_not_written
+import dev.pnptracker.resources.startup_title
+import dev.pnptracker.resources.startup_too_new
 import dev.pnptracker.resources.table_add_game
 import dev.pnptracker.resources.table_add_game_hint
 import dev.pnptracker.resources.table_cell_description
@@ -1618,6 +1629,28 @@ object Strings {
         val cellSnapshotMissing = Res.string.rollback_cell_snapshot_missing
         val cellDocumentChanged = Res.string.rollback_cell_document_changed
         val cellStructureChanged = Res.string.rollback_cell_structure_changed
+    }
+
+    /**
+     * What is shown instead of the application when the database may not be opened.
+     *
+     * PLAN 14.4.13: Turkish, actionable, and carrying no path, no SQL and
+     * nothing out of anybody's data. Every sentence says the same two things —
+     * what happened and what to do — and the two that leave something on disk
+     * say where it is in words rather than as a path.
+     */
+    object Startup {
+        val title = Res.string.startup_title
+        val dataSafe = Res.string.startup_data_safe
+        val close = Res.string.startup_close
+        val anotherCopy = Res.string.startup_another_copy
+        val notReadable = Res.string.startup_not_readable
+        val tooNew = Res.string.startup_too_new
+        val notCloned = Res.string.startup_not_cloned
+        val notMigrated = Res.string.startup_not_migrated
+        val notWritten = Res.string.startup_not_written
+        val notVerified = Res.string.startup_not_verified
+        val migrationFailed = Res.string.startup_migration_failed
     }
 
     /** Turning a reviewed import into real tasks. */

@@ -24,10 +24,13 @@ import dev.pnptracker.data.repository.TaskExportStore
 import dev.pnptracker.data.repository.TaskFromTextStore
 import dev.pnptracker.data.repository.TaskProgressStore
 import dev.pnptracker.domain.backup.DatabaseBackupExporter
+import dev.pnptracker.domain.backup.automatic.StartupProblem
+import dev.pnptracker.domain.backup.automatic.StartupRefused
 import dev.pnptracker.domain.backup.automatic.VerifiedSnapshotTaker
 import dev.pnptracker.domain.backup.restore.UntrustedBackupReader
 import dev.pnptracker.domain.backup.retention.AutomaticBackupRotation
 import dev.pnptracker.domain.backup.retention.SettingsDrivenHousekeeping
+import dev.pnptracker.domain.time.localMomentOf
 import dev.pnptracker.platform.awt.applyLinuxFileDialogPolicy
 import dev.pnptracker.platform.backupfiles.AwtBackupFilePicker
 import dev.pnptracker.platform.backupfiles.AwtBackupSourcePicker
@@ -43,6 +46,8 @@ import dev.pnptracker.platform.files.XdgAppPathsResolver
 import dev.pnptracker.platform.importfiles.AwtImportFilePicker
 import dev.pnptracker.platform.importfiles.DesktopImportFileGateway
 import dev.pnptracker.platform.settings.DesktopSettingsStore
+import dev.pnptracker.platform.startup.MigrationSnapshotSetWriter
+import dev.pnptracker.platform.startup.StartupGate
 import dev.pnptracker.ui.PnpTrackerApp
 import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.feature.colors.ColorCatalogueController
@@ -58,7 +63,9 @@ import dev.pnptracker.ui.feature.pools.PoolControllers
 import dev.pnptracker.ui.feature.settings.BackupController
 import dev.pnptracker.ui.feature.settings.RestoreController
 import dev.pnptracker.ui.feature.settings.RetentionController
-import kotlinx.coroutines.runBlocking
+import dev.pnptracker.ui.feature.startup.StartupErrorScreen
+import dev.pnptracker.ui.theme.PnpTrackerTheme
+import dev.pnptracker.ui.theme.ThemeMode
 import org.jetbrains.compose.resources.stringResource
 import java.awt.Dimension
 import kotlin.time.Clock
@@ -85,19 +92,6 @@ fun main() {
 
     val paths = XdgAppPathsResolver().resolve()
     AppDirectoryInitializer().ensureDirectories(paths)
-    val database = DatabaseFactory().open(paths.databaseFile)
-    // A harmless read opens the connection and runs any pending migration, so a
-    // database that cannot be opened is reported before the window appears.
-    runBlocking { database.gameDao().activeCount() }
-
-    val importController =
-        ImportController(
-            // The picker owns the only Path in the import flow; everything above
-            // it is handed a file name and nothing else.
-            gateway = DesktopImportFileGateway(AwtImportFilePicker(title = FILE_DIALOG_TITLE)),
-            store = ImportDraftStore(database.importDao()),
-        )
-    val reviewController = ImportReviewController(ImportReviewStore(database.importDao(), database.gameDao(), database.colorDao()))
     // The one setting this application has, and the only thing that writes it is
     // the user pressing save. Reading it creates nothing (PLAN 14.4.12).
     val settingsStore = DesktopSettingsStore(paths.settingsFile)
@@ -109,6 +103,38 @@ fun main() {
             settings = settingsStore,
             rotation = AutomaticBackupRotation(DesktopBackupDirectory(paths.backupsDirectory)),
         )
+    // Nothing in this application opens the user's database except this, and
+    // nothing reaches a migration except through it. PLAN 14.4.10: the instance
+    // lock, the version read without Room, and — for a database on an older
+    // schema — a matched pair of snapshot artefacts that must both be written
+    // and proved before the real migration is allowed to begin.
+    val opened =
+        try {
+            StartupGate(
+                paths = paths,
+                databases = DatabaseFactory(),
+                sets =
+                    MigrationSnapshotSetWriter(
+                        backupsDirectory = paths.backupsDirectory,
+                        reader = UntrustedBackupReader(TemporaryBackupProbe()),
+                        moment = { localMomentOf(Clock.System.now()) },
+                    ),
+                housekeeping = housekeeping,
+            ).open()
+        } catch (refused: StartupRefused) {
+            showTheStartupProblem(refused.problem)
+            return
+        }
+    val database = opened.database
+
+    val importController =
+        ImportController(
+            // The picker owns the only Path in the import flow; everything above
+            // it is handed a file name and nothing else.
+            gateway = DesktopImportFileGateway(AwtImportFilePicker(title = FILE_DIALOG_TITLE)),
+            store = ImportDraftStore(database.importDao()),
+        )
+    val reviewController = ImportReviewController(ImportReviewStore(database.importDao(), database.gameDao(), database.colorDao()))
     // Confirming an import is the one thing in this application that writes a
     // great many rows at once, so PLAN 14.4.8 puts a backup in front of every
     // one of them. Every collaborator here is the real one: the same exporter a
@@ -230,6 +256,28 @@ fun main() {
                 poolControllers,
                 historyController,
             )
+        }
+    }
+}
+
+/**
+ * Shows the refusal instead of the application, and nothing else.
+ *
+ * A window of its own rather than a dialog over the main one, because there is
+ * no main one: PLAN 14.4.10 does not let the application reach its first screen
+ * when the gate refuses, and a message the user can read and close is the whole
+ * of what happens next.
+ */
+private fun showTheStartupProblem(problem: StartupProblem) {
+    application {
+        Window(
+            onCloseRequest = ::exitApplication,
+            state = rememberWindowState(size = DpSize(560.dp, 360.dp)),
+            title = stringResource(Strings.Startup.title),
+        ) {
+            PnpTrackerTheme(ThemeMode.LIGHT) {
+                StartupErrorScreen(problem = problem, onClose = ::exitApplication)
+            }
         }
     }
 }

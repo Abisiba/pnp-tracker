@@ -448,6 +448,19 @@
     <string name="games_error_game_unavailable">Bu oyun artık kayıtlı değil, bu yüzden değişiklik uygulanamadı.</string>
 
     <!-- Confirming an import: turning drafts into real tasks. -->
+
+    <!-- The startup gate: what is shown instead of the application when the database may not be opened. -->
+    <string name="startup_title">PNP açılamadı</string>
+    <string name="startup_data_safe">Verileriniz olduğu gibi duruyor; hiçbir şey değiştirilmedi.</string>
+    <string name="startup_close">Kapat</string>
+    <string name="startup_another_copy">PNP zaten açık görünüyor. Aynı veriyle iki kopya birden çalışamaz. Açık olan pencereyi kapatıp yeniden deneyin.</string>
+    <string name="startup_not_readable">Veri dosyanız okunamadı. Dosya bozulmuş ya da başka bir programın dosyasıyla değiştirilmiş olabilir. Elinizde bir yedek varsa onu kullanabilirsiniz.</string>
+    <string name="startup_too_new">Veri dosyanız PNP'nin daha yeni bir sürümüyle oluşturulmuş. Bu sürüm onu açamaz; PNP'yi güncelleyip yeniden deneyin.</string>
+    <string name="startup_not_cloned">Verilerinizin güvenlik kopyası alınamadı, bu yüzden güncelleme başlatılmadı. Diskte yer olduğundan emin olup yeniden deneyin.</string>
+    <string name="startup_not_migrated">Verilerinizin kopyası yeni sürüme taşınamadı, bu yüzden asıl verilerinize hiç dokunulmadı. Yeniden deneyin; sorun sürerse bu sürümü kullanmayı bırakıp önceki sürüme dönün.</string>
+    <string name="startup_not_written">Güvenlik kopyası diske yazılamadı, bu yüzden güncelleme başlatılmadı. Diskte yer olduğundan emin olup yeniden deneyin.</string>
+    <string name="startup_not_verified">Güvenlik kopyası alındı fakat geri okunup doğrulanamadı, bu yüzden güncelleme başlatılmadı. Yeniden deneyin.</string>
+    <string name="startup_migration_failed">Verileriniz yeni sürüme taşınırken bir sorun çıktı. Taşımadan önce alınan güvenlik kopyası yedek klasörünüzde duruyor ve verilerinizin tamamını içeriyor. Bu sürümü kullanmayı bırakıp önceki sürüme dönebilir ya da yedeği geri yükleyebilirsiniz.</string>
     <string name="confirm_section_title">İçe aktarmayı onayla</string>
     <string name="confirm_loading">Onay özeti hazırlanıyor…</string>
     <string name="confirm_unavailable">Bu içe aktarma artık kayıtlı değil.</string>

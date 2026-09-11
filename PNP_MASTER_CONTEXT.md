@@ -7,9 +7,9 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** Faz 3 / İş 4'ün **üçüncü dilimi** (her içe aktarma onayı
-> öncesinde otomatik JSON snapshot ve yarış koruması) tamamlandıktan sonra. İş 2
-> ve İş 3 bütünüyle bitmiştir; İş 4'ün dört diliminden **üçü** yapılmıştır. İş
+> **Son güncelleme:** Faz 3 / İş 4'ün **dördüncü ve son dilimi** (migration
+> öncesi eşleşmiş ham `.db` + yürütülmüş `.json` seti ve açılış kapısı)
+> tamamlandıktan sonra. İş 2, İş 3 ve **İş 4 bütünüyle bitmiştir**. İş
 > 3'ün bağlayıcı metni PLAN `14.4.1`–`14.4.6`, `12.16` ve
 > `16.`'dadır; uygulanan hâli §25.1'dedir. **İş 4'ün** bağlayıcı metni PLAN
 > `14.4.7`–`14.4.13`, `11.4.2`, `12.16` ve `16.`'dadır; kararların özeti ve
@@ -29,27 +29,61 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-HEAD (bu commit öncesi): 1e1e12b5baf2f0d12ca71b9a2fa9002133947e50
-önceki commit         : feat(settings): let the number of automatic backups be chosen
+HEAD (bu commit öncesi): a8c8a874b3879fa9ae4745d6169fb361163d8cb2
+önceki commit         : feat(import): save the data before an import changes it
 working tree          : temiz
 Room şema sürümü      : 8   (bu commit'te DEĞİŞMEDİ)
 şema dosyaları        : 1.json … 8.json  hepsi bayt bayt aynı
-test durumu           : 3327 test / 0 failure / 0 error / 0 skipped  (219 sınıf)
-                        [önceki commit: 3301 test / 216 sınıf]
+test durumu           : 3377 test / 0 failure / 0 error / 0 skipped  (225 sınıf)
+                        [önceki commit: 3327 test / 219 sınıf]
 PLAN.md               : bu commit'te DEĞİŞMEDİ
 ```
 
-**Bu commit Faz 3 / İş 4'ün üçüncü dilimidir.** Artık **her** içe aktarma onayı,
-domain verisine ilk yazımdan önce, kanonik 15 tablolu bir JSON snapshot'la
-korunuyor: dosya atomik yazılıyor, **gerçek okuyucuyla geri okunup doğrulanıyor**,
-saklama sayısı uygulanıyor, ve onay transaction'ının ilk aşaması canlı
-veritabanını aynı sözleşmeyle yeniden okuyup snapshot'la karşılaştırıyor.
+**Bu commit Faz 3 / İş 4'ün dördüncü ve son dilimidir; İŞ 4 TAMAMLANDI.**
+Uygulama artık kullanıcının veritabanını **yalnız açılış kapısından** açıyor:
+instance kilidi alınıyor, `user_version` Room açılmadan okunuyor, ve eski bir
+şema görülürse gerçek migration başlamadan önce **iki eşleşmiş artefakt** —
+migration kodunun hiç çalışmadığı ham `.db` klonu ve bu klonun ayrı bir çalışma
+kopyasının gerçek zincirle v8'e yürütülmesinden üretilen doğrulanmış `.json` —
+yazılıp kanıtlanıyor.
 
-**İçe aktarma tetikleyicisi BAĞLANDI; migration tetikleyicisi hâlâ bağlanmadı**
-(Dilim 4). `ImportConfirmationStore` artık `AutomaticSnapshotTaker` ve
-`AutomaticBackupHousekeeping` alıyor; `DatabaseFactory` ve
-`ImportConfirmationController` **ikisini de almıyor** ve bunu bir test yapısal
-olarak iddia ediyor.
+**Üç tetikleyicinin üçü de bağlandı.** Otomatik yedeğin sahipleri artık şunlar ve
+başkası yok:
+
+```text
+restore öncesi   RestoreController          → pnp-oncesi-*.json
+import onayı     ImportConfirmationStore    → pnp-otomatik-import-*.json
+açılış/migration StartupGate                → pnp-otomatik-migration-*.db + .json
+```
+
+`DatabaseFactory` hâlâ ne housekeeping ne snapshot alıcı alıyor — ve bu artık
+yalnız temizlik değil, **taşıyıcı bir kural**: kapı, seti üretirken çalışma
+kopyasını bu fabrikadan geçiriyor; kendi başına snapshot alan bir fabrika,
+kopyanın snapshot'ını alırdı.
+
+Açılışın sırası (PLAN `14.4.10`, birebir):
+
+```text
+ 1  instance kilidi alınır       → alınamazsa DB HİÇ açılmaz, hata ekranı
+ 2  user_version Room AÇILMADAN okunur (salt okunur SQLite bağlantısı)
+ 3  dosya yok / boş  → normal oluşturma yolu, snapshot YOK
+ 4  sürüm 8          → snapshot YOK, normal açılış
+ 5  sürüm 1..7       → ÖNCE set
+ 6  sürüm > 8 / okunamaz → DB AÇILMAZ, hata ekranı
+ 7  iki ad AYNI ANDA sahiplenilir (aynı sonek)
+ 8  ham klon: salt okunur VACUUM INTO → .part → atomik move
+    kanıt: SQLite başlığı + user_version = addaki v<eski> + integrity_check +
+           foreign_key_check + kaynakla AYNI tablolar ve AYNI satır sayıları
+ 9  klonun AYRI çalışma kopyası geçici dizinde gerçek zincirle v8'e yürütülür
+10  yürütülmüş kopyadan kanonik belge üretilir ve atomik yazılır
+11  belge GERÇEK UntrustedBackupReader + TemporaryBackupProbe ile geri okunur
+12  geri okunan, çalışma kopyasının TAZE okumasıyla karşılaştırılır
+13  ikisi de kanıtlanmadan MigrationSnapshotSet YOKTUR → gerçek DB açılamaz
+14  set kanıtlandıktan sonra automaticBackupCount ile rotation (fail open)
+15  gerçek DB normal zincirle açılır; burada düşerse set KORUNUR + hata ekranı
+16  kilit 1'den 15'in sonuna kadar tutulur, her çıkışta bırakılır
+17  çalışma dizini, -wal, -shm ve .part her yolda silinir
+```
 
 İçe aktarma onayının sırası:
 
@@ -167,11 +201,20 @@ Bundan çıkan ve **kayda değer** olan tek şey şudur:
 yok" kesin olarak bilinemez; yalnızca dosyada görünmediği söylenebilir. Plan ve
 uygulama, veri **varmış gibi** güvenli olmak zorundadır.
 
-> **Geçici kural — Faz 3 / İş 4 / Dilim 4 tamamlanana kadar geçerlidir:**
-> gerçek uygulama **normal XDG diziniyle açılmamalıdır.** Bugün açılırsa
-> migration **snapshot'sız** çalışır ve PLAN `14.4.10`'un açılış kapısı henüz
-> yoktur. Geliştirme ve manuel doğrulama turları geçici XDG dizinleriyle
-> yapılmaya devam eder. Dilim 4 bittiğinde bu kural kalkar.
+> **O geçici kural KALKTI ve yerini koda bıraktı.** Dilim 4 bitene kadar kural
+> şuydu: gerçek uygulama normal XDG diziniyle açılmamalı, çünkü bir açılış
+> migration'ı snapshot'sız çalıştırırdı. Artık çalıştıramaz — `StartupGate`
+> eski bir şema gördüğünde, doğrulanmış bir `MigrationSnapshotSet` elde
+> edilmeden Room'a hiç ulaşmaz, ve o tip yalnız iki eş de yazılıp geri
+> okunduktan sonra üretilebilir. Yani koruma bir hatırlatma olmaktan çıkıp
+> **açılış yolunun bir özelliği** oldu.
+>
+> **Buna rağmen gerçek kullanıcı veritabanı bu geliştirme turunda AÇILMADI ve
+> MIGRATE EDİLMEDİ.** Kullanıcının ilk gerçek migration'ını tetiklemek bir
+> geliştirme adımı değil, kullanıcının kendi kararıdır; tur boyunca dosya yalnız
+> açılmadan ölçüldü (hash, boyut, mtime) ve değişmediği doğrulandı. Uygulama ilk
+> kez normal XDG ile açıldığında kapı çalışacak ve v3 → v8 geçişinin önüne
+> eşleşmiş seti koyacaktır.
 
 ---
 
@@ -1664,10 +1707,10 @@ edilmiş kalıptır; geri alma motoru da (İş 2 / Dilim 2) bilerek bağlanmamı
 
 ---
 
-# 25.2 OTOMATİK SNAPSHOT VE DÖNGÜSEL SAKLAMA  *(Faz 3 / İş 4 — DİLİM 1, 2 VE 3 BİTTİ)*
+# 25.2 OTOMATİK SNAPSHOT VE DÖNGÜSEL SAKLAMA  *(Faz 3 / İş 4 — TAMAMLANDI)*
 
 Bağlayıcı metin PLAN `14.4.7`–`14.4.13`'tedir. Aşağısı alınan kararların özeti,
-gerekçeleri ve **Dilim 1, 2 ve 3'te uygulanan hâlidir**. Dilim 4 yapılmamıştır.
+gerekçeleri ve **dört dilimin tamamında uygulanan hâlidir**.
 
 ## İki tetikleyici, üç artefakt türü
 
@@ -1776,9 +1819,11 @@ pnp-oncesi-YYYY-AA-GG-SSDDsn.json        (restore öncesi, §25.1)
 pnp-yedek-<tarih>.json                   (manuel, hedefi kullanıcı seçer)
 ```
 
-Çakışma, Dilim 4'ün atomik sahiplenme kalıbıyla çözülür (`Files.createFile`,
-sonra `-2`, `-3`). **Bir migration setinin iki eşi AYNI soneki taşır**
-(`…-2.db` + `…-2.json`); ikisi adlarından eşleştirilebilir olmalıdır.
+Çakışma, atomik sahiplenme kalıbıyla çözülür (`Files.createFile`, sonra `-2`,
+`-3`); tek yeri `ClaimedNameWriter`'dır. **Bir migration setinin iki eşi AYNI
+soneki taşır** (`…-2.db` + `…-2.json`); ikisi adlarından eşleştirilebilir
+olmalıdır, ve bunu `claimSetNames` iki adı aynı anda alarak sağlar — ikincisi
+doluysa ilki geri verilir.
 
 Ada **girmeyenler**: kullanıcı adı, makine adı, oyun adı, gerçek içe aktarma
 dosyasının adı, herhangi bir veri içeriği.
@@ -1922,13 +1967,15 @@ cp ile DB + -wal + -shm kopyalama      REDDEDİLDİ  atomik değil, tutarlı sna
    her onay yedeklenir, dosya doğrulanır, yarış transaction içinde kapatılır
    commit: feat(import): save the data before an import changes it
 
-4  Migration öncesi ham DB + yürütülmüş JSON seti + açılış kapısı . YAPILMADI
+4  Migration öncesi ham DB + yürütülmüş JSON seti + açılış kapısı . TAMAM
+   kapı yazıldı; korumasız migration artık kod tarafından imkânsız
    commit: feat(backup): save the database before a migration changes it
 ```
 
 Dilimler **bu sırayla** uygulanır: Dilim 3 ve 4, Dilim 1'in adlarını ve
-Dilim 2'nin sayısını kullanır. **Dilim 4 tamamlanana kadar gerçek uygulama normal
-kullanıcı XDG'siyle açılmaz** (§0).
+Dilim 2'nin sayısını kullanır. *(Dilim 4 bitene kadar gerçek uygulamanın normal
+kullanıcı XDG'siyle açılmaması kuralı buradaydı; kural artık kalktı ve yerini
+açılış kapısının kendisine bıraktı — §0, §33 R10.)*
 
 Hiçbir ara commit: korumasız migration başlatmaz · doğrulanmamış dosyaya
 "snapshot alındı" demez · rotation ile kullanıcı dosyası silmez · kalıcılığı
@@ -2253,11 +2300,133 @@ Ayarlar'da son snapshot zamanı / klasörü açma       kapsam dışı (PLAN 12.
 taslak oluştururken snapshot                        PLAN 14.4.8 bunu açıkça reddeder
 ```
 
-`DatabaseFactory` hâlâ ne `AutomaticSnapshotTaker` ne de
-`AutomaticBackupHousekeeping` alıyor; `RetentionAfterRestoreTest` bunu JVM
-refleksiyonuyla iddia ediyor ve aynı test artık import tarafının **aldığını**
-iddia ediyor. Dilim 4 geldiğinde bu testin yine bilinçli olarak çevrilmesi
-gerekir.
+`DatabaseFactory` ne `AutomaticSnapshotTaker` ne `AutomaticBackupHousekeeping`
+alıyor — ve Dilim 4 geldiğinde de almadı. `RetentionAfterRestoreTest` bunu JVM
+refleksiyonuyla iddia etmeye devam ediyor; test her dilimde bilinçli olarak
+genişletildi ve son hâlinde üç sahibi (restore, import, kapı) sayıyor. Fabrikanın
+boş kalması artık taşıyıcı: kapı, migration çalışma kopyasını o fabrikadan
+geçirir.
+
+---
+
+## İş 4 / Dilim 4'te uygulanan hâli
+
+```text
+domain/backup/automatic/MigrationSnapshotSet.kt   set tipi (internal ctor),
+                                                  sekiz StartupProblem, StartupRefused
+desktopMain/platform/startup/ConsistentDatabaseClone.kt   salt okunur VACUUM INTO,
+                                                  Room'suz user_version, satır
+                                                  sayıları, integrity + FK
+desktopMain/platform/startup/InstanceLock.kt      FileChannel.tryLock
+desktopMain/platform/startup/MigrationSnapshotSetWriter.kt  iki eşin üretimi ve kanıtı
+desktopMain/platform/startup/StartupGate.kt       PLAN 14.4.10'un 17 adımı
+commonMain/ui/feature/startup/StartupErrorScreen.kt  sekiz Türkçe cümle
+platform/backupfiles/ClaimedNameWriter.kt         + claimSetNames (iki ad, tek sonek)
+Main.kt                                           artık DatabaseFactory'yi DOĞRUDAN
+                                                  çağırmıyor; yalnız kapıyı çağırır
+```
+
+### Tutarlı klon — ölçülmüş mekanizma
+
+Ayrıntılı ölçüm §33 R11'dedir. Özeti: **salt okunur bağlantı + `VACUUM INTO`**.
+WAL'da bekleyen satırlar klona geçiyor, `user_version` korunuyor, migration kodu
+hiç çalışmıyor, ve kaynağın `.db` ile `-wal` dosyaları **bayt bayt** değişmiyor.
+Okuma-yazma açmak kaynağı değiştiriyor (WAL checkpoint edilip siliniyor), bu
+yüzden salt okunurluk bir tercih değil zorunluluk. `cp` ile üçlü kopyalama
+hiçbir yerde mekanizma olarak kullanılmıyor; testlerde yalnız **kaza fixture'ı
+kurmak** için var ve orada tutarlılığı testin kendisi sağlıyor.
+
+### Setin sahiplenilmesi ve kanıtı
+
+```text
+ad        claimSetNames iki adı AYNI ANDA Files.createFile ile alır; ikincisi
+          doluysa ilki geri verilir ve sonraki sonek denenir → iki eş DAİMA
+          aynı soneki taşır, yoksa eşleştirilemez iki yetim kalırdı
+ham yazım VACUUM INTO → <set>.db.part → atomik move (VACUUM INTO var olan
+          hedefi reddeder, claim ise gerçek boş bir dosyadır)
+ham kanıt SQLite başlığı + user_version == addaki v<eski> + integrity_check +
+          foreign_key_check + KAYNAKLA AYNI tablolar ve AYNI satır sayıları
+          (checksum DEĞİL: VACUUM dosyayı yeniden yazar, bayt eşitliği yanlış
+           soru olurdu)
+json      ham klonun AYRI çalışma kopyası geçici dizinde gerçek zincirle v8'e
+          yürütülür; belge o kopyadan üretilir
+json kanıt GERÇEK UntrustedBackupReader + TemporaryBackupProbe ile geri okunur,
+          sonra çalışma kopyasının TAZE okumasıyla karşılaştırılır
+set       MigrationSnapshotSet'in yapıcısı internal; ikisi de kanıtlanmadan
+          örneği YOKTUR, dolayısıyla gerçek DB açılamaz
+```
+
+### Yarım kalanla ne yapılır
+
+Üç durum, ve ayrım dosyanın **ne olduğu** üzerinedir:
+
+```text
+boş claim              SİLİNİR — ad rezervasyonundan başka bir şey değil
+kanıtı DÜŞEN ham yarım SİLİNİR — adının söylediği veritabanı OLMADIĞI kanıtlandı;
+                       adı yalan söyleyen bir dosya bırakmak, hiçbir şey
+                       bırakmamaktan kötüdür
+kanıtı GEÇEN ham yarım KALIR — saniyeler önce alınmış tutarlı bir kopyadır;
+                       eşsiz yarım rotation'ın erişiminin dışındadır (Dilim 1),
+                       disk harcar, veri kaybettirmez
+çalışma dizini + .part  HER YOLDA silinir (PLAN 14.4.10 adım 17)
+```
+
+### Instance kilidi
+
+```text
+ne          <dataDirectory>/pnp-baslangic.lock üzerinde FileChannel.tryLock
+neden OS    stale sorusu ortadan kalkar: çekirdek, process nasıl ölürse ölsün
+            kilidi bırakır. PID dosyası olsaydı "o process yaşıyor mu, id
+            yeniden mi kullanıldı, ne kadar bekleyelim" sorularının her cevabı
+            tahmin olurdu
+silinmez    dosya asla silinmez; iki kopya aynı yola descriptor tutarken biri
+            unlink ederse ikisi FARKLI dosyaları kilitlemiş olurdu
+alınamazsa  beklenmez: PLAN 14.4.10'a göre ikinci kopya veritabanını AÇMAZ,
+            ANOTHER_COPY_IS_RUNNING ekranını gösterir ve durur
+kapsam      1. adımdan gerçek migration'ın sonuna kadar; başarıda da hatada da
+            bırakılır
+kanıt       StartupGateTest gerçek bir İKİNCİ PROCESS başlatır (LockHolder),
+            kapının reddettiğini gösterir, sonra process'i ÖLDÜRÜR ve kilidin
+            kendiliğinden serbest kaldığını gösterir
+```
+
+### Set oluşturulmayan durumlar
+
+```text
+veritabanı yok / boş dosya      → normal oluşturma, seed, snapshot YOK
+zaten v8                        → snapshot YOK
+başarılı migration sonrası açılış → dosya artık v8 olduğu için snapshot YOK
+                                  (ayrı bir "daha önce yapıldı" defteri YOK;
+                                   sürümün kendisi kayıttır)
+```
+
+### Migration'ın bilerek reddettiği veritabanı
+
+Ölçüm sırasında üretim kodunda gerçek bir boşluk bulundu ve kapatıldı.
+`Migration3To4`, v3'te oyun/öge/görev/görev-rengi taşıyan bir veritabanını
+**bilerek** reddeder (PLAN 18: uydurmak yerine dur) ve attığı
+`UnconvertibleLegacyDataException` bir `SQLiteException` değildir. Yakalanmadığı
+sürece ham exception olarak dışarı çıkıyordu. Artık hem çalışma kopyasında
+(`SNAPSHOT_NOT_MIGRATED`) hem gerçek açılışta (`MIGRATION_FAILED`) yakalanıyor:
+kullanıcı Türkçe bir ekran görüyor ve **asıl veritabanına hiç dokunulmuyor**.
+
+### Hata ekranı
+
+Sekiz sebep, sekiz ayrı Türkçe cümle, `else` yok. Yedisi "Verileriniz olduğu gibi
+duruyor" der; sekizincisi — gerçek migration'ın düştüğü durum — demez, çünkü
+orada gerçekten bir şey denenmiştir; onun yerine alınmış yedeğin yedek
+klasöründe durduğunu **kelimelerle** söyler. Yol, SQL, UUID, enum, exception
+metni, `pnp.db`, `.json` hiçbirinde geçmez; bir test hepsini tarar.
+
+### Dilim 4'ün bilerek YAPMADIKLARI
+
+```text
+ham .db'yi uygulama içinden geri yükleme yolu   PLAN 14.4.9 bu işte OLUŞTURULMAZ
+                                                (seçici .json süzer, ham dosya
+                                                 orada görünmez)
+gerçek kullanıcı DB'sinde ilk migration'ı tetiklemek  kullanıcının kararı
+R12 (geriye giden saat)                         AÇIK risk olarak korundu
+```
 
 ---
 
@@ -2334,8 +2503,13 @@ gerektirmeyecektir:
 - Migration snapshot'ı **var olan** migration zincirini çalıştırır; yeni bir
   migration yazmaz. Zincir `Migration1To2` … `Migration7To8` olarak kalır.
 
-İş 4 sırasında şema değişikliği gerektiğini düşünürsen **uygulamadan önce dur ve
-kanıtlarıyla bildir.**
+**Ve gerektirmedi:** İş 4 dört diliminin hiçbirinde şema değişmedi. `1.json` …
+`8.json` bayt bayt aynı kaldı, Room sürümü 8 kaldı, zincir aynı kaldı. Dilim 4
+migration yazmadı; **var olan zinciri iki kez çalıştırdı** — bir kez geçici bir
+çalışma kopyası üzerinde, bir kez gerçek veritabanı üzerinde.
+
+Bundan sonrası için kural yeniden yürürlüktedir: **yeni bir şema değişikliği
+gerektiğini düşünürsen uygulamadan önce dur ve kanıtlarıyla bildir.**
 
 ## Migration testi kalıbı
 
@@ -2421,6 +2595,14 @@ ConfirmationSnapshots (desktopTest)     gerçek DB'yi okuyup dosya yazmayan
 RefusingWriter / RuiningWriter /        gerçek diskte: yazmayan, yazdıktan sonra
 GatedWriter (desktopTest)               dosyayı bozan, ve ikinci basış gelene
                                         kadar yazımı bekleten yazıcılar
+StartupTestSupport (desktopTest)        openWithHotWal — CHECKPOINT EDİLMEMİŞ bir
+                                        WAL bırakan eski veritabanı kurucusu;
+                                        crashedCopyOf — üçlüyü kaza fixture'ı
+                                        olarak kopyalar (mekanizma DEĞİL);
+                                        Room'suz rowCountsOf / schemaVersionOf
+LockHolder (desktopTest)                GERÇEK ikinci process: kilidi alır, bekler,
+                                        öldürülür — OS'in kilidi bıraktığını
+                                        kanıtlamanın tek dürüst yolu
 ComposeSceneHarness                     gerçek Compose sahnesi (desktopTest)
 ```
 
@@ -2455,6 +2637,9 @@ Geçmiş ekranı            2 SELECT (history_events + progress_events), satır,
 Otomatik import snapshot İKİ tam okuma (yedek + transaction içi kapı), taslak
                          sayısından BAĞIMSIZ: 1 ve 42 taslak aynı ifadeleri
                          çalıştırır; kapı yalnız okur, yazımı değiştirmez
+Açılış kapısı            v8 bir veritabanında EK MALİYET YOK: yalnız kilit +
+                         Room'suz tek PRAGMA okuması; klon, çalışma kopyası ve
+                         belge SADECE sürüm 1..7 ise üretilir
 Geri alma                önizleme 1 ve 42 görev için AYNI ifadeleri çalıştırır;
                          geri alma sorguları görev/hücre sayısıyla büyümez ve
                          geçmiş uzadıkça artmaz. Yazımlar büyür: görev başına
@@ -2610,7 +2795,7 @@ yardımcı işler
       yapılandırılmış görev CSV dışa aktarma
 ```
 
-## Faz 3 — BAŞLADI, 16 İŞTEN 3'Ü BİTTİ; 4'ÜN İLK ÜÇ DİLİMİ YAPILDI
+## Faz 3 — BAŞLADI, 16 İŞTEN 4'Ü BİTTİ
 
 PLAN `18.` — Faz 3 işler listesi.
 
@@ -2618,12 +2803,12 @@ PLAN `18.` — Faz 3 işler listesi.
  1  Geçmiş ekranını tamamla ............................. TAMAM
  2  Import batch rollback ve korumalı geri alma ......... TAMAM (üç dilim)
  3  Sürümlü JSON yedek/dışa aktarma ve geri yükleme ..... TAMAM (dört dilim)
- 4  Import ve migration öncesi otomatik snapshot ........ BAŞLADI  ← SIRADAKİ
-                                                        (dört dilimden 3'ü, §25.2)
+ 4  Import ve migration öncesi otomatik snapshot ........ TAMAM (dört dilim, §25.2)
  5  CSV görev dışa aktarmayı doğrula ......... özellik var, Faz 3 doğrulama
                                               testleri yazılmadı
  6  Veritabanı migration testlerini oluştur ............. TAMAM
- 7  Beklenmeyen kapanış / bozuk import kurtarma ......... YAPILMADI
+ 7  Beklenmeyen kapanış / bozuk import kurtarma ......... YAPILMADI  ← SIRADAKİ
+                                                        (PLAN sırası: 7 → 9+5 → 10)
  8  Klavye, odak, renk dışı etiket, yüksek DPI .... mevcut ekranlar için
                                               büyük ölçüde tamam
  9  Büyük veri setiyle performans testi ...... sorgu sayımı var; yedek
@@ -2689,46 +2874,29 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
 
 ## Sıradaki bağlayıcı iş
 
-> **Faz 3 / İş 4 / Dilim 4: migration öncesi ham `.db` + yürütülmüş JSON seti ve
-> açılış kapısı.**
+> **Faz 3 / İş 7: beklenmeyen kapanış ve bozuk import kurtarma.**
 >
-> İş 4'ün bütün tasarım kararları alınmıştır (PLAN `14.4.7`–`14.4.13`, özet
-> §25.2). **Dilim 1, 2 ve 3 bitmiştir**: adlar, sahiplik kanıtı ve tür başına
-> rotation motoru yazıldı; `settings.json` ve `Ayarlar` ekranındaki saklama
-> sayısı eklendi; ve her içe aktarma onayı artık doğrulanmış bir snapshot'ın
-> arkasında çalışıyor.
+> İş 4 **tamamlanmıştır** (dört dilim, §25.2). Kullanıcının verisi artık üç
+> yerde otomatik olarak korunuyor: geri yüklemeden önce, her içe aktarma
+> onayından önce, ve her migration'dan önce — sonuncusu iki eşleşmiş artefaktla
+> ve Room'a hiç ulaşmayan bir kapının arkasında.
 >
-> Dilim 4'ün kapsamı (PLAN `14.4.9`, `14.4.10`):
+> PLAN'ın kendi sırası bundan sonra şudur: **İş 7 → İş 9 + İş 5 → İş 10 →
+> İş 11-13 → İş 14-16.**
 >
-> - Migration gerektiren bir veritabanı için **iki eşleşmiş artefakt**: migration
->   kodunu hiç çalıştırmamış ham bir SQLite klonu ve o klonun ayrı bir çalışma
->   kopyası gerçek migration zinciriyle v8'e yürütüldükten sonra üretilen kanonik
->   JSON. **Set ancak ikisi de doğrulandığında başarılı sayılır.**
-> - Ham klon SQLite'ın tutarlı snapshot mekanizmasıyla üretilir. `VACUUM INTO`
->   kullanımına izin verilmiştir; **gerçek davranışı bu kurulumda ölçülmemiştir**
->   ve varsayılmadan testle doğrulanmalıdır (§33 R11). `cp` ile DB + `-wal` +
->   `-shm` kopyalamak **yasaktır**.
-> - PLAN `14.4.10`'un 14 adımlı açılış kapısı: instance kilidi, Room AÇILMADAN
->   `user_version` tespiti, sürüm 1..7 ise set üretimi, set doğrulanmadan gerçek
->   `DatabaseFactory`'nin kullanıcı DB'sini **açamaması**, ve bütün yollarda
->   geçici dosyaların temizlenmesi.
-> - Migration seti veya gerçek migration düşerse **gerçek hata penceresi** — bu
->   pencere İş 4 kapsamındadır ve Faz 3 / İş 7'ye bırakılmaz.
+> İş 7'nin kapsamı (PLAN `18.` Faz 3, iş 7): beklenmeyen kapanıştan sonra açılış,
+> yarım kalmış bir içe aktarmanın kurtarılması, ve kullanıcının elindeki
+> artefaktlarla ne yapabileceğinin anlatılması. Dilim 4 bu işin bir parçasını
+> **zaten** getirdi ve tekrar yazılmamalıdır: açılış kilidi, sıcak WAL taşıyan
+> bir veritabanının güvenle okunabildiğinin ölçümü, ve güvenli açılış hata
+> ekranı. İş 7 bunların üstüne kurulur.
 >
-> Dikkat: `RetentionAfterRestoreTest`'in yapısal testi bugün `DatabaseFactory`'nin
-> ne `AutomaticSnapshotTaker` ne `AutomaticBackupHousekeeping` **almadığını**
-> iddia ediyor, ve aynı sınıftaki `opening a database still writes no migration
-> snapshot` testi bunu davranışsal olarak gösteriyor. Dilim 4'te **ikisi de
-> bilinçli olarak çevrilmelidir**, sessizce silinmemelidir.
+> Not: `pnp-otomatik-migration-*.db` dosyasının uygulama içinden geri yükleme
+> yolu PLAN `14.4.9` gereği İş 4'te **bilerek oluşturulmadı**; böyle bir yol
+> gerekirse ürün kararıyla İş 7'de ele alınır.
 >
-> Ayrıca gerçek veritabanı şema **v3**'tedir (§0): Dilim 4'ün ilk gerçek
-> tetiklenmesi varsayımsal değildir.
->
-> **Dilim 4 bitene kadar gerçek uygulama normal kullanıcı XDG'siyle
-> açılmamalıdır** (§0): bugün açılırsa migration snapshot'sız çalışır.
->
-> Sonraki bağlayıcı sıra PLAN'ın kendi sırasıdır: İş 4 → 7 → 9 + 5 → 10 →
-> 11-13 → 14-16.
+> Ayrıca §33 R12 (geriye giden saat içe aktarmayı durdurur) **açık** bir risktir
+> ve doğal yeri İş 7 veya İş 10'dur.
 
 ### İş 3'ün dört atomik dilimi — dördü de bitti
 
@@ -3053,26 +3221,67 @@ Sonuçları:
 
 ---
 
-## R10 — Gerçek veritabanı korumasız bir migration'a açık  *(AÇIK — Dilim 4'e kadar)*
+## R10 — Gerçek veritabanı korumasız bir migration'a açık  *(KAPANDI — kapı yazıldı)*
 
-Gerçek kullanıcı veritabanı şema **v3**'tedir (§0), kodun şema sürümü ise 8'dir.
-Uygulamanın normal XDG diziniyle bir sonraki açılışı, v3 → v8 migration zincirini
-**snapshot olmadan** çalıştırır: PLAN `14.4.10`'un açılış kapısı henüz yoktur.
+Gerçek kullanıcı veritabanı şema **v3**'tedir (§0) ve kodun şema sürümü 8'dir,
+yani bir sonraki normal açılış gerçek bir v3 → v8 geçişidir. Risk, o geçişin
+**snapshot olmadan** çalışabilmesiydi.
+
+Dilim 4 bunu kapattı ve kapatma biçimi hatırlanacak bir kural değil:
 
 ```text
-etki       migration'da bir hata olursa geri dönüş yolu yok
-olasılık   Migration3To4 yalnız renk taşıyan bir DB'yi temiz göç ettirir ve
-           gözlemde kullanıcı verisi görünmüyor — fakat bu bir GARANTİ DEĞİLDİR;
-           DB açılmadığı için içeriği kesin olarak bilinmiyor
-azaltma    GEÇİCİ KURAL: Dilim 4 bitene kadar gerçek uygulama normal kullanıcı
-           XDG'siyle AÇILMAZ. Geliştirme ve manuel turlar geçici XDG kullanır
-kapanış    Dilim 4 (açılış kapısı + migration snapshot seti) tamamlandığında
+önce      DatabaseFactory().open(...) doğrudan çağrılıyordu
+şimdi     yalnız StartupGate.open() çağrılır; eski bir şema görülürse gerçek
+          açılış, doğrulanmış bir MigrationSnapshotSet'i TUTAN dalın içindedir
+          ve o tipin üretimi iki eşin de yazılıp geri okunmasına bağlıdır
+kanıt     StartupSurfaceTest: üretimde DatabaseFactory.open'ı çağıran üç yer
+          vardır ve üçü de sayılıdır (kapı, çalışma kopyası, geçici prob);
+          Main'de doğrudan çağrı YOKTUR
+          StartupGateTest: seti yazılamayan / migrate edilemeyen / doğrulanamayan
+          her yolda gerçek DB **v3'te kalır**
 ```
 
-## R11 — `VACUUM INTO`'nun bu kurulumdaki davranışı ölçülmedi  *(AÇIK — Dilim 4'te ölçülecek)*
+Ayrıca ölçüm sırasında ikinci bir güvence ortaya çıktı: `Migration3To4`, v3'te
+**oyun/öge/görev** taşıyan bir veritabanını bilerek reddeder ve bu reddediş bir
+depolama hatası değildir. Dilim 4'ten önce böyle bir reddediş ham exception
+olarak dışarı çıkardı; artık `SNAPSHOT_NOT_MIGRATED` olarak yakalanıp Türkçe
+hata ekranına dönüşüyor ve **asıl veritabanına hiç dokunulmuyor**. Gerçek DB'nin
+yalnız 12 tohum renk taşıdığı gözlemi bir garanti değildi; artık garanti
+gerekmiyor, çünkü her iki durumda da davranış güvenli.
 
-Migration öncesi ham klon için `VACUUM INTO` kullanılmasına izin verilmiştir
-(PLAN `14.4.9`). Statik olarak doğrulananlar:
+## R11 — `VACUUM INTO`'nun bu kurulumdaki davranışı  *(KAPANDI — ÖLÇÜLDÜ)*
+
+Migration öncesi ham klon için `VACUUM INTO` kullanılmasına izin verilmişti
+(PLAN `14.4.9`) ve gerçek davranışı ölçülmemişti. **Dilim 4'ün ilk işi bu ölçüm
+oldu**, ve sonuç bağlayıcı tasarımla uyuşuyor. Ölçümün kendisi kalıcıdır:
+`ConsistentDatabaseCloneTest`, 11 test.
+
+```text
+salt okunur bağlantı + VACUUM INTO      ÇALIŞIYOR
+sıcak WAL, canlı yazıcı varken          klon WAL'daki satırları TAŞIYOR
+kaza kopyası (-wal var, -shm var)       ÇALIŞIYOR
+kaza kopyası (-wal var, -shm YOK)       ÇALIŞIYOR
+user_version                            KORUNUYOR (hem başlık baytı hem PRAGMA)
+integrity_check                         ok
+migration kodu                          HİÇ ÇALIŞMIYOR (klon v3 kalır; v7/v8
+                                        tabloları görünmez, `items` durur)
+kaynak .db ve -wal                      BAYT BAYT DEĞİŞMİYOR
+kaynak -shm                             okuyucu tarafından oluşturulabilir/
+                                        güncellenebilir — veri taşımaz
+var olan hedef dosya                    REDDEDİLİR (üzerine asla yazılmaz)
+veritabanı olmayan dosya                REDDEDİLİR
+```
+
+**Tasarımı belirleyen negatif sonuç:** aynı kaza kopyası **okuma-yazma** açılıp
+kapatıldığında kaynak değişiyor — WAL checkpoint edilip siliniyor ve veritabanı
+dosyası yeniden yazılıyor. Yani "dikkatli davranmak" yetmez; bağlantının salt
+okunur olması zorunludur. Bu da kalıcı bir testtir.
+
+`SQLITE_OPEN_NOFOLLOW` bilinçli olarak istenmiyor: Room aynı dosyayı onsuz
+açıyor, dolayısıyla burada sembolik bağı reddetmek uygulamanın geri kalanının
+kabul ettiği bir kurulumu reddetmek olurdu.
+
+Statik olarak doğrulanmış olanlar (Dilim 4 öncesinden, hâlâ geçerli):
 
 ```text
 gömülü SQLite      3.50.1  → VACUUM INTO (3.27+) sürüm olarak mevcut
@@ -3083,10 +3292,9 @@ sqlite3_serialize  iz yok → ERİŞİLEMEZ
 açılış bayrakları  SQLITE_OPEN_READONLY ve SQLITE_OPEN_NOFOLLOW mevcut
 ```
 
-**Ölçülmemiş ve varsayılmayacak olan:** sıcak bir WAL taşıyan bir veritabanının
-salt okunur açılışı. SQLite bu durumda `-shm` kurtarma denemesi yapar ve salt
-okunur bir bağlantı `SQLITE_READONLY_RECOVERY` ile düşebilir. Dilim 4'ün ilk
-testi bu olmalıdır; davranış varsayılmaz, ölçülür.
+Endişe edilen `SQLITE_READONLY_RECOVERY` durumu bu kurulumda **gerçekleşmedi**:
+sıcak WAL taşıyan bir veritabanı salt okunur açıldı ve klonlandı, `-shm` olsa da
+olmasa da. Varsayılmadı, ölçüldü.
 
 Ayrıca **yasak olan**, hiçbir koşulda denenmeyecek alternatif: veritabanı, `-wal`
 ve `-shm` dosyalarını sırayla kopyalamak. Üçü arasında atomiklik yoktur ve
@@ -3206,10 +3414,12 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   belge + kanonik yazıcı + dataSha256, Ayarlar ekranı + atomik dosya yazma,
   güvenilmeyen dosyayı okuma/doğrulama + geçici Room v8 denemesi, ve güvenlik
   yedeği + canlı replace transaction + arayüz.
-- İş 4'ün (otomatik snapshot + döngüsel saklama) BÜTÜN TASARIM KARARLARI
-  ALINMIŞTIR: PLAN 14.4.7-14.4.13, özet §25.2. Yeniden tartışma.
-  Sıradaki bağlayıcı iş: İş 4 / DİLİM 1 — otomatik yedek adları, sahiplik
-  kanıtı ve tür başına döngüsel saklama motoru. Hiçbir tetikleyiciye bağlanmaz.
+- İş 4 (otomatik snapshot + döngüsel saklama) dört dilimiyle TAMAMEN BİTTİ:
+  adlar/sahiplik/rotation motoru, sürümlü settings.json + saklama sayısı,
+  her içe aktarma onayı öncesi doğrulanmış snapshot + yarış koruması, ve
+  migration öncesi eşleşmiş set + açılış kapısı. Kararlar PLAN 14.4.7-14.4.13,
+  uygulanan hâli §25.2. Yeniden tartışma.
+  Sıradaki bağlayıcı iş: İŞ 7 — beklenmeyen kapanış ve bozuk import kurtarma.
 - İş 4'ün verilmiş kararları, kısaca: eşik YOK (her içe aktarma onayı
   yedeklenir, XLSX/CSV ayrımı yok); snapshot confirmDraftBatch'ten HEMEN ÖNCE;
   yarış koruması restore'un modelidir (transaction içi yeniden doğrulama +
@@ -3222,9 +3432,15 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   penceresi İŞ 4 kapsamındadır.
 - İş 4 ŞEMA DEĞİŞİKLİĞİ GEREKTİRMEZ; Room sürümü 8 kalır ve migration zinciri
   Migration1To2 … Migration7To8 olarak kalır.
-- GEÇİCİ KURAL: Dilim 4 bitene kadar gerçek uygulamayı normal kullanıcı XDG'siyle
-  AÇMA. Gerçek DB şema v3'tedir ve bir sonraki normal açılış v3 -> v8 migration'ı
-  snapshot'sız tetikler (§0).
+- O GEÇİCİ KURAL KALKTI: açılış kapısı yazıldı, korumasız migration artık kod
+  tarafından imkânsızdır (§33 R10). Gerçek DB hâlâ şema v3'tedir ve bu turda
+  AÇILMADI; ilk gerçek migration'ı tetiklemek kullanıcının kararıdır.
+- Uygulamanın veritabanını açan tek üretim yolu StartupGate'tir. Main'den
+  DatabaseFactory().open(...) ÇAĞIRMA; DatabaseFactory'ye housekeeping veya
+  snapshot alıcı EKLEME (kapı, çalışma kopyasını o fabrikadan geçirir).
+- Ham migration klonu için mekanizma ÖLÇÜLMÜŞTÜR: salt okunur bağlantı +
+  VACUUM INTO (§33 R11). Okuma-yazma açmak kaynağı değiştirir; DB + -wal + -shm
+  sırayla kopyalamak YASAKTIR.
 - İş 2'nin ürün kararları VERİLMİŞTİR ve PLAN 11.4.4'tedir; yeniden tartışma.
   Kısmi rollback yoktur, tek çakışma bütün işlemi engeller, segment kimliğine
   provenance bağlanmaz, anlık görüntüsü olmayan eski batch geri alınamaz.
@@ -3419,17 +3635,17 @@ Bugün çalışan hâliyle:
   yolunda veri işlemden önceki hâlinde kalır. Geri yüklenmiş bir `CONFIRMED`
   içe aktarma hâlâ geri alınabilir.
 
-Kalan iş ağırlıklı olarak **dayanıklılık, kurtarma, paketleme ve yayına
-hazırlıktır**: otomatik snapshot, kurtarma akışı, loglama, performans kapısı,
-Linux paketi, belgeler, lisans ve CI.
+Kalan iş ağırlıklı olarak **kurtarma, paketleme ve yayına hazırlıktır**:
+kurtarma akışı, loglama, performans kapısı, Linux paketi, belgeler, lisans ve
+CI. Dayanıklılık tarafı — sürümlü yedek, geri yükleme ve otomatik snapshot —
+bitmiştir.
 
 Bunların ilki — **sürümlü JSON yedek ve geri yükleme** — dört atomik dilimde
 **tamamlanmıştır**. Biçim, kapsam, doğrulama hattı, restore mimarisi (A′),
 güvenlik yedeği ve dört dilim PLAN `14.4` ile §25.1'de yazılıdır.
 
-Sıradaki iş **otomatik snapshot**'tır (PLAN Faz 3 / iş 4); bağlayıcı metni PLAN
-`14.4.7`–`14.4.13`, özeti §25.2'dedir. Bütün tasarım kararları alınmıştır ve
-dört dilimden **üçü uygulanmıştır**.
+**Otomatik snapshot** (PLAN Faz 3 / iş 4) da **tamamlanmıştır**; bağlayıcı metni
+PLAN `14.4.7`–`14.4.13`, uygulanan hâli §25.2'dedir.
 
 Alınan kararların özü: eşik yoktur — **her** içe aktarma onayı, `XLSX`/`CSV`
 ayrımı gözetmeden ve domain yazımından hemen önce yedeklenir; snapshot ile onay
@@ -3442,7 +3658,7 @@ yapılır, böylece bir içe aktarma yoğunluğu kullanıcının geri dönüş y
 tahliye edemez; ve sayı `Ayarlar` ekranından `1..50` aralığında değiştirilir,
 varsayılanı `7`'dir, `0` geçersizdir.
 
-İş dört atomik dilimde uygulanmaktadır. **Dilim 1, 2 ve 3 bitmiştir.**
+İş dört atomik dilimde uygulanmıştır. **Dördü de bitmiştir.**
 
 Dilim 1 otomatik yedeklerin adlarını, sahipliklerinin iki bağımsız kanıtla
 doğrulanmasını ve üç bağımsız kota için döngüsel saklama motorunu getirdi. Motor
@@ -3473,13 +3689,40 @@ Yedek alınamaz, yazılamaz veya doğrulanamazsa onay hiç başlamıyor ve kulla
 dört ayrı Türkçe cümleden birini görüyor. Onay penceresi, işlemden önce yedek
 alınacağını tek bir cümleyle söylüyor.
 
-**Dilim 4** (migration öncesi iki eşleşmiş artefakt ve açılış kapısı) sıradaki
-bağlayıcı iştir.
+Dilim 4 sonuncu boşluğu kapattı ve en sessiz olanını: bir güncellemeden sonraki
+ilk açılışı. Uygulama artık veritabanını yalnız **açılış kapısından** açıyor.
+Kapı önce bir instance kilidi alıyor — işletim sisteminin kilidi, çünkü onu
+çökmüş bir kopyadan geri almak için kimsenin bir şey yapması gerekmiyor; sonra
+şema sürümünü **Room'u hiç açmadan** okuyor; ve eski bir sürüm görürse gerçek
+migration'ın önüne **iki eşleşmiş artefakt** koyuyor: migration kodunun hiç
+çalışmadığı ham bir SQLite klonu ve bu klonun ayrı bir kopyasının gerçek
+zincirle taşınmasından üretilen, `Ayarlar` ekranından normal biçimde geri
+yüklenebilen bir JSON yedeği. İkisi de yazılıp **kanıtlanmadan** gerçek
+veritabanı açılamıyor; bu bir kural değil, tipin bir özelliği. Herhangi bir adım
+düşerse veritabanı bulunduğu sürümde kalıyor ve kullanıcı sekiz sebepten birini
+söyleyen Türkçe bir açılış ekranı görüyor. Gerçek migration sonradan düşerse
+alınmış set diskte kalıyor ve ekran onu işaret ediyor.
 
-> **Geçici kural:** Dilim 4 tamamlanana kadar gerçek uygulama normal kullanıcı
-> XDG'siyle açılmamalıdır. Gerçek veritabanı şema v3'tedir ve bir sonraki normal
-> açılış, henüz var olmayan açılış kapısı olmadan bir v3 → v8 migration'ını
-> tetikler (§0).
+Ham klonun mekanizması **ölçüldü, varsayılmadı** (§33 R11): salt okunur bir
+bağlantı üzerinde `VACUUM INTO`. Ölçüm, checkpoint edilmemiş bir WAL taşıyan —
+yani bir çökmeden sonra kalan — veritabanının eksiksiz klonlandığını, sürüm
+numarasının korunduğunu ve kaynağın bayt bayt değişmediğini gösterdi; ve aynı
+ölçüm, sıradan bir okuma-yazma açılışının kaynağı **değiştirdiğini** gösterdi,
+ki salt okunurluğun neden zorunlu olduğunun cevabı budur.
+
+**Böylece Faz 3 / İş 4 tamamlanmıştır** ve kullanıcının verisi artık üç ayrı
+noktada, kendisi istemeden ve kendisi hatırlamak zorunda kalmadan korunuyor:
+geri yüklemeden önce, her içe aktarma onayından önce, ve her migration'dan önce.
+
+Sıradaki bağlayıcı iş **İş 7**'dir: beklenmeyen kapanış ve bozuk import
+kurtarma.
+
+> **O geçici kural kalktı.** Açılış kapısı yazıldı; korumasız bir migration artık
+> kod tarafından imkânsızdır. Gerçek kullanıcı veritabanı hâlâ şema v3'tedir ve
+> **bu geliştirme turunda açılmadı, kopyalanmadı ve migrate edilmedi** — yalnız
+> açılmadan ölçülüp değişmediği doğrulandı. İlk gerçek migration'ı tetiklemek
+> kullanıcının kendi kararıdır; tetiklendiğinde kapı, eşleşmiş seti onun önüne
+> koyacaktır (§0, §33 R10).
 
 En önemli kural:
 
