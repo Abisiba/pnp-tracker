@@ -889,6 +889,198 @@ kaç görevin kaldırılacağını, tamamlanma işaretlerinin geri alınmayacağ
 işlemin geri alınamaz olduğunu. Engelleyici görev varsa onay ekranı yerine
 engelleme listesi gösterilir.
 
+### 11.4.5 Beklenmeyen kapanış ve yarım kalmış içe aktarma (kurtarma)
+
+Bu bölüm `18.` Faz 3 / İş 7'nin bağlayıcı sözleşmesidir. Kararlar
+kesinleşmiştir; yeniden tartışılmaz.
+
+#### Beklenmeyen kapanış ayrıca tespit edilmez
+
+- "Temiz kapandı" işaret dosyası, oturum dosyası veya benzeri bir kapanış kaydı
+  **oluşturulmaz**.
+- Veritabanının yanında `-wal` veya `-shm` dosyasının bulunması **çökme kanıtı
+  sayılmaz**. Canlı bir WAL, SQLite'ın normal çalışma hâlidir.
+- Temel güvence SQLite'ın kendisidir: `16.`'nın gerektirdiği her yazma tek
+  transaction'dır, transaction ya bütünüyle commit edilir ya da hiç
+  uygulanmamış olur, ve bir sonraki açılışta WAL kurtarması commit edilmiş
+  hâli geri getirir. Beklenmeyen kapanıştan sonraki açılış, normal açılışla
+  **aynı yoldan** (`14.4.10`) geçer; ayrı bir kurtarma ekranı veya bildirim
+  yoktur.
+- Süreç öldürülmesi commit edilmiş hiçbir transaction'ı kaybettirmez. İşletim
+  sistemi çökmesi veya güç kesintisinde **en son** commit'lerin kalıcılığı
+  SQLite'ın `synchronous` ayarına bağlıdır; bu ayarın bu kurulumdaki değeri İş 7
+  Dilim 1'de ölçülüp belgelenir. Hiçbir ayarda yarım bir transaction kalmaz.
+  İş 7 bu ayarı **değiştirmez**; değiştirmek ayrı bir karar gerektirir.
+- Açılış kilidi, sıcak WAL'ın okunması, migration snapshot kapısı ve açılış
+  hata ekranı `14.4.10`'dadır ve İş 4'te tamamlanmıştır. İş 7 bunları **yeniden
+  uygulamaz**; yalnız kullanır.
+
+#### Kaydedilmiş bir `DRAFT` kalıcıdır
+
+- `saveDraftBatch` ile başarıyla kaydedilmiş bir `DRAFT` batch kalıcıdır.
+  Uygulama yeniden açıldığında mevcut `Devam eden içe aktarmalar` listesinden
+  tekrar açılır (`11.4.3`).
+- Kaynak `XLSX`/`CSV` dosyasının sonradan taşınması, silinmesi veya
+  değiştirilmesi kaydedilmiş bir `DRAFT`'ı **bozuk yapmaz**. Kurtarma ve devam
+  sırasında kaynak dosya **yeniden okunmaz**; esas alınan, veritabanında saklanan
+  ham bloklardır (`11.3`). Parmak izi yalnız yeni bir içe aktarmada tekrar
+  uyarısı için kullanılır.
+- **Hiçbir `DRAFT` otomatik olarak onaylanmaz, silinmez, değiştirilmez veya
+  "onarılmaz".** Açılış, bir ekranın açılması veya bir denetimin sonucu bir
+  `DRAFT`'a yazma sebebi değildir.
+
+#### Kullanıcının iki seçeneği
+
+Geçerli bir `DRAFT` için kullanıcı:
+
+1. **devam eder** — mevcut inceleme ekranını açar (`11.4`), ya da
+2. **kaldırır** — açık onay verdikten sonra taslağı kaldırır.
+
+Üçüncü bir seçenek (otomatik tamamlama, kısmi onay, kaynak dosyadan yeniden
+üretme) yoktur.
+
+#### Taslağı kaldırma
+
+- Kaldırma **tek transaction**'dır ve kısmi sonuç bırakmaz.
+- Yalnız seçilen batch'i hedefler ve yalnız şu satırları siler: o
+  `import_batches` satırı, ona ait `raw_import_blocks` satırları, bu blokların
+  `draft_tasks` satırları ve onların `draft_task_colors` satırları. Aşağıda
+  tanımlanan bozuk bir `DRAFT`'ta bulunabilecek, o batch'e ait
+  `import_batch_cells` satırları da onunla gider; bu satırlar hiçbir hücreyi
+  değiştirmez.
+- `games`, `game_cells`, `cell_segments`, `tasks`, `task_colors`, `task_stages`,
+  `progress_events`, `history_events`, `colors`, `color_aliases` ve başka hiçbir
+  batch'in satırları **değişmez**. Transaction bunu kendi içinde doğrular
+  (postcondition); doğrulama tutmazsa commit edilmez.
+- Yalnız `DRAFT` batch kaldırılabilir. `CONFIRMED` veya `ROLLED_BACK` bir batch
+  için kaldırma **korumalı bir reddediştir**; hiçbir satır değişmez. Onaylanmış
+  bir içe aktarmayı geri almanın yolu `11.4.4`'tür.
+- Kaldırılmak istenen batch'e bir `games.source_import_batch_id` veya bir
+  `tasks.source_raw_import_block_id` başvuruyorsa kaldırma **reddedilir** ve
+  hiçbir satır değişmez; gerçek kayıtlar bir taslağın temizlenmesi uğruna
+  silinmez.
+- **Tekrar çağrı güvenlidir.** Artık bulunmayan bir batch için ikinci çağrı
+  hiçbir şey yazmaz ve tipli bir "zaten kaldırılmış" sonucu döndürür; exception
+  olarak sızmaz.
+- Kaldırma geçmişe olay **yazmaz** (`12.15`'in listesinde yoktur ve taslak
+  satırları kullanıcının oyun/görev verisi değildir, `14.4.8`) ve otomatik
+  snapshot tetikleyicisi **değildir**; `14.4.7`'nin iki tetikleyicili listesi
+  değişmez.
+- Kaldırma `17.`'ye göre kullanıcı onayı ister. Onay penceresi en az şunları
+  söyler: hangi dosyanın taslağının kaldırılacağını, ham hücrelerin ve görev
+  taslaklarının kalıcı olarak silineceğini, hiçbir oyun, görev veya hücrenin
+  değişmeyeceğini ve işlemin geri alınamaz olduğunu. Odak `Vazgeç` üzerindedir;
+  çift gönderim tek transaction üretir.
+- Beklenen hatalar (depolama hatası, reddediş) Türkçe ve eyleme dönük bir
+  cümleye çevrilir; `IllegalStateException`, `NullPointerException` ve diğer
+  invariant/programlama hataları maskelenmez (`14.4.5`).
+
+#### "Bozuk içe aktarma" ne demektir
+
+Bozuk bir içe aktarma, **yalnız** kalıcı import kayıtlarının mevcut şema ve
+domain invariant'larını **objektif olarak** ihlal ettiği durumdur. Belirsiz,
+tahmine dayalı veya kural sürümüne bağlı hiçbir durum bozuk sayılmaz.
+
+Uygulamanın kendi yazma yolları bozuk bir `DRAFT` **üretemez**: batch ve ham
+blokları `saveDraftBatch` tek transaction'ında ve sayı eşitliğiyle yazılır; ham
+blok metni ve koordinatları için güncelleme yolu yoktur; bütün inceleme yazımları
+batch'in `DRAFT` olduğunu aynı transaction içinde yeniden denetler; sayaçları,
+`materialized_task_id`'yi, `import_batch_cells`'i ve `tasks.source_raw_import_block_id`'yi
+yalnız onay transaction'ı, batch'i `CONFIRMED` yaparken yazar; üretimde
+`games.source_import_batch_id` her zaman boştur (`11.4.1`); yabancı anahtarlar
+zorlanır. Beklenmeyen kapanış bunların hiçbirini yarıda bırakamaz.
+
+Uygulamanın kendi yolları arasında bu tür durumların canlı veritabanına
+girebildiği **tek** yol, uygulamanın üretmediği ama `14.4.5`'in kapılarından
+geçen bir yedek belgesinin geri yüklenmesidir: yedek okuyucusu satır değerlerini, başvuruları, benzersiz
+anahtarları ve sıra boşluklarını denetler, fakat import yaşam döngüsünün
+satırlar arası kurallarını denetlemez. Yedek okuyucusu İş 7'de
+**değiştirilmez**. Migration zincirinde bu durumları üreten bilinen bir adım
+yoktur; eski sürümlerden gelen satırlar da aynı denetimden geçer. Veritabanı
+dosyasının uygulama dışından değiştirilmesi bu sözleşmenin konusu değildir.
+
+Bir `DRAFT` batch `b` için bozukluk, aşağıdaki kesin predicate'lerden **en az
+birinin** doğru olmasıdır ve başka hiçbir şey değildir:
+
+```text
+D1  b.created_task_count <> 0
+D2  b.created_game_count <> 0
+D3  b.raw_block_count <> (b'ye ait raw_import_blocks satır sayısı)
+D4  b'nin bir bloğundan gelen bir draft_tasks satırında
+    materialized_task_id IS NOT NULL
+D5  import_batch_cells içinde import_batch_id = b.id olan bir satır var
+D6  tasks içinde source_raw_import_block_id'si b'nin bir bloğu olan bir satır var
+    (silinmiş olsun olmasın)
+D7  games içinde source_import_batch_id = b.id olan bir satır var
+    (silinmiş olsun olmasın)
+D8  b'nin bir bloğundan gelen bir draft_tasks satırında
+    selection_end_index > blok metninin UTF-16 uzunluğu
+D9  b'nin bir raw_import_blocks satırında
+    source_column_type <> 'GAME' AND game_completion_hint <> 'NONE'
+```
+
+Açıkça **bozuk sayılmayanlar**:
+
+- Hedef hücresi boş, silinmiş bir oyunda, görev taşımayan ya da havuzuyla
+  uyuşmayan bir sütunda olan taslak — onay bunu tipli bir reddedişle söyler ve
+  kullanıcı hedefi yeniden seçebilir.
+- Seçimi metnin içinde kalan fakat bir karakterin (grapheme) ortasına denk gelen
+  taslak — sınırlar platformun Unicode tablolarına bağlıdır; onay bunu
+  `SELECTION_NO_LONGER_FITS` olarak reddeder.
+- `**` ipucu kararının metinle uyuşup uyuşmadığı — ancak ayrıştırıcıyı yeniden
+  çalıştırarak cevaplanır ve kural sürümüne bağlıdır.
+- `Migration3To4`'ün hedefini ve `materialized_task_id`'sini temizlediği eski
+  taslaklar, ve şema 5'ten gelen, oyunu seçilmemiş kabul edilmiş yeşil hücre
+  kararı — ikisi de belgelenmiş geçerli durumlardır.
+- `updated_at < created_at` gibi zaman damgası tersliği — geriye giden bir
+  sistem saatiyle üretim yolunda da oluşur ve İş 7'nin konusu değildir (İş 10).
+- Kaynak dosyanın kaybolması veya değişmesi.
+- Hiç görev taslağı olmayan veya hiç bloğu işlenmemiş bir `DRAFT`.
+
+Bir predicate'in canlı veritabanına gerçekten ulaşabildiği, İş 7 Dilim 3'te
+gerçek yedek okuyucusu ve gerçek geri yükleme hattıyla **ölçülerek** kanıtlanır.
+Ölçüm bir predicate'in ulaşılamaz olduğunu gösterirse o predicate listeden
+çıkarılır; hayalî bir bozukluk için dedektör yazılmaz.
+
+#### Bozuk bir `DRAFT` ile ne yapılır
+
+- Bozukluk denetimi **salt okunur**dur ve hiçbir satır yazmaz. Uygulamanın
+  açılışını engellemez; açılışta çalıştırılması gerekmez.
+- Geçerli devam eden taslaklar `İçe Aktarma` ekranında gösterilir. Bozuk olduğu
+  kanıtlanan taslaklar **aynı ekranda, ayrı** bir bölümde, Türkçe ve eyleme
+  dönük bir uyarıyla gösterilir. Uyarı ham tablo adı, predicate kodu, UUID, SQL,
+  enum, yol veya exception metni içermez.
+- Bozuk bir taslak inceleme ekranında **açılamaz** ve **onaylanamaz**. Onay,
+  snapshot almadan önce ve onay transaction'ının içinde bu durumu yeniden
+  denetler ve tipli bir reddedişle hiçbir şey yazmadan durur; başarı ihtimali
+  olmayan bir onay için otomatik snapshot alınmaz (`14.4.8`).
+- Bozuk taslak da **otomatik silinmez**. Yalnız yukarıdaki kaldırma yoluyla ve
+  açık kullanıcı onayıyla kaldırılabilir. `D6` veya `D7` taşıyan bir taslağın
+  kaldırılması, gerçek kayıtları korumak için reddedilir ve bunu kullanıcıya
+  söyleyen ayrı bir cümle vardır.
+- Hiçbir kayıt tahminle yeniden üretilmez, düzeltilmez veya yeniden
+  numaralandırılmaz.
+
+#### İş 7'nin dışında kalanlar
+
+- Ham migration `.db` snapshot'ı için uygulama içinden geri yükleme yolu
+  **eklenmez** (`14.4.9`). Kullanıcıya açık geri yükleme biçimi doğrulanmış
+  JSON'dur (`14.4.3`).
+- Bütün veritabanının `integrity_check` başarısızlığı bozuk içe aktarma ile
+  **aynı şey değildir**. Güvenli bir genel veritabanı kurtarma tasarımı olmadan
+  otomatik düzeltme, dosya takası veya silme yapılmaz; bu ayrı ve açık bir
+  risktir.
+- Yedek okuyucusunun import yaşam döngüsü kurallarını da denetlemesi İş 7'de
+  yapılmaz: bu kuralları taşıyan bir veritabanı zaten geri yüklenmişse, okuyucuyu
+  sıkılaştırmak o veritabanının her içe aktarma snapshot'ını doğrulanamaz kılar
+  ve `14.4.13` gereği bütün içe aktarmaları durdurur. Bu açık bir risktir.
+- Geriye giden sistem saati (`updated_at < created_at`) İş 7'de çözülmez; İş 10'un
+  bütünlük ve doğrulama kapsamındadır.
+- Beklenmeyen kapanışın `backups/` altında bırakabileceği boş ad rezervasyonları
+  ve `.part` dosyaları için temizlik eklenmez. `14.4.11` gereği rotation bunları
+  sahiplenmez, saymaz ve silmez; yedek okuyucusu boş dosyayı tipli bir sebeple
+  reddeder.
+
 ### 11.5 Excel biçim işaretleri
 
 - `**` tamamlanma ipucudur; gösterim adından temizlenir.
@@ -2056,6 +2248,18 @@ Tek modülle başlanabilir. Kod büyümeden gereksiz Gradle modüllerine ayrılm
 - `Görevi metne dönüştür` tek transaction'dır; yarıda kalırsa hiçbir parça değişmez.
 - İçe aktarma sırasında tek bir hücredeki hata bütün dosya aktarımını kaybettirmemelidir.
 - Uygulama kapanırsa onaylanmamış import taslağı yeniden açılabilmelidir.
+- Beklenmeyen kapanış ayrıca tespit edilmez; işaret dosyası yazılmaz ve `-wal`
+  dosyası çökme kanıtı sayılmaz. Güvence, her yazmanın tek transaction olması ve
+  SQLite'ın WAL kurtarmasıdır (`11.4.5`).
+- Hiçbir `DRAFT` otomatik olarak onaylanmaz, silinmez, değiştirilmez veya
+  onarılmaz. Kaynak dosyanın kaybolması bir `DRAFT`'ı bozuk yapmaz ve kurtarma
+  kaynak dosyayı yeniden okumaz (`11.4.5`).
+- Taslağı kaldırma tek transaction'dır, yalnız seçilen `DRAFT` batch'in kendi
+  satırlarını siler, gerçek bir kaydın başvurduğu batch'i silmez ve tekrar
+  çağrıldığında hiçbir şey yazmadan tipli bir sonuç döndürür (`11.4.5`).
+- Bozuk içe aktarma yalnız `11.4.5`'teki kesin predicate'lerle tanımlanır;
+  denetim salt okunurdur, açılışı engellemez, ve bozuk bir taslak onaylanamaz
+  ve kendiliğinden silinmez.
 - Import rollback yalnızca ilgili import batch’in oluşturduğu kayıtları hedeflemelidir.
 - Kullanıcının sonradan düzenlediği kayıtlar geri alma sırasında sessizce silinmemelidir. Uygulanan kural `11.4.4`'tedir: batch'in tek bir görevi dokunulmuşsa ya da yazdığı tek bir hücrenin metni değişmişse geri alma **tamamen engellenir**; güvenli görünen görevler de kaldırılmaz.
 - Import rollback tek transaction'dır ve kısmi sonuç bırakmaz. Batch ancak bütün hedefleri güvenliyse ve hepsi kaldırıldıysa `ROLLED_BACK` olur; aksi hâlde `CONFIRMED` kalır ve hiçbir satır değişmez.
@@ -2096,7 +2300,7 @@ Tek modülle başlanabilir. Kod büyümeden gereksiz Gradle modüllerine ayrılm
 - Odak sırası ve görünür odak göstergesi bulunmalıdır.
 - Metin ölçekleme ve yüksek DPI ekranlar desteklenmelidir.
 - Sayaç düğmelerinin erişilebilir adları olmalıdır.
-- Silme, renk silme, görevi metne dönüştürme, oyun toplu tamamlama, temel renkleri geri yükleme, import rollback ve yedekten geri yükleme işlemlerinde onay istenmelidir. Yedekten geri yüklemede onay, ancak dosya doğrulandıktan sonra sorulur (`14.4.3`).
+- Silme, renk silme, görevi metne dönüştürme, oyun toplu tamamlama, temel renkleri geri yükleme, import rollback, içe aktarma taslağını kaldırma ve yedekten geri yükleme işlemlerinde onay istenmelidir. Yedekten geri yüklemede onay, ancak dosya doğrulandıktan sonra sorulur (`14.4.3`).
 - Türkçe karakterlerde büyük/küçük harf normalizasyonu doğru yapılmalıdır.
 - Uygulama metinleri kaynak dosyalarında tutulmalı, UI içine dağınık biçimde hardcode edilmemelidir.
 - İlk dil Türkçedir; yapı gelecekte başka dil eklemeyi engellememelidir.
@@ -2335,7 +2539,26 @@ Kişisel kullanımda veri kaybı riski düşük, test edilmiş ve Garuda Linux�
    aktarmayı sürdürmez.
 5. CSV görev dışa aktarmayı doğrula.
 6. Veritabanı migration testlerini oluştur.
-7. Beklenmeyen kapanış ve bozuk import durumlarına karşı kurtarma akışını ekle.
+7. Beklenmeyen kapanış ve bozuk import durumlarına karşı kurtarma akışını ekle
+   (`11.4.5`). Kararlar kesinleşmiştir. İş 4'ün açılış kilidi, sıcak WAL okuması,
+   migration snapshot kapısı ve açılış hata ekranı yeniden yazılmaz. Room şeması
+   değişmez. İş dört atomik dilimde uygulanır:
+   1. Kesintiye dayanıklılığın kalıcı kanıtı. Gerçek bir ikinci süreç, taslak
+      kaydı, taslak düzenleme, onay ve geri alma transaction'larının içinde
+      öldürülür; yeniden açılışta ya hepsinin ya hiçbirinin kaldığı, commit
+      edilmiş verinin kaybolmadığı ve normal kapanışın hiçbir işaret dosyası
+      bırakmadığı gösterilir. `journal_mode` ve `synchronous` ölçülüp belgelenir.
+      Yalnız test; kullanıcıya açılan bir şey yoktur.
+   2. Taslağı kaldırma motoru: tek transaction, tipli sonuçlar, postcondition,
+      tekrar çağrı güvenliği. Arayüz yok.
+   3. Bozuk `DRAFT` sınıflandırması: `D1`–`D9`'un ölçülmüş ulaşılabilirliği,
+      salt okunur denetim ve onayın bozuk taslağı snapshot almadan ve yazmadan
+      reddetmesi. Taslak listesi ve kaldırma arayüzü henüz yoktur.
+   4. Arayüz: `Devam eden içe aktarmalar` listesinde devam etme ve onaylı
+      kaldırma, bozuk taslakların ayrı bölümü ve Türkçe uyarısı.
+   Hiçbir ara commit: bir `DRAFT`'ı kendiliğinden onaylamaz, silmez veya
+   değiştirmez, onaysız bir kaldırma yolu açmaz, bozuk bir taslağın onayına izin
+   veren yeni bir yol açmaz ve açılışı engelleyen bir denetim eklemez.
 8. Klavye kullanımı, odak yönetimi, renk dışı etiketler ve yüksek DPI kontrolünü tamamla.
 9. Büyük ama gerçekçi veri setiyle performans testi yap.
 10. Loglama ve kullanıcıya anlaşılır hata mesajları ekle; hassas kullanıcı içeriğini loglara gereksiz yazma.
@@ -2398,6 +2621,24 @@ Kişisel kullanımda veri kaybı riski düşük, test edilmiş ve Garuda Linux�
 - Yüksek DPI ve büyük metin
 - Paketlenmiş uygulamanın temiz Garuda kurulumunda çalışması
 - Uygulama güncellemesinde veritabanının korunması
+- Taslak kaydı, taslak düzenleme, onay ve geri alma transaction'ı içinde öldürülen bir süreçten sonra yeniden açılışta hepsinin ya da hiçbirinin kalması, `foreign_key_check` ve `integrity_check`'in temiz olması
+- Commit edilmiş bir taslağın süreç öldürüldükten sonra yeniden açılışta `Devam eden içe aktarmalar` listesinde bulunması
+- Normal ve beklenmeyen kapanışın veri ve ayar dizinlerinde hiçbir işaret dosyası bırakmaması; `-wal` dosyasının kurtarma veya uyarı tetiklememesi
+- Onay transaction'ı içinde öldürülen bir süreçten sonra batch'in `DRAFT` kalması, snapshot dosyasının geçerli kalması ve onayın yeniden denenebilmesi
+- Beklenmeyen kapanışın bıraktığı boş ad rezervasyonunun ve `.part` dosyasının rotation tarafından silinmemesi ve sayılmaması
+- Taslağı kaldırmanın yalnız o batch'in satırlarını silmesi ve diğer bütün tabloların satır sayısını değiştirmemesi
+- `CONFIRMED` / `ROLLED_BACK` batch'in, bilinmeyen batch'in ve gerçek bir kaydın başvurduğu batch'in kaldırılamaması; hiçbir satırın değişmemesi
+- Kaldırmanın ikinci çağrısının hiçbir şey yazmadan tipli "zaten kaldırılmış" sonucu vermesi
+- Kaldırma transaction'ı yarıda kalırsa hiçbir satırın değişmemesi
+- Kaldırmanın geçmiş olayı yazmaması ve otomatik snapshot almaması
+- Kaynak dosya silinmiş veya değiştirilmişken taslağın açılabilmesi, onaylanabilmesi ve kaldırılabilmesi
+- `D1`–`D9`'un her birinin gerçek geri yükleme hattıyla canlı veritabanına ulaşabildiğinin ölçülmesi ve tek başına bozukluk olarak sınıflandırılması
+- Uygulamanın kendi akışlarıyla üretilmiş, migration'dan gelmiş, hedefi kaybolmuş, grapheme sınırı uyuşmayan veya zaman damgası ters taslakların bozuk sayılmaması
+- Bozukluk denetiminin hiçbir satır yazmaması ve sorgu sayısının taslak ve blok sayısından bağımsız olması
+- Bozuk bir taslağın onayının snapshot almadan ve hiçbir satır yazmadan tipli reddedilmesi
+- Bozuk taslağın açılıştan sonra kendiliğinden silinmemesi ve açılışı engellememesi
+- Kaldırma ve bozuk taslak uyarısının Türkçe olması; ham tablo adı, predicate kodu, UUID, SQL, enum, yol veya exception metni göstermemesi
+- Programlama hatalarının bozuk içe aktarma veya depolama hatası olarak maskelenmemesi
 
 #### Faz 3 tamamlanma ölçütü
 
