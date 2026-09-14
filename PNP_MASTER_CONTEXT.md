@@ -7,10 +7,14 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** Faz 3 / İş 7'nin **belge ve tasarım turundan** sonra
-> (`docs: define interrupted import recovery semantics`). Bu turda kod
-> değişmedi; İş 7'nin sözleşmesi PLAN `11.4.5`'e, dilimleri PLAN `18.`'e, özeti
-> ve repo denetimi §25.3'e yazıldı. İş 7'nin hiçbir kod dilimi başlamadı.
+> **Son güncelleme:** Faz 3 / İş 7 / **Dilim 1**'den (kesintiye dayanıklılığın
+> kalıcı kanıtı) sonra — `test(recovery): prove an interrupted write leaves all
+> or nothing`. Yalnız test ve ölçüm eklendi; üretim kodu, UI, Room şeması ve
+> PLAN değişmedi. İş 7'nin sözleşmesi PLAN `11.4.5`'te, özeti, repo denetimi ve
+> Dilim 1'in uygulanan hâli §25.3'tedir. Sıradaki bağlayıcı iş **İş 7 / Dilim 2**.
+>
+> Daha önce: İş 7'nin belge turu (`docs: define interrupted import recovery
+> semantics`) sözleşmeyi yazdı.
 >
 > Bir önceki durum: Faz 3 / İş 4'ün **dördüncü ve son dilimi** (migration
 > öncesi eşleşmiş ham `.db` + yürütülmüş `.json` seti ve açılış kapısı)
@@ -34,26 +38,34 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-HEAD (bu commit öncesi): 6119b1f9f38c58ee3cf5b5b5d05b306aba9da280
-önceki commit         : feat(backup): save the database before a migration changes it
-bu commit             : docs: define interrupted import recovery semantics
+HEAD (bu commit öncesi): 10bd739ac3945bbe00876ddb96eeff4ef31206ae
+önceki commit         : docs: define interrupted import recovery semantics
+bu commit             : test(recovery): prove an interrupted write leaves all or nothing
 working tree          : temiz
 Room şema sürümü      : 8   (bu commit'te DEĞİŞMEDİ)
 şema dosyaları        : 1.json … 8.json  hepsi bayt bayt aynı
-test durumu           : 3377 test / 0 failure / 0 error / 0 skipped  (225 sınıf)
-                        bu değer 6119b1f'in raporundan OKUNMUŞTUR; bu belge
-                        turunda testler KOŞULMADI (kod değişmedi)
-değişen dosyalar      : yalnız PLAN.md ve PNP_MASTER_CONTEXT.md
-PLAN.md               : bu commit'te DEĞİŞTİ — İş 7 sözleşmesi (11.4.5, 16.,
-                        17., 18. Faz 3 / İş 7 ve Faz 3 testleri)
+test durumu           : 3391 test / 0 failure / 0 error / 0 skipped  (228 sınıf)
+                        [önceki kod commit'i 6119b1f: 3377 test / 225 sınıf → +14 / +3]
+                        ./gradlew clean check --rerun-tasks ile bu commit'ten
+                        hemen önce KOŞULDU: BUILD SUCCESSFUL in 2m 48s
+değişen dosyalar      : yalnız desktopTest/…/platform/recovery/ altında 7 yeni test
+                        dosyası ve PNP_MASTER_CONTEXT.md
+PLAN.md               : bu commit'te DEĞİŞMEDİ
 ```
 
-**Bu commit yalnız belgedir: Faz 3 / İş 7'nin kararlarını, repo denetimini ve
-dört atomik dilimini yazar.** Üretim kodu, test kodu, Room şeması, bağımlılık ve
-fixture değişmedi. İş 7'nin ilk kod dilimi (kesintiye dayanıklılığın kalıcı
-kanıtı) **başlamadı**. Ayrıntı §25.3'te.
+**Bu commit Faz 3 / İş 7'nin birinci dilimidir ve yalnız testtir.** Kararın
+dayandığı cümle — "her yazma tek transaction'dır; SQLite ya hepsini ya hiçbirini
+tutar" — artık bir inanç değil, **gerçek bir ikinci JVM process'inin öldürülmesiyle
+ölçülmüş** bir sonuçtur. Dört yazma yolu (taslak kaydı, taslak düzenleme, onay,
+geri alma) transaction'ın ortasında ve commit'ten hemen sonra SIGKILL ile
+kesildi; yeniden açılış her seferinde açılış kapısından geçti, `integrity_check`
+`ok`, `foreign_key_check` boş döndü ve 15 tablonun parmak izi ya işlemden
+önceki ya da commit edilen değere **birebir** eşit çıktı. Kalıcılık ayarı
+ölçüldü: **`journal_mode = wal`, `synchronous = 1 (NORMAL)`**, iki bağlantı
+türünde de ve yeniden açılıştan sonra da. Ayrıntı §25.3 "İş 7 / Dilim 1'de
+uygulanan hâli".
 
-Denetimin tek cümlelik sonucu: uygulamanın kendi yazma yolları ve beklenmeyen
+Belge turunun denetim sonucu (değişmedi): uygulamanın kendi yazma yolları ve beklenmeyen
 kapanış bozuk bir `DRAFT` üretemez; doğrulanmış JSON geri yüklemesi ise yaşam
 döngüsü kurallarını denetlemediği için dokuz kesin predicate'le (`D1`–`D9`)
 sınırlı tutarsızlıkları canlı DB'ye taşıyabilir — bu kod okumasıdır ve İş 7
@@ -166,7 +178,8 @@ değişti.
 
 ```text
 PLAN.md  a266824ba28e1b90b3f650575905587951b5309debdfc62a56f7d2bdfbadff04
-         (bu commit PLAN'ı DEĞİŞTİRİR — İş 7 sözleşmesi; önceki değer
+         (bu commit PLAN'ı DEĞİŞTİRMEZ; değer İş 7 belge turundan aynen gelir.
+          Ondan önceki değer
           db891ba8362bb5ee837535aa042b8414ac2062d97a8fa25bff744884b09a3455)
 
 1.json   7cafd48fb4b06ec1da00b3f15f4335aae46fb8b40fc57926cde442dda515a724
@@ -2476,7 +2489,7 @@ testi silmek yerine güçlendirdi. Dilim 3, `DesktopImportSnapshotWriter`'ı
 
 ---
 
-# 25.3 BEKLENMEYEN KAPANIŞ VE YARIM KALMIŞ İÇE AKTARMA  *(Faz 3 / İş 7 — TASARLANDI, KOD YOK)*
+# 25.3 BEKLENMEYEN KAPANIŞ VE YARIM KALMIŞ İÇE AKTARMA  *(Faz 3 / İş 7 — DİLİM 1/4 TAMAM)*
 
 Bağlayıcı metin PLAN `11.4.5`, `16.`, `17.` ve `18.` Faz 3 / İş 7'dedir. Bu
 bölüm kararların özetini, **repo denetiminin sonucunu** ve dört dilimin
@@ -2615,17 +2628,29 @@ açılış kilidi                     FileChannel.tryLock — süreç ölünce O
 Bu izler için **temizlik eklenmez** (PLAN `11.4.5` dışında kalanlar): kullanıcı
 verisi kopyaları gelişigüzel silinmez ve boş dosyalar hiçbir sayıma girmez.
 
-### Kalıcılık ayarı  *(ölçülmedi — Dilim 1 ölçer)*
+### Kalıcılık ayarı  *(ÖLÇÜLDÜ — Dilim 1)*
 
 `DatabaseFactory` `journal_mode` veya `synchronous` belirtmez; Room'un
 varsayılanı geçerlidir. `room3-runtime-jvm-3.0.1` içindeki
 `BaseRoomConnectionManager` sabitleri iki çift içerir: `journal_mode = WAL` ile
 `synchronous = NORMAL`, ve `journal_mode = TRUNCATE` ile `synchronous = FULL`.
-Canlı DB'nin yanında `-wal` görülmesi (§33 R11) ilk çiftin kullanıldığını
-düşündürür ama **ölçülmüş değildir**. Anlamı: WAL + NORMAL'da süreç öldürülmesi
-commit edilmiş hiçbir şeyi kaybettirmez; işletim sistemi çökmesi veya güç
-kesintisi en son commit'leri geri alabilir, **yarım transaction bırakamaz**. İş 7
-ayarı değiştirmez.
+Hangisinin geçerli olduğu **ölçüldü**:
+
+```text
+yeni DB, writer bağlantısı      journal_mode = wal   synchronous = 1 (NORMAL)
+yeni DB, reader bağlantısı      journal_mode = wal   synchronous = 1 (NORMAL)
+dosya başlığı bayt 18 / 19      2 / 2   → WAL dosyanın KENDİSİNE yazılı (kalıcı)
+temiz kapanıştan sonra          -wal YOK (checkpoint edilip silindi)
+yeniden açılıştan sonra         wal / 1 / wal / 1   (aynı)
+SIGKILL sonrası yeniden açılış  wal / 1 / wal / 1   (aynı)
+test sürücüsü sargısıyla child  wal / 1 / wal / 1   (sargı modu DEĞİŞTİRMİYOR)
+```
+
+Sonuç beklenen SQLite/Room dayanıklılık modeliyle **uyuşuyor** ve üretim
+değişikliği gerektirmedi. Anlamı: WAL + NORMAL'da süreç öldürülmesi commit
+edilmiş hiçbir şeyi kaybettirmez (Dilim 1 bunu ölçtü); işletim sistemi çökmesi
+veya güç kesintisi **en son** commit'leri geri alabilir (bu makinede test
+edilemez, ölçülmedi), **yarım transaction bırakamaz**. İş 7 ayarı değiştirmez.
 
 ## Bugünkü eksik  *(İş 7'nin gerçek iş yükü)*
 
@@ -2636,9 +2661,8 @@ tekrar çağrı        IllegalArgumentException ("There is no import batch") —
 FK engeli           SQLiteException (FOREIGN KEY) — tipli değil
 postcondition       YOK — diğer tabloların değişmediği kanıtlanmıyor
 bozuk sınıflandırma YOK; D2/D4/D5/D9 onaya ulaşabilir (yukarıdaki tablo)
-kesinti kanıtı      yeniden açılış testleri VAR (ImportDraftStoreTest,
-                    ImportReviewStoreTest, XlsxImportEndToEndTest: kapat-aç);
-                    transaction İÇİNDE öldürülen gerçek süreç testi YOK
+kesinti kanıtı      Dilim 1'de EKLENDİ: dört yazma yolu gerçek bir ikinci
+                    süreçte transaction İÇİNDE ve commit'ten SONRA öldürülüyor
 ```
 
 ## Dört atomik dilim
@@ -2762,6 +2786,160 @@ commit         feat(import): let an unfinished import be continued or removed
 neden son      motor (2) ve sınıflandırma (3) kanıtlanmadan açılan bir kaldırma
                düğmesi, sonucu tipli olmayan ve bozuk taslağı ayırt etmeyen bir
                yıkıcı eylem olurdu
+```
+
+## İş 7 / Dilim 1'de uygulanan hâli
+
+Yalnız test ve ölçüm. `desktopTest/kotlin/dev/pnptracker/platform/recovery/`:
+
+```text
+StoppingSqliteDriver.kt   gerçek BundledSQLiteDriver'ı sarar; seçilen ifadenin
+                          N'inci çalışmasında, ifade SQLite'a GİTMEDEN önce,
+                          transaction'ı tutan bağlantıyı onReached'e verir.
+                          onReached geri dönmez. DatabaseFactory'nin mevcut
+                          `driver` parametresinden girer — üretimde hook YOK
+InterruptedWriter.kt      child process'in main'i. Main gibi kurulur: yollar
+                          kendi XDG_DATA_HOME / XDG_CONFIG_HOME'undan, DB
+                          StartupGate'ten, yazma gerçek store'dan
+RecoverySupport.kt        iki tarafın ortak sözlüğü: gateFor, gerçek onay
+                          store'u, 15 tablo parmak izi, durability ölçümü,
+                          fixture'lar (ImportDraftStore + ImportReviewStore ile)
+RecoveryHome.kt           test başına geçici ev (data/config/tmp), child başlatma,
+                          kapıdan yeniden açılış + integrity/FK, dosya listesi,
+                          gerçek uygulama dosyalarının açılmadan parmak izi
+InterruptedWriteTest.kt   8 test — dört yol × (içeride öldür, commit sonrası öldür)
+DurabilityTest.kt         2 test — journal_mode / synchronous / başlık baytları
+UnexpectedShutdownTest.kt 4 test — işaret yok, WAL çökme değil, normal kapanış,
+                          kesilmiş yedek artıkları
+```
+
+### Protokol — zamanlamaya değil olaya dayalı
+
+```text
+1  test DB'yi kapıdan açar, fixture'ı gerçek store'larla kurar, kapatır
+2  child JVM başlar (-XX:-UsePerfData, java.io.tmpdir = evin tmp'si,
+   XDG_DATA_HOME / XDG_CONFIG_HOME = evin data/config'i)
+3  child der ki:  RECOVERY:DURABILITY wal/1/wal/1
+                  RECOVERY:BEFORE <15 tablonun parmak izi>
+4  ya  RECOVERY:INSIDE <yol> true <transaction'ın O ANA KADAR yazdıkları>
+       (aynı bağlantıdan okunur) → latch'te bekler
+   ya  RECOVERY:COMMITTED <parmak izi> → latch'te bekler
+   ya  RECOVERY:CLOSED <parmak izi> → DB'yi kapatır, exit 0
+5  test SATIRI ALDIKTAN SONRA destroyForcibly (SIGKILL) + waitFor;
+   çıkış kodu 137 ve alt süreç yok doğrulanır
+6  yeniden açılış kapıdan: set == null, integrity_check == [ok],
+   foreign_key_check == [], durability aynı, parmak izi = BEFORE / COMMITTED
+```
+
+`sleep` yok. Satırlar ayrı bir thread'de kuyruğa okunur ve test satır geldiği
+anda ilerler; kuyruktaki 3 dakikalık sınır yalnız bozuk bir child'ın testi
+sonsuza kadar asmasına karşı bir emniyettir, ölçülen bir şey değildir. Seçilen
+ifadeye uğramadan biten bir yazma `MISSED` der ve çıkar; yanlış yerde öldürme
+mümkün değildir.
+
+Parmak izi, yedeğin kendi `dataSha256`'sıdır (15 tablonun kanonik JSON'u).
+Yani "kısmi yan etki yok" iddiası seçilmiş birkaç tablo hakkında değil,
+uygulamanın **bütün satırları** hakkındadır.
+
+### Kesilen dört işlem ve ölçülen sonuçlar
+
+```text
+yol / kesme noktası                      transaction'ın o ana kadar yazdığı   yeniden açılış
+───────────────────────────────────────  ───────────────────────────────────  ───────────────────────────
+taslak kaydı (ImportDraftStore.save)      "1 batch, 2 cells"                   parmak izi = BEFORE;
+  5 ham hücreden 3.'sünün INSERT'ü                                             0 batch, 0 hücre
+  commit sonrası                                                               parmak izi = COMMITTED;
+                                                                               1 DRAFT, 5 hücre,
+                                                                               draftBatches()'te görünür
+taslak düzenleme (saveDraft)              "Mavi figür, 0 colours"              parmak izi = BEFORE;
+  ilk draft_task_colors INSERT'ü          (satır güncellenmiş, eski renk       ad "Kırmızı figür", adet 3,
+                                           silinmiş)                           renk [c0 → 0]
+  commit sonrası                                                               ad "Mavi figür", adet 5,
+                                                                               renk [c1 → 0, c0 → 1]
+onay (ImportConfirmationStore.confirm,    "CONFIRMED, 1 task, 1 piece,         parmak izi = BEFORE; DRAFT,
+  gerçek snapshot + rotation)              1 cell snapshot, 0 history"         sayaç 0, görev/renk/aşama/
+  ilk history_events INSERT'ü                                                  parça/hücre anlık görüntüsü/
+                                                                               geçmiş 0, materialized null;
+                                                                               snapshot dosyası GERÇEK
+                                                                               okuyucudan Valid ve parmak
+                                                                               izi = BEFORE; sonraki
+                                                                               açılışta onay YENİDEN
+                                                                               denenir ve başarılı olur
+                                                                               (ikinci snapshot alınır)
+  commit sonrası                                                               CONFIRMED, 1 görev, bağlı
+                                                                               parça, 1 hücre anlık
+                                                                               görüntüsü, 1 IMPORT_CONFIRMED
+geri alma (ImportRollbackStore.rollBack)  "CONFIRMED, 1 tombstone, 0 piece,    parmak izi = BEFORE;
+  UPDATE … 'ROLLED_BACK'                   3 history"                          CONFIRMED, tombstone yok,
+                                                                               parça duruyor, yalnız
+                                                                               IMPORT_CONFIRMED
+  commit sonrası                                                               ROLLED_BACK, tombstone,
+                                                                               parça yok, üç geçmiş satırı
+```
+
+"Transaction'ın o ana kadar yazdığı" sütunu kesmenin gerçekten **yarım** bir
+işe denk geldiğinin kanıtıdır: onay yolunda batch durumu, görev, parça ve hücre
+anlık görüntüsü transaction içinde yazılmış hâldeydi — ve yeniden açılışta
+hiçbiri yoktu. Commit sonrası öldürmelerde `-wal` dosyası boş değildi: commit
+edilen veri **yalnız log'daydı** ve SQLite'ın WAL kurtarması onu geri getirdi.
+
+### Beklenmeyen kapanışın izleri — ölçülmüş
+
+```text
+normal kapanış sonrası   data: backups/, backups/<snapshot>, pnp-baslangic.lock,
+                         pnp.db, pnp.db.lck    config: boş
+                         (-wal / -shm YOK; tmp BOŞ)
+SIGKILL sonrası          yukarıdakiler + pnp.db-wal + pnp.db-shm
+                         tmp: tek bir androidx_sqliteJni<sayı>.tmp
+bir sonraki açılıştan    normal kapanışla BİREBİR aynı liste; işaret dosyası,
+sonra                    kurtarma dosyası, ek yedek, settings.json YOK;
+                         ikinci açılış da hiçbir şey değiştirmez
+üretim kaynağında        addShutdownHook ve deleteOnExit YOK (tarama testi)
+pnp.db.lck               Room'un kendi dosya kilidi — gerçek veri dizinindeki
+                         .lck dosyasının açıklaması budur; bizim yazdığımız bir
+                         işaret DEĞİLDİR
+androidx_sqliteJni*.tmp  bundled sürücünün açtığı native kütüphane kopyası;
+                         normal çıkışta silinir, SIGKILL'de kalır. Kullanıcı veri
+                         dizininde değil java.io.tmpdir'dedir, veri taşımaz,
+                         uygulama onu bir şeyin kanıtı saymaz. İş 7 temizlemez
+                         (karar vermek gerekir); gözlem olarak kayıtlıdır
+```
+
+### Kesilmiş otomatik yedek artıkları — silinmiyor
+
+Gerçek ad üreticileriyle (`importSnapshotFileName`, `claimSetNames` +
+`migrationSnapshotSetName`) bir öldürmenin bırakabileceği beş dosya kuruldu:
+0 baytlık import adı, yanında yarım `.json.part`, migration setinin iki boş
+yarısı ve `.db.part`. Hepsi gerçek yedeklerden **daha eski** tarihli. Ayar
+`automaticBackupCount = 1` yapıldı ve iki gerçek onay (gerçek snapshot + gerçek
+rotation) çalıştırıldı:
+
+```text
+rotation çalıştı mı      EVET — iki gerçek yedekten yalnız yenisi kaldı
+artıklar                 beşi de yerinde, SHA-256'ları bayt bayt aynı
+0 baytlık .json          gerçek okuyucu: Refused(EMPTY_FILE)
+.part dosyaları          automaticBackupNameOf → null (rotation adı bile tanımıyor)
+```
+
+### Gerçek kullanıcı dosyaları
+
+`RecoveryHome.close()` her testte, **dosyaları açmadan**, gerçek XDG yollarındaki
+`pnp.db`, `-wal`, `-shm`, `pnp.db.lck`, `pnp-baslangic.lock`, `backups/`,
+config dizini ve `settings.json` için var/yok + boyut + mtime (+ dizinde girdi
+sayısı) karşılaştırır. Child süreçler gerçek XDG'yi hiç görmez: ortam
+değişkenleri ve `java.io.tmpdir` test evine yönlendirilir.
+
+### Dilim 1'in bilerek YAPMADIKLARI
+
+```text
+üretim kodu / UI / Room şeması / migration   değişmedi
+synchronous ayarı                            değiştirilmedi (ölçüldü)
+D1–D9 sınıflandırması                        Dilim 3
+taslak kaldırma motoru                       Dilim 2
+kullanıcı arayüzü                            Dilim 4
+JNI tmp artığının temizliği                  yapılmadı; karar değil gözlem
+güç kesintisi / OS çökmesi                   bu makinede test edilemez; ölçülmedi
+R12, R13, R14                                AÇIK kaldı
 ```
 
 ## Reddedilen alternatifler  *(tekrar önerilmesin)*
@@ -2937,6 +3115,17 @@ StartupTestSupport (desktopTest)        openWithHotWal — CHECKPOINT EDİLMEMİ
 LockHolder (desktopTest)                GERÇEK ikinci process: kilidi alır, bekler,
                                         öldürülür — OS'in kilidi bıraktığını
                                         kanıtlamanın tek dürüst yolu
+StoppingSqliteDriver (desktopTest)      seçilen ifadenin N'inci çalışmasında
+                                        transaction bağlantısını teslim eder ve
+                                        ASLA devam etmez (öldürülecek süreç için)
+InterruptedWriter (desktopTest)         GERÇEK ikinci process: Main gibi kurulur,
+                                        tek yazma yapar, protokol satırı söyler,
+                                        latch'te bekler ya da normal kapanır
+RecoveryHome / WriterProcess            test başına geçici XDG evi; child
+(desktopTest)                           başlatma, olay tabanlı satır bekleme,
+                                        SIGKILL + waitFor, kapıdan yeniden açılış,
+                                        gerçek uygulama dosyalarının açılmadan
+                                        parmak izi
 ComposeSceneHarness                     gerçek Compose sahnesi (desktopTest)
 ```
 
@@ -2971,6 +3160,15 @@ Geçmiş ekranı            2 SELECT (history_events + progress_events), satır,
 Otomatik import snapshot İKİ tam okuma (yedek + transaction içi kapı), taslak
                          sayısından BAĞIMSIZ: 1 ve 42 taslak aynı ifadeleri
                          çalıştırır; kapı yalnız okur, yazımı değiştirmez
+Kesintiye dayanıklılık   dört yazma yolu (taslak kaydı, düzenleme, onay, geri
+                         alma) transaction İÇİNDE SIGKILL → 15 tablonun parmak
+                         izi işlem öncesiyle AYNI; commit SONRASI SIGKILL →
+                         commit edilenle AYNI; her iki durumda integrity_check
+                         ok, foreign_key_check boş, kapıdan açılış, set yok
+Kalıcılık ayarı          writer ve reader: journal_mode = wal, synchronous = 1;
+                         başlık baytları 18/19 = 2/2; yeniden açılışta aynı
+Kapanış izleri           normal kapanış ile SIGKILL sonrası ilk açılış AYNI dosya
+                         listesini bırakır; işaret/kurtarma dosyası yok
 Açılış kapısı            v8 bir veritabanında EK MALİYET YOK: yalnız kilit +
                          Room'suz tek PRAGMA okuması; klon, çalışma kopyası ve
                          belge SADECE sürüm 1..7 ise üretilir
@@ -3141,8 +3339,8 @@ PLAN `18.` — Faz 3 işler listesi.
  5  CSV görev dışa aktarmayı doğrula ......... özellik var, Faz 3 doğrulama
                                               testleri yazılmadı
  6  Veritabanı migration testlerini oluştur ............. TAMAM
- 7  Beklenmeyen kapanış / bozuk import kurtarma ......... TASARLANDI, 0/4 dilim
-                                                        ← SIRADAKİ (Dilim 1)
+ 7  Beklenmeyen kapanış / bozuk import kurtarma ......... 1/4 dilim TAMAM
+                                                        ← SIRADAKİ (Dilim 2)
                                                         (PLAN sırası: 7 → 9+5 → 10)
  8  Klavye, odak, renk dışı etiket, yüksek DPI .... mevcut ekranlar için
                                               büyük ölçüde tamam
@@ -3209,15 +3407,16 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
 
 ## Sıradaki bağlayıcı iş
 
-> **Faz 3 / İş 7 / Dilim 1: kesintiye dayanıklılığın kalıcı kanıtı.**
+> **Faz 3 / İş 7 / Dilim 2: taslağı kaldırma motoru.**
 >
-> İş 7'nin sözleşmesi yazıldı (PLAN `11.4.5`, `16.`, `17.`, `18.`; özet ve repo
-> denetimi §25.3). Kararlar verilmiştir ve yeniden tartışılmaz. Kod dilimi
-> başlamadı.
+> İş 7'nin sözleşmesi yazıldı (PLAN `11.4.5`, `16.`, `17.`, `18.`; özet, repo
+> denetimi ve uygulanan hâl §25.3). Kararlar verilmiştir ve yeniden
+> tartışılmaz. Dilim 1 bitti: dört yazma yolu gerçek süreç öldürmesiyle ölçüldü,
+> kalıcılık ayarı `wal` + `synchronous = NORMAL` olarak kayda geçti.
 >
 > ```text
-> 1  kesintiye dayanıklılığın kalıcı kanıtı (yalnız test) ...... SIRADAKİ
-> 2  taslağı kaldırma motoru (arayüz yok) ....................... YAPILMADI
+> 1  kesintiye dayanıklılığın kalıcı kanıtı (yalnız test) ...... TAMAM
+> 2  taslağı kaldırma motoru (arayüz yok) ....................... SIRADAKİ
 > 3  bozuk DRAFT sınıflandırması + onay kapısı .................. YAPILMADI
 > 4  arayüz: devam et / kaldır / bozuk taslak uyarısı ........... YAPILMADI
 > ```
@@ -3793,7 +3992,13 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   her içe aktarma onayı öncesi doğrulanmış snapshot + yarış koruması, ve
   migration öncesi eşleşmiş set + açılış kapısı. Kararlar PLAN 14.4.7-14.4.13,
   uygulanan hâli §25.2. Yeniden tartışma.
-  Sıradaki bağlayıcı iş: İŞ 7 / DİLİM 1 — kesintiye dayanıklılığın kalıcı kanıtı.
+  Sıradaki bağlayıcı iş: İŞ 7 / DİLİM 2 — taslağı kaldırma motoru.
+- İş 7 / Dilim 1 BİTTİ (yalnız test): dört yazma yolu gerçek ikinci JVM'de
+  transaction içinde ve commit sonrası SIGKILL ile kesildi; hepsi ya hep ya hiç.
+  Ölçülen kalıcılık: journal_mode = wal, synchronous = 1 (NORMAL). synchronous'u
+  DEĞİŞTİRME. Üretime crash hook / debug flag EKLEME; kesme noktası yalnız
+  desktopTest'teki StoppingSqliteDriver'dadır ve DatabaseFactory'nin mevcut
+  `driver` parametresinden girer.
 - İş 7'nin (beklenmeyen kapanış ve yarım kalmış içe aktarma) kararları VERİLMİŞTİR:
   PLAN 11.4.5, özet ve repo denetimi §25.3. Yeniden tartışma. İşaret dosyası YOK,
   -wal çökme kanıtı DEĞİL, güvence tek transaction + WAL kurtarması; DRAFT
@@ -4098,8 +4303,12 @@ noktada, kendisi istemeden ve kendisi hatırlamak zorunda kalmadan korunuyor:
 geri yüklemeden önce, her içe aktarma onayından önce, ve her migration'dan önce.
 
 Sıradaki bağlayıcı iş **İş 7**'dir: beklenmeyen kapanış ve bozuk import
-kurtarma. Sözleşmesi yazılmıştır (PLAN `11.4.5`, §25.3) ve ilk kod dilimi
-kesintiye dayanıklılığın kalıcı kanıtıdır.
+kurtarma. Sözleşmesi yazılmıştır (PLAN `11.4.5`, §25.3). **Dilim 1 bitti:**
+taslak kaydı, taslak düzenleme, onay ve geri alma gerçek bir ikinci süreçte
+transaction'ın ortasında öldürüldü ve her seferinde veritabanı işlemden önceki
+hâline bayt bayt döndü; commit'ten sonra öldürülünce commit edilen her şey
+yerindeydi. Kalıcılık ayarı ölçüldü (`wal`, `synchronous = NORMAL`). Sıradaki
+dilim taslağı kaldırma motorudur.
 
 İş 7'nin belge turu bir şeyi netleştirdi: bu işin yükü hayalî bozukluk
 durumlarını avlamak **değildir**. Uygulamanın kendi yolları yarım bir içe
