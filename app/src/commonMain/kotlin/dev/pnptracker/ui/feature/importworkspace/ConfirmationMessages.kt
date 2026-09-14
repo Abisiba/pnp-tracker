@@ -20,6 +20,9 @@ fun messageOf(failure: ImportConfirmationFailure): StringResource =
         ImportConfirmationFailure.BATCH_NOT_FOUND -> Strings.Confirm.errorBatchNotFound
         ImportConfirmationFailure.ALREADY_CONFIRMED -> Strings.Confirm.errorAlreadyConfirmed
         ImportConfirmationFailure.BATCH_NOT_A_DRAFT -> Strings.Confirm.errorNotADraft
+        // One sentence for all nine ways: which rows disagree is nothing a
+        // person can act on, and no table or code is ever put in front of them.
+        ImportConfirmationFailure.RECORDS_CONTRADICT_EACH_OTHER -> Strings.Confirm.errorRecordsContradict
         ImportConfirmationFailure.NO_DRAFTS_TO_CONFIRM -> Strings.Confirm.errorNoDrafts
         ImportConfirmationFailure.NO_CELLS_AVAILABLE -> Strings.Confirm.errorNoCells
         ImportConfirmationFailure.UNPROCESSED_BLOCKS_NOT_ACKNOWLEDGED -> Strings.Confirm.errorUnprocessed

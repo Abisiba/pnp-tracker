@@ -199,6 +199,7 @@ import dev.pnptracker.resources.confirm_error_no_cells
 import dev.pnptracker.resources.confirm_error_no_drafts
 import dev.pnptracker.resources.confirm_error_not_a_draft
 import dev.pnptracker.resources.confirm_error_pool_missing
+import dev.pnptracker.resources.confirm_error_records_contradict
 import dev.pnptracker.resources.confirm_error_selection_no_longer_fits
 import dev.pnptracker.resources.confirm_error_snapshot_not_made
 import dev.pnptracker.resources.confirm_error_snapshot_not_verified
@@ -1716,6 +1717,7 @@ object Strings {
         val errorSnapshotNotWritten = Res.string.confirm_error_snapshot_not_written
         val errorSnapshotNotVerified = Res.string.confirm_error_snapshot_not_verified
         val errorDataChanged = Res.string.confirm_error_data_changed
+        val errorRecordsContradict = Res.string.confirm_error_records_contradict
     }
 
     /** Choosing which cell one draft's task will be written in. */

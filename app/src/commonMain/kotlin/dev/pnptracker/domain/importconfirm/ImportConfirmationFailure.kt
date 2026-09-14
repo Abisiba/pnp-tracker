@@ -1,5 +1,6 @@
 package dev.pnptracker.domain.importconfirm
 
+import dev.pnptracker.domain.importhealth.DraftContradiction
 import dev.pnptracker.domain.model.EntityId
 
 /**
@@ -29,6 +30,17 @@ enum class ImportConfirmationFailure {
 
     /** The import is neither a draft nor confirmed, so it cannot be confirmed now. */
     BATCH_NOT_A_DRAFT,
+
+    /**
+     * The draft's own records contradict each other (PLAN 11.4.5).
+     *
+     * Not something the review screen can put right: no edit reaches the rows
+     * that disagree. Found before the automatic backup, so none is taken, or —
+     * if the records changed after that look — inside the transaction before
+     * its first write. Either way the batch stays a draft and nothing is written;
+     * [ImportConfirmationException.contradictions] says how, for code and tests.
+     */
+    RECORDS_CONTRADICT_EACH_OTHER,
 
     /** There is nothing to turn into tasks yet. */
     NO_DRAFTS_TO_CONFIRM,
@@ -146,9 +158,14 @@ enum class ImportConfirmationFailure {
  * can point at it. The draft's *name* is deliberately not carried here and not
  * put in the message: it is text out of the user's file, and a message ends up
  * in logs.
+ *
+ * [contradictions] is filled by the store for
+ * [ImportConfirmationFailure.RECORDS_CONTRADICT_EACH_OTHER] alone, and is never
+ * shown to the user.
  */
 class ImportConfirmationException(
     val failure: ImportConfirmationFailure,
     val draftTaskId: EntityId? = null,
     cause: Throwable? = null,
+    val contradictions: Set<DraftContradiction> = emptySet(),
 ) : Exception("The import could not be confirmed: $failure", cause)

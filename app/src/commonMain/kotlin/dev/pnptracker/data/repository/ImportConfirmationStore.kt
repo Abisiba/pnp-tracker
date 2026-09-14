@@ -22,6 +22,7 @@ import dev.pnptracker.domain.importconfirm.ImportConfirmationResult
 import dev.pnptracker.domain.importconfirm.ImportConfirmationSummary
 import dev.pnptracker.domain.importconfirm.RawBlockProblem
 import dev.pnptracker.domain.importconfirm.TargetCellChoice
+import dev.pnptracker.domain.importhealth.DraftHealth
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.HintDecision
 import dev.pnptracker.domain.model.IdGenerator
@@ -82,6 +83,11 @@ interface ImportConfirmation {
 
 /** Raised inside the transaction when the database is no longer what was backed up. */
 private class ChangedUnderneath : Exception("The data changed after the automatic backup was taken")
+
+/** Raised inside the transaction when the draft's records have come to contradict each other. */
+private class ContradictsNow(
+    val health: DraftHealth.Contradicting,
+) : Exception("The draft's records contradict each other")
 
 class ImportConfirmationStore(
     private val database: AppDatabase,
@@ -290,11 +296,29 @@ class ImportConfirmationStore(
      * to go ahead therefore describes the same database the writing lands on. A
      * global mutation barrier was considered and not chosen — this is the
      * guarantee it would have given, at the cost of one reading.
+     *
+     * Two looks at whether the draft's records agree (PLAN 11.4.5) stand on
+     * either side of all this. The first is before step 1, read only, so a
+     * draft that can never be confirmed costs no backup and no rotation. The
+     * second is inside the transaction, after step 5 and before the first
+     * write, so records that came to contradict each other after the first look
+     * — and were then backed up as they were — still write nothing. Only a
+     * contradiction stops either one; every other answer is left to the
+     * confirmation's own checks, exactly as before.
      */
     override suspend fun confirm(
         batchId: EntityId,
         acknowledgeUnprocessedBlocks: Boolean,
     ): ImportConfirmationResult {
+        val health =
+            try {
+                importDao.draftHealthOf(batchId)
+            } catch (cause: SQLiteException) {
+                // Nothing has been written, and no backup taken, when this is reached.
+                throw ImportConfirmationException(ImportConfirmationFailure.COULD_NOT_SAVE, cause = cause)
+            }
+        if (health is DraftHealth.Contradicting) throw contradicting(health)
+
         val snapshot =
             try {
                 snapshots.takeBeforeImport()
@@ -308,6 +332,8 @@ class ImportConfirmationStore(
                 confirmUnlessChanged(batchId, acknowledgeUnprocessedBlocks, snapshot)
             } catch (changed: ChangedUnderneath) {
                 throw ImportConfirmationException(ImportConfirmationFailure.DATA_CHANGED_MEANWHILE, cause = changed)
+            } catch (contradicts: ContradictsNow) {
+                throw contradicting(contradicts.health, cause = contradicts)
             } catch (cause: SQLiteException) {
                 // The transaction rolled back, so nothing at all was written.
                 throw ImportConfirmationException(ImportConfirmationFailure.COULD_NOT_SAVE, cause = cause)
@@ -337,6 +363,10 @@ class ImportConfirmationStore(
             transactor.immediateTransaction {
                 val before = backupDataOf(database.backupDao().snapshot())
                 if (before != snapshot.data) throw ChangedUnderneath()
+                // The second look, before the first write. Same reading as the
+                // first, and inside the write lock, so it cannot be overtaken.
+                val health = importDao.draftHealthOf(batchId)
+                if (health is DraftHealth.Contradicting) throw ContradictsNow(health)
 
                 importDao.confirmDraftBatch(
                     batchId = batchId,
@@ -347,6 +377,16 @@ class ImportConfirmationStore(
             }
         }
 }
+
+/** The refusal for a draft whose records disagree, carrying how they do. */
+private fun contradicting(
+    health: DraftHealth.Contradicting,
+    cause: Throwable? = null,
+) = ImportConfirmationException(
+    failure = ImportConfirmationFailure.RECORDS_CONTRADICT_EACH_OTHER,
+    cause = cause,
+    contradictions = health.contradictions,
+)
 
 /** What a snapshot that did not happen is, in the words the import screen has. */
 private fun failureOf(problem: SnapshotProblem): ImportConfirmationFailure =

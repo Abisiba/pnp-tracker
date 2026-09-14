@@ -229,6 +229,42 @@ class ImportReviewScreenTest {
     }
 
     @Test
+    fun `a draft whose records contradict each other is told so in words, with nothing technical`() {
+        // PLAN 11.4.5: the person is told only what they can act on — this
+        // draft cannot be confirmed, nothing was written, editing will not help.
+        // Which records disagree, and how, stays inside the application.
+        val one = block()
+        val review = FakeReview(workspace(listOf(one), listOf(draftOf(one.id))))
+        val store = FakeConfirmation()
+        store.failWith = ImportConfirmationFailure.RECORDS_CONTRADICT_EACH_OTHER
+        onScreen(review, store) { harness, _, confirmation ->
+            runBlocking { confirmation.confirm(batchId) }
+            harness.render()
+            harness.render()
+
+            val words = harness.writtenText()
+            assertTrue(words.any { "kayıtları birbiriyle uyuşmadığı için onaylanamıyor" in it }, "the refusal is not said: $words")
+            assertTrue(words.any { "Hiçbir şey yazılmadı" in it }, "the user is not told nothing changed: $words")
+            listOf(
+                "RECORDS",
+                "CONTRADICT",
+                "D1",
+                "D8",
+                "import_batches",
+                "raw_import_blocks",
+                "draft_tasks",
+                "materialized",
+                "created_task_count",
+                "SELECT",
+                "Exception",
+                batchId.toString(),
+            ).forEach { leak ->
+                assertTrue(words.none { leak in it }, "$leak leaked into the refusal: $words")
+            }
+        }
+    }
+
+    @Test
     fun `while the backup and the import are running the screen says so and takes no second press`() {
         // The automatic backup is the slowest part of a confirmation — it reads
         // the whole database, writes a file and reads it back — so this is the

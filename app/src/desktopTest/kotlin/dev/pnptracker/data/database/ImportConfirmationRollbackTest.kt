@@ -175,7 +175,10 @@ class ImportConfirmationRollbackTest {
         this.otherGame = other.id
         this.cell = cell.id
 
-        val batch = anImportBatch(rawBlockCount = drafts)
+        // One raw cell per draft and the two green game cells below. A count
+        // that left those two out would be a draft whose records contradict
+        // each other (PLAN 11.4.5, D3), and the store refuses to confirm one.
+        val batch = anImportBatch(rawBlockCount = drafts + 2)
         importDao.insertBatch(batch)
         this.batch = batch.id
         val palette = listOf("Gri", "Mavi").map { assertNotNull(database.colorDao().resolve(it)).id }

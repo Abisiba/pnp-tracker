@@ -499,6 +499,7 @@
     <string name="confirm_error_snapshot_not_made">Otomatik yedek alınamadı, bu yüzden içe aktarma başlatılmadı. Hiçbir görev oluşturulmadı ve içe aktarma taslak olarak kaldı. Biraz sonra tekrar deneyin.</string>
     <string name="confirm_error_snapshot_not_written">Otomatik yedek diske yazılamadı, bu yüzden içe aktarma başlatılmadı. Diskte yer olduğundan emin olup tekrar deneyin; içe aktarma taslak olarak duruyor.</string>
     <string name="confirm_error_snapshot_not_verified">Otomatik yedek yazıldı fakat geri okunup doğrulanamadı, bu yüzden içe aktarma başlatılmadı. Hiçbir göreviniz değişmedi; tekrar deneyin.</string>
+    <string name="confirm_error_records_contradict">Bu taslağın kayıtları birbiriyle uyuşmadığı için onaylanamıyor. Hiçbir şey yazılmadı ve taslak olduğu gibi duruyor. İnceleme ekranındaki bir düzenleme bunu düzeltemez; böyle bir taslağı kaldırma seçeneği ileride İçe Aktarma ekranına eklenecek.</string>
     <string name="confirm_error_data_changed">Yedek alındıktan sonra verileriniz değişti, bu yüzden onay hiçbir şey yazmadan durduruldu. İçe aktarma taslak olarak duruyor; tekrar onaylayın.</string>
     <string name="confirm_error_color_unavailable">Bu taslağa seçilmiş bir renk artık katalogda yok; rengi yeniden seçin.</string>
     <string name="confirm_error_selection_no_longer_fits">Bu taslağın seçtiği metin, geldiği hücreye artık uymuyor.</string>

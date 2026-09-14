@@ -7,18 +7,21 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** Faz 3 / İş 7 / **Dilim 2**'den (taslağı kaldırma motoru)
-> sonra — `feat(import): remove an unconfirmed import in one transaction`.
-> `discardDraftBatch` yerini tipli sonuçlu, transaction içi kararlı ve
-> postcondition'lı `removeDraftBatch` + `ImportDraftRemovalStore`'a bıraktı.
-> Arayüz yok, Room şeması ve PLAN değişmedi. İş 7'nin sözleşmesi PLAN
-> `11.4.5`'te, özeti, repo denetimi ve Dilim 1 + 2'nin uygulanan hâli
-> §25.3'tedir. Sıradaki bağlayıcı iş **İş 7 / Dilim 3**.
+> **Son güncelleme:** Faz 3 / İş 7 / **Dilim 3**'ten (bozuk DRAFT
+> sınıflandırması ve onay kapısı) sonra — `feat(import): recognise an
+> unconfirmed import whose records contradict each other`. D1–D9'un dokuzu da
+> gerçek geri yükleme hattından canlı Room 8 veritabanına ulaştı (ÖLÇÜLDÜ);
+> salt okunur `ImportDao.draftHealthOf` onları sınıflandırıyor ve
+> `ImportConfirmationStore` bozuk bir taslağı snapshot'tan önce ve transaction
+> içinde iki kez reddediyor. Room şeması ve PLAN değişmedi. İş 7'nin sözleşmesi
+> PLAN `11.4.5`'te, özeti, repo denetimi ve Dilim 1–3'ün uygulanan hâli
+> §25.3'tedir. Sıradaki bağlayıcı iş **İş 7 / Dilim 4**.
 >
-> Daha önce: İş 7 / Dilim 1 (`test(recovery): prove an interrupted write leaves
-> all or nothing`) kesintiye dayanıklılığı gerçek süreç öldürmesiyle ölçtü; İş
-> 7'nin belge turu (`docs: define interrupted import recovery semantics`)
-> sözleşmeyi yazdı.
+> Daha önce: İş 7 / Dilim 2 (`feat(import): remove an unconfirmed import in one
+> transaction`) tipli ve postcondition'lı kaldırma motorunu yazdı; Dilim 1
+> (`test(recovery): prove an interrupted write leaves all or nothing`)
+> kesintiye dayanıklılığı gerçek süreç öldürmesiyle ölçtü; İş 7'nin belge turu
+> (`docs: define interrupted import recovery semantics`) sözleşmeyi yazdı.
 >
 > Bir önceki durum: Faz 3 / İş 4'ün **dördüncü ve son dilimi** (migration
 > öncesi eşleşmiş ham `.db` + yürütülmüş `.json` seti ve açılış kapısı)
@@ -42,25 +45,47 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-HEAD (bu commit öncesi): 5a1cc9b14f36415aa50057fbade6ef3b763f28e4
-önceki commit         : test(recovery): prove an interrupted write leaves all or nothing
-bu commit             : feat(import): remove an unconfirmed import in one transaction
+HEAD (bu commit öncesi): 18db43a404df7e823d12c1486187d013105cc491
+önceki commit         : feat(import): remove an unconfirmed import in one transaction
+bu commit             : feat(import): recognise an unconfirmed import whose records contradict each other
 working tree          : temiz
 Room şema sürümü      : 8   (bu commit'te DEĞİŞMEDİ)
 şema dosyaları        : 1.json … 8.json  hepsi bayt bayt aynı
-test durumu           : 3424 test / 0 failure / 0 error / 0 skipped  (233 sınıf)
-                        [önceki commit 5a1cc9b: 3391 test / 228 sınıf → +33 / +5]
+test durumu           : 3474 test / 0 failure / 0 error / 0 skipped  (238 sınıf)
+                        [önceki commit 18db43a: 3424 test / 233 sınıf → +50 / +5]
                         ./gradlew clean check --rerun-tasks ile bu commit'ten
-                        hemen önce KOŞULDU: BUILD SUCCESSFUL in 2m 15s
-değişen dosyalar      : üretim 4 (ImportDao değişti; DraftRemoval.kt,
-                        DraftRemovalRows.kt, ImportDraftRemovalStore.kt yeni),
-                        test 10 (6 yeni, 4 bilinçli dönüştürüldü),
+                        hemen önce KOŞULDU: BUILD SUCCESSFUL in 2m 27s
+değişen dosyalar      : üretim 8 (ImportDao, ImportConfirmationStore,
+                        ImportConfirmationFailure, ConfirmationMessages, Strings.kt,
+                        strings.xml değişti; DraftHealth.kt, DraftHealthRows.kt yeni),
+                        test 8 (5 yeni; ImportConfirmationRollbackTest fixture'ı,
+                        CountingImportDao, ImportReviewScreenTest değişti),
                         PNP_MASTER_CONTEXT.md
-PLAN.md               : bu commit'te DEĞİŞMEDİ
+PLAN.md               : bu commit'te DEĞİŞMEDİ — ölçüm belgelenen D1–D9
+                        listesiyle birebir uyuştu, düzeltilecek satır çıkmadı
 ```
 
-**Bu commit Faz 3 / İş 7'nin ikinci dilimidir: taslağı kaldırma motoru.**
-Onaylanmamış bir içe aktarma artık tek bir `BEGIN IMMEDIATE` transaction'ında,
+**Bu commit Faz 3 / İş 7'nin üçüncü dilimidir: bozuk DRAFT sınıflandırması ve
+onay kapısı.** Önce ölçüm yapıldı: sağlıklı bir veritabanından kanonik bir yedek
+okundu, D1–D9'dan **yalnız biri** eklendi, `dataSha256` biçimin kendi
+fonksiyonuyla yeniden hesaplandı ve belge gerçek `UntrustedBackupReader` +
+gerçek `TemporaryBackupProbe` + gerçek `LiveBackupRestorer` hattından geçirildi.
+**Dokuzun dokuzu da canlı Room 8 veritabanına ulaştı** (D3 iki yönde, D6/D7
+silinmiş satırla da, D9 hem `PENDING` hem hedef oyunlu `ACCEPTED` ile); her
+birinde canlı DB yüklenen belgeye değer düzeyinde eşit, `foreign_key_check` boş,
+`integrity_check` ok. Belgelenen liste doğru çıktı, PLAN değişmedi. Sonra salt
+okunur `ImportDao.draftHealthOf` (dört tipli sonuç: `Sound`, `Contradicting` +
+iç neden kümesi, `NotFound`, `NotADraft`) — tek transaction'da, blok sayısından
+bağımsız **üç okuma**, D8 Kotlin'de UTF-16 uzunluğuyla. Onay yolu iki kapı
+kazandı: snapshot'tan **önce** salt okunur ön kontrol (bozuksa snapshot, rotation
+ve yazma YOK) ve `BEGIN IMMEDIATE` transaction'ının içinde 15 tablo
+karşılaştırmasından sonra, ilk domain yazımından önce yeniden kontrol. Sonuç yeni
+tipli `ImportConfirmationFailure.RECORDS_CONTRADICT_EACH_OTHER`; kullanıcı yalnız
+onay denediğinde tek bir Türkçe cümle görür. Arayüzde düğme, liste veya bölüm
+yok (Dilim 4). Ayrıntı §25.3 "İş 7 / Dilim 3'te uygulanan hâli".
+
+**Bir önceki commit (`18db43a`) İş 7'nin ikinci dilimiydi: taslağı kaldırma
+motoru.** Onaylanmamış bir içe aktarma artık tek bir `BEGIN IMMEDIATE` transaction'ında,
 kararları o transaction'ın içinde yeniden okunarak kaldırılıyor. Beş tipli
 sonuç var (`Removed` + dört `Refused`: `ALREADY_REMOVED`, `NOT_A_DRAFT`,
 `HELD_BY_RECORDS`, `COULD_NOT_SAVE`); ikinci çağrı exception değil
@@ -72,7 +97,7 @@ taslak boyutundan bağımsız: 0, 1 ve 42 hücreli taslak aynı altı ifadeyi
 bağlı değil (kabul edilmiş kalıp, §33 R3). Ayrıntı §25.3 "İş 7 / Dilim 2'de
 uygulanan hâli".
 
-**Bir önceki commit (`5a1cc9b`) İş 7'nin birinci dilimiydi ve yalnız testti.** Kararın
+**Ondan önceki commit (`5a1cc9b`) İş 7'nin birinci dilimiydi ve yalnız testti.** Kararın
 dayandığı cümle — "her yazma tek transaction'dır; SQLite ya hepsini ya hiçbirini
 tutar" — artık bir inanç değil, **gerçek bir ikinci JVM process'inin öldürülmesiyle
 ölçülmüş** bir sonuçtur. Dört yazma yolu (taslak kaydı, taslak düzenleme, onay,
@@ -84,11 +109,11 @@ kesildi; yeniden açılış her seferinde açılış kapısından geçti, `integ
 türünde de ve yeniden açılıştan sonra da. Ayrıntı §25.3 "İş 7 / Dilim 1'de
 uygulanan hâli".
 
-Belge turunun denetim sonucu (değişmedi): uygulamanın kendi yazma yolları ve beklenmeyen
+Belge turunun denetim sonucu: uygulamanın kendi yazma yolları ve beklenmeyen
 kapanış bozuk bir `DRAFT` üretemez; doğrulanmış JSON geri yüklemesi ise yaşam
 döngüsü kurallarını denetlemediği için dokuz kesin predicate'le (`D1`–`D9`)
-sınırlı tutarsızlıkları canlı DB'ye taşıyabilir — bu kod okumasıdır ve İş 7
-Dilim 3'te ölçülecektir.
+sınırlı tutarsızlıkları canlı DB'ye taşıyabilir. Bu cümle artık kod okuması
+değil, **Dilim 3'te gerçek hatla ölçülmüş** bir sonuçtur (R14 hâlâ açıktır).
 
 ## Bir önceki commit: İş 4 / Dilim 4 — İŞ 4 TAMAMLANDI
 
@@ -197,7 +222,7 @@ değişti.
 
 ```text
 PLAN.md  a266824ba28e1b90b3f650575905587951b5309debdfc62a56f7d2bdfbadff04
-         (İş 7 Dilim 1 ve Dilim 2 PLAN'ı DEĞİŞTİRMEDİ; değer İş 7 belge turundan aynen gelir.
+         (İş 7 Dilim 1, 2 ve 3 PLAN'ı DEĞİŞTİRMEDİ; değer İş 7 belge turundan aynen gelir.
           Ondan önceki değer
           db891ba8362bb5ee837535aa042b8414ac2062d97a8fa25bff744884b09a3455)
 
@@ -228,7 +253,7 @@ veritabanının parmak izi orada durmamalıdır. Bunun yerine kural şudur:
 
 Gerçek DB hiçbir aşamada açılmaz, kopyalanmaz veya migrate edilmez. Bütün testler ve
 manuel turlar geçici Room veritabanları ve geçici XDG dizinleri kullanır. Bu koruma
-`assertRealApplicationDatabaseUntouched` yardımcı fonksiyonuyla **94 test sınıfında**
+`assertRealApplicationDatabaseUntouched` yardımcı fonksiyonuyla **98 test sınıfında**
 uygulanmaktadır. Sayı tek bir yerde tutulur; §29 aynı değeri anar ve tarama
 `grep -rl 'assertRealApplicationDatabaseUntouched' app/src/*Test` ile yapılır.
 
@@ -2508,7 +2533,7 @@ testi silmek yerine güçlendirdi. Dilim 3, `DesktopImportSnapshotWriter`'ı
 
 ---
 
-# 25.3 BEKLENMEYEN KAPANIŞ VE YARIM KALMIŞ İÇE AKTARMA  *(Faz 3 / İş 7 — DİLİM 2/4 TAMAM)*
+# 25.3 BEKLENMEYEN KAPANIŞ VE YARIM KALMIŞ İÇE AKTARMA  *(Faz 3 / İş 7 — DİLİM 3/4 TAMAM)*
 
 Bağlayıcı metin PLAN `11.4.5`, `16.`, `17.` ve `18.` Faz 3 / İş 7'dedir. Bu
 bölüm kararların özetini, **repo denetiminin sonucunu** ve dört dilimin
@@ -2547,9 +2572,10 @@ recovery semantics` commit'iyle yazıldı; o commit **yalnız belge** değiştir
 - **Uygulamanın kendi yazma yolları ve beklenmeyen kapanış altında: HAYIR.**
 - **Doğrulanmış JSON geri yüklemesi yoluyla: EVET, dokuz kesin predicate'le
   sınırlı olarak** — yedek okuyucusu import yaşam döngüsünün satırlar arası
-  kurallarını denetlemediği için. Bu ikinci cevap **kod okumasıyla** verilmiştir;
-  Dilim 3 her predicate'i gerçek hatla ölçerek doğrular, ulaşılamayanı listeden
-  çıkarır.
+  kurallarını denetlemediği için. Bu ikinci cevap belge turunda kod okumasıydı;
+  **Dilim 3 onu gerçek hatla ölçtü: dokuzun dokuzu da canlı DB'ye ulaşıyor**,
+  listeden çıkarılacak predicate yok (ölçüm matrisi "İş 7 / Dilim 3'te uygulanan
+  hâli").
 
 ### Neden kendi yollar bozuk DRAFT üretemez  *(kanıt)*
 
@@ -2595,7 +2621,7 @@ migration            import tabloları v3'te BOŞ yaratıldı (Migration2To3);
 üretmediği ama `dataSha256`'sı yeniden hesaplanmış bir belge şu durumları canlı
 DB'ye taşıyabilir:
 
-| Kod | Predicate (`b` = `status = 'DRAFT'` bir batch) | Üretim yolu neden yazamaz | Onaya ulaşırsa bugün beklenen *(kod okuması, ölçülmedi)* |
+| Kod | Predicate (`b` = `status = 'DRAFT'` bir batch) | Üretim yolu neden yazamaz | Dilim 3'ten ÖNCE onaya ulaşırsa beklenen *(kod okuması; artık kapıyla kapalı)* |
 |---|---|---|---|
 | D1 | `b.created_task_count <> 0` | `ImportDraftStore` 0 yazar; yalnız onay değiştirir | onay sayacı üzerine yazar — iz kaybolur |
 | D2 | `b.created_game_count <> 0` | hiçbir yol sıfır dışı yazmaz | `plannedConfirmationOf` `require` → **ham `IllegalArgumentException`** |
@@ -2609,8 +2635,11 @@ DB'ye taşıyabilir:
 
 Bu tablo D2, D4, D5 ve D9'un neden yalnız bir uyarı değil **onay kapısı**
 gerektirdiğini de gösterir: bozuk bir taslak onaya ulaşırsa ya ham exception
-çıkar, ya yanlış sebep gösterilir, ya da başka bir kayıt sessizce değişir. Bu
-sütun kod okumasıdır; Dilim 3'ün ölçümü her satırı doğrular veya düzeltir.
+çıkar, ya yanlış sebep gösterilir, ya da başka bir kayıt sessizce değişir. Son
+sütun Dilim 3 öncesinin kod okumasıdır ve **tarihseldir**: Dilim 3'ün ölçümü
+dokuz satırın dokuzunun da gerçek restore hattından canlı DB'ye ulaştığını
+gösterdi, ve onay artık bu taslakların hiçbirinde domain yazımına ulaşmaz — ilk
+kapı snapshot'tan önce, ikinci kapı transaction içinde reddeder.
 
 ### Bozuk SAYILMAYANLAR  *(hayalî dedektör yazılmaz)*
 
@@ -2681,7 +2710,10 @@ kaldırma motoru     Dilim 2'de YAZILDI: ImportDao.removeDraftBatch +
 tekrar çağrı        Dilim 2'den beri tipli ALREADY_REMOVED (önce IllegalArgumentException)
 FK engeli           Dilim 2'den beri açık SELECT → HELD_BY_RECORDS (önce SQLiteException)
 postcondition       Dilim 2'de EKLENDİ — 15 tablonun sayımı önce/sonra
-bozuk sınıflandırma YOK; D2/D4/D5/D9 onaya ulaşabilir (yukarıdaki tablo)
+bozuk sınıflandırma Dilim 3'te YAZILDI: ImportDao.draftHealthOf (salt okunur,
+                    üç okuma); onay iki kapıyla kapalı → RECORDS_CONTRADICT_EACH_OTHER.
+                    Arayüzde ayrı bölüm / uyarı / Kaldır YOK (Dilim 4); kullanıcı
+                    bozuk taslağı yalnız onaylamaya çalışınca fark eder
 kesinti kanıtı      Dilim 1'de EKLENDİ: dört yazma yolu gerçek bir ikinci
                     süreçte transaction İÇİNDE ve commit'ten SONRA öldürülüyor
 ```
@@ -3146,6 +3178,239 @@ Dilim 1'in süreç/SIGKILL testleri                     değişmedi, zayıflatı
 R12, R13, R14                                         AÇIK kaldı
 ```
 
+## İş 7 / Dilim 3'te uygulanan hâli
+
+Önce ölçüm, sonra salt okunur sınıflandırma, sonra onay yoluna iki kapı. Room
+şeması, migration zinciri, yedek okuyucusu, kaldırma motoru ve Dilim 1'in süreç
+testleri değişmedi; PLAN değişmedi.
+
+```text
+commonMain/domain/importhealth/DraftHealth.kt          DraftContradiction (9 değer, D1–D9)
+                                                       + DraftHealth (Sound / Contradicting /
+                                                       NotFound / NotADraft)
+commonMain/data/database/projection/DraftHealthRows.kt DraftHealthFacts (6 sayım, tek SELECT)
+                                                       + SelectionCandidateRow + saf
+                                                       draftHealthOf(batch, facts, selections)
+commonMain/data/database/dao/ImportDao.kt              @Transaction draftHealthOf(batchId)
+                                                       + iki protected sorgu
+commonMain/data/repository/ImportConfirmationStore.kt  iki kapı (aşağıda)
+commonMain/domain/importconfirm/ImportConfirmationFailure.kt
+                                                       RECORDS_CONTRADICT_EACH_OTHER +
+                                                       ImportConfirmationException.contradictions
+ui/…/ConfirmationMessages.kt, ui/Strings.kt,           confirm_error_records_contradict
+composeResources/values/strings.xml
+```
+
+### D1–D9 ulaşılabilirlik matrisi  *(ÖLÇÜLDÜ — gerçek restore hattı)*
+
+Yöntem (`DraftContradictionReachTest`): gerçek store yollarıyla kurulmuş sağlıklı
+bir veritabanı (`insertGameCellAndTask` + `aReadyDraftImport`: kaydedilmiş,
+seçimle taslak kesilmiş, hedeflenmiş, onaylanabilir bir taslak) `BackupStore`
+ile kanonik `BackupData` olarak okunur; `data class copy` ile **yalnız** hedef
+çelişki eklenir; `backupDocumentOf` `dataSha256`'yı biçimin kendi fonksiyonuyla
+yeniden hesaplar; bayt dizisi `FakeBackupInput` ile gerçek
+`UntrustedBackupReader(TemporaryBackupProbe(…))`'a verilir (geçici dizinler test
+tarafından yaratılır, probe bittiğinde silindiği doğrulanır); `Valid` dönerse
+`LiveBackupRestorer` canlı geçici DB'ye yazar ve DB'nin yüklenen veriye DEĞER
+düzeyinde eşit, iki PRAGMA'nın temiz olduğu doğrulanır. Doğrudan SQL ile
+kurulmuş hiçbir durum bu matrise delil sayılmadı.
+
+```text
+kod  eklenen tek çelişki                                  okuyucu+probe  canlı DB  sınıflandırıcı
+D1   created_task_count = 1                               Valid          ULAŞTI    {D1}
+D2   created_game_count = 1                               Valid          ULAŞTI    {D2}
+D3   raw_block_count = gerçek + 1                         Valid          ULAŞTI    {D3}
+D3   raw_block_count = gerçek − 1                         Valid          ULAŞTI    {D3}
+D4   taslağın materialized_task_id'si = mevcut görev      Valid          ULAŞTI    {D4}
+D5   import_batch_cells(batch, mevcut hücre, "")          Valid          ULAŞTI    {D5}
+D6   görevin source_raw_import_block_id'si = taslak bloğu Valid          ULAŞTI    {D6}
+D6   aynısı, görev silinmiş (deleted_at dolu)             Valid          ULAŞTI    {D6}
+D7   oyunun source_import_batch_id'si = taslak            Valid          ULAŞTI    {D7}
+D7   aynısı, oyun silinmiş                                Valid          ULAŞTI    {D7}
+D8   selection_end_index = metnin UTF-16 uzunluğu + 1     Valid          ULAŞTI    {D8}
+D9   THREE_D blokta game_completion_hint = PENDING        Valid          ULAŞTI    {D9}
+D9   THREE_D blokta ACCEPTED + completion_target_game_id  Valid          ULAŞTI    {D9}
+kontrol  hiç çelişki yok                                  Valid          ULAŞTI    Sound; onay 1 görev + 1 snapshot
+kontrol  materialized_task_id = var olmayan görev         Refused        ULAŞMADI  BROKEN_REFERENCE; canlı DB aynı
+```
+
+**Sonuç: ulaşılamayan predicate yok; PLAN 11.4.5'in listesi olduğu gibi doğru.**
+Sınıflandırıcıya sahte veya gereksiz kural eklenmedi: dokuz neden, dokuz ölçülmüş
+predicate'tir. İkinci kontrol satırı, ölçümün bir reddi görebildiğini gösterir
+(her şeyi "ulaştı" diye raporlayan bir hat değil).
+
+Her D satırında aynı test ayrıca şunları doğrular: sınıflandırıcı iki kez sorulur
+ve **yalnız o nedeni** söyler, sorulması hiçbir satır yazmaz; onay
+`RECORDS_CONTRADICT_EACH_OTHER` + aynı neden kümesiyle reddedilir, `snapshots.taken
+== 0`, rotation çağrılmaz, DB değişmez, batch DRAFT kalır; Dilim 2 kaldırma motoru
+PLAN'a göre davranır — D6/D7'de `HELD_BY_RECORDS` ve DB aynı, diğer yedisinde
+`Removed` ve DB = önce − o taslak; sonrasında iki PRAGMA temiz.
+
+### Sınıflandırıcı kuralları  *(gerçek hâli)*
+
+```text
+DraftContradiction                      predicate (b = DRAFT batch)            nereden
+TASKS_COUNTED_BEFORE_CONFIRMATION   D1  b.created_task_count != 0             batch satırı
+GAMES_COUNTED_BEFORE_CONFIRMATION   D2  b.created_game_count != 0             batch satırı
+RAW_CELL_COUNT_DISAGREES            D3  b.raw_block_count != blok satırı sayısı  facts
+DRAFT_ALREADY_MATERIALIZED          D4  b'nin taslağında materialized_task_id  facts
+CELL_RECORDED_BEFORE_CONFIRMATION   D5  import_batch_cells'te b               facts
+TASK_SOURCED_FROM_DRAFT             D6  tasks → b'nin bloğu (silinmiş dâhil)  facts
+GAME_SOURCED_FROM_DRAFT             D7  games → b (silinmiş dâhil)            facts
+SELECTION_BEYOND_ITS_TEXT           D8  selection_end_index > rawText.length  aday satırlar + Kotlin
+COMPLETION_HINT_OUTSIDE_GAME_COLUMN D9  source_column_type <> 'GAME' AND
+                                        game_completion_hint <> 'NONE'        facts
+```
+
+- `draftHealthOf(batchId)` bir `@Transaction`'dır (ölçüldü: ilk okumadan önceki son
+  işaret `BEGIN IMMEDIATE TRANSACTION`). Sebep: batch satırı ile sayımlar ayrı
+  okunsa, arada commit edilen bir kaldırma sağlıklı bir taslağı D3 gibi
+  gösterebilirdi. Hiçbir satır yazmaz.
+- Batch yoksa `NotFound`, DRAFT değilse `NotADraft(status)` — ikisi de yalnız batch
+  okumasıyla, çocuk satırlara bakılmadan. `CONFIRMED`/`ROLLED_BACK` tutarsızlıkları
+  sınıflandırılmaz (R14).
+- **D8 neden iki adımda:** SQLite `length()` kod noktası sayar (ve ilk NUL'da durur);
+  seçim UTF-16 birimiyle indekslenir. UTF-16 uzunluğu hiçbir zaman kod noktası
+  sayısından kısa olmadığı için SQL süzgeci `selection_end_index > length(raw_text)`
+  gerçek D8 satırlarının **üst kümesini** döndürür; kesin karar Kotlin'de
+  `selectionEndIndex > rawText.length` ile verilir. Ölçüldü: "🎲🎲" (2 kod noktası,
+  4 UTF-16) için son = 4 Sound, 3 (vekil çiftin ortası) Sound, 5 Contradicting;
+  Kotlin daraltması kapatılınca 2 test düşüyor.
+- Programlama hatası maskelenmez: DAO hiçbir şey yakalamaz; bozuk taslak bir
+  **cevaptır**, exception değildir. `Contradicting` boş neden kümesiyle, `NotADraft`
+  DRAFT durumuyla kurulamaz (`require`).
+- Kaynak dosya okunmaz; sınıflandırıcının dosya sistemiyle hiçbir bağı yoktur
+  (smoke: kaynak silinmiş / yeniden yazılmış CSV taslağı Sound, dosya listesi ve
+  parmak izi aynı).
+
+Bozuk **sayılmadığı** testle sabitlenenler (`DraftHealthTest`): uygulamanın kendi
+taslağı (çok bloklu, seçimli, hazır), sıfır bloklu DRAFT, blokları olup taslağı
+olmayan ve hiç işlenmemiş DRAFT, silinmiş oyundaki hedef, Migration3To4'ün
+temizlediği hedef/materialized, geriye giden zaman damgaları, GAME sütununda
+PENDING / hedefsiz ACCEPTED / hedefli ACCEPTED / REJECTED, grapheme ortasına düşen
+seçim, metnin tam sonunda biten seçim. Ayrıca: dokuz çelişkinin hepsini taşıyan bir
+taslağın yanındaki komşu taslak Sound kalır (değerlendirme batch'e özeldir).
+
+### İki onay kapısı
+
+```text
+confirm(batchId)
+ 1  KAPI 1  importDao.draftHealthOf(batchId)            salt okunur, snapshot'tan ÖNCE
+            Contradicting → RECORDS_CONTRADICT_EACH_OTHER; snapshot YOK, rotation YOK,
+                            yazma YOK
+            SQLiteException → COULD_NOT_SAVE (snapshot YOK)
+            ISE / IAE / diğer → olduğu gibi yükselir
+            Sound / NotFound / NotADraft → devam (bu sonuçlar ESKİ davranışa bırakılır:
+                            BATCH_NOT_FOUND, ALREADY_CONFIRMED vb. confirmDraftBatch'ten)
+ 2  snapshots.takeBeforeImport()  → housekeeping      (değişmedi)
+ 3  BEGIN IMMEDIATE
+ 4    15 tablo okunur, snapshot.data ile karşılaştırılır → farklıysa DATA_CHANGED_MEANWHILE
+ 5  KAPI 2  importDao.draftHealthOf(batchId)            aynı transaction, ilk yazımdan ÖNCE
+            Contradicting → ContradictsNow → RECORDS_CONTRADICT_EACH_OTHER (cause dolu);
+                            transaction geri alınır, hiçbir domain yazımı yapılmamıştır
+            SQLiteException → COULD_NOT_SAVE;  ISE / IAE → olduğu gibi
+ 6    confirmDraftBatch                                 (değişmedi)
+    COMMIT
+```
+
+Kapı 2'nin yakaladığı durum: çelişki kapı 1'den **sonra**, snapshot'tan **önce**
+oluşur → snapshot bozuk hâli tarif eder, 15 tablo karşılaştırması geçer, yalnız kapı
+2 durdurabilir (test: snapshot alıcısı gerçek snapshot'tan hemen önce
+`created_task_count`'u bozar → RECORDS_CONTRADICT_EACH_OTHER, 1 snapshot, DB =
+snapshot'ın verisi, batch DRAFT). Snapshot'tan **sonra** oluşan bozulma zaten
+mevcut yarış korumasıyla `DATA_CHANGED_MEANWHILE` alır (testli, değişmedi).
+Mutasyonla doğrulandı: kapı 1 kapatılınca 17 test (snapshot sayısı ve disk
+iddiaları), kapı 2 kapatılınca kapılar-arası test düşüyor.
+
+`ImportConfirmationStore` zaten `Main`'e bağlı olduğu için kapılar **bugün
+kullanıcının onay yolunda çalışıyor**; ayrı bir bağlantı gerekmedi.
+
+### Tipli sonuç ve kullanıcıya görünen
+
+```text
+ImportConfirmationFailure.RECORDS_CONTRADICT_EACH_OTHER    toplu (batch-wide) ret
+ImportConfirmationException.contradictions: Set<DraftContradiction>
+                                                           yalnız store bu ret için doldurur;
+                                                           ekran KULLANMAZ, mesaja girmez
+confirm_error_records_contradict
+  "Bu taslağın kayıtları birbiriyle uyuşmadığı için onaylanamıyor. Hiçbir şey
+   yazılmadı ve taslak olduğu gibi duruyor. İnceleme ekranındaki bir düzenleme bunu
+   düzeltemez; böyle bir taslağı kaldırma seçeneği ileride İçe Aktarma ekranına
+   eklenecek."
+```
+
+Cümle yalnız onay denendiğinde görünür. Dilim 3'ün plan metni "kaldırma eylemini
+vaat etmez" diyordu; dilim talimatı "Dilim 4'te kaldırılabileceği anlaşılır
+biçimde söylenebilir; düğme ekleme" dediği için **talimat uygulandı**: cümle bir
+sonraki eylemi söyler, düğme yoktur. Ekran testi D-kodu, tablo/sütun adı, enum
+adı, `SELECT`, `Exception` ve batch UUID'sinin görünmediğini doğrular.
+
+### Ölçülen sorgu sayısı
+
+```text
+draftHealthOf, DRAFT — 1 blok / 42 blok × 2 taslak (sağlıklı)          AYNI harita:
+  SELECT batch 1 · SELECT altı sayım 1 · SELECT aday seçimler 1
+aynısı, 84 seçimin hepsi metnin dışında (aday sorgusu 84 satır döner)  AYNI harita
+NotFound / NotADraft                                                   SELECT batch 1
+ilk okumadan önceki son transaction işareti                            BEGIN IMMEDIATE TRANSACTION
+store onayı — 1 blok ve 42 blok                                        sınıflandırıcı TAM 2 kez
+mevcut ImportConfirmationQueryCountTest                                değişmeden geçti
+```
+
+### Testler
+
+```text
+data/database/DraftContradictionReachTest.kt   15  ölçüm matrisi (13 çelişki + 2 kontrol);
+                                                   her satırda sınıflandırıcı, onay reddi,
+                                                   snapshot 0, kaldırma motoru, PRAGMA'lar
+data/database/DraftHealthTest.kt               15  bozuk sayılmayanlar, UTF-16 kenarları,
+                                                   komşu izolasyonu, dokuzu birden, saf
+                                                   fonksiyonun her nedeni tek başına,
+                                                   yapıcı invariant'ları
+data/repository/ImportConfirmationGateTest.kt  11  iki kapı: sağlıklı onay 2 bakış + 1 snapshot;
+                                                   kapı 1 reddi (snapshot/rotation/yazma 0);
+                                                   tekrar reddi; kapılar arası bozulma kapı 2;
+                                                   snapshot sonrası bozulma DATA_CHANGED;
+                                                   üç neden birlikte; SQLiteException kapı 1
+                                                   ve 2 → COULD_NOT_SAVE; ISE kapı 1 ve IAE
+                                                   kapı 2 maskelenmez; diğer retler eskisi gibi
+data/repository/DraftHealthQueryCountTest.kt    4  yukarıdaki sorgu ölçümü
+platform/recovery/DraftHealthSmokeTest.kt       4  geçici XDG + StartupGate: kaynak dosyası
+                                                   silinmiş / yeniden yazılmış CSV taslağı
+                                                   Sound, parmak izi ve dosya listesi aynı;
+                                                   bozuk taslak GERÇEK VerifiedSnapshotTaker'lı
+                                                   store ile reddedilir, backups/ BOŞ,
+                                                   settings.json yok, yeniden açılış
+                                                   assertWhole; kontrol: aynı taslak bozulmadan
+                                                   onaylanır ve 1 yedek dosyası yazılır
+ui/…/ImportReviewScreenTest.kt                 +1  Türkçe cümle + sızıntı taraması
+```
+
+Bilinçli olarak değiştirilen eski test: `ImportConfirmationRollbackTest`'in
+fixture'ı `rawBlockCount = drafts` yazıp `drafts + 2` blok ekliyordu — yani
+**kendisi D3 taşıyan** bir taslaktı. Store üzerinden giden tek testi ("a clock
+that will not answer…") yeni kapıya takıldı. Fixture sayımı doğru olacak biçimde
+düzeltildi (`drafts + 2`); testin iddiası değişmedi. `CountingImportDao` iki yeni
+protected üyeyi `outOfReach` ile aldı.
+
+### Dilim 3'ün bilerek YAPMADIKLARI
+
+```text
+Kaldır düğmesi / onay penceresi / bozuk taslak bölümü     Dilim 4
+bütün DRAFT'ları tek seferde sınıflandırma (liste için)   Dilim 4 — bugünkü API batch başına
+                                                          3 okumadır; liste N batch için
+                                                          N × 3 yapmamalı. Saf
+                                                          draftHealthOf(batch, facts, selections)
+                                                          gruplanmış okumalarla beslenebilir
+inceleme ekranının bozuk taslağı açmayı reddetmesi        Dilim 4 (PLAN 11.4.5)
+otomatik silme / onarma / yeniden numaralandırma          YOK (karar 3, 8)
+yedek okuyucusunu sıkılaştırma                            YOK → R14
+açılışta denetim                                          YOK
+inceleme yazımlarına yeni denetim                         YOK
+Room şeması / migration                                   değişmedi
+R12, R13, R14                                             AÇIK kaldı
+```
+
 ## Reddedilen alternatifler  *(tekrar önerilmesin)*
 
 ```text
@@ -3164,6 +3429,12 @@ yedek okuyucusunu İş 7'de sıkılaştırma   ERTELENDİ   zaten geri yüklenmi
 kaldırmada otomatik snapshot             REDDEDİLDİ  PLAN 14.4.7'nin tetikleyici listesi kapalı
 kaldırma için history olayı              REDDEDİLDİ  PLAN 12.15'te yok; şema değişirdi
 synchronous = FULL yapmak                REDDEDİLDİ  İş 7 ayarı değiştirmez; ayrı karar
+bozukluk denetimini yalnız transaction   REDDEDİLDİ  bozuk taslak için snapshot + rotation
+  içinde yapmak                                      çalışırdı (PLAN 14.4.8: başarı ihtimali
+                                                     olmayan onaya snapshot alınmaz)
+ölçülmemiş / ulaşılamayan predicate      REDDEDİLDİ  dokuzu da ölçüldü; hayalî dedektör yok
+bozukluk nedenini kullanıcıya göstermek  REDDEDİLDİ  D-kodu/tablo/UUID ekrana girmez; tek cümle
+D8'i SQLite length() ile kesinleştirmek  REDDEDİLDİ  kod noktası sayar, UTF-16 değil
 ```
 
 ---
@@ -3273,7 +3544,7 @@ geçmez. Hash'i dilim başında/sonunda kontrol edilir ve kapsam dışında değ
 
 ```text
 TemporaryDatabaseDirectory              geçici Room DB + gerçek DB koruma iddiası
-assertRealApplicationDatabaseUntouched  94 test sınıfında kullanılıyor
+assertRealApplicationDatabaseUntouched  98 test sınıfında kullanılıyor
 CommittedSchema                         eski sürümleri commit'li JSON'dan kurar
 LegacyRowFixtures                       v1…v6 satır yazıcıları
                                         (v6 raw block = v7 raw block; şema aynı)
@@ -3384,6 +3655,14 @@ Taslağı kaldırma         0, 1 ve 42 hücreli (×2 taslak ×3 renk) taslak AYN
                          (sıra ile ölçüldü). Kaldırma sonrası DB = önce − o batch'in
                          kendi satırları, DEĞER düzeyinde; history 0 satır,
                          backups/ 0 dosya
+Taslak sınıflandırma     draftHealthOf 1 blok ve 42 blok × 2 taslak için (sağlıklı
+                         da, 84 seçimin hepsi metin dışında da) AYNI üç okuma:
+                         batch 1, altı sayım 1, aday seçimler 1; NotFound /
+                         NotADraft yalnız batch okuması; BEGIN IMMEDIATE (sıra ile
+                         ölçüldü); 0 yazma. Onay sınıflandırıcıyı TAM 2 kez çağırır
+                         (snapshot'tan önce + transaction içinde); bozuk taslakta
+                         snapshot 0, rotation 0, DB aynı. D1–D9'un dokuzu da gerçek
+                         restore hattından canlı DB'ye ULAŞIR (ölçüldü)
 Kapanış izleri           normal kapanış ile SIGKILL sonrası ilk açılış AYNI dosya
                          listesini bırakır; işaret/kurtarma dosyası yok
 Açılış kapısı            v8 bir veritabanında EK MALİYET YOK: yalnız kilit +
@@ -3556,8 +3835,8 @@ PLAN `18.` — Faz 3 işler listesi.
  5  CSV görev dışa aktarmayı doğrula ......... özellik var, Faz 3 doğrulama
                                               testleri yazılmadı
  6  Veritabanı migration testlerini oluştur ............. TAMAM
- 7  Beklenmeyen kapanış / bozuk import kurtarma ......... 2/4 dilim TAMAM
-                                                        ← SIRADAKİ (Dilim 3)
+ 7  Beklenmeyen kapanış / bozuk import kurtarma ......... 3/4 dilim TAMAM
+                                                        ← SIRADAKİ (Dilim 4)
                                                         (PLAN sırası: 7 → 9+5 → 10)
  8  Klavye, odak, renk dışı etiket, yüksek DPI .... mevcut ekranlar için
                                               büyük ölçüde tamam
@@ -3624,7 +3903,7 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
 
 ## Sıradaki bağlayıcı iş
 
-> **Faz 3 / İş 7 / Dilim 3: bozuk DRAFT sınıflandırması ve onay kapısı.**
+> **Faz 3 / İş 7 / Dilim 4: arayüz — devam et, kaldır, bozuk taslak uyarısı.**
 >
 > İş 7'nin sözleşmesi yazıldı (PLAN `11.4.5`, `16.`, `17.`, `18.`; özet, repo
 > denetimi ve uygulanan hâl §25.3). Kararlar verilmiştir ve yeniden
@@ -3632,14 +3911,19 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
 > kalıcılık ayarı `wal` + `synchronous = NORMAL` olarak kayda geçti. Dilim 2
 > bitti: `ImportDao.removeDraftBatch` + `ImportDraftRemovalStore` — tek
 > transaction, beş tipli sonuç, 15 tablo sayımıyla postcondition, taslak
-> boyutundan bağımsız altı ifade; arayüze bağlı değil. Dilim 3, D-predicate'leri
-> ölçerken ve bozuk taslak için tek eylemi sunarken bu motoru kullanır.
+> boyutundan bağımsız altı ifade; arayüze bağlı değil. Dilim 3 bitti: D1–D9'un
+> dokuzu da gerçek restore hattından canlı DB'ye ulaştı (ölçüldü, PLAN değişmedi);
+> salt okunur `ImportDao.draftHealthOf` üç okumayla sınıflandırıyor; onay bozuk
+> taslağı snapshot'tan önce ve transaction içinde `RECORDS_CONTRADICT_EACH_OTHER`
+> ile reddediyor. Dilim 4 bu ikisini ekrana bağlar: geçerli taslakta Aç + Kaldır,
+> bozuk taslaklar ayrı bölümde yalnız Kaldır; bütün taslakları sınıflandırırken
+> batch başına üç okumayı N kez yapmamalıdır (§25.3 Dilim 3 "YAPMADIKLARI").
 >
 > ```text
 > 1  kesintiye dayanıklılığın kalıcı kanıtı (yalnız test) ...... TAMAM
 > 2  taslağı kaldırma motoru (arayüz yok) ....................... TAMAM
-> 3  bozuk DRAFT sınıflandırması + onay kapısı .................. SIRADAKİ
-> 4  arayüz: devam et / kaldır / bozuk taslak uyarısı ........... YAPILMADI
+> 3  bozuk DRAFT sınıflandırması + onay kapısı .................. TAMAM
+> 4  arayüz: devam et / kaldır / bozuk taslak uyarısı ........... SIRADAKİ
 > ```
 >
 > Hiçbir dilim Room şemasını değiştirmez. Dilim 4'ün (İş 4) kilidi, sıcak WAL
@@ -3867,6 +4151,10 @@ boyunca çağrılmayan okuma hattı (`UntrustedBackupReader`, `PathBackupInput`,
 `ImportDraftRemovalStore` ve `ImportDao.removeDraftBatch` yazıldı, testli, fakat
 arayüz Dilim 4'e ait olduğu için `Main.kt`'ye **bağlı değil**; kullanıcı bugün
 bir taslağı hâlâ kaldıramaz.
+
+İş 7 / Dilim 3 bu kalıbı **kullanmadı**: `ImportDao.draftHealthOf`,
+`Main`'e zaten bağlı olan `ImportConfirmationStore`'un iki kapısından
+çağrılıyor; sınıflandırma bugün kullanıcının onay yolunda çalışır.
 
 Geriye kalan: `TaskDao.softDelete`, `GameDao.softDelete` ve
 `completePrimaryBatch` üretim kodundan çağrılmıyor; `TASK_RESTORED` /
@@ -4110,17 +4398,20 @@ kararıdır ve verilmemiştir. İş 7 bu riski **kapatmaz**.
 
 ---
 
-## R14 — Yedek okuyucusu import yaşam döngüsünü denetlemiyor  *(AÇIK — kod okumasıyla bulundu)*
+## R14 — Yedek okuyucusu import yaşam döngüsünü denetlemiyor  *(AÇIK — kod okumasıyla bulundu, DRAFT tarafı Dilim 3'te ÖLÇÜLDÜ)*
 
 İş 7'nin belge turundaki denetim: `BackupValues` ve `BackupGraph` satır
 değerlerini, başvuruları, benzersiz anahtarları ve sıra boşluklarını denetler;
 bir batch'in durumunu çocuk satırlarıyla **karşılaştırmaz**. Uygulamanın
 üretmediği ama checksum'ı yeniden hesaplanmış bir belge, `DRAFT` için `D1`–`D9`
 (§25.3) ve `CONFIRMED` / `ROLLED_BACK` batch'ler için benzer tutarsızlıkları
-canlı veritabanına taşıyabilir.
+canlı veritabanına taşıyabilir. **DRAFT tarafı ölçüldü (İş 7 / Dilim 3):**
+dokuz predicate'in dokuzu da gerçek okuyucu + geçici DB denemesi + canlı
+restore hattından geçip canlı Room 8 veritabanına ulaşıyor (§25.3 matris).
+Okuyucu değiştirilmedi; sonuç onay kapısıyla karşılanıyor.
 
 ```text
-İş 7 ne yapar   DRAFT tarafının SONUCUNU ölçer (Dilim 3), salt okunur olarak
+İş 7 ne yapar   DRAFT tarafının SONUCUNU ölçer (Dilim 3 — YAPILDI), salt okunur olarak
                 sınıflandırır, onayı kapatır ve açık onayla kaldırmaya izin verir
 İş 7 ne yapmaz  okuyucuyu sıkılaştırmaz: böyle bir veritabanı zaten geri
                 yüklenmişse, sıkılaşan okuyucu o DB'nin HER import snapshot'ını
@@ -4218,7 +4509,7 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   her içe aktarma onayı öncesi doğrulanmış snapshot + yarış koruması, ve
   migration öncesi eşleşmiş set + açılış kapısı. Kararlar PLAN 14.4.7-14.4.13,
   uygulanan hâli §25.2. Yeniden tartışma.
-  Sıradaki bağlayıcı iş: İŞ 7 / DİLİM 3 — bozuk DRAFT sınıflandırması + onay kapısı.
+  Sıradaki bağlayıcı iş: İŞ 7 / DİLİM 4 — arayüz: devam et, kaldır, bozuk taslak uyarısı.
 - İş 7 / Dilim 1 BİTTİ (yalnız test): dört yazma yolu gerçek ikinci JVM'de
   transaction içinde ve commit sonrası SIGKILL ile kesildi; hepsi ya hep ya hiç.
   Ölçülen kalıcılık: journal_mode = wal, synchronous = 1 (NORMAL). synchronous'u
@@ -4234,6 +4525,17 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   15 tablonun sayımıdır; satır başına okuma/silme EKLEME (cascade tek DELETE'te).
   Kaldırma history YAZMAZ, snapshot ALMAZ, kaynak dosyayı OKUMAZ. Store henüz
   Main'e BAĞLI DEĞİL (arayüz Dilim 4).
+- İş 7 / Dilim 3 BİTTİ: D1–D9'un DOKUZU DA gerçek restore hattından canlı DB'ye
+  ulaşır (ÖLÇÜLDÜ; PLAN listesi doğru, değişmedi). Sınıflandırmanın TEK yolu
+  ImportDao.draftHealthOf → DraftHealth (Sound / Contradicting(nedenler) /
+  NotFound / NotADraft); salt okunur, @Transaction, blok sayısından bağımsız 3
+  okuma; D8 SQL'de üst küme + Kotlin'de UTF-16 kesin karar. Nedenler
+  DraftContradiction'dır ve kullanıcıya GÖSTERİLMEZ. ImportConfirmationStore
+  sınıflandırıcıyı snapshot'tan ÖNCE ve BEGIN IMMEDIATE içinde 15 tablo
+  karşılaştırmasından SONRA çağırır; bozuksa RECORDS_CONTRADICT_EACH_OTHER,
+  snapshot/rotation/yazma YOK. Yalnız Contradicting durdurur; diğer sonuçlar
+  eski onay denetimlerine bırakılır. Programlama hataları MASKELENMEZ. Yeni bir
+  bozukluk nedeni ancak gerçek restore hattıyla ölçülerek eklenir.
 - İş 7'nin (beklenmeyen kapanış ve yarım kalmış içe aktarma) kararları VERİLMİŞTİR:
   PLAN 11.4.5, özet ve repo denetimi §25.3. Yeniden tartışma. İşaret dosyası YOK,
   -wal çökme kanıtı DEĞİL, güvence tek transaction + WAL kurtarması; DRAFT
@@ -4449,6 +4751,10 @@ Bugün çalışan hâliyle:
 - Bir içe aktarmayı onaylamak, önce bütün veritabanının doğrulanmış bir
   yedeğini `backups/` altına yazar; yedek alınamazsa onay hiç başlamaz ve
   hiçbir satır değişmez.
+- Kayıtları birbiriyle çelişen bir içe aktarma taslağı — bugün yalnız elle
+  değiştirilmiş bir yedeğin geri yüklenmesiyle oluşabilir — onaylanamaz: onay
+  bunu yedek almadan önce ve transaction içinde yeniden tanır, hiçbir şey
+  yazmaz ve kullanıcıya tek bir Türkçe cümle söyler.
 - Kullanıcı bütün verisinin sürümlü, deterministik ve checksum'lı bir JSON
   yedeğini `Ayarlar` ekranından istediği yere atomik olarak kaydedebilir.
 - Ve o yedeği **geri yükleyebilir**. Dosya hiçbir şeyine güvenilmeden okunur;
@@ -4548,7 +4854,14 @@ satırlarıyla ve tipli bir sonuçla kaldırılabiliyor; ikinci istek sessiz ba�
 ya da exception değil "zaten kaldırılmış" cevabı alıyor, gerçek bir görev veya
 oyun başvuruyorsa hiçbir şey silinmiyor, ve yarıda kalan her deneme veritabanını
 olduğu gibi bırakıyor. Kullanıcının bu eyleme ulaşacağı düğme henüz yok (Dilim
-4). Sıradaki dilim bozuk taslak sınıflandırması ve onay kapısıdır.
+4). **Dilim 3 bitti:** kayıtları birbiriyle çelişen bir taslağın canlı veritabanına
+nereden gelebileceği tahmin edilmedi, ölçüldü — dokuz çelişkinin dokuzu da
+checksum'ı yeniden hesaplanmış bir yedeğin gerçek geri yüklemesiyle içeri
+girebiliyor. Uygulama artık bunları salt okunur olarak tanıyor ve böyle bir
+taslağın onayını, otomatik yedeği bile almadan, tek bir satır yazmadan
+reddediyor; kullanıcı bu durumda neyin değişmediğini söyleyen tek bir Türkçe
+cümle görüyor. Sıradaki dilim arayüzdür: taslağa devam etme, açık onayla
+kaldırma ve bozuk taslakların ayrı gösterilmesi.
 
 İş 7'nin belge turu bir şeyi netleştirdi: bu işin yükü hayalî bozukluk
 durumlarını avlamak **değildir**. Uygulamanın kendi yolları yarım bir içe

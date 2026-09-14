@@ -22,15 +22,19 @@ import dev.pnptracker.data.database.entity.stageRowsFor
 import dev.pnptracker.data.database.projection.CellColumnRow
 import dev.pnptracker.data.database.projection.CellDocumentRow
 import dev.pnptracker.data.database.projection.CellGameRow
+import dev.pnptracker.data.database.projection.DraftHealthFacts
 import dev.pnptracker.data.database.projection.DraftRemovalFacts
 import dev.pnptracker.data.database.projection.DraftTargetRow
 import dev.pnptracker.data.database.projection.RollbackCellRow
 import dev.pnptracker.data.database.projection.RollbackSegmentRow
+import dev.pnptracker.data.database.projection.SelectionCandidateRow
 import dev.pnptracker.data.database.projection.TableCounts
+import dev.pnptracker.data.database.projection.draftHealthOf
 import dev.pnptracker.domain.games.TASK_SEPARATOR
 import dev.pnptracker.domain.games.taskNeedsSeparatorAfter
 import dev.pnptracker.domain.importconfirm.ImportConfirmationException
 import dev.pnptracker.domain.importconfirm.ImportConfirmationFailure
+import dev.pnptracker.domain.importhealth.DraftHealth
 import dev.pnptracker.domain.importremoval.DraftRemovalOutcome
 import dev.pnptracker.domain.importremoval.DraftRemovalRefusal
 import dev.pnptracker.domain.importreview.DraftInitialValues
@@ -409,6 +413,32 @@ abstract class ImportDao {
             )
         val after = tableCounts()
         check(after == expected) { "Removing the draft import $batchId left $after where $expected was expected." }
+    }
+
+    /**
+     * Whether one import is a draft whose records agree with each other.
+     *
+     * Read only: nothing is written, no snapshot is taken, the source file is
+     * not opened, and asking twice of the same database gives the same answer.
+     * The nine contradictions PLAN 11.4.5 defines are the whole test — a draft
+     * whose target has gone, whose selection splits a character, that has no
+     * drafts or no raw cells at all, is sound here and refused, if at all, by the
+     * confirmation's own typed checks.
+     *
+     * One transaction, so the batch row and the counts held against it are read
+     * from the same database: read apart, a removal committing in between would
+     * make a sound draft look as if its raw cells had gone. Three reads, however
+     * large the draft — the batch, the counts, and the few selections that could
+     * run past their text.
+     *
+     * Nothing is caught here. A storage failure travels out as it is, for the
+     * caller to name; a damaged draft is an answer, never an exception.
+     */
+    @Transaction
+    open suspend fun draftHealthOf(batchId: EntityId): DraftHealth {
+        val batch = batchById(batchId) ?: return DraftHealth.NotFound(batchId)
+        if (batch.status != ImportBatchStatus.DRAFT) return DraftHealth.NotADraft(batchId, batch.status)
+        return draftHealthOf(batch, draftHealthFactsOf(batchId), selectionsPastCodePointsOf(batchId))
     }
 
     // ------------------------------------------- the colours of a draft task
@@ -955,6 +985,41 @@ abstract class ImportDao {
         """,
     )
     protected abstract suspend fun draftRemovalFactsOf(batchId: EntityId): DraftRemovalFacts
+
+    /** See [DraftHealthFacts]. The literals are the stored enum names. */
+    @Query(
+        """
+        SELECT
+          (SELECT COUNT(*) FROM raw_import_blocks WHERE import_batch_id = :batchId) AS raw_block_rows,
+          (SELECT COUNT(*) FROM draft_tasks
+             JOIN raw_import_blocks ON raw_import_blocks.id = draft_tasks.raw_import_block_id
+             WHERE raw_import_blocks.import_batch_id = :batchId
+               AND draft_tasks.materialized_task_id IS NOT NULL) AS materialized_draft_count,
+          (SELECT COUNT(*) FROM import_batch_cells WHERE import_batch_id = :batchId) AS cell_snapshot_count,
+          (SELECT COUNT(*) FROM tasks
+             JOIN raw_import_blocks ON raw_import_blocks.id = tasks.source_raw_import_block_id
+             WHERE raw_import_blocks.import_batch_id = :batchId) AS sourced_task_count,
+          (SELECT COUNT(*) FROM games WHERE source_import_batch_id = :batchId) AS sourced_game_count,
+          (SELECT COUNT(*) FROM raw_import_blocks
+             WHERE import_batch_id = :batchId
+               AND source_column_type <> 'GAME'
+               AND game_completion_hint <> 'NONE') AS hint_outside_game_count
+        """,
+    )
+    protected abstract suspend fun draftHealthFactsOf(batchId: EntityId): DraftHealthFacts
+
+    /** See [SelectionCandidateRow]: a superset of D8, narrowed in Kotlin. */
+    @Query(
+        """
+        SELECT raw_import_blocks.raw_text AS raw_text, draft_tasks.selection_end_index AS selection_end_index
+        FROM draft_tasks
+        JOIN raw_import_blocks ON raw_import_blocks.id = draft_tasks.raw_import_block_id
+        WHERE raw_import_blocks.import_batch_id = :batchId
+          AND draft_tasks.selection_end_index IS NOT NULL
+          AND draft_tasks.selection_end_index > length(raw_import_blocks.raw_text)
+        """,
+    )
+    protected abstract suspend fun selectionsPastCodePointsOf(batchId: EntityId): List<SelectionCandidateRow>
 
     /** See [TableCounts]. */
     @Query(
