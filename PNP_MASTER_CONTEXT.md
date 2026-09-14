@@ -7,14 +7,18 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** Faz 3 / İş 7 / **Dilim 1**'den (kesintiye dayanıklılığın
-> kalıcı kanıtı) sonra — `test(recovery): prove an interrupted write leaves all
-> or nothing`. Yalnız test ve ölçüm eklendi; üretim kodu, UI, Room şeması ve
-> PLAN değişmedi. İş 7'nin sözleşmesi PLAN `11.4.5`'te, özeti, repo denetimi ve
-> Dilim 1'in uygulanan hâli §25.3'tedir. Sıradaki bağlayıcı iş **İş 7 / Dilim 2**.
+> **Son güncelleme:** Faz 3 / İş 7 / **Dilim 2**'den (taslağı kaldırma motoru)
+> sonra — `feat(import): remove an unconfirmed import in one transaction`.
+> `discardDraftBatch` yerini tipli sonuçlu, transaction içi kararlı ve
+> postcondition'lı `removeDraftBatch` + `ImportDraftRemovalStore`'a bıraktı.
+> Arayüz yok, Room şeması ve PLAN değişmedi. İş 7'nin sözleşmesi PLAN
+> `11.4.5`'te, özeti, repo denetimi ve Dilim 1 + 2'nin uygulanan hâli
+> §25.3'tedir. Sıradaki bağlayıcı iş **İş 7 / Dilim 3**.
 >
-> Daha önce: İş 7'nin belge turu (`docs: define interrupted import recovery
-> semantics`) sözleşmeyi yazdı.
+> Daha önce: İş 7 / Dilim 1 (`test(recovery): prove an interrupted write leaves
+> all or nothing`) kesintiye dayanıklılığı gerçek süreç öldürmesiyle ölçtü; İş
+> 7'nin belge turu (`docs: define interrupted import recovery semantics`)
+> sözleşmeyi yazdı.
 >
 > Bir önceki durum: Faz 3 / İş 4'ün **dördüncü ve son dilimi** (migration
 > öncesi eşleşmiş ham `.db` + yürütülmüş `.json` seti ve açılış kapısı)
@@ -38,22 +42,37 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-HEAD (bu commit öncesi): 10bd739ac3945bbe00876ddb96eeff4ef31206ae
-önceki commit         : docs: define interrupted import recovery semantics
-bu commit             : test(recovery): prove an interrupted write leaves all or nothing
+HEAD (bu commit öncesi): 5a1cc9b14f36415aa50057fbade6ef3b763f28e4
+önceki commit         : test(recovery): prove an interrupted write leaves all or nothing
+bu commit             : feat(import): remove an unconfirmed import in one transaction
 working tree          : temiz
 Room şema sürümü      : 8   (bu commit'te DEĞİŞMEDİ)
 şema dosyaları        : 1.json … 8.json  hepsi bayt bayt aynı
-test durumu           : 3391 test / 0 failure / 0 error / 0 skipped  (228 sınıf)
-                        [önceki kod commit'i 6119b1f: 3377 test / 225 sınıf → +14 / +3]
+test durumu           : 3424 test / 0 failure / 0 error / 0 skipped  (233 sınıf)
+                        [önceki commit 5a1cc9b: 3391 test / 228 sınıf → +33 / +5]
                         ./gradlew clean check --rerun-tasks ile bu commit'ten
-                        hemen önce KOŞULDU: BUILD SUCCESSFUL in 2m 48s
-değişen dosyalar      : yalnız desktopTest/…/platform/recovery/ altında 7 yeni test
-                        dosyası ve PNP_MASTER_CONTEXT.md
+                        hemen önce KOŞULDU: BUILD SUCCESSFUL in 2m 15s
+değişen dosyalar      : üretim 4 (ImportDao değişti; DraftRemoval.kt,
+                        DraftRemovalRows.kt, ImportDraftRemovalStore.kt yeni),
+                        test 10 (6 yeni, 4 bilinçli dönüştürüldü),
+                        PNP_MASTER_CONTEXT.md
 PLAN.md               : bu commit'te DEĞİŞMEDİ
 ```
 
-**Bu commit Faz 3 / İş 7'nin birinci dilimidir ve yalnız testtir.** Kararın
+**Bu commit Faz 3 / İş 7'nin ikinci dilimidir: taslağı kaldırma motoru.**
+Onaylanmamış bir içe aktarma artık tek bir `BEGIN IMMEDIATE` transaction'ında,
+kararları o transaction'ın içinde yeniden okunarak kaldırılıyor. Beş tipli
+sonuç var (`Removed` + dört `Refused`: `ALREADY_REMOVED`, `NOT_A_DRAFT`,
+`HELD_BY_RECORDS`, `COULD_NOT_SAVE`); ikinci çağrı exception değil
+`ALREADY_REMOVED`; `D6`/`D7` başvurusu FK hatası beklenmeden açık bir SELECT ile
+bulunuyor; postcondition 15 tablonun sayımını önce/sonra karşılaştırıyor ve
+bozulursa `IllegalStateException` ile bütün transaction geri alınıyor. Maliyet
+taslak boyutundan bağımsız: 0, 1 ve 42 hücreli taslak aynı altı ifadeyi
+çalıştırıyor (ölçüldü). Arayüz yok; `ImportDraftRemovalStore` henüz `Main`'e
+bağlı değil (kabul edilmiş kalıp, §33 R3). Ayrıntı §25.3 "İş 7 / Dilim 2'de
+uygulanan hâli".
+
+**Bir önceki commit (`5a1cc9b`) İş 7'nin birinci dilimiydi ve yalnız testti.** Kararın
 dayandığı cümle — "her yazma tek transaction'dır; SQLite ya hepsini ya hiçbirini
 tutar" — artık bir inanç değil, **gerçek bir ikinci JVM process'inin öldürülmesiyle
 ölçülmüş** bir sonuçtur. Dört yazma yolu (taslak kaydı, taslak düzenleme, onay,
@@ -178,7 +197,7 @@ değişti.
 
 ```text
 PLAN.md  a266824ba28e1b90b3f650575905587951b5309debdfc62a56f7d2bdfbadff04
-         (bu commit PLAN'ı DEĞİŞTİRMEZ; değer İş 7 belge turundan aynen gelir.
+         (İş 7 Dilim 1 ve Dilim 2 PLAN'ı DEĞİŞTİRMEDİ; değer İş 7 belge turundan aynen gelir.
           Ondan önceki değer
           db891ba8362bb5ee837535aa042b8414ac2062d97a8fa25bff744884b09a3455)
 
@@ -209,7 +228,7 @@ veritabanının parmak izi orada durmamalıdır. Bunun yerine kural şudur:
 
 Gerçek DB hiçbir aşamada açılmaz, kopyalanmaz veya migrate edilmez. Bütün testler ve
 manuel turlar geçici Room veritabanları ve geçici XDG dizinleri kullanır. Bu koruma
-`assertRealApplicationDatabaseUntouched` yardımcı fonksiyonuyla **90 test sınıfında**
+`assertRealApplicationDatabaseUntouched` yardımcı fonksiyonuyla **94 test sınıfında**
 uygulanmaktadır. Sayı tek bir yerde tutulur; §29 aynı değeri anar ve tarama
 `grep -rl 'assertRealApplicationDatabaseUntouched' app/src/*Test` ile yapılır.
 
@@ -2489,7 +2508,7 @@ testi silmek yerine güçlendirdi. Dilim 3, `DesktopImportSnapshotWriter`'ı
 
 ---
 
-# 25.3 BEKLENMEYEN KAPANIŞ VE YARIM KALMIŞ İÇE AKTARMA  *(Faz 3 / İş 7 — DİLİM 1/4 TAMAM)*
+# 25.3 BEKLENMEYEN KAPANIŞ VE YARIM KALMIŞ İÇE AKTARMA  *(Faz 3 / İş 7 — DİLİM 2/4 TAMAM)*
 
 Bağlayıcı metin PLAN `11.4.5`, `16.`, `17.` ve `18.` Faz 3 / İş 7'dedir. Bu
 bölüm kararların özetini, **repo denetiminin sonucunu** ve dört dilimin
@@ -2555,7 +2574,8 @@ sayaç / materialize  created_task_count, draft_tasks.materialized_task_id,
 provenance           YALNIZ confirmDraftBatch yazar ve aynı transaction batch'i
                      CONFIRMED yapar; requireConfirmationHeld hepsini geri okur
 games.source_...     üretimde tek yazan GameSetupStore → her zaman null (PLAN 11.4.1)
-kaldırma             discardDraftBatch — @Transaction, status denetimi SQL'de
+kaldırma             removeDraftBatch (Dilim 2; önceden discardDraftBatch) —
+                     @Transaction (BEGIN IMMEDIATE), status denetimi SQL'de
                      tekrarlanır, çocuklar CASCADE, provenance RESTRICT
 yabancı anahtarlar   üretim bağlantısında ZORLANIR (§33 R9, ölçüldü)
 çöküş                bunların hiçbiri transaction dışında çok adımlı değildir;
@@ -2655,11 +2675,12 @@ edilemez, ölçülmedi), **yarım transaction bırakamaz**. İş 7 ayarı deği�
 ## Bugünkü eksik  *(İş 7'nin gerçek iş yükü)*
 
 ```text
-discardDraftBatch   VAR, testli (ImportDraftTest, DraftTaskColorTest), fakat
-                    ÜRETİMDE ÇAĞIRANI YOK → kullanıcı bugün bir taslağı kaldıramaz
-tekrar çağrı        IllegalArgumentException ("There is no import batch") — tipli değil
-FK engeli           SQLiteException (FOREIGN KEY) — tipli değil
-postcondition       YOK — diğer tabloların değişmediği kanıtlanmıyor
+kaldırma motoru     Dilim 2'de YAZILDI: ImportDao.removeDraftBatch +
+                    ImportDraftRemovalStore; ÜRETİMDE ÇAĞIRANI HENÜZ YOK (arayüz
+                    Dilim 4) → kullanıcı bugün bir taslağı hâlâ kaldıramaz
+tekrar çağrı        Dilim 2'den beri tipli ALREADY_REMOVED (önce IllegalArgumentException)
+FK engeli           Dilim 2'den beri açık SELECT → HELD_BY_RECORDS (önce SQLiteException)
+postcondition       Dilim 2'de EKLENDİ — 15 tablonun sayımı önce/sonra
 bozuk sınıflandırma YOK; D2/D4/D5/D9 onaya ulaşabilir (yukarıdaki tablo)
 kesinti kanıtı      Dilim 1'de EKLENDİ: dört yazma yolu gerçek bir ikinci
                     süreçte transaction İÇİNDE ve commit'ten SONRA öldürülüyor
@@ -2942,6 +2963,189 @@ güç kesintisi / OS çökmesi                   bu makinede test edilemez; öl�
 R12, R13, R14                                AÇIK kaldı
 ```
 
+## İş 7 / Dilim 2'de uygulanan hâli
+
+Taslağı kaldırma motoru. Arayüz yok; Room şeması, migration zinciri, onay
+kapısı ve Dilim 1'in süreç testleri değişmedi.
+
+```text
+commonMain/domain/importremoval/DraftRemoval.kt       DraftRemovalOutcome (Removed /
+                                                      Refused) + DraftRemovalRefusal (4)
+commonMain/data/database/projection/DraftRemovalRows.kt  DraftRemovalFacts (7 sayım,
+                                                      tek SELECT) + TableCounts (15 tablo,
+                                                      tek SELECT)
+commonMain/data/database/dao/ImportDao.kt             discardDraftBatch → removeDraftBatch;
+                                                      requireRemovalHeld; iki yeni sorgu
+commonMain/data/repository/ImportDraftRemovalStore.kt ImportDraftRemoval arayüzü + store
+```
+
+### Tipli sonuçların tam listesi
+
+```text
+Removed(batchId, rawBlockCount, draftTaskCount,       taslak ve kendi satırları gitti
+        draftColorCount, cellSnapshotCount)
+Refused(batchId, ALREADY_REMOVED)   batch yok — ikinci çağrı ile hiç var olmamış id
+                                    AYIRT EDİLEMEZ ve ikisi de yapacak iş bırakmaz
+Refused(batchId, NOT_A_DRAFT)       CONFIRMED veya ROLLED_BACK (geri almanın yolu 11.4.4)
+Refused(batchId, HELD_BY_RECORDS)   D6 (tasks.source_raw_import_block_id, silinmiş
+                                    görev dâhil) veya D7 (games.source_import_batch_id,
+                                    silinmiş oyun dâhil)
+Refused(batchId, COULD_NOT_SAVE)    YALNIZ store üretir: SQLiteException → transaction
+                                    geri alındı, hiçbir şey yazılmadı
+```
+
+İlk üç ret DAO'dan **değer** olarak döner — reddedildiği noktada hiçbir şey
+yazılmamıştır. `IllegalStateException` (postcondition), `IllegalArgumentException`
+ve diğer programlama hataları **olduğu gibi yükselir**; store yalnız
+`SQLiteException`'ı yakalar. Beklenen çakışma (D6/D7) FK hata metnine hiç
+bırakılmaz: aynı transaction'daki açık bir sayımla bulunur.
+
+### Transaction sırası
+
+```text
+BEGIN IMMEDIATE                (Room @Transaction; ÖLÇÜLDÜ — yazma kilidi ilk okumadan önce)
+1  SELECT * FROM import_batches WHERE id = ?      yoksa → ALREADY_REMOVED
+                                                  DRAFT değilse → NOT_A_DRAFT
+2  DraftRemovalFacts (tek SELECT, 7 alt sayım)    holding_task/game > 0 → HELD_BY_RECORDS
+3  TableCounts (tek SELECT, 15 alt sayım)         "önce"
+4  DELETE FROM import_batches WHERE id = ? AND status = 'DRAFT'
+   → raw_import_blocks, draft_tasks, draft_task_colors, import_batch_cells
+     şemanın ON DELETE CASCADE'iyle AYNI ifadenin içinde gider; check(silinen == 1)
+5  DraftRemovalFacts yeniden: batch + 4 çocuk sayımı 0 olmalı
+6  TableCounts yeniden: 5 import tablosu tam olarak sayılan kadar eksilmeli,
+   diğer 10 tablo AYNI kalmalı → değilse IllegalStateException, commit YOK
+COMMIT
+```
+
+**Tablo sayısı notu:** PLAN `11.4.5` kaldırmanın dokunabileceği beş tabloyu
+(`import_batches`, `raw_import_blocks`, `draft_tasks`, `draft_task_colors`,
+`import_batch_cells`) ve dokunamayacağı on tabloyu adıyla sayar. Dilim 2'nin
+plan metni "diğer 11 tablo", dilim talimatı "izin verilmeyen 13 tablo" diyordu;
+uygulanan postcondition ikisinden de geniştir: **15 tablonun hepsi** sayılır,
+izinli beşte yalnız bu batch'in kendi satırları kadar eksilme kabul edilir.
+Testler ise sayımla değil **değerle** doğrular: işlem öncesi bütün veritabanının
+kanonik okuması, bu batch'in satırları çıkarılmış hâliyle, işlem sonrasına
+birebir eşit olmalıdır (başka batch'lerin satırları dâhil).
+
+Postcondition sayıma dayanır, değer karşılaştırmaz: tek bir `DELETE` bir satırın
+değerini değiştiremez, yalnız satır götürebilir; götürülen her satır sayıda
+görünür. Tam değer karşılaştırması veritabanı boyutuyla büyürdü (§29'daki
+değişmez sorgu sayısı sözü). Tetikleyiciyle kurulmuş iki bozulma — izinsiz bir
+tablodan satır silen ve batch satırını geri koyan — postcondition'ı düşürüyor
+ve veritabanı bayt bayt önceki hâlinde kalıyor (testli; mutasyonla da
+doğrulandı: postcondition ve HELD denetimi kapatılınca 4 test düşüyor).
+
+### Ölçülen sorgu sayısı
+
+```text
+0 hücreli / 1 hücreli / 42 hücre × 2 taslak × 3 renk   AYNI harita:
+  SELECT batch 1 · SELECT facts 2 · SELECT table counts 2 · DELETE 1
+  + Room'un SAVEPOINT/RELEASE çifti 1 + changes() okuması 1
+ALREADY_REMOVED yolu                                   SELECT batch 1, yazma 0
+ilk okumadan önceki son transaction işareti            BEGIN IMMEDIATE TRANSACTION
+```
+
+İlk tam koşuda sorgu sayımı testi **bir kez düştü**: Room'un invalidation
+tracker'ı commit'ten sonra kendi `BEGIN IMMEDIATE … COMMIT` çiftini kendi
+zamanlamasıyla açıyor ve bu çift bazen kayıt penceresine giriyordu. Test
+düzeltildi: üst düzey `BEGIN`/`COMMIT` sayımdan çıkarıldı, removal'ın kendi
+transaction'ı ise **sıra** ile doğrulanıyor (ilk okumadan önceki son işaret
+`BEGIN IMMEDIATE`). Düzeltmeden sonra dar test 5 kez art arda ve tam koşu
+geçti. Üretim kodu bu yüzden değişmedi.
+
+### Yarışlar — sleep yok
+
+İkinci işlem, birincinin transaction'ının **içinden**, seçilen ifadede,
+`PausingSqliteDriver` ile başlatılır (restore yarış testinin kalıbı). Room tek
+writer bağlantısı tuttuğu için ikinci işlem birinci commit edene kadar kendi
+transaction'ını açamaz ve kararını birincinin bıraktığından verir.
+
+```text
+kaldırma sürerken düzenleme      Removed(3,3,3,0); düzenleme → ImportReviewException
+                                 DRAFT_TASK_NOT_FOUND, hiçbir şey yazmaz
+düzenleme sürerken kaldırma      düzenleme true; kaldırma sonra Removed(3,3,4,0) — 4
+                                 renk, düzenlemenin YENİ iki rengini tam okuduğunun
+                                 kanıtı. Bu sırada ikisi de meşru olarak başarılıdır:
+                                 önce düzenleme commit edilir, sonra taslak bütünüyle
+                                 kaldırılır; hiçbir sırada yarım durum yok
+onay sürerken kaldırma           onay 3 görevle CONFIRMED; kaldırma NOT_A_DRAFT;
+                                 batch'in blokları ve 3 materialized taslağı yerinde
+kaldırma sürerken onay           onay (snapshot kaldırmadan ÖNCE alınmış) →
+                                 DATA_CHANGED_MEANWHILE, hiçbir şey yazmaz
+kaldırma commit edildikten sonra onay   BATCH_NOT_FOUND, hiçbir şey yazmaz
+kaldırma sürerken ikinci kaldırma       ALREADY_REMOVED
+8 eşzamanlı kaldırma (Dispatchers.IO)   tam 1 Removed + 7 ALREADY_REMOVED
+her yarıştan sonra                      foreign_key_check boş, integrity_check ok,
+                                        veritabanı = önce − bu batch (değer düzeyinde)
+```
+
+### Failure injection
+
+`FailingSqliteDriver` ile gerçek SQLite hatası altı noktada (batch okuması,
+facts okuması, önce-sayım, DELETE, sonra-facts, sonra-sayım) ve bir SQLite
+tetikleyicisiyle **cascade'in ortasında** (`RAISE(ABORT)`, taslağın renklerinin
+bir kısmı silindikten sonra) enjekte edildi. Her birinde sonuç
+`COULD_NOT_SAVE`, bütün veritabanı değer düzeyinde aynı, iki PRAGMA temiz;
+hata kaldırılınca aynı kaldırma başarılı. `PausingSqliteDriver`'dan fırlatılan
+`IllegalStateException` (DELETE'ten önce) ve `IllegalArgumentException`
+(postcondition sayımında) **maskelenmeden** yükseliyor ve veritabanı aynı kalıyor.
+
+### Testler
+
+```text
+data/database/DraftRemovalFixtures.kt        aDraftImport (saveDraftBatch + inceleme
+                                             yolları), wholeDatabase, withoutDraft,
+                                             soundnessProblemsOf, executeRawSql
+data/database/DraftRemovalTest.kt        13  0/1/5/42 hücre, renksiz/taslaksız, ikinci
+                                             çağrı, bilinmeyen id, gerçek CONFIRMED +
+                                             gerçek ROLLED_BACK, D6 (silinmiş görev),
+                                             D7 (silinmiş oyun), D4+D5 taşıyan taslak
+                                             kaldırılır ve görev/hücre dokunulmaz,
+                                             history ve 10 tablo aynı, iki postcondition
+                                             bozulması
+data/database/DraftRemovalFailureTest.kt  9  yukarıdaki failure injection
+data/repository/DraftRemovalRaceTest.kt   7  yukarıdaki yarışlar
+data/repository/DraftRemovalQueryCountTest.kt 2  sorgu şekli
+platform/recovery/DraftRemovalSmokeTest.kt 2  geçici XDG: gerçek CSV → gerçek gateway +
+                                             ImportController + ImportDraftStore;
+                                             StartupGate ile kapat/aç; kaynak dosya
+                                             SİLİNDİ / YENİDEN YAZILDI; kaldırma →
+                                             Removed(6 hücre); backups/ BOŞ (otomatik
+                                             snapshot yok), settings.json yok, dosya
+                                             listesi aynı; yeniden açılış assertWhole,
+                                             history boş ve parmak izi İÇE AKTARMADAN
+                                             ÖNCEKİ değere eşit; sonraki açılışta
+                                             ikinci çağrı ALREADY_REMOVED
+```
+
+Bilinçli olarak dönüştürülen (silinmeyen) eski testler:
+
+```text
+ImportDraftTest  removing a draft batch removes only its own cells and drafts
+                 → artık Removed(1,1,0,0) sonucunu da doğrular
+ImportDraftTest  a confirmed or rolled back import cannot be removed
+                 IllegalArgumentException + mesajda status → NOT_A_DRAFT değeri;
+                 bilinmeyen id IllegalArgumentException → ALREADY_REMOVED
+ImportDraftTest  a batch or cell that a game or task points at cannot be removed
+                 SQLiteException "FOREIGN KEY" → HELD_BY_RECORDS
+DraftTaskColorTest removing an import takes the colours of its drafts with it
+ImportConfirmationStoreTest a confirmed import cannot be removed → store üzerinden NOT_A_DRAFT
+CountingImportDao iki yeni protected üye outOfReach ile eklendi
+```
+
+### Dilim 2'nin bilerek YAPMADIKLARI
+
+```text
+kaldırma düğmesi / onay penceresi / Main bağlantısı   Dilim 4
+D1–D9 sınıflandırması ve onay kapısı                  Dilim 3
+import confirmation kapısı                            değişmedi
+Room şeması / migration                               değişmedi (CASCADE'ler v3/v5/v8'den)
+geçmiş olayı / otomatik snapshot                      YOK (PLAN 11.4.5, 14.4.7)
+kesilmiş yedek artıklarının / JNI tmp'nin temizliği   yapılmadı
+Dilim 1'in süreç/SIGKILL testleri                     değişmedi, zayıflatılmadı
+R12, R13, R14                                         AÇIK kaldı
+```
+
 ## Reddedilen alternatifler  *(tekrar önerilmesin)*
 
 ```text
@@ -3069,7 +3273,7 @@ geçmez. Hash'i dilim başında/sonunda kontrol edilir ve kapsam dışında değ
 
 ```text
 TemporaryDatabaseDirectory              geçici Room DB + gerçek DB koruma iddiası
-assertRealApplicationDatabaseUntouched  90 test sınıfında kullanılıyor
+assertRealApplicationDatabaseUntouched  94 test sınıfında kullanılıyor
 CommittedSchema                         eski sürümleri commit'li JSON'dan kurar
 LegacyRowFixtures                       v1…v6 satır yazıcıları
                                         (v6 raw block = v7 raw block; şema aynı)
@@ -3126,6 +3330,11 @@ RecoveryHome / WriterProcess            test başına geçici XDG evi; child
                                         SIGKILL + waitFor, kapıdan yeniden açılış,
                                         gerçek uygulama dosyalarının açılmadan
                                         parmak izi
+DraftRemovalFixtures (desktopTest)      her boyutta gerçek inceleme yollarıyla kurulmuş
+                                        taslak; bütün DB'nin kanonik okuması ve bir
+                                        taslağın kendi satırları çıkarılmış hâli
+                                        (withoutDraft); foreign_key_check +
+                                        integrity_check; tuzak kurmak için ham SQL
 ComposeSceneHarness                     gerçek Compose sahnesi (desktopTest)
 ```
 
@@ -3134,7 +3343,7 @@ Beş smoke turu (`BackupSmokeTest`, `BackupRestoreSmokeTest`, `RestoreSmokeTest`
 `TemporaryDatabaseDirectory` örneği tutmadıkları için aynı iddiayı **satır
 içinde** kurar: gerçek veritabanının var olup olmadığı turdan önce ölçülür ve
 sonra karşılaştırılır. Bu yüzden yukarıdaki
-90 sayısı yardımcı fonksiyonun kendi sayısıdır, korumanın değil.
+94 sayısı yardımcı fonksiyonun kendi sayısıdır, korumanın değil.
 
 **Sorgu sayımı her zaman frekans haritasıyla yapılır**, `Set` ile değil: `Set` bir
 ifadenin 400 koşusunu bire indirir ve kimsenin ödemediği bir maliyeti raporlar.
@@ -3167,6 +3376,14 @@ Kesintiye dayanıklılık   dört yazma yolu (taslak kaydı, düzenleme, onay, g
                          ok, foreign_key_check boş, kapıdan açılış, set yok
 Kalıcılık ayarı          writer ve reader: journal_mode = wal, synchronous = 1;
                          başlık baytları 18/19 = 2/2; yeniden açılışta aynı
+Taslağı kaldırma         0, 1 ve 42 hücreli (×2 taslak ×3 renk) taslak AYNI ifade
+                         haritasını çalıştırır: SELECT batch 1, SELECT facts 2,
+                         SELECT 15 tablo sayımı 2, DELETE 1 (+ SAVEPOINT çifti ve
+                         changes()); satır başına okuma veya silme YOK; ret yolu
+                         yalnız 1 SELECT, 0 yazma; transaction BEGIN IMMEDIATE
+                         (sıra ile ölçüldü). Kaldırma sonrası DB = önce − o batch'in
+                         kendi satırları, DEĞER düzeyinde; history 0 satır,
+                         backups/ 0 dosya
 Kapanış izleri           normal kapanış ile SIGKILL sonrası ilk açılış AYNI dosya
                          listesini bırakır; işaret/kurtarma dosyası yok
 Açılış kapısı            v8 bir veritabanında EK MALİYET YOK: yalnız kilit +
@@ -3339,8 +3556,8 @@ PLAN `18.` — Faz 3 işler listesi.
  5  CSV görev dışa aktarmayı doğrula ......... özellik var, Faz 3 doğrulama
                                               testleri yazılmadı
  6  Veritabanı migration testlerini oluştur ............. TAMAM
- 7  Beklenmeyen kapanış / bozuk import kurtarma ......... 1/4 dilim TAMAM
-                                                        ← SIRADAKİ (Dilim 2)
+ 7  Beklenmeyen kapanış / bozuk import kurtarma ......... 2/4 dilim TAMAM
+                                                        ← SIRADAKİ (Dilim 3)
                                                         (PLAN sırası: 7 → 9+5 → 10)
  8  Klavye, odak, renk dışı etiket, yüksek DPI .... mevcut ekranlar için
                                               büyük ölçüde tamam
@@ -3407,17 +3624,21 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
 
 ## Sıradaki bağlayıcı iş
 
-> **Faz 3 / İş 7 / Dilim 2: taslağı kaldırma motoru.**
+> **Faz 3 / İş 7 / Dilim 3: bozuk DRAFT sınıflandırması ve onay kapısı.**
 >
 > İş 7'nin sözleşmesi yazıldı (PLAN `11.4.5`, `16.`, `17.`, `18.`; özet, repo
 > denetimi ve uygulanan hâl §25.3). Kararlar verilmiştir ve yeniden
 > tartışılmaz. Dilim 1 bitti: dört yazma yolu gerçek süreç öldürmesiyle ölçüldü,
-> kalıcılık ayarı `wal` + `synchronous = NORMAL` olarak kayda geçti.
+> kalıcılık ayarı `wal` + `synchronous = NORMAL` olarak kayda geçti. Dilim 2
+> bitti: `ImportDao.removeDraftBatch` + `ImportDraftRemovalStore` — tek
+> transaction, beş tipli sonuç, 15 tablo sayımıyla postcondition, taslak
+> boyutundan bağımsız altı ifade; arayüze bağlı değil. Dilim 3, D-predicate'leri
+> ölçerken ve bozuk taslak için tek eylemi sunarken bu motoru kullanır.
 >
 > ```text
 > 1  kesintiye dayanıklılığın kalıcı kanıtı (yalnız test) ...... TAMAM
-> 2  taslağı kaldırma motoru (arayüz yok) ....................... SIRADAKİ
-> 3  bozuk DRAFT sınıflandırması + onay kapısı .................. YAPILMADI
+> 2  taslağı kaldırma motoru (arayüz yok) ....................... TAMAM
+> 3  bozuk DRAFT sınıflandırması + onay kapısı .................. SIRADAKİ
 > 4  arayüz: devam et / kaldır / bozuk taslak uyarısı ........... YAPILMADI
 > ```
 >
@@ -3641,6 +3862,11 @@ güvenilir olmazdı.
 **kapanmıştır**. Aynı kalıbın ikinci örneği de kapandı: Dilim 3'ün bir commit
 boyunca çağrılmayan okuma hattı (`UntrustedBackupReader`, `PathBackupInput`,
 `TemporaryBackupProbe`) Dilim 4'te `RestoreController` üzerinden bağlanmıştır.
+
+İş 7 / Dilim 2 aynı kalıbı bilerek bir kez daha kullandı:
+`ImportDraftRemovalStore` ve `ImportDao.removeDraftBatch` yazıldı, testli, fakat
+arayüz Dilim 4'e ait olduğu için `Main.kt`'ye **bağlı değil**; kullanıcı bugün
+bir taslağı hâlâ kaldıramaz.
 
 Geriye kalan: `TaskDao.softDelete`, `GameDao.softDelete` ve
 `completePrimaryBatch` üretim kodundan çağrılmıyor; `TASK_RESTORED` /
@@ -3992,13 +4218,22 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   her içe aktarma onayı öncesi doğrulanmış snapshot + yarış koruması, ve
   migration öncesi eşleşmiş set + açılış kapısı. Kararlar PLAN 14.4.7-14.4.13,
   uygulanan hâli §25.2. Yeniden tartışma.
-  Sıradaki bağlayıcı iş: İŞ 7 / DİLİM 2 — taslağı kaldırma motoru.
+  Sıradaki bağlayıcı iş: İŞ 7 / DİLİM 3 — bozuk DRAFT sınıflandırması + onay kapısı.
 - İş 7 / Dilim 1 BİTTİ (yalnız test): dört yazma yolu gerçek ikinci JVM'de
   transaction içinde ve commit sonrası SIGKILL ile kesildi; hepsi ya hep ya hiç.
   Ölçülen kalıcılık: journal_mode = wal, synchronous = 1 (NORMAL). synchronous'u
   DEĞİŞTİRME. Üretime crash hook / debug flag EKLEME; kesme noktası yalnız
   desktopTest'teki StoppingSqliteDriver'dadır ve DatabaseFactory'nin mevcut
   `driver` parametresinden girer.
+- İş 7 / Dilim 2 BİTTİ: taslağı kaldırmanın TEK yolu ImportDao.removeDraftBatch
+  (+ ImportDraftRemovalStore). discardDraftBatch YOK. Sonuçlar tiplidir:
+  Removed / Refused(ALREADY_REMOVED | NOT_A_DRAFT | HELD_BY_RECORDS |
+  COULD_NOT_SAVE); ret DAO'dan DEĞER olarak döner, yalnız SQLiteException
+  COULD_NOT_SAVE'e çevrilir, IllegalStateException/IllegalArgumentException
+  MASKELENMEZ. D6/D7 FK hatası beklenmeden açık SELECT ile bulunur. Postcondition
+  15 tablonun sayımıdır; satır başına okuma/silme EKLEME (cascade tek DELETE'te).
+  Kaldırma history YAZMAZ, snapshot ALMAZ, kaynak dosyayı OKUMAZ. Store henüz
+  Main'e BAĞLI DEĞİL (arayüz Dilim 4).
 - İş 7'nin (beklenmeyen kapanış ve yarım kalmış içe aktarma) kararları VERİLMİŞTİR:
   PLAN 11.4.5, özet ve repo denetimi §25.3. Yeniden tartışma. İşaret dosyası YOK,
   -wal çökme kanıtı DEĞİL, güvence tek transaction + WAL kurtarması; DRAFT
@@ -4307,8 +4542,13 @@ kurtarma. Sözleşmesi yazılmıştır (PLAN `11.4.5`, §25.3). **Dilim 1 bitti:
 taslak kaydı, taslak düzenleme, onay ve geri alma gerçek bir ikinci süreçte
 transaction'ın ortasında öldürüldü ve her seferinde veritabanı işlemden önceki
 hâline bayt bayt döndü; commit'ten sonra öldürülünce commit edilen her şey
-yerindeydi. Kalıcılık ayarı ölçüldü (`wal`, `synchronous = NORMAL`). Sıradaki
-dilim taslağı kaldırma motorudur.
+yerindeydi. Kalıcılık ayarı ölçüldü (`wal`, `synchronous = NORMAL`). **Dilim 2
+bitti:** onaylanmamış bir içe aktarma artık tek transaction'da, yalnız kendi
+satırlarıyla ve tipli bir sonuçla kaldırılabiliyor; ikinci istek sessiz başarı
+ya da exception değil "zaten kaldırılmış" cevabı alıyor, gerçek bir görev veya
+oyun başvuruyorsa hiçbir şey silinmiyor, ve yarıda kalan her deneme veritabanını
+olduğu gibi bırakıyor. Kullanıcının bu eyleme ulaşacağı düğme henüz yok (Dilim
+4). Sıradaki dilim bozuk taslak sınıflandırması ve onay kapısıdır.
 
 İş 7'nin belge turu bir şeyi netleştirdi: bu işin yükü hayalî bozukluk
 durumlarını avlamak **değildir**. Uygulamanın kendi yolları yarım bir içe

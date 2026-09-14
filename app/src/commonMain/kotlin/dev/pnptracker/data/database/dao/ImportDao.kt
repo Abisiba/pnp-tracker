@@ -22,13 +22,17 @@ import dev.pnptracker.data.database.entity.stageRowsFor
 import dev.pnptracker.data.database.projection.CellColumnRow
 import dev.pnptracker.data.database.projection.CellDocumentRow
 import dev.pnptracker.data.database.projection.CellGameRow
+import dev.pnptracker.data.database.projection.DraftRemovalFacts
 import dev.pnptracker.data.database.projection.DraftTargetRow
 import dev.pnptracker.data.database.projection.RollbackCellRow
 import dev.pnptracker.data.database.projection.RollbackSegmentRow
+import dev.pnptracker.data.database.projection.TableCounts
 import dev.pnptracker.domain.games.TASK_SEPARATOR
 import dev.pnptracker.domain.games.taskNeedsSeparatorAfter
 import dev.pnptracker.domain.importconfirm.ImportConfirmationException
 import dev.pnptracker.domain.importconfirm.ImportConfirmationFailure
+import dev.pnptracker.domain.importremoval.DraftRemovalOutcome
+import dev.pnptracker.domain.importremoval.DraftRemovalRefusal
 import dev.pnptracker.domain.importreview.DraftInitialValues
 import dev.pnptracker.domain.importreview.ImportReviewException
 import dev.pnptracker.domain.importreview.ImportReviewFailure
@@ -328,24 +332,83 @@ abstract class ImportDao {
     }
 
     /**
-     * Throws away an import the user never confirmed, together with the raw cells
-     * and drafts it produced. Nothing else is touched.
+     * Removes an import the user never confirmed, or changes nothing at all.
      *
-     * A confirmed or rolled back import cannot be discarded this way, and neither
-     * can one whose cells already produced games or tasks: those foreign keys stop
-     * the delete and the whole transaction is rolled back. Undoing a confirmed
-     * import is a different operation and belongs to a later phase.
+     * PLAN 11.4.5 lets this take exactly five kinds of row: the batch, its raw
+     * cells, their drafts, those drafts' colours, and any cell snapshot a
+     * damaged draft could be carrying. Games, cells, pieces, tasks, their
+     * colours and stages, progress, history, the colour catalogue and every
+     * other batch stay exactly as they are.
      *
-     * @throws IllegalArgumentException if the batch is unknown or is not a draft.
+     * Every decision is made inside this transaction, from rows read here, so a
+     * confirmation or an edit cannot slip between deciding and deleting: Room
+     * keeps one writer connection, and whichever of them holds it first finishes
+     * before the other reads. The three refusals are returned rather than thrown
+     * — nothing has been written when they are reached, and a second removal of
+     * the same draft is an ordinary thing to ask, not a failure.
+     *
+     * The cost does not grow with the draft: two reads to decide, one to count
+     * the tables, one delete (the rest follows by the schema's cascades, inside
+     * the same statement) and two reads to prove it. A draft of one raw cell and
+     * one of forty-two run the same six statements.
+     *
+     * @return what was removed, or why nothing was.
+     * @throws IllegalStateException if the removal did not do exactly what it
+     *   counted on doing. It is a defect, not an outcome, and it takes the whole
+     *   transaction down with it.
      */
     @Transaction
-    open suspend fun discardDraftBatch(id: EntityId) {
-        val batch = batchById(id)
-        requireNotNull(batch) { "There is no import batch $id to discard." }
-        require(batch.status == ImportBatchStatus.DRAFT) {
-            "Only a draft import can be discarded, but $id is ${batch.status}."
+    open suspend fun removeDraftBatch(batchId: EntityId): DraftRemovalOutcome {
+        val batch = batchById(batchId) ?: return DraftRemovalOutcome.Refused(batchId, DraftRemovalRefusal.ALREADY_REMOVED)
+        if (batch.status != ImportBatchStatus.DRAFT) {
+            return DraftRemovalOutcome.Refused(batchId, DraftRemovalRefusal.NOT_A_DRAFT)
         }
-        deleteDraftBatchRow(id)
+        val own = draftRemovalFactsOf(batchId)
+        if (own.holdingTaskCount > 0 || own.holdingGameCount > 0) {
+            return DraftRemovalOutcome.Refused(batchId, DraftRemovalRefusal.HELD_BY_RECORDS)
+        }
+
+        val before = tableCounts()
+        val removed = deleteDraftBatchRow(batchId)
+        check(removed == 1) { "The draft import $batchId was no longer a draft when it was about to be removed." }
+        requireRemovalHeld(batchId, own, before)
+
+        return DraftRemovalOutcome.Removed(
+            batchId = batchId,
+            rawBlockCount = own.rawBlockCount,
+            draftTaskCount = own.draftTaskCount,
+            draftColorCount = own.draftColorCount,
+            cellSnapshotCount = own.cellSnapshotCount,
+        )
+    }
+
+    /**
+     * Reads back what the removal has just done and refuses to let it stand
+     * unless it is exactly what was counted. Still inside the transaction, so a
+     * broken postcondition takes the whole removal down.
+     *
+     * Nothing of the batch may be left, and every table must have lost exactly
+     * the rows counted as the batch's own — which for ten of the fifteen tables
+     * is none. A cascade that reached further than PLAN 11.4.5 allows, or a
+     * delete that did less than it should, both stop here.
+     */
+    private suspend fun requireRemovalHeld(
+        batchId: EntityId,
+        own: DraftRemovalFacts,
+        before: TableCounts,
+    ) {
+        val left = draftRemovalFactsOf(batchId)
+        check(left.isEmpty) { "The draft import $batchId left rows of its own behind: $left." }
+        val expected =
+            before.copy(
+                importBatches = before.importBatches - 1,
+                rawImportBlocks = before.rawImportBlocks - own.rawBlockCount,
+                draftTasks = before.draftTasks - own.draftTaskCount,
+                draftTaskColors = before.draftTaskColors - own.draftColorCount,
+                importBatchCells = before.importBatchCells - own.cellSnapshotCount,
+            )
+        val after = tableCounts()
+        check(after == expected) { "Removing the draft import $batchId left $after where $expected was expected." }
     }
 
     // ------------------------------------------- the colours of a draft task
@@ -860,9 +923,61 @@ abstract class ImportDao {
     @Update
     protected abstract suspend fun updateDraftTaskRow(draft: DraftTaskEntity): Int
 
-    /** Guarded by [discardDraftBatch]; the status check is repeated in SQL. */
+    /**
+     * Guarded by [removeDraftBatch]; the status check is repeated in SQL.
+     *
+     * The raw cells, their drafts, the drafts' colours and any cell snapshot go
+     * with the row by the schema's own `ON DELETE CASCADE`, inside this one
+     * statement. A game or a task pointing at the batch would stop it with
+     * `RESTRICT`, but [removeDraftBatch] has already looked for both.
+     */
     @Query("DELETE FROM import_batches WHERE id = :id AND status = 'DRAFT'")
     protected abstract suspend fun deleteDraftBatchRow(id: EntityId): Int
+
+    /** See [DraftRemovalFacts]. */
+    @Query(
+        """
+        SELECT
+          (SELECT COUNT(*) FROM import_batches WHERE id = :batchId) AS batch_count,
+          (SELECT COUNT(*) FROM raw_import_blocks WHERE import_batch_id = :batchId) AS raw_block_count,
+          (SELECT COUNT(*) FROM draft_tasks
+             JOIN raw_import_blocks ON raw_import_blocks.id = draft_tasks.raw_import_block_id
+             WHERE raw_import_blocks.import_batch_id = :batchId) AS draft_task_count,
+          (SELECT COUNT(*) FROM draft_task_colors
+             JOIN draft_tasks ON draft_tasks.id = draft_task_colors.draft_task_id
+             JOIN raw_import_blocks ON raw_import_blocks.id = draft_tasks.raw_import_block_id
+             WHERE raw_import_blocks.import_batch_id = :batchId) AS draft_color_count,
+          (SELECT COUNT(*) FROM import_batch_cells WHERE import_batch_id = :batchId) AS cell_snapshot_count,
+          (SELECT COUNT(*) FROM tasks
+             JOIN raw_import_blocks ON raw_import_blocks.id = tasks.source_raw_import_block_id
+             WHERE raw_import_blocks.import_batch_id = :batchId) AS holding_task_count,
+          (SELECT COUNT(*) FROM games WHERE source_import_batch_id = :batchId) AS holding_game_count
+        """,
+    )
+    protected abstract suspend fun draftRemovalFactsOf(batchId: EntityId): DraftRemovalFacts
+
+    /** See [TableCounts]. */
+    @Query(
+        """
+        SELECT
+          (SELECT COUNT(*) FROM colors) AS colors,
+          (SELECT COUNT(*) FROM color_aliases) AS color_aliases,
+          (SELECT COUNT(*) FROM games) AS games,
+          (SELECT COUNT(*) FROM game_cells) AS game_cells,
+          (SELECT COUNT(*) FROM tasks) AS tasks,
+          (SELECT COUNT(*) FROM cell_segments) AS cell_segments,
+          (SELECT COUNT(*) FROM task_colors) AS task_colors,
+          (SELECT COUNT(*) FROM task_stages) AS task_stages,
+          (SELECT COUNT(*) FROM progress_events) AS progress_events,
+          (SELECT COUNT(*) FROM history_events) AS history_events,
+          (SELECT COUNT(*) FROM import_batches) AS import_batches,
+          (SELECT COUNT(*) FROM raw_import_blocks) AS raw_import_blocks,
+          (SELECT COUNT(*) FROM draft_tasks) AS draft_tasks,
+          (SELECT COUNT(*) FROM draft_task_colors) AS draft_task_colors,
+          (SELECT COUNT(*) FROM import_batch_cells) AS import_batch_cells
+        """,
+    )
+    protected abstract suspend fun tableCounts(): TableCounts
 
     // ---------------------------------------------------------------------
     // Confirming an import: turning drafts into real tasks.

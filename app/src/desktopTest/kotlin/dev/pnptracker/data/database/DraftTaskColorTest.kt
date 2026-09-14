@@ -1,5 +1,6 @@
 package dev.pnptracker.data.database
 
+import dev.pnptracker.domain.importremoval.DraftRemovalOutcome
 import dev.pnptracker.domain.importreview.ImportReviewException
 import dev.pnptracker.domain.importreview.ImportReviewFailure
 import dev.pnptracker.domain.model.EntityId
@@ -13,6 +14,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -275,13 +277,13 @@ class DraftTaskColorTest {
         }
 
     @Test
-    fun `throwing away an import takes the colours of its drafts with it`() =
+    fun `removing an import takes the colours of its drafts with it`() =
         runBlocking<Unit> {
             val fixture = given()
             set(fixture.draftId, listOf("Gri", "Mavi").map { colorId(it) })
             assertEquals(2, CommittedSchema.countRowsOf(directory.databaseFile, "draft_task_colors"))
 
-            importDao.discardDraftBatch(fixture.batchId)
+            assertIs<DraftRemovalOutcome.Removed>(importDao.removeDraftBatch(fixture.batchId))
 
             assertEquals(0, CommittedSchema.countRowsOf(directory.databaseFile, "draft_tasks"))
             assertEquals(

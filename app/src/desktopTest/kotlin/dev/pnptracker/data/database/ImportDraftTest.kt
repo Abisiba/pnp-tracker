@@ -5,6 +5,8 @@ import androidx.room3.useWriterConnection
 import androidx.sqlite.SQLiteException
 import dev.pnptracker.data.database.dao.ImportDao
 import dev.pnptracker.data.database.entity.RawImportBlockEntity
+import dev.pnptracker.domain.importremoval.DraftRemovalOutcome
+import dev.pnptracker.domain.importremoval.DraftRemovalRefusal
 import dev.pnptracker.domain.model.HintDecision
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.ImportBatchStatus
@@ -369,7 +371,7 @@ class ImportDraftTest {
         }
 
     @Test
-    fun `discarding a draft batch removes only its own cells and drafts`() =
+    fun `removing a draft batch removes only its own cells and drafts`() =
         runBlocking<Unit> {
             val doomed = insertBatchWithBlock()
             database.importDao().addDraftTask(aDraftTask(doomed.id))
@@ -382,8 +384,19 @@ class ImportDraftTest {
             val game = aGame()
             database.gameDao().insert(game)
 
-            database.importDao().discardDraftBatch(doomed.importBatchId)
+            val outcome = database.importDao().removeDraftBatch(doomed.importBatchId)
 
+            // Once a bare delete; now a typed answer that says what went.
+            assertEquals(
+                DraftRemovalOutcome.Removed(
+                    batchId = doomed.importBatchId,
+                    rawBlockCount = 1,
+                    draftTaskCount = 1,
+                    draftColorCount = 0,
+                    cellSnapshotCount = 0,
+                ),
+                outcome,
+            )
             assertNull(database.importDao().batchById(doomed.importBatchId))
             assertNull(database.importDao().rawBlockById(doomed.id))
             assertEquals(emptyList(), database.importDao().draftTasksOfBlock(doomed.id))
@@ -394,25 +407,33 @@ class ImportDraftTest {
         }
 
     @Test
-    fun `a confirmed or rolled back import cannot be discarded`() =
+    fun `a confirmed or rolled back import cannot be removed`() =
         runBlocking<Unit> {
             val confirmed = insertBatchWithBlock(status = ImportBatchStatus.CONFIRMED)
             val rolledBack = insertBatchWithBlock(status = ImportBatchStatus.ROLLED_BACK).importBatchId
 
-            val confirmedFailure =
-                assertFailsWith<IllegalArgumentException> {
-                    database.importDao().discardDraftBatch(confirmed.importBatchId)
-                }
-            val rolledBackFailure =
-                assertFailsWith<IllegalArgumentException> { database.importDao().discardDraftBatch(rolledBack) }
+            // These used to be IllegalArgumentExceptions carrying the status in
+            // their message. PLAN 11.4.5 makes them guarded refusals: a value,
+            // with nothing written.
+            assertEquals(
+                DraftRemovalOutcome.Refused(confirmed.importBatchId, DraftRemovalRefusal.NOT_A_DRAFT),
+                database.importDao().removeDraftBatch(confirmed.importBatchId),
+            )
+            assertEquals(
+                DraftRemovalOutcome.Refused(rolledBack, DraftRemovalRefusal.NOT_A_DRAFT),
+                database.importDao().removeDraftBatch(rolledBack),
+            )
 
-            assertContains(confirmedFailure.message.orEmpty(), "CONFIRMED")
-            assertContains(rolledBackFailure.message.orEmpty(), "ROLLED_BACK")
-            assertNotNull(database.importDao().batchById(confirmed.importBatchId))
+            assertEquals(ImportBatchStatus.CONFIRMED, assertNotNull(database.importDao().batchById(confirmed.importBatchId)).status)
+            assertEquals(ImportBatchStatus.ROLLED_BACK, assertNotNull(database.importDao().batchById(rolledBack)).status)
             assertNotNull(database.importDao().rawBlockById(confirmed.id))
-            assertFailsWith<IllegalArgumentException> {
-                database.importDao().discardDraftBatch(IdGenerator.Random.newId())
-            }
+            // And an import that is not there at all is the typed "already
+            // removed", no longer an exception.
+            val unknown = IdGenerator.Random.newId()
+            assertEquals(
+                DraftRemovalOutcome.Refused(unknown, DraftRemovalRefusal.ALREADY_REMOVED),
+                database.importDao().removeDraftBatch(unknown),
+            )
         }
 
     @Test
@@ -430,10 +451,14 @@ class ImportDraftTest {
                 }
             }
 
-            val batchFailure =
-                assertFailsWith<SQLiteException> { database.importDao().discardDraftBatch(block.importBatchId) }
+            // This used to reach SQLite and come back as a FOREIGN KEY
+            // SQLiteException. The removal now looks for both references itself
+            // and refuses before it deletes anything.
+            assertEquals(
+                DraftRemovalOutcome.Refused(block.importBatchId, DraftRemovalRefusal.HELD_BY_RECORDS),
+                database.importDao().removeDraftBatch(block.importBatchId),
+            )
 
-            assertContains(batchFailure.message.orEmpty().uppercase(), "FOREIGN KEY")
             assertNotNull(database.importDao().batchById(block.importBatchId))
             assertNotNull(database.importDao().rawBlockById(block.id))
             assertEquals(

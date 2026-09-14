@@ -17,6 +17,8 @@ import dev.pnptracker.data.database.entity.RawImportBlockEntity
 import dev.pnptracker.data.database.entity.TaskEntity
 import dev.pnptracker.domain.importconfirm.ImportConfirmationException
 import dev.pnptracker.domain.importconfirm.ImportConfirmationFailure
+import dev.pnptracker.domain.importremoval.DraftRemovalOutcome
+import dev.pnptracker.domain.importremoval.DraftRemovalRefusal
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
@@ -593,15 +595,16 @@ class ImportConfirmationStoreTest {
         }
 
     @Test
-    fun `a confirmed import cannot be discarded`() =
+    fun `a confirmed import cannot be removed`() =
         runBlocking {
             val fixture = given()
             aimBothDrafts(fixture)
             store.confirm(fixture.batchId, acknowledgeUnprocessedBlocks = false)
 
-            assertFailsWith<IllegalArgumentException> {
-                database.importDao().discardDraftBatch(fixture.batchId)
-            }
+            assertEquals(
+                DraftRemovalOutcome.Refused(fixture.batchId, DraftRemovalRefusal.NOT_A_DRAFT),
+                ImportDraftRemovalStore(database.importDao()).remove(fixture.batchId),
+            )
 
             assertEquals(ImportBatchStatus.CONFIRMED, batch(fixture.batchId).status)
         }
