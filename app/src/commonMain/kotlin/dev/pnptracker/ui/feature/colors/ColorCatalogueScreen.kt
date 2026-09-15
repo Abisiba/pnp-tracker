@@ -386,8 +386,11 @@ private fun DeleteCard(
     controller: ColorCatalogueController,
     onConfirm: () -> Unit,
 ) {
-    val confirm = remember { FocusRequester() }
-    LaunchedEffect(controller.focusRecall) { runCatching { confirm.requestFocus() } }
+    // The keyboard starts on the way out, not on the deletion: a stray Enter on a
+    // question nobody has read yet must keep the colour rather than lose it for
+    // good. Ctrl+Enter still deletes, because that one has to be meant.
+    val keep = remember { FocusRequester() }
+    LaunchedEffect(controller.focusRecall) { runCatching { keep.requestFocus() } }
 
     SurfaceCard(
         onEscape = { controller.cancel() },
@@ -431,11 +434,14 @@ private fun DeleteCard(
             Button(
                 onClick = onConfirm,
                 enabled = !work.isSaving,
-                modifier = Modifier.focusRequester(confirm),
             ) {
                 Text(stringResource(Strings.Colors.deleteConfirm))
             }
-            OutlinedButton(onClick = { controller.cancel() }, enabled = !work.isSaving) {
+            OutlinedButton(
+                onClick = { controller.cancel() },
+                enabled = !work.isSaving,
+                modifier = Modifier.focusRequester(keep),
+            ) {
                 Text(stringResource(Strings.Colors.discard))
             }
         }

@@ -30,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -1290,6 +1291,14 @@ private fun ConvertConfirmation(
     controller: PoolController,
 ) {
     val scope = rememberCoroutineScope()
+    // The keyboard starts on the way out, as it does over a word in the table:
+    // turning a task into text cannot be taken back. Asked after a frame, so it
+    // lands after the popover has taken the keyboard for itself.
+    val keep = remember { FocusRequester() }
+    LaunchedEffect(work.task.taskId) {
+        withFrameNanos { }
+        runCatching { keep.requestFocus() }
+    }
     Text(text = stringResource(Strings.TaskConvert.title), style = MaterialTheme.typography.labelLarge)
     Text(
         text = stringResource(Strings.TaskConvert.body, work.task.name),
@@ -1311,7 +1320,7 @@ private fun ConvertConfirmation(
         }
         TextButton(
             onClick = controller::closeInnermost,
-            modifier = Modifier.focusOutline(CardShape).semantics { contentDescription = stop },
+            modifier = Modifier.focusRequester(keep).focusOutline(CardShape).semantics { contentDescription = stop },
         ) {
             Text(text = stop, style = MaterialTheme.typography.labelMedium)
         }

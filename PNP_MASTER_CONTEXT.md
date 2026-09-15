@@ -7,13 +7,18 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** Faz 3 / **İş 9 — ölçüm dilimi** (1.000+ görevle açılış,
-> arama ve havuz filtreleme) — `test(performance): measure the application with
-> a thousand tasks`. **Ölçüm dilimi TAMAMLANDI; süre kabul eşiği kararı AÇIK.**
-> 1.203 görevlik kütüphanede her ekran 42 görevdeki ifadelerin aynısını çalıştırıyor
-> (toplam 21, her biri bir kez), arama ve 24 havuz süzgeci beklenen kümeyi 0 ifadeyle
-> veriyor; N+1 yok, üretim kodu değişmedi. Süreler kayıt olarak §29 "Faz 3 / İş 9"da.
-> Sıradaki: İş 8 taraması.
+> **Son güncelleme:** Faz 3 / **İş 8** (klavye, odak ve ölçekleme taraması) —
+> `fix(ui): keep every screen usable with keyboard and scaling`. **İş 8
+> TAMAMLANDI.** Bütün uygulama gerçek controller/store'larla dört görünümde
+> (açılış boyutu, minimum pencere 2×, büyük metin) tarandı (§17 "Faz 3 / İş 8").
+> Üç kusur düzeltildi: tablo hücresi iki Tab durağıydı; minimum pencerede tablo
+> görünmüyordu; üç geri alınamaz onay odağı yıkıcı düğmede başlatıyordu. Bu turun
+> üç commit'inden sonra tam koşu: 3535 / 0 / 0 / 0. Room şeması ve PLAN değişmedi.
+> Sıradaki Faz 3 işi İş 10'dur; kararlar olmadan başlanmaz (§32).
+>
+> Daha önce: İş 9 ölçüm dilimi (`test(performance): measure the application with
+> a thousand tasks`) 1.203 görevde sabit sorgu yapısını ve süzgeç doğruluğunu
+> ölçtü; süre eşiği kararı açık (§29).
 >
 > Daha önce: İş 5 (`fix(export): report storage that will not answer instead of
 > hanging`) CSV export sözleşmesini madde madde doğruladı ve depolama okuma
@@ -54,23 +59,33 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-HEAD (bu commit öncesi): d1c76c62273c61d8838a7f4943e0d51e87e22fdb
-önceki commit         : fix(export): report storage that will not answer instead of hanging
-bu commit             : test(performance): measure the application with a thousand tasks
+HEAD (bu commit öncesi): 14490a89c3815380bbb919827ffa55c4e05ce65c
+önceki commit         : test(performance): measure the application with a thousand tasks
+bu commit             : fix(ui): keep every screen usable with keyboard and scaling
 working tree          : temiz
 Room şema sürümü      : 8   (bu commit'te DEĞİŞMEDİ)
 şema dosyaları        : 1.json … 8.json  hepsi bayt bayt aynı
-test durumu           : dar koşu: LargeLibraryPerformanceTest 4 test / 0 failure / 0 error /
-                        0 skipped (yeni sınıf). Önceki commit d1c76c6'nin dar koşusu
-                        202 / 0. Tam `./gradlew clean check --rerun-tasks` bu turun üç
-                        commit'inden SONRA koşulur ve sonucu İş 8 commit'inde yazılır
-değişen dosyalar      : üretim 0
-                        test 1 (yeni: performance/LargeLibraryPerformanceTest)
+test durumu           : 3535 test / 0 failure / 0 error / 0 skipped  (246 sınıf)
+                        [557122e: 3513 / 243 → bu turun üç commit'i +22 / +3:
+                         İş 5 +12 (TaskExportContractTest 11, ExportScreenTest +1),
+                         İş 9 +4 (LargeLibraryPerformanceTest), İş 8 +6
+                         (AppKeyboardAndScalingTest)]
+                        ./gradlew clean check --rerun-tasks, bu commit'in içeriği
+                        çalışma ağacındayken KOŞULDU: BUILD SUCCESSFUL in 6m 3s
+                        (ilk deneme test sonucu değil, sistem belleği azaldığı için
+                        durduruldu; daemon'lar kapatılıp tek başına yeniden koşuldu)
+değişen dosyalar      : üretim 3 (GameTableScreen, ColorCatalogueScreen, PoolScreen)
+                        test 2 (yeni: ui/navigation/AppKeyboardAndScalingTest;
+                        değişen: GameTableLayoutTest — hücrenin eski iki odaklı şeklini
+                        sabitleyen iki kaynak iddiası yeni şekle çevrildi)
                         PNP_MASTER_CONTEXT.md
 PLAN.md               : bu commit'te DEĞİŞMEDİ
 ```
 
-**Bu commit Faz 3 / İş 9'un ölçüm dilimidir; süre kabul eşiği kararı AÇIK.**
+**Bu commit Faz 3 / İş 8'dir; İŞ 8 TAMAMLANDI.** Envanter, tablo güdümlü tüm
+uygulama taraması ve bulunan üç kusurun düzeltmesi §17 "Faz 3 / İş 8"dedir.
+
+**Bir önceki commit (`14490a8`) Faz 3 / İş 9'un ölçüm dilimiydi; süre kabul eşiği kararı AÇIK.**
 1.203 görevlik, uygulamanın kendi yazma yollarıyla kurulan kütüphane gerçek
 `StartupGate` ile açılıyor; açılış, tekrar okuma, arama ve havuz süzgeçleri
 makineden bağımsız koşullarla doğrulanıyor, süre/bellek yalnız kayıt (§29).
@@ -250,7 +265,7 @@ değişti.
 
 ```text
 PLAN.md  a266824ba28e1b90b3f650575905587951b5309debdfc62a56f7d2bdfbadff04
-         (İş 7 Dilim 1–4, İş 5 ve İş 9 ölçüm dilimi PLAN'ı DEĞİŞTİRMEDİ; değer İş 7 belge turundan aynen gelir.
+         (İş 7 Dilim 1–4, İş 5, İş 9 ölçüm dilimi ve İş 8 PLAN'ı DEĞİŞTİRMEDİ; değer İş 7 belge turundan aynen gelir.
           Ondan önceki değer
           db891ba8362bb5ee837535aa042b8414ac2062d97a8fa25bff744884b09a3455)
 
@@ -281,7 +296,7 @@ veritabanının parmak izi orada durmamalıdır. Bunun yerine kural şudur:
 
 Gerçek DB hiçbir aşamada açılmaz, kopyalanmaz veya migrate edilmez. Bütün testler ve
 manuel turlar geçici Room veritabanları ve geçici XDG dizinleri kullanır. Bu koruma
-`assertRealApplicationDatabaseUntouched` yardımcı fonksiyonuyla **102 test sınıfında**
+`assertRealApplicationDatabaseUntouched` yardımcı fonksiyonuyla **103 test sınıfında**
 uygulanmaktadır. Sayı tek bir yerde tutulur; §29 aynı değeri anar ve tarama
 `grep -rl 'assertRealApplicationDatabaseUntouched' app/src/*Test` ile yapılır.
 
@@ -925,6 +940,98 @@ Test edilmesi gerekenler:
   İlk dil Türkçedir.
 
 ---
+
+## Faz 3 / İş 8 — klavye, odak ve ölçekleme taraması  *(TAMAMLANDI)*
+
+Envanter gerçek `Screen.all` ve `AppScaffold` yönlendirmesinden çıkarıldı: 10
+gezinme hedefi (Ana Sayfa, Oyunlar, 3D Baskı, Kartlar, Mukavva, Özel, İçe
+Aktarma, Geçmiş, Renkler, Ayarlar) + açılış hata ekranı. Ortak ve tablo güdümlü
+kanıt: `desktopTest/…/ui/navigation/AppKeyboardAndScalingTest` (6 test) —
+`AppScaffold`, `Main`'in kurduğu **gerçek controller ve store'larla** geçici bir
+Room DB üzerinde (uzun Türkçe adlı oyun, dört havuzda görev, renk, hata kaydı),
+dört görünümde birleştirilir:
+
+```text
+1100×720 dp 1× (Main'in açılış boyutu) · 640×460 dp 2× (Main'in minimum penceresi)
+1100×720 dp metin ×1,5 · 640×460 dp 2× metin ×1,3
+```
+
+Her ekran × görünüm için (40 kombinasyon): kenar çubuğu girişine yalnız Tab ile
+ulaşılır, Enter veya Space ile açılır, ekranın başlığı yazılıdır; ekranda Tab ile
+yürüyüş 150 durak içinde kenar çubuğuna **geri döner** (odak tuzağı yok); her
+durak konuşan bir semantics düğümüdür ve kaydırma sonrası **pencerenin içinde**
+çizilir; son 8 durak Shift+Tab ile birebir geri izlenir; hiçbir düğüm sağ kenarı
+aşmaz. Ayrıca: 10 ekranda UUID, sınıf adı, SQL, yol ve domain enum adı taraması;
+tablo hücresi tek duraktır ve Enter/F2 düzenleyiciyi açar; üç geri alınamaz onay
+aşağıda.
+
+```text
+ekran / yüzey              klavye·Tab   Esc   yıkıcı odak   dar·2×   büyük metin  sızıntı  çift gönderim
+─────────────────────────  ──────────  ────  ────────────  ───────  ───────────  ───────  ─────────────
+kenar çubuğu + 10 ekran    App*        —     —             App*     App* (YENİ)  App*     —
+Oyunlar: hücre, görev      TaskChipKeyboard, GameTableLayout, App* (hücre tek durak)          TaskChipKeyboard
+Oyunlar: görev → metne     App* (YENİ)       ✓ Vazgeç (DÜZELTİLDİ)  App*
+Oyunlar: toplu tamamlama   GameTableLayout (kapsayıcı odak; geri alınabilir işlem)
+Oyunlar: arama/filtre      SearchToolbarRender, GameTableFilterState (Esc, odak dönüşü, dar, büyük metin)
+Havuzlar: kart, aşama      PoolScreenLayout, PoolFilterState, App*
+Havuz: görev → metne       App* (YENİ)       ✓ Vazgeç (DÜZELTİLDİ)  App*
+Renkler: oluştur/düzenle   ColorManagementSurface, ColorPickerLayout (Esc, Ctrl+Enter, klavye tekeri)
+Renkler: sil               App* (YENİ)       ✓ Vazgeç (DÜZELTİLDİ)  App*
+Renkler: temel geri yükle  ColorManagementSurface (engelliyken odak çıkışta)
+İçe Aktarma: inceleme      ImportReviewScreen (Tab/Shift+Tab, Esc, dar, çift gönderim, sızıntı)
+İçe Aktarma: onay          ImportReviewScreen (meşgulken ikinci basış yok)
+İçe Aktarma: geri alma     ImportRollbackScreen (odak Vazgeç, Esc, dar, çift gönderim)
+İçe Aktarma: devam/kaldır  UnfinishedImportsSection (odak Vazgeç, Esc, 640×620 2×, çift gönderim)
+İçe Aktarma: CSV hatası    CsvImportScreen (dar, klavye çıkışı, sızıntı)
+Geçmiş                     HistoryScreenLayout (klavyeyle okuma) + App*
+Ayarlar: yedek/üzerine yaz SettingsScreen (Esc, odak dönüşü, basılı Enter tek yedek, dar)
+Ayarlar: geri yükle        RestoreSection (odak Vazgeç, Esc, dar + büyük ölçek, çift gönderim)
+Ayarlar: saklama sayısı    RetentionSection (dar 2×, sızıntı)
+Dışa aktarma (Oyunlar)     ExportScreen (Esc, dar, uzun ad, 7 hata cümlesi sızıntısız)
+Açılış hata ekranı         StartupErrorScreen (2×, sızıntı, çıkış erişilebilir)
+```
+`App*` = `AppKeyboardAndScalingTest`.
+
+**Bulunan ve düzeltilen kusurlar** — `fix(ui): keep every screen usable with keyboard and scaling`:
+
+1. **Oyun tablosu hücresi iki Tab durağıydı.** `.focusable()` ile
+   `combinedClickable` yan yana iki odak hedefi kuruyordu; ikinci durak ekran
+   okuyucuya sessizdi ve klavye hücre ile ilk görevi arasında "kayboluyordu"
+   (tarama: "stop holds nothing"). Hücre artık tek `focusable`; tek tıklama odağı
+   alır, çift tıklama `detectTapGestures` ile düzenleyiciyi açar (görev tikinin
+   kalıbı), Enter/F2 değişmedi, semantics tıklaması düzenleyiciyi açar (önce
+   etiketli ama boş bir eylemdi). `GameTableLayoutTest`'in bu şekli sabitleyen iki
+   kaynak iddiası yeni şekle çevrildi (çift tıklama + tek odak hedefi).
+2. **En küçük pencerede ve büyük metinde oyun tablosu görünmüyordu.** Tablonun
+   üstündeki kontroller kaydırılamaz sabit bir sütundu; 640×460'ta tablo 0
+   yükseklikte, büyük metinde dışa aktarma düğmesi pencerenin dışında kalıyordu.
+   Kontroller artık `pencere − 200 dp` (en az %40) yüksekliğe kadar yer alır ve
+   ötesinde kendi içinde kayar. Açılış boyutunda görünüm değişmez.
+3. **Geri alınamaz üç onayda başlangıç odağı yıkıcı düğmedeydi / hiçbir
+   düğmede değildi.** Renk silme (`Rengi sil`) ve tablodaki `Metne dönüştür`
+   odağı yıkıcı düğmeye veriyordu; havuzdaki `Metne dönüştür` kapsayıcıda
+   bırakıyordu. Üçü de artık `Vazgeç`'te başlar; Enter rengi/görevi korur
+   (Vazgeç yalnız en içteki yüzeyi kapatır: dönüştürmede menüye döner).
+   Ctrl+Enter kısayolu bilinçli olarak korunur. Mutasyonla doğrulandı: eski odak
+   geri konunca üç test de düşüyor.
+
+**Kusur sayılmayan, kayda geçen gözlemler:**
+
+- Tembel (lazy) listelerde (Renkler, tablo, havuzlar, geçmiş) dışarıdan Tab ile
+  girildiğinde odak görünen ilk öğeye, Shift+Tab ile görünen son öğeye iner;
+  liste içinde her iki yönde de **bütün** öğelere ulaşılır ve odaklanan öğe
+  görünür alana kaydırılır. Compose'un standart davranışıdır; lazy listeler
+  yeniden tasarlanmadı.
+- Oyun toplu tamamlama onayı odağı kapsayıcıya verir (Enter bir şey yapmaz,
+  Escape kapatır); işlem geri alınabilir olduğu için değiştirilmedi.
+- Görsel odak göstergesi piksel olarak test edilmez (piksel testi eklenmedi);
+  kaynağı `focusOutline` kalıbıdır.
+
+Programatik masaüstü smoke: `XDG_DATA_HOME`/`XDG_CONFIG_HOME` geçici bir dizine
+yönlendirilerek `./gradlew --no-daemon run`; pencere açıldı, DB ve kilit geçici
+dizinde oluştu, `wmctrl -i -c` ile kapatıldı, çıkış 0, `-wal`/`-shm` kalmadı,
+log'da exception yok; dizin silindi. Gerçek pencerede el ile klavye turu
+yapılmadı (kullanıcı başında değildi; ekran görüntüsü alınmadı).
 
 # 18. KİMLİK VE OFFLINE-FIRST
 
@@ -3820,7 +3927,7 @@ geçmez. Hash'i dilim başında/sonunda kontrol edilir ve kapsam dışında değ
 
 ```text
 TemporaryDatabaseDirectory              geçici Room DB + gerçek DB koruma iddiası
-assertRealApplicationDatabaseUntouched  102 test sınıfında kullanılıyor
+assertRealApplicationDatabaseUntouched  103 test sınıfında kullanılıyor
 CommittedSchema                         eski sürümleri commit'li JSON'dan kurar
 LegacyRowFixtures                       v1…v6 satır yazıcıları
                                         (v6 raw block = v7 raw block; şema aynı)
@@ -4174,7 +4281,7 @@ yardımcı işler
       yapılandırılmış görev CSV dışa aktarma
 ```
 
-## Faz 3 — BAŞLADI, 16 İŞTEN 6'SI BİTTİ
+## Faz 3 — BAŞLADI, 16 İŞTEN 7'Sİ BİTTİ (+ İş 9 ölçüm dilimi)
 
 PLAN `18.` — Faz 3 işler listesi.
 
@@ -4188,8 +4295,8 @@ PLAN `18.` — Faz 3 işler listesi.
  6  Veritabanı migration testlerini oluştur ............. TAMAM
  7  Beklenmeyen kapanış / bozuk import kurtarma ......... TAMAM (dört dilim, §25.3)
                                                         (PLAN sırası: 7 → 9+5 → 10)
- 8  Klavye, odak, renk dışı etiket, yüksek DPI .... mevcut ekranlar için
-                                              büyük ölçüde tamam
+ 8  Klavye, odak, renk dışı etiket, yüksek DPI ....... TAMAM (§17 tarama; üç
+                                              kusur düzeltildi)
  9  Büyük veri setiyle performans testi ...... ÖLÇÜM DİLİMİ TAMAM (1.203 görev,
                                               §29); süre/bellek kabul eşiği
                                               KARARI AÇIK → iş bitmiş sayılmaz
@@ -4253,7 +4360,11 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
 ## Sıradaki bağlayıcı iş
 
 > **İş 5 TAMAMLANDI (§25 matris). İş 9'un ölçüm dilimi TAMAMLANDI (§29), süre
-> eşiği kararı açık.** Kullanıcının talimatıyla bu turda sıradaki: İş 8 taraması. İş 10 ve
+> eşiği kararı açık. İş 8 TAMAMLANDI (§17).** Sıradaki PLAN işi İş 10 (loglama);
+> log yeri/biçimi/döndürme/bağımlılık, R12/R13/R14 yönlendirmesi, paket türü (11),
+> Arch dağıtımı (12), temiz VM (13), lisans (15), remote/CI (16) ve İş 9 süre
+> eşiği kullanıcı kararı bekler. İş 14'ün paketlemeden bağımsız kısmı karar
+> gerektirmeden yapılabilir. İş 10 ve
 > sonrası karar bekler. Aşağıdaki not İş 7'nin kapanış özetidir.
 >
 > İş 7'nin sözleşmesi yazıldı (PLAN `11.4.5`, `16.`, `17.`, `18.`; özet, repo
@@ -4865,6 +4976,10 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   tipli COULD_NOT_READ — export'ta SQLiteException'ı ham bırakma).
   İŞ 9 ÖLÇÜM DİLİMİ TAMAMLANDI (LargeLibraryPerformanceTest, §29): süre/bellek
   EŞİK DEĞİL kayıttır; eşik kararı kullanıcınındır. Açılış 21 sabit ifadedir.
+  İŞ 8 TAMAMLANDI (AppKeyboardAndScalingTest, §17): tablo hücresi TEK odak hedefidir
+  (focusable yanına clickable/combinedClickable EKLEME); geri alınamaz onaylarda
+  başlangıç odağı Vazgeç'tir; oyun tablosunun üst kontrolleri kayar, tablo en az
+  200 dp kalır. Yeni ekran eklenirse Screen.all üzerinden taramaya kendiliğinden girer.
 - İş 7 / Dilim 1 BİTTİ (yalnız test): dört yazma yolu gerçek ikinci JVM'de
   transaction içinde ve commit sonrası SIGKILL ile kesildi; hepsi ya hep ya hiç.
   Ölçülen kalıcılık: journal_mode = wal, synchronous = 1 (NORMAL). synchronous'u

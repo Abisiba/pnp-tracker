@@ -168,7 +168,7 @@ class GameTableLayoutTest {
         val cellSlot = source.substringAfter("private fun CellSlot(").substringBefore("private fun TaskHandle(")
         assertTrue("cell.editableText != null" !in cellSlot, "a cell still asks whether it may be opened")
         assertTrue("Strings.Cell.lockedByTasks" !in source, "a cell still says it is locked by its tasks")
-        assertTrue("onDoubleClick = onEdit" in cellSlot, "a cell can no longer be opened by double click")
+        assertTrue("onDoubleTap = { onEdit() }" in cellSlot, "a cell can no longer be opened by double click")
     }
 
     @Test
@@ -176,11 +176,15 @@ class GameTableLayoutTest {
         // PLAN 17 asks for every main action to be reachable by keyboard, and a
         // dense table wants the single click to do nothing but take the focus,
         // so passing over a cell never puts an editor into it.
-        assertTrue(source.contains("combinedClickable("), "a cell cannot be double clicked")
-        assertTrue(source.contains("onDoubleClick = onEdit"), "the double click does not open the editor")
-        assertTrue(source.contains("onClick = {}"), "a single click does more than take the focus")
-        assertTrue(source.contains("Key.F2"), "F2 does not open the editor")
-        assertTrue(source.contains(".focusable()"), "a cell cannot take the keyboard at all")
+        val cell = source.substringAfter("private fun CellSlot(").substringBefore("verticalArrangement = Arrangement.spacedBy(2.dp)")
+        assertTrue(cell.contains("onDoubleTap = { onEdit() }"), "a cell cannot be double clicked open")
+        assertTrue(cell.contains("onTap = { runCatching { cellFocus.requestFocus() } }"), "a single click does more than take the focus")
+        assertTrue(cell.contains("Key.F2"), "F2 does not open the editor")
+        assertTrue(cell.contains(".focusable()"), "a cell cannot take the keyboard at all")
+        // One focus target, not two: `clickable` is one of its own, and beside
+        // `focusable` it made every cell a second, silent tab stop. The keyboard
+        // really stopping once per cell is proved in AppKeyboardAndScalingTest.
+        assertTrue("clickable(" !in cell && "combinedClickable(" !in cell, "a cell is two tab stops again")
     }
 
     @Test

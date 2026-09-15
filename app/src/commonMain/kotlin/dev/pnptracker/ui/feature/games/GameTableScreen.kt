@@ -5,7 +5,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
@@ -14,6 +13,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -37,6 +37,7 @@ import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -84,6 +85,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -248,29 +250,46 @@ fun GameTableScreen(
     LaunchedEffect(controller) { controller.observeColorCatalogue() }
 
     val state = controller.state
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Text(
-            text = stringResource(Strings.ScreenTitles.games),
-            style = MaterialTheme.typography.headlineSmall,
-        )
-        Text(
-            text = stringResource(Strings.ScreenDescriptions.games),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp),
-        )
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+        // Everything above the table may take the window, less what the table
+        // needs to show a row; past that it scrolls. At the size the window opens
+        // at this changes nothing. In the smallest window `Main` allows, or with
+        // the text scaled up, the controls alone were taller than the window: the
+        // table was laid out at no height at all and the last controls below the
+        // edge, so the keyboard walked onto rows and buttons nobody could see.
+        val controlsLimit = maxOf(maxHeight - TableMinimumHeight, maxHeight * CONTROLS_SHARE_AT_LEAST)
+        Column(modifier = Modifier.fillMaxSize()) {
+            Column(modifier = Modifier.heightIn(max = controlsLimit).verticalScroll(rememberScrollState())) {
+                Text(
+                    text = stringResource(Strings.ScreenTitles.games),
+                    style = MaterialTheme.typography.headlineSmall,
+                )
+                Text(
+                    text = stringResource(Strings.ScreenDescriptions.games),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
 
-        TableControls(controller = controller, state = state, exportAction = exportAction)
-        FailureLine(state.failure)
-        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                TableControls(controller = controller, state = state, exportAction = exportAction)
+                FailureLine(state.failure)
+            }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
-        when (val rows = state.rows) {
-            GameTableRowsState.Loading -> Message(stringResource(Strings.Table.loading))
-            is GameTableRowsState.Empty -> EmptyTable(rows, controller::clearFilters)
-            is GameTableRowsState.Content -> Table(rows.rows, controller, state)
+            when (val rows = state.rows) {
+                GameTableRowsState.Loading -> Message(stringResource(Strings.Table.loading))
+                is GameTableRowsState.Empty -> EmptyTable(rows, controller::clearFilters)
+                is GameTableRowsState.Content -> Table(rows.rows, controller, state)
+            }
         }
     }
 }
+
+/** What the table keeps for itself however tall the controls above it grow: its header and a row. */
+private val TableMinimumHeight = 200.dp
+
+/** The share the controls may always take, even in a window too short for the table's own minimum. */
+private const val CONTROLS_SHARE_AT_LEAST = 0.4f
 
 /** The view filter and the one action, above the table. */
 @Composable
@@ -1242,6 +1261,7 @@ private fun CellSlot(
             stringResource(Strings.Table.cellDescription, columnName, spokenContentOf(cell))
         }
     var focused by remember { mutableStateOf(false) }
+    val cellFocus = remember { FocusRequester() }
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
     val edgeCorner = with(LocalDensity.current) { 3.dp.toPx() }
     val edgeStroke = with(LocalDensity.current) { 1.dp.toPx() }
@@ -1271,16 +1291,29 @@ private fun CellSlot(
 
                         else -> false
                     }
-                }.focusable()
-                .combinedClickable(
-                    onClickLabel = editLabel,
-                    // A single click only takes the focus; the double click is
-                    // what opens the editor, so passing over a cell on the way
-                    // to another never puts one into it.
-                    onClick = {},
-                    onDoubleClick = onEdit,
-                ).padding(horizontal = 10.dp, vertical = 8.dp)
-                .semantics { contentDescription = description },
+                }.focusRequester(cellFocus)
+                .focusable()
+                // Pressed rather than clicked, as a finished tick is. `clickable`
+                // is a focus target of its own, and beside `focusable` it made
+                // every cell two tab stops — the second one silent to a reader,
+                // so the keyboard seemed to vanish between a cell and its first
+                // task. A single click only takes the focus; the double click is
+                // what opens the editor, so passing over a cell on the way to
+                // another never puts one into it.
+                .pointerInput(onEdit) {
+                    detectTapGestures(
+                        onTap = { runCatching { cellFocus.requestFocus() } },
+                        onDoubleTap = { onEdit() },
+                    )
+                }.padding(horizontal = 10.dp, vertical = 8.dp)
+                .semantics {
+                    contentDescription = description
+                    // What Enter and F2 do from the keyboard, offered to a reader too.
+                    onClick(label = editLabel) {
+                        onEdit()
+                        true
+                    }
+                },
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         if (cell.isEmpty) {
@@ -2255,6 +2288,8 @@ private fun ConvertConfirmation(
     controller: GameTableController,
 ) {
     val scope = rememberCoroutineScope()
+    // The keyboard starts on the way out: turning a task into text cannot be
+    // taken back, so a stray Enter on the question has to leave the task alone.
     val focus = remember { FocusRequester() }
     LaunchedEffect(work.taskId) { focus.requestFocus() }
 
@@ -2276,7 +2311,6 @@ private fun ConvertConfirmation(
             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
             modifier =
                 Modifier
-                    .focusRequester(focus)
                     .focusOutline(ComposerShape)
                     .semantics { contentDescription = acceptLabel },
         ) {
@@ -2285,7 +2319,11 @@ private fun ConvertConfirmation(
         TextButton(
             onClick = controller::closeInnermost,
             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-            modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = cancelLabel },
+            modifier =
+                Modifier
+                    .focusRequester(focus)
+                    .focusOutline(ComposerShape)
+                    .semantics { contentDescription = cancelLabel },
         ) {
             Text(text = cancelLabel, style = MaterialTheme.typography.labelMedium)
         }
