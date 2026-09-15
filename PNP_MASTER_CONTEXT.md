@@ -7,14 +7,17 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** Faz 3 / **İş 5** (CSV görev dışa aktarma doğrulaması) —
-> `fix(export): report storage that will not answer instead of hanging`.
-> **İş 5 TAMAMLANDI.** Export sözleşmesi (§25) madde madde gerçek üretim yolu
-> testleriyle eşleştirildi (§25 "Faz 3 / İş 5 — doğrulama matrisi"); eksik
-> maddeler yeni `TaskExportContractTest` ile kapandı ve bir üretim kusuru
-> düzeltildi: depolama okuması düşünce export ekranı meşgul durumda kalıyordu,
-> artık tipli `COULD_NOT_READ` gösteriliyor. Room şeması ve PLAN değişmedi.
-> Sıradaki: İş 9'un eşik gerektirmeyen ölçüm dilimi.
+> **Son güncelleme:** Faz 3 / **İş 9 — ölçüm dilimi** (1.000+ görevle açılış,
+> arama ve havuz filtreleme) — `test(performance): measure the application with
+> a thousand tasks`. **Ölçüm dilimi TAMAMLANDI; süre kabul eşiği kararı AÇIK.**
+> 1.203 görevlik kütüphanede her ekran 42 görevdeki ifadelerin aynısını çalıştırıyor
+> (toplam 21, her biri bir kez), arama ve 24 havuz süzgeci beklenen kümeyi 0 ifadeyle
+> veriyor; N+1 yok, üretim kodu değişmedi. Süreler kayıt olarak §29 "Faz 3 / İş 9"da.
+> Sıradaki: İş 8 taraması.
+>
+> Daha önce: İş 5 (`fix(export): report storage that will not answer instead of
+> hanging`) CSV export sözleşmesini madde madde doğruladı ve depolama okuma
+> hatasını tipli `COULD_NOT_READ` yaptı (§25 matris).
 >
 > Daha önce: İş 7 / Dilim 4 (`feat(import): let an unfinished import be
 > continued or removed`) İş 7'yi tamamladı: `Devam eden içe aktarmalar` listesi
@@ -51,25 +54,28 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-HEAD (bu commit öncesi): 557122ece1eed95e82e60d4d265e2e65fdc2a500
-önceki commit         : feat(import): let an unfinished import be continued or removed
-bu commit             : fix(export): report storage that will not answer instead of hanging
+HEAD (bu commit öncesi): d1c76c62273c61d8838a7f4943e0d51e87e22fdb
+önceki commit         : fix(export): report storage that will not answer instead of hanging
+bu commit             : test(performance): measure the application with a thousand tasks
 working tree          : temiz
 Room şema sürümü      : 8   (bu commit'te DEĞİŞMEDİ)
 şema dosyaları        : 1.json … 8.json  hepsi bayt bayt aynı
-test durumu           : dar koşu: export'a dokunan 13 sınıf, 202 test / 0 failure / 0 error /
-                        0 skipped (TaskExportContractTest 11 yeni, ExportScreenTest +1)
-                        [önceki commit 557122e: 3513 test / 243 sınıf; beklenen yeni toplam
-                         3525 / 244 — tam `./gradlew clean check --rerun-tasks` bu turun
-                         üç commit'inden SONRA koşulur ve sonucu İş 8 commit'inde yazılır]
-değişen dosyalar      : üretim 5 (TaskExportStore, TaskExportFailure, ExportSection,
-                        Strings.kt, strings.xml)
-                        test 2 (yeni: TaskExportContractTest; değişen: ExportScreenTest)
+test durumu           : dar koşu: LargeLibraryPerformanceTest 4 test / 0 failure / 0 error /
+                        0 skipped (yeni sınıf). Önceki commit d1c76c6'nin dar koşusu
+                        202 / 0. Tam `./gradlew clean check --rerun-tasks` bu turun üç
+                        commit'inden SONRA koşulur ve sonucu İş 8 commit'inde yazılır
+değişen dosyalar      : üretim 0
+                        test 1 (yeni: performance/LargeLibraryPerformanceTest)
                         PNP_MASTER_CONTEXT.md
 PLAN.md               : bu commit'te DEĞİŞMEDİ
 ```
 
-**Bu commit Faz 3 / İş 5'tir; İŞ 5 TAMAMLANDI.** CSV export sözleşmesinin her
+**Bu commit Faz 3 / İş 9'un ölçüm dilimidir; süre kabul eşiği kararı AÇIK.**
+1.203 görevlik, uygulamanın kendi yazma yollarıyla kurulan kütüphane gerçek
+`StartupGate` ile açılıyor; açılış, tekrar okuma, arama ve havuz süzgeçleri
+makineden bağımsız koşullarla doğrulanıyor, süre/bellek yalnız kayıt (§29).
+
+**Bir önceki commit (`d1c76c6`) Faz 3 / İş 5'ti; İŞ 5 TAMAMLANDI.** CSV export sözleşmesinin her
 maddesi gerçek üretim yolunu kullanan bir testle eşleşiyor (§25 matris). Testin
 bulduğu tek üretim kusuru düzeltildi: `TaskExportStore` depolama hatasını ham
 bırakıyordu ve export ekranı meşgul kalıyordu; artık `COULD_NOT_READ`.
@@ -244,7 +250,7 @@ değişti.
 
 ```text
 PLAN.md  a266824ba28e1b90b3f650575905587951b5309debdfc62a56f7d2bdfbadff04
-         (İş 7 Dilim 1–4 ve İş 5 PLAN'ı DEĞİŞTİRMEDİ; değer İş 7 belge turundan aynen gelir.
+         (İş 7 Dilim 1–4, İş 5 ve İş 9 ölçüm dilimi PLAN'ı DEĞİŞTİRMEDİ; değer İş 7 belge turundan aynen gelir.
           Ondan önceki değer
           db891ba8362bb5ee837535aa042b8414ac2062d97a8fa25bff744884b09a3455)
 
@@ -275,7 +281,7 @@ veritabanının parmak izi orada durmamalıdır. Bunun yerine kural şudur:
 
 Gerçek DB hiçbir aşamada açılmaz, kopyalanmaz veya migrate edilmez. Bütün testler ve
 manuel turlar geçici Room veritabanları ve geçici XDG dizinleri kullanır. Bu koruma
-`assertRealApplicationDatabaseUntouched` yardımcı fonksiyonuyla **101 test sınıfında**
+`assertRealApplicationDatabaseUntouched` yardımcı fonksiyonuyla **102 test sınıfında**
 uygulanmaktadır. Sayı tek bir yerde tutulur; §29 aynı değeri anar ve tarama
 `grep -rl 'assertRealApplicationDatabaseUntouched' app/src/*Test` ile yapılır.
 
@@ -3814,7 +3820,7 @@ geçmez. Hash'i dilim başında/sonunda kontrol edilir ve kapsam dışında değ
 
 ```text
 TemporaryDatabaseDirectory              geçici Room DB + gerçek DB koruma iddiası
-assertRealApplicationDatabaseUntouched  101 test sınıfında kullanılıyor
+assertRealApplicationDatabaseUntouched  102 test sınıfında kullanılıyor
 CommittedSchema                         eski sürümleri commit'li JSON'dan kurar
 LegacyRowFixtures                       v1…v6 satır yazıcıları
                                         (v6 raw block = v7 raw block; şema aynı)
@@ -4008,6 +4014,75 @@ Güvenlik yedeği          onaydan önce 0 dosya; vazgeçildiğinde 0; doğrulam
                          Yazma/taşıma hatasında ne .json ne .part kalır
 ```
 
+## Faz 3 / İş 9 — büyük veri ölçüm dilimi  *(ölçüm dilimi TAMAMLANDI; süre kabul eşiği kararı AÇIK)*
+
+PLAN `18.` Faz 3 testi "1.000+ görevle açılış, arama ve havuz filtreleme
+performansı" **eşik vermez**. Bu yüzden milisaniye veya bellek sınırı
+uydurulmadı; süre ve bellek yalnız **kayıttır**. Testin geçme koşulu makineden
+bağımsız olanlardır. Test: `desktopTest/…/performance/LargeLibraryPerformanceTest` (4 test).
+
+Veri kümesi kodla ve uygulamanın **kendi yazma yollarıyla** kurulur
+(`addTaskToCell`, `addColorToTask`, `reportFailure`, `setStageQuantity`,
+`convertTaskToText`, `GameDao.softDelete`) ve DB gerçek `StartupGate` ile geçici
+XDG evinde açılır:
+
+```text
+görev          1.203 yazıldı → 1.146 yaşayan (47 metne dönüştürülmüş + silinmiş
+               oyunun 10 görevi hariç); 121 oyun (1 silinmiş), oyun başına 5 hücre
+havuz          4 havuza eşit dağılım (287 / 287 / 287 / 285)
+durum          tamamlanmış (her 3.), bilgi eksik + adetsiz (her 13.), açık
+bayrak         MISSING (i%10=1), BORROWED (i%10=2)
+renk (3D)      0 / 1 / 2 / 3 renk; 4 tohum + 1 özel ("Açık Şeftali")
+ilerleme       3D'de FAILURE_REPORTED, kart/mukavvada PRINT aşaması; geçmiş 179 satır
+metin          Türkçe büyük/küçük (Işık/IŞIK/ışıltı, İstanbul/istanbul/Istanbul),
+               birleşik aksan (Cafe + U+0301) ve hazır "Café", emoji + ZWJ, virgül,
+               tırnak, çok satırlı not
+```
+
+Geçme koşulları (hepsi geçti):
+
+```text
+açılış          42 ve 1.203 görevde AYNI normalize SQL frekans haritası:
+                kapı 3 ifade (room_master_table ×2 + tek COUNT(*) FROM games)
+                kenar özeti 1 · oyun tablosu 4 · renk kataloğu 1 · 3D/kart/mukavva
+                havuzu 3'er · özel havuz 2 · geçmiş 2 · devam eden içe aktarmalar 1 ·
+                onaylanmış içe aktarmalar 1  → toplam 21; hiçbir ifade bir okumada
+                iki kez çalışmaz (satır/oyun/renk başına okuma YOK)
+sonuç doğruluğu her havuzun görev kimlikleri = kurulumdan hesaplanan küme; kenar
+                özeti task/active sayıları; tablo = silinmemiş 120 oyun ve 1.146
+                görev parçası
+tekrar          aynı okuma 1. ve 42. kez: aynı ifadeler, eşit sonuç (10 okuma × 42)
+arama           7 sorgu × 4 havuz + tablo: sonuç kümesi kurulumdan hesaplanan
+                beklentiye eşit (ışık = IŞIK, istanbul = İSTANBUL ≠ Istanbul,
+                café = cafe+U+0301, oyun adı eşleşmesi, boş sonuç); 0 ifade;
+                controller'a harf harf yazma 0 ifade
+havuz süzgeci   24 süzgeç (durum × 4 havuz, 5 renk, renk seçilecek, renk + renk
+                seçilecek, MISSING, MISSING|BORROWED + tamamlanmış, PRINT, LAMINATE,
+                arama + renk + durum): beklenen küme; 0 ifade; ekrandaki değişim 0 ifade
+N+1             bulunmadı; üretim kodu DEĞİŞMEDİ
+```
+
+Ölçüm kaydı — **eşik değildir**, makineye bağlıdır (Intel i5-10300H, 8 çekirdek,
+7,6 GiB RAM, Linux 7.2.4-zen, JDK 21.0.12, test JVM maxHeap 512 MiB; Gradle test
+görevi içinde, ısınmamış JVM):
+
+```text
+kapıdan yeniden açılış          42 → 2,3 ms     1.203 → 2,1 ms
+kenar özeti (ilk)               42 → 1,4 ms     1.203 → 4,5 ms
+oyun tablosu (ilk, 120 satır)   42 → 7,3 ms     1.203 → 16,5 ms
+havuzlar (ilk)                  1.203 → 3D 5,4 · kart 4,1 · mukavva 3,6 · özel 3,0 ms
+geçmiş (ilk, 179 satır)         42 → 1,0 ms     1.203 → 2,8 ms
+tekrar okuma medyanı (×41)      tablo 15,9 · 3D 5,1 · kart 5,2 · geçmiş 3,0 ms
+okumaların tuttuğu heap          ≈ 1,1 MiB (System.gc sonrası fark; kaba)
+arama 7 sorgu × 4 havuz + tablo  ≈ 110 ms toplam (beklenti hesabı dâhil)
+havuz süzgeci 24 süzgeç          ≈ 22 ms toplam
+11 harf yazma (havuz + tablo)    ≈ 14 ms
+```
+
+**Açık karar:** "yeterince hızlı" için bir süre/bellek kabul eşiği ve ölçüm
+yöntemi (ısınmış JVM, gerçek pencere, hedef donanım) PLAN'da yoktur ve bu
+dilimde seçilmedi. İş 9 bu yüzden bütünüyle bitmiş sayılmaz.
+
 ---
 
 # 30. REGRESYON KOMUTLARI
@@ -4115,10 +4190,9 @@ PLAN `18.` — Faz 3 işler listesi.
                                                         (PLAN sırası: 7 → 9+5 → 10)
  8  Klavye, odak, renk dışı etiket, yüksek DPI .... mevcut ekranlar için
                                               büyük ölçüde tamam
- 9  Büyük veri setiyle performans testi ...... sorgu sayımı var; yedek
-                                              yazma ve okuma için süre/boyut
-                                              ölçümü de var (§29), genel
-                                              performans kapısı yok
+ 9  Büyük veri setiyle performans testi ...... ÖLÇÜM DİLİMİ TAMAM (1.203 görev,
+                                              §29); süre/bellek kabul eşiği
+                                              KARARI AÇIK → iş bitmiş sayılmaz
 10  Loglama ve anlaşılır hata mesajları ................. YAPILMADI
 11  Self-contained Linux dağıtımı ....................... YAPILMADI
 12  Garuda/Arch paketi .................................. YAPILMADI
@@ -4178,8 +4252,8 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
 
 ## Sıradaki bağlayıcı iş
 
-> **İş 5 TAMAMLANDI (§25 matris).** Kullanıcının talimatıyla bu turda sıra:
-> İş 9'un süre eşiği gerektirmeyen ölçüm dilimi → İş 8 taraması. İş 10 ve
+> **İş 5 TAMAMLANDI (§25 matris). İş 9'un ölçüm dilimi TAMAMLANDI (§29), süre
+> eşiği kararı açık.** Kullanıcının talimatıyla bu turda sıradaki: İş 8 taraması. İş 10 ve
 > sonrası karar bekler. Aşağıdaki not İş 7'nin kapanış özetidir.
 >
 > İş 7'nin sözleşmesi yazıldı (PLAN `11.4.5`, `16.`, `17.`, `18.`; özet, repo
@@ -4789,6 +4863,8 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   uygulanan hâli §25.2. Yeniden tartışma.
   İŞ 7 TAMAMLANDI. İŞ 5 TAMAMLANDI (CSV export matrisi §25; depolama okuma hatası
   tipli COULD_NOT_READ — export'ta SQLiteException'ı ham bırakma).
+  İŞ 9 ÖLÇÜM DİLİMİ TAMAMLANDI (LargeLibraryPerformanceTest, §29): süre/bellek
+  EŞİK DEĞİL kayıttır; eşik kararı kullanıcınındır. Açılış 21 sabit ifadedir.
 - İş 7 / Dilim 1 BİTTİ (yalnız test): dört yazma yolu gerçek ikinci JVM'de
   transaction içinde ve commit sonrası SIGKILL ile kesildi; hepsi ya hep ya hiç.
   Ölçülen kalıcılık: journal_mode = wal, synchronous = 1 (NORMAL). synchronous'u
