@@ -5,8 +5,8 @@ import java.nio.file.InvalidPathException
 import java.nio.file.Path
 
 /**
- * Computes where this application keeps its data and its configuration, following
- * the XDG Base Directory specification.
+ * Computes where this application keeps its data, its configuration and its
+ * state (the diagnostic log), following the XDG Base Directory specification.
  *
  * Resolving is a pure calculation: nothing is read from or written to disk.
  */
@@ -18,12 +18,15 @@ class XdgAppPathsResolver(
     fun resolve(): XdgAppPaths {
         val dataDirectory = baseDirectory(DATA_HOME_VARIABLE, DATA_HOME_FALLBACK).resolve(appId)
         val configDirectory = baseDirectory(CONFIG_HOME_VARIABLE, CONFIG_HOME_FALLBACK).resolve(appId)
+        val stateDirectory = baseDirectory(STATE_HOME_VARIABLE, STATE_HOME_FALLBACK).resolve(appId)
         return XdgAppPaths(
             dataDirectory = dataDirectory,
             databaseFile = dataDirectory.resolve(DATABASE_FILE_NAME),
             backupsDirectory = dataDirectory.resolve(BACKUPS_DIRECTORY_NAME),
             configDirectory = configDirectory,
             settingsFile = configDirectory.resolve(SETTINGS_FILE_NAME),
+            stateDirectory = stateDirectory,
+            logsDirectory = stateDirectory.resolve(LOGS_DIRECTORY_NAME),
         )
     }
 
@@ -80,10 +83,13 @@ class XdgAppPathsResolver(
     private companion object {
         const val DATA_HOME_VARIABLE = "XDG_DATA_HOME"
         const val CONFIG_HOME_VARIABLE = "XDG_CONFIG_HOME"
+        const val STATE_HOME_VARIABLE = "XDG_STATE_HOME"
         const val DATA_HOME_FALLBACK = ".local/share"
         const val CONFIG_HOME_FALLBACK = ".config"
+        const val STATE_HOME_FALLBACK = ".local/state"
         const val DATABASE_FILE_NAME = "pnp.db"
         const val BACKUPS_DIRECTORY_NAME = "backups"
         const val SETTINGS_FILE_NAME = "settings.json"
+        const val LOGS_DIRECTORY_NAME = "logs"
     }
 }

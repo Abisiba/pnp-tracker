@@ -13,4 +13,8 @@ data class XdgAppPaths(
     val backupsDirectory: Path,
     val configDirectory: Path,
     val settingsFile: Path,
+    /** `$XDG_STATE_HOME/pnp-tracker`: what the application keeps about itself, never user data. */
+    val stateDirectory: Path,
+    /** Where the diagnostic log lives (PLAN 14.7.1); made only when a first line is written. */
+    val logsDirectory: Path,
 )

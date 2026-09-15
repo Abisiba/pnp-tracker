@@ -7,15 +7,19 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** Faz 3 / **İş 9 kapanışı ve İş 10 belge turu** —
-> `docs: define diagnostics and data integrity failure semantics`. Kod, test,
-> Room şeması ve bağımlılık **değişmedi**; yalnız `PLAN.md` ve bu dosya değişti ve
-> **test çalıştırılmadı**. **İş 9 TAMAMLANDI:** kabul ölçütleri makineden
-> bağımsızdır ve `14490a8`'in kanıtları hepsini karşılar; süre/bellek eşik değil
-> kayıttır (§29, PLAN `18.` İş 9). **İş 10 TASARLANDI:** tanılama kaydı sözleşmesi,
-> kayıt üreten hata sınırları, R12/R13/R14 kararları ve sekiz atomik dilim PLAN
-> `14.7`'de, repo kanıtları ve özet §25.4'tedir. Sıradaki bağlayıcı kod dilimi
-> **İş 10 / Dilim 1** (kayıt dosyası sözleşmesi, güvenli yazıcı ve rotation).
+> **Son güncelleme:** Faz 3 / **İş 10 / Dilim 1** —
+> `feat(diagnostics): keep a bounded diagnostic log in the state directory`.
+> Tanılama kaydının dosya sözleşmesi, güvenli yazıcı, sınırlı kuyruk, kendi süreç
+> kilidi (R15) ve 5 × 1 MiB rotation motoru yazıldı (§25.4 "İş 10 / Dilim 1'de
+> uygulanan hâli"). **Hiçbir üretim hata sınırı henüz kayıt üretmez**; `Main`
+> yazıcıyı kurar ve kapanışta boşaltır. Room şeması, PLAN ve bağımlılıklar
+> değişmedi. Tam koşu: 3579 / 0 / 0 / 0 (251 sınıf); üç geçici XDG dizinli
+> masaüstü smoke geçti. Sıradaki bağlayıcı kod dilimi **İş 10 / Dilim 2**
+> (tipli hata sınırlarının kayda bağlanması).
+>
+> Daha önce: İş 9 kapanışı ve İş 10 belge turu (`docs: define diagnostics and data
+> integrity failure semantics`) İş 9'u makineden bağımsız ölçütlerle kapattı ve
+> İş 10'un sözleşmesini PLAN `14.7`'ye yazdı.
 >
 > Daha önce: İş 8 (`fix(ui): keep every screen usable with keyboard and
 > scaling`) bütün uygulamayı dört görünümde taradı ve üç kusuru düzeltti (§17);
@@ -65,28 +69,54 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-HEAD (bu commit öncesi): 85ccc3229bd363482d00d98483e15d26309360bb
-önceki commit         : fix(ui): keep every screen usable with keyboard and scaling
-bu commit             : docs: define diagnostics and data integrity failure semantics
+HEAD (bu commit öncesi): 2c80dc35ff377ca2ee416b5953a3eb8d3b8ff813
+önceki commit         : docs: define diagnostics and data integrity failure semantics
+bu commit             : feat(diagnostics): keep a bounded diagnostic log in the state directory
 working tree          : başlangıçta temiz
 Room şema sürümü      : 8   (bu commit'te DEĞİŞMEDİ)
 şema dosyaları        : 1.json … 8.json  hepsi bayt bayt aynı
-test durumu           : bu turda KOŞULMADI (yalnız belge turu).
-                        Son ölçülen sonuç 85ccc32'nin içeriğiyle koşulan
-                        ./gradlew clean check --rerun-tasks:
-                        3535 test / 0 failure / 0 error / 0 skipped (246 sınıf).
-                        Bu commit kod ve test değiştirmediği için yeniden koşulmuş
-                        gibi sunulmaz.
-değişen dosyalar      : PLAN.md, PNP_MASTER_CONTEXT.md  (başka dosya yok)
-PLAN.md               : DEĞİŞTİ — 14.2, 11.4.5, 14.4.7, 14.4.10, 14.4.11,
-                        14.4.13, yeni 14.7, 16., 18. Faz 3 İş 9 / İş 10 ve
-                        Faz 3 testleri
+test durumu           : ./gradlew clean check --rerun-tasks → BUILD SUCCESSFUL
+                        3579 test / 0 failure / 0 error / 0 skipped (251 sınıf)
+                        [2c80dc3 / 85ccc32: 3535 / 246 → +44 test / +5 sınıf:
+                         DiagnosticLineTest 11 (commonTest), DiagnosticLogSinkTest 17,
+                         QueuedDiagnosticsTest 8, DiagnosticSurfaceTest 4,
+                         DiagnosticLogProcessTest 3, XdgAppPathsResolverTest +1
+                         (13 → 14; biri üç XDG değişkenine genişletildi);
+                         AppDirectoryInitializerTest 6 (sayı aynı, state dizininin
+                         açılışta oluşmadığı iddiası eklendi)]
+                        Bu makinede varsayılan ayarlarla iki tam koşu düşük bellek
+                        nedeniyle OS tarafından öldürüldü; geçen koşu kaynak sınırlıdır:
+                        --no-daemon --no-parallel --max-workers=1
+                        -Pkotlin.compiler.execution.strategy=in-process
+                        -Dorg.gradle.jvmargs="-Xmx1536m -XX:MaxMetaspaceSize=512m
+                        -Dfile.encoding=UTF-8" (6 dk 50 s; repo gradle.properties
+                        DEĞİŞMEDİ)
+smoke                 : XDG_DATA_HOME / XDG_CONFIG_HOME / XDG_STATE_HOME üç ayrı geçici
+                        dizin, ./gradlew --no-daemon run: pencere açıldı, DB + kilitler
+                        geçici data'da, wmctrl -i -c ile kapatıldı, çıkış 0, -wal/-shm
+                        kalmadı; kayıt üretilmediği için state altında logs/ OLUŞMADI;
+                        gerçek pnp.db / lck / backups / config / ~/.local/state aynı
+değişen dosyalar      : üretim — yeni commonMain/domain/diagnostics/DiagnosticRecord.kt,
+                        DiagnosticLine.kt; yeni desktopMain/platform/diagnostics/
+                        DiagnosticLogFileSystem.kt, DiagnosticLogSink.kt,
+                        QueuedDiagnostics.kt; değişen XdgAppPaths.kt,
+                        XdgAppPathsResolver.kt, Main.kt
+                        test — yeni desktopTest/platform/diagnostics/ (5 test sınıfı +
+                        DiagnosticLogTestSupport + DiagnosticLogWriterProcess),
+                        commonTest/domain/diagnostics/DiagnosticLineTest; değişen
+                        XdgAppPathsResolverTest, AppDirectoryInitializerTest (ortamına
+                        XDG_STATE_HOME eklendi), LargeLibraryPerformanceTest (XdgAppPaths
+                        iki yeni alan aldı)
+                        PNP_MASTER_CONTEXT.md
+PLAN.md               : bu commit'te DEĞİŞMEDİ (180ff640…)
 ```
 
-**Bu commit İş 9'u kapatır ve İş 10'un belge turudur.** İş 9'un bağlayıcı kabul
-ölçütleri PLAN `18.` Faz 3 / İş 9'dadır ve `14490a8`'in
-`LargeLibraryPerformanceTest`'i hepsini karşılar (§29). İş 10'un bütün kararları
-PLAN `14.7`'dedir; özet, repo kanıtları, açık sınırlar ve dilim tablosu §25.4'te.
+**Bu commit Faz 3 / İş 10'un birinci dilimidir.** Sözleşme PLAN `14.7.1`;
+uygulanan hâl, kuyruk/kapanış davranışı, sahiplik ve rotation, R15 mekanizması ve
+testler §25.4 "İş 10 / Dilim 1'de uygulanan hâli"dedir. Kayıt API'si metin
+parametresi almaz; hiçbir üretim sınırı henüz kayıt üretmez (Dilim 2).
+
+**Bir önceki commit (`2c80dc3`) İş 9'u kapatan ve İş 10'u tasarlayan belge turuydu.**
 
 **Bir önceki commit (`85ccc32`) Faz 3 / İş 8'di; İŞ 8 TAMAMLANDI.** Envanter, tablo güdümlü tüm
 uygulama taraması ve bulunan üç kusurun düzeltmesi §17 "Faz 3 / İş 8"dedir.
@@ -271,7 +301,7 @@ değişti.
 
 ```text
 PLAN.md  180ff640aa7782539ecc2c423b01adb27fc3c662849e7972eaa1f4ad31bbfee2
-         (İş 9 kapanışı + İş 10 belge turu — docs: define diagnostics and data
+         (İş 10 / Dilim 1 PLAN'ı DEĞİŞTİRMEDİ; değer İş 9 kapanışı + İş 10 belge turu — docs: define diagnostics and data
           integrity failure semantics. Bu turdan önceki değer
           a266824ba28e1b90b3f650575905587951b5309debdfc62a56f7d2bdfbadff04
           (İş 7 belge turundan İş 8'e kadar değişmemişti); ondan önceki
@@ -3830,7 +3860,7 @@ kaldırmayı her zaman mümkün göstermek    REDDEDİLDİ  D6/D7'de motor redde
 
 ---
 
-# 25.4 TANILAMA VE VERİ BÜTÜNLÜĞÜ HATA SEMANTİĞİ  *(Faz 3 / İş 10 — TASARLANDI, 0/8 dilim)*
+# 25.4 TANILAMA VE VERİ BÜTÜNLÜĞÜ HATA SEMANTİĞİ  *(Faz 3 / İş 10 — TASARLANDI, 1/8 dilim)*
 
 Bağlayıcı metin PLAN `14.7` (ve ona bağlanan `14.2`, `11.4.5`, `14.4.7`,
 `14.4.10`, `14.4.11`, `14.4.13`, `16.`, `18.` Faz 3 İş 10 ve testleri). Bu bölüm
@@ -4008,8 +4038,8 @@ U1–U3            aday; Dilim 5           —                       —        
 
 ```text
 #  kapsam                                        commit                                                            durum
-1  kayıt dosyası sözleşmesi, yazıcı, rotation    feat(diagnostics): keep a bounded diagnostic log in the state directory  SIRADAKİ
-2  tipli sınırların kayda bağlanması + tipsiz     feat(diagnostics): record typed failures where they are decided         YAPILMADI
+1  kayıt dosyası sözleşmesi, yazıcı, rotation    feat(diagnostics): keep a bounded diagnostic log in the state directory  TAMAM
+2  tipli sınırların kayda bağlanması + tipsiz     feat(diagnostics): record typed failures where they are decided         SIRADAKİ
    kaçışların ölçümü
 3  tipsiz kaçan depolama/dizin hataları → tipli  fix(storage): say in words when the database or its folders will not answer  YAPILMADI
 4  R12 saat geriye gidince                       fix(backup): keep backups usable after the clock goes backwards          YAPILMADI
@@ -4027,6 +4057,167 @@ noktasını, (7) yeni çelişkinin girişini kapatır. R13 (8) R14'e bağlı de�
 (6) veya (7) bir ölçüm sonucu yüzünden durursa (8) yine yapılabilir. Kullanıcının
 önerdiği sıra (log → sınırlar → R12 → R14 → R13) korunmuştur; yalnız "tipsiz
 kaçan hatalar" ayrı dilim olmuş ve R14 İş 7'nin kalıbıyla üçe bölünmüştür.
+
+## İş 10 / Dilim 1'de uygulanan hâli
+
+```text
+commonMain/domain/diagnostics/DiagnosticRecord.kt   DiagnosticLevel (3), DiagnosticEvent (21, kod +
+                                                    varsayılan seviye), DiagnosticArea (sabit liste),
+                                                    ExceptionClassName, DiagnosticPlace,
+                                                    DiagnosticRecord, Diagnostics (+ None)
+commonMain/domain/diagnostics/DiagnosticLine.kt     diagnosticLineOf (tek satır, ≤ 2 KiB),
+                                                    utcMillisText (takvim kütüphanesi yok)
+desktopMain/platform/diagnostics/
+  DiagnosticLogFileSystem.kt                        dar dosya sistemi arayüzü + Nio uygulaması
+                                                    (yalnız beş kanonik ad, NOFOLLOW, 0700/0600)
+  DiagnosticLogSink.kt                              tembel açılış, süreç kilidi, yarım satır onarımı,
+                                                    rotation, fail-open
+  QueuedDiagnostics.kt                              256'lık kuyruk, tek worker, seq, düşürme raporu,
+                                                    500 ms'lik kapanış
+platform/files/XdgAppPaths(+Resolver).kt            stateDirectory + logsDirectory
+                                                    ($XDG_STATE_HOME, yoksa ~/.local/state)
+Main.kt                                             QueuedDiagnostics.inDirectory(paths.logsDirectory, …);
+                                                    ana pencere ve açılış hata penceresi kapanırken
+                                                    close(); record ÇAĞRISI YOK
+```
+
+### Gerçek bir satır
+
+```text
+{"v":1,"seq":7,"at":"2025-09-15T08:21:04.512Z","level":"ERROR","event":"storage.write_failed","app":"0.1.0","schema":8,"reason":"COULD_NOT_READ","area":"EXPORT","place":"tasks.updatedAt","fromSchema":3,"toSchema":8,"count":12,"exception":"java.lang.IllegalStateException","cause":"java.lang.IllegalArgumentException"}
+```
+
+(`DiagnosticLineTest`'in bayt bayt karşılaştırdığı satır; alanları gösterebilmek
+için bütün isteğe bağlı alanlar dolu.) Alan sırası sabittir, BOM yoktur, tek `\n`
+satırın sonundadır; `schema` derlemenin `SUPPORTED_SOURCE_SCHEMA_VERSION` (8)
+değeridir.
+
+### API neyi alamaz
+
+```text
+DiagnosticRecord  event · level · reason: Enum<*>? · area · place: BackupPlace? ·
+                  fromSchema/toSchema: Int? · count: Long? · failure: Throwable?
+                  → String/CharSequence/Path/Uuid/EntityId/ByteArray parametresi YOK
+                    (DiagnosticSurfaceTest yansımayla tarar; sentetik üyeler hariç)
+failure           yapıcıda ExceptionClassName.of + ofRootCause'a indirilir ve
+                  BIRAKILIR; kayıt Throwable ALAN TUTMAZ (testli). Sınıf adı
+                  KClass.qualifiedName; kalıp dışı / > 200 / isimsiz → "?";
+                  kök neden 16 adım ve döngü korumalı
+reason            yalnız enum sabitinin adı
+place             yalnız BackupData / BackupEnvelopeV1 serializer descriptor'larının
+                  dizi ve alan adları (+ file, data, envelope); başka her şey → alan YOK
+count             negatifse yazılmaz
+diagnostics kodu  message / localizedMessage / stackTrace / printStackTrace /
+                  suppressed OKUMAZ (kaynak taraması)
+```
+
+### Kuyruk, düşürme ve kapanış
+
+```text
+record()          numbering kilidi altında: seq = sıradaki sayı, at = clock.now(),
+                  ArrayBlockingQueue(256).offer — disk I/O YOK, bekleme YOK, throw YOK.
+                  Kuyruk doluysa kayıt düşer ve sayılır; seq harcanır (boşluk = düşen)
+worker            tek daemon iş parçacığı "pnp-diagnostics"; 50 ms poll; her kayıt
+                  bir satır; kodlama ≤ 2 KiB değilse veya yazılamazsa düşürülmüş sayılır
+                  (sink kapalıysa sayılmaz)
+düşürme raporu    kuyruk BOŞKEN, numbering kilidi altında kuyruk boşluğu yeniden
+                  denetlenerek numaralanır → dosyadaki seq sırası HİÇ bozulmaz;
+                  diagnostics.records_dropped WARN + count, içerik yok
+clock hatası      kayıt düşer, çağıran hiçbir şey görmez
+close()           yeni kayıt kabul edilmez → worker kuyruğu boşaltır → join(500 ms);
+                  süre dolarsa kalanlar bırakılır, sink kapatılır (takılmış yazma
+                  döner), ikinci join(500 ms); kilit ve dosya bırakılır; iki kez
+                  çağrılabilir; kapanıştan sonraki kayıt yazılmaz
+```
+
+### Sahiplik, kilit ve rotation
+
+```text
+yer               $XDG_STATE_HOME/pnp-tracker/logs/ ; ilk SATIRDA oluşur (0700 dizin,
+                  0600 dosya); hiç kayıt verilmeyen yazıcı dizin oluşturmaz (testli)
+kilit (R15)       logs/pnp-tanilama.lock, FileChannel.tryLock, süreç boyunca tutulur,
+                  dosya SİLİNMEZ (farklı inode yarışı yok), NOFOLLOW ile açılır.
+                  Alınamazsa o süreç kalıcı olarak yazmaz; aynı süreçte ikinci yazıcı
+                  (OverlappingFileLockException) da çekilir. StartupGate kilidi
+                  DEĞİŞMEDİ
+adlar             pnp-tanilama.jsonl, pnp-tanilama.1…4.jsonl — başka ad, benzer önek,
+                  .part, .bak, .0/.5, kullanıcı dosyası rotation'a GİRMEZ (testli)
+sınır             satır eklenince dosya 1 MiB'ı aşacaksa önce rotation; tam 1 MiB'a
+                  izin var (512 × 2 KiB), 1 bayt eksik dosyaya 64 baytlık satır sığmaz
+rotation          beş adın herhangi biri link/dizin/FIFO ise HİÇBİR ŞEY silinmez, yazma
+                  kalıcı durur; .3→.4 ancak gerekirse .4 silinerek, .2→.3, .1→.2,
+                  etkin→.1, yeni etkin CREATE_NEW. Taşıma üzerine yazmaz. Sıra yalnız
+                  adlardan; mtime değişikliği sonucu değiştirmez (testli). Çökmenin
+                  bıraktığı boşluk doldurulur, en eski gereksiz silinmez; iki ayrı
+                  evde aynı çökme durumu aynı sonucu verir (testli)
+yarım satır       etkin dosya \n ile bitmiyorsa önce \n; o bayt dosyayı 1 MiB'ın
+                  üzerine çıkaracaksa dosya olduğu gibi rotate edilir; önceki satırlar
+                  ve sonraki satır ayrı ayrı ayrıştırılır (testli)
+hata              her dosya sistemi işlemi (hazırlık, kilit, tür, açma, ekleme, silme,
+                  taşıma) ve alttaki bozuk kod: çağırana exception YOK; üç ardışık
+                  başarısızlık → süreç boyunca kapalı; geçici hata temizlenince sonraki
+                  satır yazılır; dosya sayısı ≤ 5, her dosya ≤ 1 MiB, bozuk satır yok
+                  (yedi işlemin her biri FaultyLogFileSystem ile testli)
+```
+
+### İki gerçek süreç
+
+```text
+tutan + ikinci     tutan süreç ilk satırı yazar (HELD); ikinci süreç 500 kayıt verir →
+                   dosyada YALNIZ tutanın satırı; tutan bitirince üçüncü süreç 500 satır
+                   yazar → 201 + 500 satır, sırayla, hepsi ayrıştırılır
+eşzamanlı patlama  iki süreç 3.000'er kayıt → her satır ayrıştırılır; her sürecin
+                   satırları tek kesintisiz blok, seq 1, 2, 3 …
+SIGKILL            tutan süreç öldürülür → OS kilidi bırakır → test sürecinin sink'i
+                   yazar; öldürülenin satırı ve yenisi ayrıştırılır; kilit dosyası durur
+```
+
+### Testler
+
+```text
+commonTest/…/DiagnosticLineTest                 11  bayt bayt satırlar, 21 olay, 3 seviye,
+                                                    sınıf adları + kullanıcı içeriği sızmaz,
+                                                    döngülü/derin neden, isimsiz sınıf "?",
+                                                    yer sözlüğü, negatif sayı, UTC takvimi,
+                                                    gerçek JSON okuyucusu
+desktopTest/…/DiagnosticLogSinkTest             17  yukarıdaki sahiplik/rotation/hata tablosu,
+                                                    2 KiB (2048 kabul, 2049 ret), tam 1 MiB
+QueuedDiagnosticsTest                            8  sıra, 8 iş parçacığı × 2.000 (rotation
+                                                    altında, seq 1…16.000 kesintisiz), dolu
+                                                    kuyruk bloklamaz + düşürme raporu, kapanış
+                                                    flush + kilit, takılmış disk ~1 s içinde
+                                                    kapanır ve worker ölür, hatalı disk döngü
+                                                    kurmaz, bozuk saat, kullanılmayan yazıcı
+                                                    dizin açmaz; her testten sonra worker yok
+DiagnosticSurfaceTest                            4  API tipleri, kayıt Throwable tutmaz,
+                                                    message/stack taraması, üretimde yalnız
+                                                    Main kullanır ve record ÇAĞIRMAZ
+DiagnosticLogProcessTest                         3  iki gerçek süreç (yukarıda)
+XdgAppPathsResolverTest                     14 (+1) state açık/varsayılan/boş/göreli
+LogHome (test desteği)                              her testte gerçek data/config/backups/state
+                                                    konumlarının var/boyut/mtime/girdi sayısı
+                                                    öncesi-sonrası AYNI
+```
+
+Tam koşu 3579 / 0 / 0 / 0 (251 sınıf; +44 test, +5 sınıf). İlk tam koşu
+öldürülmeden önce gerçek bir hata gösterdi: `AppDirectoryInitializerTest`'in
+ortam haritasında `XDG_STATE_HOME` yoktu, çözücü ev dizinine düştü ve testin
+"ev dizini okunmaz" şartı 6 testi düşürdü. Haritaya geçici `state` eklendi ve
+state dizininin açılışta oluşmadığı iddiası kondu; beklenti gevşetilmedi.
+
+Mutasyonla doğrulandı: boyut sınırı `>` yerine `>=` yapılıp yabancı nesne denetimi
+kaldırılınca `DiagnosticLogSinkTest`'in 5 testi düşüyor.
+
+### Dilim 1'in bilerek YAPMADIKLARI
+
+```text
+hata sınırlarını kayda bağlamak                 Dilim 2 (Main dahil hiçbir yer record çağırmaz)
+beklenmeyen hata handler'ı                      Dilim 2
+yeni kullanıcı metni / ayar / log ekranı        YOK
+StartupGate kilidinin ömrü                      DEĞİŞMEDİ (R15)
+fsync, sıkıştırma, ağ                           YOK
+R12, R13, R14                                   Dilim 4–8
+```
 
 ## Açık sınırlar ve karar bekleyenler
 
@@ -4211,6 +4402,13 @@ DraftRemovalFixtures (desktopTest)      her boyutta gerçek inceleme yollarıyla
                                         (withoutDraft); foreign_key_check +
                                         integrity_check; tuzak kurmak için ham SQL
 ComposeSceneHarness                     gerçek Compose sahnesi (desktopTest)
+LogHome (desktopTest)                   geçici state evi + gerçek XDG konumlarının
+                                        açılmadan öncesi/sonrası karşılaştırması
+FaultyLogFileSystem (desktopTest)       log dosya sistemi arayüzünün önüne konan,
+                                        seçilen işlemi IOException / bozuk kod ile
+                                        düşüren veya eklemeyi bekleten çift
+DiagnosticLogWriterProcess (desktopTest) GERÇEK ikinci süreç: log kilidini tutar,
+                                        bekler, öldürülür ya da kayıt patlatır
 ```
 
 Beş smoke turu (`BackupSmokeTest`, `BackupRestoreSmokeTest`, `RestoreSmokeTest`,
@@ -4273,6 +4471,10 @@ Devam eden içe aktarmalar healthOfDraftBatches 1 ve 42 taslak için AYNI üç o
                          eşdeğer. Devam et her basışta draftHealthOf'u YENİDEN
                          okur; kaldırma motoru dışında yazan yol yok, snapshot 0,
                          history 0
+Tanılama kaydı           kayıt verilmeyen yazıcı diskte hiçbir şey oluşturmaz; record()
+                         disk I/O yapmaz; 16.000 eşzamanlı kayıt seq sırasıyla, satırlar
+                         karışmadan; dosya ≤ 1 MiB (tam 1 MiB'a izin), ≤ 5 dosya; yabancı
+                         nesne silinmez; hiçbir hata çağırana ulaşmaz; SQL ifadesi 0
 Kapanış izleri           normal kapanış ile SIGKILL sonrası ilk açılış AYNI dosya
                          listesini bırakır; işaret/kurtarma dosyası yok
 Açılış kapısı            v8 bir veritabanında EK MALİYET YOK: yalnız kilit +
@@ -4452,10 +4654,21 @@ git diff --check
 git status --short
 ```
 
+Geliştirme makinesinde (7,8 GiB RAM) varsayılan ayarlı tam koşu iki kez OS
+tarafından bellek yüzünden öldürüldü (İş 10 / Dilim 1). O zaman repo ayarlarına
+dokunmadan seri ve sınırlı koşulur:
+
+```bash
+./gradlew clean check --rerun-tasks --no-daemon --no-parallel --max-workers=1 \
+  -Pkotlin.compiler.execution.strategy=in-process \
+  -Dorg.gradle.jvmargs="-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8"
+```
+
 Manuel tur:
 
 ```bash
-XDG_DATA_HOME=/tmp/<gecici>/xdg ./gradlew --no-daemon run
+XDG_DATA_HOME=/tmp/<gecici>/data XDG_CONFIG_HOME=/tmp/<gecici>/config \
+XDG_STATE_HOME=/tmp/<gecici>/state ./gradlew --no-daemon run
 ```
 
 UI smoke listesi: açılış, gezinme, tema, klavye, dar pencere, normal kapanış,
@@ -4551,8 +4764,8 @@ PLAN `18.` — Faz 3 işler listesi.
  9  Büyük veri setiyle performans testi ......... TAMAM (1.203 görev, §29;
                                               makineden bağımsız kabul ölçütleri,
                                               süre/bellek eşik değil kayıt)
-10  Loglama ve anlaşılır hata mesajları ......... TASARLANDI (PLAN 14.7, §25.4;
-                                              sekiz dilim, hiçbiri yapılmadı)
+10  Loglama ve anlaşılır hata mesajları ......... DEVAM EDİYOR (PLAN 14.7, §25.4;
+                                              8 dilimden 1'i: kayıt dosyası + yazıcı)
 11  Self-contained Linux dağıtımı ....................... YAPILMADI
 12  Garuda/Arch paketi .................................. YAPILMADI
 13  Temiz Garuda ortamında kurulum testi ................ YAPILMADI
@@ -4611,11 +4824,13 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
 
 ## Sıradaki bağlayıcı iş
 
-> **Sıradaki bağlayıcı kod dilimi: Faz 3 / İş 10 / Dilim 1 — kayıt dosyası
-> sözleşmesi, güvenli yazıcı ve rotation** (PLAN `14.7.1`, `14.7.6`; özet §25.4).
-> Commit mesajı `feat(diagnostics): keep a bounded diagnostic log in the state
-> directory`. Hiçbir hata sınırı henüz kayıt üretmez; smoke üç geçici XDG
-> (`XDG_DATA_HOME`, `XDG_CONFIG_HOME`, **`XDG_STATE_HOME`**) ile yapılır.
+> **Sıradaki bağlayıcı kod dilimi: Faz 3 / İş 10 / Dilim 2 — tipli hata
+> sınırlarının kayda bağlanması** (PLAN `14.7.2`, `14.7.6`; özet §25.4). Commit
+> mesajı `feat(diagnostics): record typed failures where they are decided`.
+> Dilim 1 bitti: `QueuedDiagnostics` ve `DiagnosticRecord` hazır, `Main` yazıcıyı
+> kurup kapatıyor ama hiçbir yer `record` çağırmıyor (`DiagnosticSurfaceTest`
+> bunu sabitliyor; Dilim 2 bu testi bilinçli olarak dönüştürmeli). Smoke üç
+> geçici XDG (`XDG_DATA_HOME`, `XDG_CONFIG_HOME`, `XDG_STATE_HOME`) ile yapılır.
 >
 > **İş 5 TAMAMLANDI (§25 matris). İş 8 TAMAMLANDI (§17). İş 9 TAMAMLANDI (§29).
 > İş 10'un bütün kararları verildi (PLAN `14.7`)** — R12, R13 ve R14 dahil; kod
@@ -5151,6 +5366,11 @@ yazıcısı kendi süreç kilidini (`pnp-tanilama.lock`) alır (PLAN `14.7.1`). 
 kopya politikası (kilidin uygulama ömrü boyunca tutulması) ayrı bir ürün
 kararıdır ve ölçülmemiştir.
 
+**İş 10 / Dilim 1'de uygulandı:** `DiagnosticLogSink` ilk satırda
+`logs/pnp-tanilama.lock` kilidini alır ve süreç boyunca tutar; alamayan süreç hiç
+yazmaz. İki gerçek süreçle ve SIGKILL ile ölçüldü (`DiagnosticLogProcessTest`).
+Açılış kilidinin kapsamı değişmedi.
+
 ---
 
 # 34. TASARIM İLKELERİ
@@ -5250,7 +5470,13 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   İŞ 9 TAMAMLANDI: kabul makineden bağımsızdır (doğru sonuç, 42/1.000+ aynı ifade
   yapısı, N+1 yok, arama/süzgeç 0 ifade, tekrarda aynı sonuç); süre/bellek EŞİK
   EKLEME, yalnız ortamla kayıt; aynı yöntemde 2 kat kötüleşmeyi raporla.
-- İŞ 10 TASARLANDI (PLAN 14.7, özet §25.4), kod YOK. Sıradaki: Dilim 1. Kurallar:
+- İŞ 10 / DİLİM 1 BİTTİ: tanılama yazıcısı domain/diagnostics (DiagnosticRecord,
+  diagnosticLineOf) + platform/diagnostics (DiagnosticLogFileSystem, DiagnosticLogSink,
+  QueuedDiagnostics). Yeni olay kaydederken ikinci bir yazıcı, kuyruk, dosya adı
+  veya rotation YAZMA; DiagnosticRecord'a String/Path parametresi EKLEME; Throwable'ı
+  kayıtta TUTMA. Test ederken XDG_STATE_HOME geçici dizine; FaultyLogFileSystem ve
+  LogHome kullan. Sıradaki: Dilim 2 (sınırları bağlamak).
+- İŞ 10 TASARLANDI (PLAN 14.7, özet §25.4). Kurallar:
   log yalnız $XDG_STATE_HOME/pnp-tracker/logs/ (pnp-tanilama*.jsonl, 5 × 1 MiB);
   yeni bağımlılık EKLEME; kayıt API'sine String/Path/EntityId parametresi EKLEME;
   exception MESAJI, stack trace, dosya adı, yol, UUID, SQL YAZMA — yalnız sınıf ve
@@ -5542,7 +5768,9 @@ saati geri gitmiş bir makinede yedek ve içe aktarma çalışmaya devam edecek;
 hasarlı bir veritabanı açılmayacak ve dokunulmadan korunacak; elle hazırlanmış
 bir yedekteki çelişkili içe aktarma kayıtları geri yükleme onayından önce
 reddedilecek ve geri alma yalnız kendi ürettiği görevleri kaldıracak. Bunların
-hiçbiri henüz kodda değildir; sıradaki bağlayıcı kod dilimi İş 10 / Dilim 1'dir.
+ilki — sınırlı, kullanıcı verisi taşımayan tanılama kaydı yazıcısı — Dilim 1'de
+yazıldı; henüz hiçbir hata onu kullanmıyor. Sıradaki bağlayıcı kod dilimi İş 10 /
+Dilim 2'dir.
 
 Bunların ilki — **sürümlü JSON yedek ve geri yükleme** — dört atomik dilimde
 **tamamlanmıştır**. Biçim, kapsam, doğrulama hattı, restore mimarisi (A′),

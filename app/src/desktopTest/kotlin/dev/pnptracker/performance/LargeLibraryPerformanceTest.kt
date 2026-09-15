@@ -99,7 +99,16 @@ class LargeLibraryPerformanceTest {
         home = TemporaryDatabaseDirectory()
         val data = home.root.resolve("data/pnp-tracker")
         val config = home.root.resolve("config/pnp-tracker")
-        paths = XdgAppPaths(data, data.resolve("pnp.db"), data.resolve("backups"), config, config.resolve("settings.json"))
+        paths =
+            XdgAppPaths(
+                data,
+                data.resolve("pnp.db"),
+                data.resolve("backups"),
+                config,
+                config.resolve("settings.json"),
+                home.root.resolve("state/pnp-tracker"),
+                home.root.resolve("state/pnp-tracker/logs"),
+            )
         Files.createDirectories(paths.backupsDirectory)
         Files.createDirectories(paths.configDirectory)
         database = gateFor(paths, DatabaseFactory(driver = driver)).open().database

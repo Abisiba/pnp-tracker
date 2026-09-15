@@ -40,6 +40,7 @@ import dev.pnptracker.platform.backupfiles.DesktopBackupFileGateway
 import dev.pnptracker.platform.backupfiles.DesktopBackupSourceGateway
 import dev.pnptracker.platform.backupfiles.DesktopImportSnapshotWriter
 import dev.pnptracker.platform.backupfiles.DesktopSafetyBackupWriter
+import dev.pnptracker.platform.diagnostics.QueuedDiagnostics
 import dev.pnptracker.platform.exportfiles.AwtExportFilePicker
 import dev.pnptracker.platform.exportfiles.DesktopExportFileGateway
 import dev.pnptracker.platform.files.AppDirectoryInitializer
@@ -94,6 +95,10 @@ fun main() {
 
     val paths = XdgAppPathsResolver().resolve()
     AppDirectoryInitializer().ensureDirectories(paths)
+    // The diagnostic log (PLAN 14.7.1). Nothing records into it yet; until a first
+    // line is written it makes no folder, no file and no lock, and closing it
+    // hands whatever is queued to the disk for at most half a second.
+    val diagnostics = QueuedDiagnostics.inDirectory(paths.logsDirectory, AppInfo.Current)
     // The one setting this application has, and the only thing that writes it is
     // the user pressing save. Reading it creates nothing (PLAN 14.4.12).
     val settingsStore = DesktopSettingsStore(paths.settingsFile)
@@ -124,7 +129,7 @@ fun main() {
                 housekeeping = housekeeping,
             ).open()
         } catch (refused: StartupRefused) {
-            showTheStartupProblem(refused.problem)
+            showTheStartupProblem(refused.problem, onExit = diagnostics::close)
             return
         }
     val database = opened.database
@@ -239,6 +244,7 @@ fun main() {
         Window(
             onCloseRequest = {
                 database.close()
+                diagnostics.close()
                 exitApplication()
             },
             state = rememberWindowState(size = DpSize(1100.dp, 720.dp)),
@@ -275,15 +281,22 @@ fun main() {
  * when the gate refuses, and a message the user can read and close is the whole
  * of what happens next.
  */
-private fun showTheStartupProblem(problem: StartupProblem) {
+private fun showTheStartupProblem(
+    problem: StartupProblem,
+    onExit: () -> Unit,
+) {
     application {
+        val exit = {
+            onExit()
+            exitApplication()
+        }
         Window(
-            onCloseRequest = ::exitApplication,
+            onCloseRequest = exit,
             state = rememberWindowState(size = DpSize(560.dp, 360.dp)),
             title = stringResource(Strings.Startup.title),
         ) {
             PnpTrackerTheme(ThemeMode.LIGHT) {
-                StartupErrorScreen(problem = problem, onClose = ::exitApplication)
+                StartupErrorScreen(problem = problem, onClose = exit)
             }
         }
     }

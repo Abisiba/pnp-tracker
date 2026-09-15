@@ -45,6 +45,7 @@ class AppDirectoryInitializerTest {
                 mapOf(
                     "XDG_DATA_HOME" to temporaryRoot.resolve("data").toString(),
                     "XDG_CONFIG_HOME" to temporaryRoot.resolve("config").toString(),
+                    "XDG_STATE_HOME" to temporaryRoot.resolve("state").toString(),
                 )::get,
             userHome = { error("the home directory must not be needed in this test") },
         ).resolve()
@@ -58,6 +59,9 @@ class AppDirectoryInitializerTest {
         assertTrue(Files.isDirectory(paths.dataDirectory), "data directory missing")
         assertTrue(Files.isDirectory(paths.backupsDirectory), "backups directory missing")
         assertTrue(Files.isDirectory(paths.configDirectory), "config directory missing")
+        // The state folder is the diagnostic log's own and is made by its first
+        // line, never at startup (PLAN 14.7.1).
+        assertTrue(!Files.exists(paths.stateDirectory), "the state directory was made at startup")
     }
 
     @Test
