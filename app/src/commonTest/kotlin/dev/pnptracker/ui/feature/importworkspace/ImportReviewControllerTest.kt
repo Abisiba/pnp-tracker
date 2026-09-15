@@ -780,22 +780,6 @@ class ImportReviewControllerTest {
     }
 
     @Test
-    fun `resumable imports are collected as storage reports them`() {
-        val review = FakeReview()
-        val entry = EarlierImport(BATCH_ID, "sample-import.xlsx", "Sayfa1", ImportBatchStatus.DRAFT)
-        runBlocking {
-            val controller = ImportReviewController(review)
-            val job = launch { controller.observeDraftBatches() }
-            yield()
-            review.draftBatches.value = listOf(entry)
-            yield()
-
-            assertEquals(listOf(entry), controller.draftBatches)
-            job.cancelAndJoin()
-        }
-    }
-
-    @Test
     fun `a restore lets go of the workspace, because the import it was about has gone`() {
         val one = block("bir", 1, 1)
         val draft = ReviewDraftTask(IdGenerator.Random.newId(), one.id, "Taslak")

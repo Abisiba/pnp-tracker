@@ -4,6 +4,7 @@ import androidx.room3.ColumnInfo
 import dev.pnptracker.data.database.entity.ImportBatchEntity
 import dev.pnptracker.domain.importhealth.DraftContradiction
 import dev.pnptracker.domain.importhealth.DraftHealth
+import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.ImportBatchStatus
 
 /**
@@ -51,6 +52,51 @@ data class SelectionCandidateRow(
 ) {
     val isBeyondItsText: Boolean get() = selectionEndIndex > rawText.length
 }
+
+/** [DraftHealthFacts] for one draft import, named, as the whole list reads them. */
+data class DraftBatchHealthRow(
+    @ColumnInfo(name = "batch_id")
+    val batchId: EntityId,
+    @ColumnInfo(name = "raw_block_rows")
+    val rawBlockRows: Int,
+    @ColumnInfo(name = "materialized_draft_count")
+    val materializedDraftCount: Int,
+    @ColumnInfo(name = "cell_snapshot_count")
+    val cellSnapshotCount: Int,
+    @ColumnInfo(name = "sourced_task_count")
+    val sourcedTaskCount: Int,
+    @ColumnInfo(name = "sourced_game_count")
+    val sourcedGameCount: Int,
+    @ColumnInfo(name = "hint_outside_game_count")
+    val hintOutsideGameCount: Int,
+) {
+    val facts: DraftHealthFacts
+        get() =
+            DraftHealthFacts(
+                rawBlockRows = rawBlockRows,
+                materializedDraftCount = materializedDraftCount,
+                cellSnapshotCount = cellSnapshotCount,
+                sourcedTaskCount = sourcedTaskCount,
+                sourcedGameCount = sourcedGameCount,
+                hintOutsideGameCount = hintOutsideGameCount,
+            )
+}
+
+/** A [SelectionCandidateRow] of some draft import, naming which. */
+data class DraftBatchSelectionRow(
+    @ColumnInfo(name = "batch_id")
+    val batchId: EntityId,
+    @ColumnInfo(name = "raw_text")
+    val rawText: String,
+    @ColumnInfo(name = "selection_end_index")
+    val selectionEndIndex: Int,
+)
+
+/** One draft import and what its records say about each other. */
+data class DraftBatchHealth(
+    val batch: ImportBatchEntity,
+    val health: DraftHealth,
+)
 
 /**
  * Classifies one import from what was read about it.

@@ -14,6 +14,7 @@ import dev.pnptracker.ui.feature.importreview.ImportController
 import dev.pnptracker.ui.feature.importworkspace.ImportConfirmationController
 import dev.pnptracker.ui.feature.importworkspace.ImportReviewController
 import dev.pnptracker.ui.feature.importworkspace.ImportRollbackController
+import dev.pnptracker.ui.feature.importworkspace.UnfinishedImportsController
 import dev.pnptracker.ui.feature.pools.PoolControllers
 import dev.pnptracker.ui.feature.settings.BackupController
 import dev.pnptracker.ui.feature.settings.RestoreController
@@ -38,6 +39,7 @@ fun PnpTrackerApp(
     reviewController: ImportReviewController,
     confirmationController: ImportConfirmationController,
     rollbackController: ImportRollbackController,
+    unfinishedController: UnfinishedImportsController,
     gameTableController: GameTableController,
     exportController: ExportController,
     backupController: BackupController,
@@ -57,7 +59,14 @@ fun PnpTrackerApp(
     // settings and that is where they stay.
     val staleSurfaces: List<StaleSurfaces> =
         remember(gameTableController, colorCatalogueController, poolControllers, reviewController) {
-            listOf(gameTableController, colorCatalogueController, reviewController, confirmationController, rollbackController) +
+            listOf(
+                gameTableController,
+                colorCatalogueController,
+                reviewController,
+                confirmationController,
+                rollbackController,
+                unfinishedController,
+            ) +
                 poolControllers.all
         }
     CloseStaleSurfacesAfterRestore(restoreController.restoredTick, staleSurfaces)
@@ -72,6 +81,7 @@ fun PnpTrackerApp(
             reviewController = reviewController,
             confirmationController = confirmationController,
             rollbackController = rollbackController,
+            unfinishedController = unfinishedController,
             gameTableController = gameTableController,
             exportController = exportController,
             backupController = backupController,

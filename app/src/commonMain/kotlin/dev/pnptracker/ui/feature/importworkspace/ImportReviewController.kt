@@ -4,7 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.pnptracker.data.repository.DraftEdit
-import dev.pnptracker.data.repository.EarlierImport
 import dev.pnptracker.data.repository.GameChoice
 import dev.pnptracker.data.repository.ImportReview
 import dev.pnptracker.domain.colors.ColorSummary
@@ -46,10 +45,6 @@ class ImportReviewController(
     var state: ImportReviewState by mutableStateOf(ImportReviewState.Loading)
         private set
 
-    /** Imports the user can come back to, kept fresh by [observeDraftBatches]. */
-    var draftBatches: List<EarlierImport> by mutableStateOf(emptyList())
-        private set
-
     /** Every game an accepted green cell could be about, kept fresh. */
     var games: List<GameChoice> by mutableStateOf(emptyList())
         private set
@@ -89,11 +84,6 @@ class ImportReviewController(
     private var analyzedBlockId: EntityId? = null
     private var analyzedVocabulary: ColorVocabulary? = null
     private var analysis: CellHintAnalysis? = null
-
-    /** Collects the list of resumable imports until cancelled. */
-    suspend fun observeDraftBatches() {
-        review.observeDraftBatches().collect { draftBatches = it }
-    }
 
     /** Collects the games a green cell could be about, until cancelled. */
     suspend fun observeGames() {

@@ -22,6 +22,9 @@ import dev.pnptracker.data.database.entity.stageRowsFor
 import dev.pnptracker.data.database.projection.CellColumnRow
 import dev.pnptracker.data.database.projection.CellDocumentRow
 import dev.pnptracker.data.database.projection.CellGameRow
+import dev.pnptracker.data.database.projection.DraftBatchHealth
+import dev.pnptracker.data.database.projection.DraftBatchHealthRow
+import dev.pnptracker.data.database.projection.DraftBatchSelectionRow
 import dev.pnptracker.data.database.projection.DraftHealthFacts
 import dev.pnptracker.data.database.projection.DraftRemovalFacts
 import dev.pnptracker.data.database.projection.DraftTargetRow
@@ -117,7 +120,8 @@ abstract class ImportDao {
         blocks.forEach { insertRawBlock(it) }
     }
 
-    @Query("SELECT * FROM import_batches WHERE status = 'DRAFT' ORDER BY imported_at DESC")
+    /** The same order [observeDraftBatches] gives, so a list and its reading agree. */
+    @Query("SELECT * FROM import_batches WHERE status = 'DRAFT' ORDER BY imported_at DESC, id")
     abstract suspend fun draftBatches(): List<ImportBatchEntity>
 
     @Query("SELECT * FROM import_batches WHERE id = :id")
@@ -439,6 +443,35 @@ abstract class ImportDao {
         val batch = batchById(batchId) ?: return DraftHealth.NotFound(batchId)
         if (batch.status != ImportBatchStatus.DRAFT) return DraftHealth.NotADraft(batchId, batch.status)
         return draftHealthOf(batch, draftHealthFactsOf(batchId), selectionsPastCodePointsOf(batchId))
+    }
+
+    /**
+     * Every draft import, each with what [draftHealthOf] would say about it.
+     *
+     * For the list of unfinished imports, which has to tell the sound drafts
+     * from the contradicting ones before anybody opens either. Asking
+     * [draftHealthOf] once per row would cost three reads a row; this costs
+     * three reads however many drafts there are — the drafts, their counts, and
+     * the few selections that could run past their text — and decides each draft
+     * with the very same pure function, so the two can never disagree.
+     *
+     * One transaction, so a row and the counts held against it come from the
+     * same database. Read only; nothing is caught.
+     */
+    @Transaction
+    open suspend fun healthOfDraftBatches(): List<DraftBatchHealth> {
+        val batches = draftBatches()
+        if (batches.isEmpty()) return emptyList()
+        val facts = draftHealthFactsOfDraftBatches().associateBy { it.batchId }
+        val selections =
+            selectionsPastCodePointsOfDraftBatches().groupBy(
+                keySelector = { it.batchId },
+                valueTransform = { SelectionCandidateRow(it.rawText, it.selectionEndIndex) },
+            )
+        return batches.map { batch ->
+            val counts = checkNotNull(facts[batch.id]) { "The draft import ${batch.id} was read without its counts." }
+            DraftBatchHealth(batch, draftHealthOf(batch, counts.facts, selections[batch.id].orEmpty()))
+        }
     }
 
     // ------------------------------------------- the colours of a draft task
@@ -1020,6 +1053,49 @@ abstract class ImportDao {
         """,
     )
     protected abstract suspend fun selectionsPastCodePointsOf(batchId: EntityId): List<SelectionCandidateRow>
+
+    /**
+     * [draftHealthFactsOf] for every draft import at once, one row each.
+     *
+     * The same six counts, correlated to each batch row inside one statement, so
+     * the number of statements does not grow with the number of drafts.
+     */
+    @Query(
+        """
+        SELECT
+          b.id AS batch_id,
+          (SELECT COUNT(*) FROM raw_import_blocks r WHERE r.import_batch_id = b.id) AS raw_block_rows,
+          (SELECT COUNT(*) FROM draft_tasks d
+             JOIN raw_import_blocks r ON r.id = d.raw_import_block_id
+             WHERE r.import_batch_id = b.id AND d.materialized_task_id IS NOT NULL) AS materialized_draft_count,
+          (SELECT COUNT(*) FROM import_batch_cells c WHERE c.import_batch_id = b.id) AS cell_snapshot_count,
+          (SELECT COUNT(*) FROM tasks t
+             JOIN raw_import_blocks r ON r.id = t.source_raw_import_block_id
+             WHERE r.import_batch_id = b.id) AS sourced_task_count,
+          (SELECT COUNT(*) FROM games g WHERE g.source_import_batch_id = b.id) AS sourced_game_count,
+          (SELECT COUNT(*) FROM raw_import_blocks r
+             WHERE r.import_batch_id = b.id
+               AND r.source_column_type <> 'GAME'
+               AND r.game_completion_hint <> 'NONE') AS hint_outside_game_count
+        FROM import_batches b
+        WHERE b.status = 'DRAFT'
+        """,
+    )
+    protected abstract suspend fun draftHealthFactsOfDraftBatches(): List<DraftBatchHealthRow>
+
+    /** [selectionsPastCodePointsOf] for every draft import at once, each row naming its batch. */
+    @Query(
+        """
+        SELECT r.import_batch_id AS batch_id, r.raw_text AS raw_text, d.selection_end_index AS selection_end_index
+        FROM draft_tasks d
+        JOIN raw_import_blocks r ON r.id = d.raw_import_block_id
+        JOIN import_batches b ON b.id = r.import_batch_id
+        WHERE b.status = 'DRAFT'
+          AND d.selection_end_index IS NOT NULL
+          AND d.selection_end_index > length(r.raw_text)
+        """,
+    )
+    protected abstract suspend fun selectionsPastCodePointsOfDraftBatches(): List<DraftBatchSelectionRow>
 
     /** See [TableCounts]. */
     @Query(

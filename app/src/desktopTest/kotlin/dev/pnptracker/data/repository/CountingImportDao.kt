@@ -15,6 +15,8 @@ import dev.pnptracker.data.database.entity.TaskStageEntity
 import dev.pnptracker.data.database.projection.CellColumnRow
 import dev.pnptracker.data.database.projection.CellDocumentRow
 import dev.pnptracker.data.database.projection.CellGameRow
+import dev.pnptracker.data.database.projection.DraftBatchHealthRow
+import dev.pnptracker.data.database.projection.DraftBatchSelectionRow
 import dev.pnptracker.data.database.projection.DraftHealthFacts
 import dev.pnptracker.data.database.projection.DraftRemovalFacts
 import dev.pnptracker.data.database.projection.DraftTargetRow
@@ -199,6 +201,11 @@ class CountingImportDao(
 
     override suspend fun selectionsPastCodePointsOf(batchId: EntityId): List<SelectionCandidateRow> =
         outOfReach("selectionsPastCodePointsOf")
+
+    override suspend fun draftHealthFactsOfDraftBatches(): List<DraftBatchHealthRow> = outOfReach("draftHealthFactsOfDraftBatches")
+
+    override suspend fun selectionsPastCodePointsOfDraftBatches(): List<DraftBatchSelectionRow> =
+        outOfReach("selectionsPastCodePointsOfDraftBatches")
 
     override suspend fun insertSegment(segment: CellSegmentEntity): Unit = outOfReach("insertSegment")
 

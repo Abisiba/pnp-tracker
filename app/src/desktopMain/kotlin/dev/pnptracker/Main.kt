@@ -23,6 +23,7 @@ import dev.pnptracker.data.repository.TaskEditStore
 import dev.pnptracker.data.repository.TaskExportStore
 import dev.pnptracker.data.repository.TaskFromTextStore
 import dev.pnptracker.data.repository.TaskProgressStore
+import dev.pnptracker.data.repository.UnfinishedImportsStore
 import dev.pnptracker.domain.backup.DatabaseBackupExporter
 import dev.pnptracker.domain.backup.automatic.StartupProblem
 import dev.pnptracker.domain.backup.automatic.StartupRefused
@@ -59,6 +60,7 @@ import dev.pnptracker.ui.feature.importreview.ImportController
 import dev.pnptracker.ui.feature.importworkspace.ImportConfirmationController
 import dev.pnptracker.ui.feature.importworkspace.ImportReviewController
 import dev.pnptracker.ui.feature.importworkspace.ImportRollbackController
+import dev.pnptracker.ui.feature.importworkspace.UnfinishedImportsController
 import dev.pnptracker.ui.feature.pools.PoolControllers
 import dev.pnptracker.ui.feature.settings.BackupController
 import dev.pnptracker.ui.feature.settings.RestoreController
@@ -162,6 +164,10 @@ fun main() {
     // confirmation above wrote, through the very same DAO: PLAN 11.4.4 has one
     // transaction undo the other, so there is one place both live.
     val rollbackController = ImportRollbackController(ImportRollbackStore(database.importDao()))
+    // The unfinished imports are read by the same classifier the confirmation's
+    // two gates use, and removed by the one removal engine there is: PLAN 11.4.5
+    // has a draft be continued or removed, and nothing else done to it.
+    val unfinishedController = UnfinishedImportsController(UnfinishedImportsStore(database, database.importDao()))
     // One catalogue behind both the colour section and the task panel, so a
     // colour the user adds is offered by the panel without a second read.
     val colorCatalogue = ColorCatalogueStore(database.colorDao())
@@ -247,6 +253,7 @@ fun main() {
                 reviewController,
                 confirmationController,
                 rollbackController,
+                unfinishedController,
                 gameTableController,
                 exportController,
                 backupController,

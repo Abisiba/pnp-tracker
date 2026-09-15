@@ -1,26 +1,14 @@
 package dev.pnptracker.ui.feature.importworkspace
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Card
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import dev.pnptracker.domain.model.EntityId
-import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.feature.importreview.ImportController
 import dev.pnptracker.ui.feature.importreview.ImportScreen
-import org.jetbrains.compose.resources.stringResource
 
 /**
  * The import section: choosing a file, and reviewing what an earlier choice
@@ -32,7 +20,7 @@ import org.jetbrains.compose.resources.stringResource
  *
  * The list of unfinished imports is what makes an interrupted review survive the
  * application closing: the drafts are in the database, so they are simply still
- * there the next time this section opens.
+ * there the next time this section opens — to be continued, or removed.
  */
 @Composable
 fun ImportSection(
@@ -40,11 +28,10 @@ fun ImportSection(
     reviewController: ImportReviewController,
     confirmationController: ImportConfirmationController,
     rollbackController: ImportRollbackController,
+    unfinishedController: UnfinishedImportsController,
     modifier: Modifier = Modifier,
 ) {
     var openBatchId: EntityId? by remember { mutableStateOf(null) }
-
-    LaunchedEffect(Unit) { reviewController.observeDraftBatches() }
 
     val batchId = openBatchId
     if (batchId != null) {
@@ -65,52 +52,15 @@ fun ImportSection(
         onOpenReview = { savedBatchId -> openBatchId = savedBatchId },
         modifier = modifier,
     ) {
-        ResumableImports(
-            controller = reviewController,
+        // A draft reaches the review screen from here only once its records
+        // have been read again at the moment of opening (PLAN 11.4.5).
+        UnfinishedImportsSection(
+            controller = unfinishedController,
             onOpen = { resumedBatchId -> openBatchId = resumedBatchId },
         )
         // The two lists are different things and are labelled as such: one is a
         // review to come back to, the other is work already done that PLAN
         // 11.4.4 lets the user undo.
         SettledImportsSection(controller = rollbackController)
-    }
-}
-
-@Composable
-private fun ResumableImports(
-    controller: ImportReviewController,
-    onOpen: (EntityId) -> Unit,
-) {
-    val batches = controller.draftBatches
-    if (batches.isEmpty()) return
-
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(
-            text = stringResource(Strings.Review.resumableTitle),
-            style = MaterialTheme.typography.titleMedium,
-        )
-        Text(
-            text = stringResource(Strings.Review.resumableHint),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        batches.forEach { batch ->
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text(
-                        text = stringResource(Strings.Review.resumableEntry, batch.fileName, batch.sheetName),
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                    TextButton(onClick = { onOpen(batch.batchId) }) {
-                        Text(stringResource(Strings.Review.open))
-                    }
-                }
-            }
-        }
     }
 }

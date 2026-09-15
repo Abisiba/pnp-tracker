@@ -667,7 +667,6 @@ import dev.pnptracker.resources.review_raw_text_accessibility
 import dev.pnptracker.resources.review_raw_text_hint
 import dev.pnptracker.resources.review_raw_text_title
 import dev.pnptracker.resources.review_resumable_entry
-import dev.pnptracker.resources.review_resumable_hint
 import dev.pnptracker.resources.review_resumable_title
 import dev.pnptracker.resources.review_select_cell_accessibility
 import dev.pnptracker.resources.review_selection_none
@@ -876,6 +875,39 @@ import dev.pnptracker.resources.tracking_checklist
 import dev.pnptracker.resources.tracking_counted
 import dev.pnptracker.resources.tracking_pipeline
 import dev.pnptracker.resources.tracking_three_d_batch
+import dev.pnptracker.resources.unfinished_checking
+import dev.pnptracker.resources.unfinished_close
+import dev.pnptracker.resources.unfinished_contradicting_hint
+import dev.pnptracker.resources.unfinished_contradicting_list_label
+import dev.pnptracker.resources.unfinished_contradicting_title
+import dev.pnptracker.resources.unfinished_held_note
+import dev.pnptracker.resources.unfinished_hint
+import dev.pnptracker.resources.unfinished_list_label
+import dev.pnptracker.resources.unfinished_loading
+import dev.pnptracker.resources.unfinished_open
+import dev.pnptracker.resources.unfinished_open_description
+import dev.pnptracker.resources.unfinished_open_refused_contradict
+import dev.pnptracker.resources.unfinished_open_refused_gone
+import dev.pnptracker.resources.unfinished_open_refused_not_draft
+import dev.pnptracker.resources.unfinished_open_refused_unreadable
+import dev.pnptracker.resources.unfinished_refused_already_removed
+import dev.pnptracker.resources.unfinished_refused_could_not_save
+import dev.pnptracker.resources.unfinished_refused_held
+import dev.pnptracker.resources.unfinished_refused_not_a_draft
+import dev.pnptracker.resources.unfinished_refused_title
+import dev.pnptracker.resources.unfinished_remove
+import dev.pnptracker.resources.unfinished_remove_accept
+import dev.pnptracker.resources.unfinished_remove_cancel
+import dev.pnptracker.resources.unfinished_remove_description
+import dev.pnptracker.resources.unfinished_remove_irreversible
+import dev.pnptracker.resources.unfinished_remove_title
+import dev.pnptracker.resources.unfinished_remove_untouched
+import dev.pnptracker.resources.unfinished_remove_what
+import dev.pnptracker.resources.unfinished_remove_which
+import dev.pnptracker.resources.unfinished_removed_body
+import dev.pnptracker.resources.unfinished_removed_title
+import dev.pnptracker.resources.unfinished_removing
+import dev.pnptracker.resources.unfinished_unreadable
 
 /**
  * Every text the user can read, in one place.
@@ -1555,6 +1587,47 @@ object Strings {
         val rolledBack = Res.string.import_status_rolled_back
     }
 
+    /**
+     * The drafts the user has not confirmed: continuing one, and removing one
+     * (PLAN 11.4.5). The title and the row wording are [Review]'s, which the
+     * list has always used.
+     */
+    object Unfinished {
+        val hint = Res.string.unfinished_hint
+        val loading = Res.string.unfinished_loading
+        val unreadable = Res.string.unfinished_unreadable
+        val open = Res.string.unfinished_open
+        val openDescription = Res.string.unfinished_open_description
+        val remove = Res.string.unfinished_remove
+        val removeDescription = Res.string.unfinished_remove_description
+        val checking = Res.string.unfinished_checking
+        val contradictingTitle = Res.string.unfinished_contradicting_title
+        val contradictingHint = Res.string.unfinished_contradicting_hint
+        val heldNote = Res.string.unfinished_held_note
+        val listLabel = Res.string.unfinished_list_label
+        val contradictingListLabel = Res.string.unfinished_contradicting_list_label
+        val openRefusedContradict = Res.string.unfinished_open_refused_contradict
+        val openRefusedGone = Res.string.unfinished_open_refused_gone
+        val openRefusedNotDraft = Res.string.unfinished_open_refused_not_draft
+        val openRefusedUnreadable = Res.string.unfinished_open_refused_unreadable
+        val removeTitle = Res.string.unfinished_remove_title
+        val removeWhich = Res.string.unfinished_remove_which
+        val removeWhat = Res.string.unfinished_remove_what
+        val removeUntouched = Res.string.unfinished_remove_untouched
+        val removeIrreversible = Res.string.unfinished_remove_irreversible
+        val removeAccept = Res.string.unfinished_remove_accept
+        val removeCancel = Res.string.unfinished_remove_cancel
+        val removing = Res.string.unfinished_removing
+        val removedTitle = Res.string.unfinished_removed_title
+        val removedBody = Res.string.unfinished_removed_body
+        val refusedTitle = Res.string.unfinished_refused_title
+        val refusedAlreadyRemoved = Res.string.unfinished_refused_already_removed
+        val refusedNotADraft = Res.string.unfinished_refused_not_a_draft
+        val refusedHeld = Res.string.unfinished_refused_held
+        val refusedCouldNotSave = Res.string.unfinished_refused_could_not_save
+        val close = Res.string.unfinished_close
+    }
+
     /** The confirmed imports, and taking one of them back (PLAN 11.4.4). */
     object Rollback {
         val sectionTitle = Res.string.rollback_section_title
@@ -1743,7 +1816,6 @@ object Strings {
         val back = Res.string.review_back
 
         val resumableTitle = Res.string.review_resumable_title
-        val resumableHint = Res.string.review_resumable_hint
 
         /** Takes the file name and the sheet name. */
         val resumableEntry = Res.string.review_resumable_entry
