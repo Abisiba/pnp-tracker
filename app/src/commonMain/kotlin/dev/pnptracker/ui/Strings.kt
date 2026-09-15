@@ -226,6 +226,7 @@ import dev.pnptracker.resources.export_action_description
 import dev.pnptracker.resources.export_choosing
 import dev.pnptracker.resources.export_dismiss
 import dev.pnptracker.resources.export_error_broken_data
+import dev.pnptracker.resources.export_error_could_not_read
 import dev.pnptracker.resources.export_error_not_atomic
 import dev.pnptracker.resources.export_error_not_writable
 import dev.pnptracker.resources.export_error_nothing
@@ -2216,6 +2217,7 @@ object Strings {
         val title = Res.string.export_error_title
         val nothingToExport = Res.string.export_error_nothing
         val brokenData = Res.string.export_error_broken_data
+        val couldNotRead = Res.string.export_error_could_not_read
         val unsupportedFileType = Res.string.export_error_unsupported_file_type
         val notWritable = Res.string.export_error_not_writable
         val writeFailed = Res.string.export_error_write_failed

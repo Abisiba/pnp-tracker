@@ -1,7 +1,10 @@
 package dev.pnptracker.data.repository
 
+import androidx.sqlite.SQLiteException
 import dev.pnptracker.data.database.dao.TaskExportDao
+import dev.pnptracker.domain.export.ExportFailure
 import dev.pnptracker.domain.export.ExportedTask
+import dev.pnptracker.domain.export.TaskExportException
 import dev.pnptracker.domain.export.exportedTasksOf
 
 /**
@@ -15,8 +18,8 @@ interface TaskExportSource {
      * Every task that will be written out, from one reading of the database.
      *
      * @throws dev.pnptracker.domain.export.TaskExportException if there is
-     *   nothing to write, or if a stored record breaks a guarantee the rest of
-     *   the application maintains.
+     *   nothing to write, if a stored record breaks a guarantee the rest of
+     *   the application maintains, or if storage would not answer.
      */
     suspend fun exportedTasks(): List<ExportedTask>
 }
@@ -33,7 +36,17 @@ class TaskExportStore(
     private val exportDao: TaskExportDao,
 ) : TaskExportSource {
     override suspend fun exportedTasks(): List<ExportedTask> {
-        val snapshot = exportDao.snapshot()
+        val snapshot =
+            try {
+                exportDao.snapshot()
+            } catch (refused: SQLiteException) {
+                // Storage said no while the tasks were being read. Left to travel,
+                // it would pass every catch the screen has and leave the export
+                // stuck half way; as a failure, the user is told and can retry.
+                // A broken invariant is deliberately not caught: that is a defect,
+                // not a reading that did not happen.
+                throw TaskExportException(ExportFailure.COULD_NOT_READ).apply { initCause(refused) }
+            }
         return exportedTasksOf(snapshot.tasks, snapshot.colors)
     }
 }

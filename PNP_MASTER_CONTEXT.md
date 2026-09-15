@@ -7,17 +7,19 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** Faz 3 / İş 7 / **Dilim 4**'ten (arayüz: devam et, kaldır,
-> bozuk taslak uyarısı) sonra — `feat(import): let an unfinished import be
-> continued or removed`. **İş 7 TAMAMLANDI.** İçe Aktarma ekranındaki `Devam
-> eden içe aktarmalar` listesi artık tek toplu sağlık okumasıyla (taslak
-> sayısından bağımsız üç okuma) geçerli taslakları `Devam et` + `Kaldır` ile,
-> kayıtları uyuşmayan taslakları ayrı bölümde yalnız `Kaldır` ile gösteriyor;
-> `Devam et` taze bir sağlık denetiminden geçmeden inceleme ekranına girmiyor;
-> kaldırma odağı `Vazgeç`'te başlayan bir onayla, çift gönderim korumalı olarak
-> Dilim 2'nin motorundan geçiyor. Room şeması ve PLAN değişmedi. Ayrıntı §25.3
-> "İş 7 / Dilim 4'te uygulanan hâli". Faz 3'te sıradaki iş PLAN sırasına göre
-> **İş 9 + İş 5**'tir; dilim planı henüz yazılmamıştır.
+> **Son güncelleme:** Faz 3 / **İş 5** (CSV görev dışa aktarma doğrulaması) —
+> `fix(export): report storage that will not answer instead of hanging`.
+> **İş 5 TAMAMLANDI.** Export sözleşmesi (§25) madde madde gerçek üretim yolu
+> testleriyle eşleştirildi (§25 "Faz 3 / İş 5 — doğrulama matrisi"); eksik
+> maddeler yeni `TaskExportContractTest` ile kapandı ve bir üretim kusuru
+> düzeltildi: depolama okuması düşünce export ekranı meşgul durumda kalıyordu,
+> artık tipli `COULD_NOT_READ` gösteriliyor. Room şeması ve PLAN değişmedi.
+> Sıradaki: İş 9'un eşik gerektirmeyen ölçüm dilimi.
+>
+> Daha önce: İş 7 / Dilim 4 (`feat(import): let an unfinished import be
+> continued or removed`) İş 7'yi tamamladı: `Devam eden içe aktarmalar` listesi
+> tek toplu sağlık okumasıyla geçerli taslakları `Devam et` + `Kaldır` ile,
+> kayıtları uyuşmayan taslakları ayrı bölümde yalnız `Kaldır` ile gösteriyor.
 >
 > Daha önce: İş 7 / Dilim 3 (`feat(import): recognise an unconfirmed import whose
 > records contradict each other`) D1–D9'u gerçek restore hattıyla ölçüp onayı iki
@@ -49,29 +51,30 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-HEAD (bu commit öncesi): 19a9152af438998450d499a3d689397d91d84540
-önceki commit         : feat(import): recognise an unconfirmed import whose records contradict each other
-bu commit             : feat(import): let an unfinished import be continued or removed
+HEAD (bu commit öncesi): 557122ece1eed95e82e60d4d265e2e65fdc2a500
+önceki commit         : feat(import): let an unfinished import be continued or removed
+bu commit             : fix(export): report storage that will not answer instead of hanging
 working tree          : temiz
 Room şema sürümü      : 8   (bu commit'te DEĞİŞMEDİ)
 şema dosyaları        : 1.json … 8.json  hepsi bayt bayt aynı
-test durumu           : 3513 test / 0 failure / 0 error / 0 skipped  (243 sınıf)
-                        [önceki commit 19a9152: 3474 test / 238 sınıf → +39 / +5;
-                         40 yeni test, 1 bilinçli taşınan test]
-                        ./gradlew clean check --rerun-tasks ile bu commit'ten
-                        hemen önce KOŞULDU: BUILD SUCCESSFUL in 2m 32s
-değişen dosyalar      : üretim 13 (yeni: UnfinishedImportsStore, UnfinishedImportsController,
-                        UnfinishedImportsState, UnfinishedImportsSection; değişen:
-                        ImportDao, DraftHealthRows, ImportSection, ImportReviewController,
-                        AppScaffold, PnpTrackerApp, Main, Strings.kt, strings.xml)
-                        test 8 (yeni: UnfinishedImportsDoubles, …ControllerTest,
-                        …SectionTest, …StoreTest, …QueryCountTest, …SmokeTest;
-                        değişen: CountingImportDao, ImportReviewControllerTest)
+test durumu           : dar koşu: export'a dokunan 13 sınıf, 202 test / 0 failure / 0 error /
+                        0 skipped (TaskExportContractTest 11 yeni, ExportScreenTest +1)
+                        [önceki commit 557122e: 3513 test / 243 sınıf; beklenen yeni toplam
+                         3525 / 244 — tam `./gradlew clean check --rerun-tasks` bu turun
+                         üç commit'inden SONRA koşulur ve sonucu İş 8 commit'inde yazılır]
+değişen dosyalar      : üretim 5 (TaskExportStore, TaskExportFailure, ExportSection,
+                        Strings.kt, strings.xml)
+                        test 2 (yeni: TaskExportContractTest; değişen: ExportScreenTest)
                         PNP_MASTER_CONTEXT.md
 PLAN.md               : bu commit'te DEĞİŞMEDİ
 ```
 
-**Bu commit Faz 3 / İş 7'nin dördüncü ve son dilimidir; İŞ 7 TAMAMLANDI.**
+**Bu commit Faz 3 / İş 5'tir; İŞ 5 TAMAMLANDI.** CSV export sözleşmesinin her
+maddesi gerçek üretim yolunu kullanan bir testle eşleşiyor (§25 matris). Testin
+bulduğu tek üretim kusuru düzeltildi: `TaskExportStore` depolama hatasını ham
+bırakıyordu ve export ekranı meşgul kalıyordu; artık `COULD_NOT_READ`.
+
+**Bir önceki commit (`557122e`) Faz 3 / İş 7'nin dördüncü ve son dilimiydi; İŞ 7 TAMAMLANDI.**
 Kullanıcı artık onaylanmamış bir içe aktarmaya kaynak dosya olmadan devam
 edebiliyor ya da açık onayla kaldırabiliyor. Liste `ImportDao.healthOfDraftBatches`
 ile (tek transaction, taslak sayısından bağımsız üç okuma; tekil
@@ -241,7 +244,7 @@ değişti.
 
 ```text
 PLAN.md  a266824ba28e1b90b3f650575905587951b5309debdfc62a56f7d2bdfbadff04
-         (İş 7 Dilim 1, 2, 3 ve 4 PLAN'ı DEĞİŞTİRMEDİ; değer İş 7 belge turundan aynen gelir.
+         (İş 7 Dilim 1–4 ve İş 5 PLAN'ı DEĞİŞTİRMEDİ; değer İş 7 belge turundan aynen gelir.
           Ondan önceki değer
           db891ba8362bb5ee837535aa042b8414ac2062d97a8fa25bff744884b09a3455)
 
@@ -272,7 +275,7 @@ veritabanının parmak izi orada durmamalıdır. Bunun yerine kural şudur:
 
 Gerçek DB hiçbir aşamada açılmaz, kopyalanmaz veya migrate edilmez. Bütün testler ve
 manuel turlar geçici Room veritabanları ve geçici XDG dizinleri kullanır. Bu koruma
-`assertRealApplicationDatabaseUntouched` yardımcı fonksiyonuyla **100 test sınıfında**
+`assertRealApplicationDatabaseUntouched` yardımcı fonksiyonuyla **101 test sınıfında**
 uygulanmaktadır. Sayı tek bir yerde tutulur; §29 aynı değeri anar ve tarama
 `grep -rl 'assertRealApplicationDatabaseUntouched' app/src/*Test` ile yapılır.
 
@@ -1296,6 +1299,74 @@ Sıra: hedef seçimi → overwrite kararı → tek read snapshot → bayt üreti
 yazma. Geçici dosya hedefle **aynı dizinde** açılır, sonra atomik taşınır. Atomik
 taşıma desteklenmiyorsa **veri kaybettiren fallback yoktur**; tipli hata verilir ve
 eski dosya korunur. Her hatada geçici dosya silinir ve hedef bayt bayt aynı kalır.
+
+Depolama okuması düşerse (`SQLiteException`) export tipli `COULD_NOT_READ` ile
+durur; hiçbir dosya oluşturulmaz veya değiştirilmez ve ekran yeniden denemeye
+izin verir (İş 5'te eklendi, aşağıda).
+
+## Faz 3 / İş 5 — doğrulama matrisi  *(TAMAMLANDI)*
+
+PLAN `18.` Faz 3 İş 5 ("CSV görev dışa aktarmayı doğrula") ve Faz 3 testi
+"CSV dışa aktarma doğruluğu" yalnız başlıktır; ölçüt yukarıdaki sözleşmedir
+(PLAN `11.8` başlığı + `14.4` + bu bölüm). Her madde, gerçek üretim yolunu
+kullanan en az bir testle eşleştirildi. `Contract` = yeni
+`platform/exportfiles/TaskExportContractTest` (gerçek Room DB + `TaskExportStore`
++ `ExportController` + `DesktopExportFileGateway` + gerçek `AtomicFileWriter`).
+
+```text
+madde                                  kanıt (test sınıfı)
+başlık ve sütun sırası                 TaskCsvTest · Contract "exactly the bytes"
+her Task tek satır, çok renk çoğalmaz  TaskExportSnapshotTest · Contract "progress, stages and flags"
+aktif + tamamlanmış + bilgi eksik      TaskExportStoreTest · Contract "a thousand tasks"
+soft-delete görev / silinmiş oyun      TaskExportStoreTest, TaskExportEndToEndTest (görev),
+                                       TaskExportSnapshotTest (saf) · Contract "deleted game" (GERÇEK DB)
+metne dönüştürülmüş görev yazılmaz     TaskConversionHistoryTest
+arama/filtre kapsamı değiştirmez       yapısal: TaskExportSource.exportedTasks() parametre almaz;
+                                       ExportScreenTest kapsam cümlesi; TaskExportStoreTest filtre 0 ifade
+progress/stage/batch/segment satır olmaz Contract "progress, stages and flags" (gerçek olay + aşama)
+alan kaynakları (güncel ad, gerçek     TaskExportStoreTest · Contract "stored now" (oyun adı değişti,
+  columnType, gerçek poolType, notlar)  renk renameAndRecolor ile, görev editTask ile)
+column ≠ pool → bütünlük hatası        TaskExportSnapshotTest · Contract "pool its column does not feed"
+renkler slotIndex sırası, "|" birleşik TaskExportStoreTest · Contract "exactly the bytes", "progress…"
+kaçış \ → \\, | → \|                   TaskCsvTest (geri okuma) · Contract "exactly the bytes" (gerçek renk adı)
+sıfır renk → boş hücre                 TaskCsvTest · Contract "exactly the bytes"
+duplicate renk / bozuk slot → hata,    TaskExportSnapshotTest · Contract "broken colour slot" (eski hedef
+  hedef değişmez                        dosya bayt bayt aynı, klasörde başka dosya yok)
+required_quantity yalnız rakam / boş   TaskCsvTest · Contract "exactly the bytes"
+status önceliği needsInfo>completed>open TaskExportSnapshotTest · Contract (needsInfo + completed → bilgi eksik)
+MISSING/BORROWED/eksik miktar/aşama     Contract "progress, stages and flags" (hepsi "açık")
+  status üretmez
+notes aynen, null/boş → boş, trim yok  TaskCsvTest · Contract "exactly the bytes"
+UTF-8 BOM (EF BB BF, bir kez) + CRLF   CsvWriterTest · Contract "exactly the bytes", "a thousand tasks"
+  (son kayıt dâhil)
+RFC 4180: virgül, tırnak, satır sonu   CsvWriterTest · TaskExportEndToEndTest · Contract "exactly the bytes"
+Türkçe / Unicode / emoji               CsvWriterTest · TaskExportEndToEndTest · Contract "a thousand tasks"
+formül koruması (= + - @, tab/CR/LF,   SpreadsheetSafeTextTest · TaskCsvTest · TaskExportEndToEndTest ·
+  baştaki boşluk korunur, adet hariç)   Contract "exactly the bytes" (' -iki, '\tsekmeli)
+1.000+ görev                           TaskExportStoreTest (1.082, sorgu) · Contract (1.200 üretilen,
+                                       1.054 yazılan: silinmiş görev + silinmiş oyun hariç)
+deterministik bayt                     TaskCsvTest · TaskExportEndToEndTest (8) · Contract (1.054 görev, iki export)
+sorgu şekli + 0 yazma + tek transaction TaskExportStoreTest
+atomik yazma, eski hedef korunur       AtomicFileWriterTest · Contract: NOT_ATOMIC, WRITE_FAILED (yarım
+                                       yazılmış geçici dosya), NOT_WRITABLE — üçünde de eski hedef bayt
+                                       bayt aynı ve klasörde yalnız o dosya
+üzerine yazma onayı / vazgeç           ExportControllerTest · TaskExportEndToEndTest · ExportScreenTest
+depolama okuması düşerse               Contract "storage that will not answer" → COULD_NOT_READ (YENİ)
+kullanıcıya yol/teknik hata sızmaz     ExportScreenTest "every failure…" — 7 ExportFailure'ın hepsi ekranda,
+                                       720 px, yasaklı: Exception, SQL, SELECT, /, \, java., dev.pnptracker,
+                                       null, tasks, enum adları; 7 ayrı cümle · TaskExportEndToEndTest
+                                       (state'te yol yok) · TaskExportSnapshotTest (ret mesajı)
+```
+
+**Bulunan ve düzeltilen üretim kusuru** — `fix(export): report storage that will
+not answer instead of hanging`: `TaskExportStore` bir `SQLiteException`'ı olduğu
+gibi bırakıyordu; `ExportController` yalnız `TaskExportException` yakaladığı için
+exception coroutine'den dışarı çıkıyor ve ekran `Writing` (meşgul, düğme kapalı)
+durumunda kalıyordu. Test önce **kırmızı** koştu (ham `SQLiteException` ile düştü),
+sonra düzeltildi. Düzeltme `BackupController`'ın `COULD_NOT_READ_DATABASE`
+kalıbının aynısıdır: yeni `ExportFailure.COULD_NOT_READ` + tek Türkçe cümle
+(`export_error_could_not_read`); `IllegalStateException` ve diğer programlama
+hataları **yakalanmaz**. Başka davranış değişmedi.
 
 ---
 
@@ -3743,7 +3814,7 @@ geçmez. Hash'i dilim başında/sonunda kontrol edilir ve kapsam dışında değ
 
 ```text
 TemporaryDatabaseDirectory              geçici Room DB + gerçek DB koruma iddiası
-assertRealApplicationDatabaseUntouched  100 test sınıfında kullanılıyor
+assertRealApplicationDatabaseUntouched  101 test sınıfında kullanılıyor
 CommittedSchema                         eski sürümleri commit'li JSON'dan kurar
 LegacyRowFixtures                       v1…v6 satır yazıcıları
                                         (v6 raw block = v7 raw block; şema aynı)
@@ -4028,7 +4099,7 @@ yardımcı işler
       yapılandırılmış görev CSV dışa aktarma
 ```
 
-## Faz 3 — BAŞLADI, 16 İŞTEN 5'İ BİTTİ
+## Faz 3 — BAŞLADI, 16 İŞTEN 6'SI BİTTİ
 
 PLAN `18.` — Faz 3 işler listesi.
 
@@ -4037,8 +4108,8 @@ PLAN `18.` — Faz 3 işler listesi.
  2  Import batch rollback ve korumalı geri alma ......... TAMAM (üç dilim)
  3  Sürümlü JSON yedek/dışa aktarma ve geri yükleme ..... TAMAM (dört dilim)
  4  Import ve migration öncesi otomatik snapshot ........ TAMAM (dört dilim, §25.2)
- 5  CSV görev dışa aktarmayı doğrula ......... özellik var, Faz 3 doğrulama
-                                              testleri yazılmadı
+ 5  CSV görev dışa aktarmayı doğrula ............... TAMAM (matris §25; bir
+                                              kusur düzeltildi: COULD_NOT_READ)
  6  Veritabanı migration testlerini oluştur ............. TAMAM
  7  Beklenmeyen kapanış / bozuk import kurtarma ......... TAMAM (dört dilim, §25.3)
                                                         (PLAN sırası: 7 → 9+5 → 10)
@@ -4107,10 +4178,9 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
 
 ## Sıradaki bağlayıcı iş
 
-> **İş 7 TAMAMLANDI. PLAN sırasına göre sıradaki: İş 9 (büyük veri performansı) +
-> İş 5 (CSV dışa aktarma doğrulaması).** İkisinin de dilim planı henüz
-> yazılmamıştır; başlamadan önce kapsam ve kabul ölçütleri kullanıcıyla
-> kesinleştirilmelidir. Aşağıdaki not İş 7'nin kapanış özetidir.
+> **İş 5 TAMAMLANDI (§25 matris).** Kullanıcının talimatıyla bu turda sıra:
+> İş 9'un süre eşiği gerektirmeyen ölçüm dilimi → İş 8 taraması. İş 10 ve
+> sonrası karar bekler. Aşağıdaki not İş 7'nin kapanış özetidir.
 >
 > İş 7'nin sözleşmesi yazıldı (PLAN `11.4.5`, `16.`, `17.`, `18.`; özet, repo
 > denetimi ve uygulanan hâl §25.3). Kararlar verilmiştir ve yeniden
@@ -4717,8 +4787,8 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   her içe aktarma onayı öncesi doğrulanmış snapshot + yarış koruması, ve
   migration öncesi eşleşmiş set + açılış kapısı. Kararlar PLAN 14.4.7-14.4.13,
   uygulanan hâli §25.2. Yeniden tartışma.
-  İŞ 7 TAMAMLANDI. PLAN sırasına göre sıradaki: İŞ 9 + İŞ 5 — dilim planı yazılmadı;
-  kapsamı kullanıcıyla kesinleştirmeden kod yazma.
+  İŞ 7 TAMAMLANDI. İŞ 5 TAMAMLANDI (CSV export matrisi §25; depolama okuma hatası
+  tipli COULD_NOT_READ — export'ta SQLiteException'ı ham bırakma).
 - İş 7 / Dilim 1 BİTTİ (yalnız test): dört yazma yolu gerçek ikinci JVM'de
   transaction içinde ve commit sonrası SIGKILL ile kesildi; hepsi ya hep ya hiç.
   Ölçülen kalıcılık: journal_mode = wal, synchronous = 1 (NORMAL). synchronous'u

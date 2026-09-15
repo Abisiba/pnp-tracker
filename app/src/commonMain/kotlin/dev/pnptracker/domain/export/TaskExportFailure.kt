@@ -15,6 +15,14 @@ enum class ExportFailure {
     /** Something stored is not what the rest of the application guarantees. */
     BROKEN_DATA,
 
+    /**
+     * Storage would not answer while the tasks were being read.
+     *
+     * Not [BROKEN_DATA]: nothing is known to be wrong with any record, only that
+     * this reading of them did not happen. No file was made or changed.
+     */
+    COULD_NOT_READ,
+
     /** The chosen name is not a `.csv`, and this writes nothing else. */
     UNSUPPORTED_FILE_TYPE,
 

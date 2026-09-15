@@ -166,6 +166,30 @@ class ExportScreenTest {
     }
 
     @Test
+    fun `every failure is said in its own words, with nothing technical in them`() {
+        val sentences =
+            ExportFailure.entries.associateWith { failure ->
+                val controller = controllerFor(source = FixedTasks(emptyList(), failure))
+                runBlocking { controller.exportTasks() }
+                var shown = ""
+                onScreen(controller, width = 720, height = 880) { harness ->
+                    assertTrue(harness.saying("Görevler dışa aktarılamadı"), "$failure drew no failure: ${harness.writtenText()}")
+                    shown = harness.writtenText().joinToString("\n")
+                    harness.nodes().forEach { node ->
+                        assertTrue(node.boundsInRoot.right <= 721f, "the $failure sentence ran past a 720 wide window")
+                    }
+                }
+                val forbidden =
+                    listOf("Exception", "SQL", "SELECT", "/", "\\", "java.", "dev.pnptracker", "null", "tasks", failure.name) +
+                        ExportFailure.entries.map { it.name }
+                forbidden.forEach { word -> assertTrue(word !in shown, "`$word` reached the screen for $failure:\n$shown") }
+                shown
+            }
+
+        assertEquals(ExportFailure.entries.size, sentences.values.toSet().size, "two failures share one sentence: $sentences")
+    }
+
+    @Test
     fun `changing one's mind says nothing at all`() {
         val controller = controllerFor(destination = null)
         runBlocking { controller.exportTasks() }

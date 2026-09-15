@@ -140,6 +140,7 @@
     <string name="export_error_title">Görevler dışa aktarılamadı</string>
     <string name="export_error_nothing">Dışa aktarılacak görev yok. Dosya oluşturulmadı.</string>
     <string name="export_error_broken_data">Kayıtlardan biri okunamadı. Hiçbir dosya oluşturulmadı veya değiştirilmedi.</string>
+    <string name="export_error_could_not_read">Görevler okunamadı. Hiçbir dosya oluşturulmadı veya değiştirilmedi. Uygulamayı kapatıp yeniden açmayı deneyin.</string>
     <string name="export_error_unsupported_file_type">Dosya adı .csv ile bitmelidir.</string>
     <string name="export_error_not_writable">Bu konuma yazılamadı. Yazma izniniz olmayabilir.</string>
     <string name="export_error_write_failed">Dosya yazılamadı. Varsa eski dosya olduğu gibi kaldı.</string>

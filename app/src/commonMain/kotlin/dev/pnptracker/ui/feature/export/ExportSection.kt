@@ -227,6 +227,7 @@ internal fun messageFor(failure: ExportFailure): StringResource =
     when (failure) {
         ExportFailure.NOTHING_TO_EXPORT -> Strings.ExportErrors.nothingToExport
         ExportFailure.BROKEN_DATA -> Strings.ExportErrors.brokenData
+        ExportFailure.COULD_NOT_READ -> Strings.ExportErrors.couldNotRead
         ExportFailure.UNSUPPORTED_FILE_TYPE -> Strings.ExportErrors.unsupportedFileType
         ExportFailure.NOT_WRITABLE -> Strings.ExportErrors.notWritable
         ExportFailure.WRITE_FAILED -> Strings.ExportErrors.writeFailed
