@@ -1033,7 +1033,8 @@ Açıkça **bozuk sayılmayanlar**:
   taslaklar, ve şema 5'ten gelen, oyunu seçilmemiş kabul edilmiş yeşil hücre
   kararı — ikisi de belgelenmiş geçerli durumlardır.
 - `updated_at < created_at` gibi zaman damgası tersliği — geriye giden bir
-  sistem saatiyle üretim yolunda da oluşur ve İş 7'nin konusu değildir (İş 10).
+  sistem saatiyle üretim yolunda da oluşur ve bir bütünlük kuralı değildir
+  (`14.7.3`).
 - Kaynak dosyanın kaybolması veya değişmesi.
 - Hiç görev taslağı olmayan veya hiç bloğu işlenmemiş bir `DRAFT`.
 
@@ -1068,14 +1069,17 @@ gerçek yedek okuyucusu ve gerçek geri yükleme hattıyla **ölçülerek** kan�
   JSON'dur (`14.4.3`).
 - Bütün veritabanının `integrity_check` başarısızlığı bozuk içe aktarma ile
   **aynı şey değildir**. Güvenli bir genel veritabanı kurtarma tasarımı olmadan
-  otomatik düzeltme, dosya takası veya silme yapılmaz; bu ayrı ve açık bir
-  risktir.
+  otomatik düzeltme, dosya takası veya silme yapılmaz. İş 10'daki sınırı
+  `14.7.4`'tedir: tespit edilir, açılış durdurulur, veri korunur; kurtarma ayrı
+  bir tasarımdır.
 - Yedek okuyucusunun import yaşam döngüsü kurallarını da denetlemesi İş 7'de
   yapılmaz: bu kuralları taşıyan bir veritabanı zaten geri yüklenmişse, okuyucuyu
   sıkılaştırmak o veritabanının her içe aktarma snapshot'ını doğrulanamaz kılar
-  ve `14.4.13` gereği bütün içe aktarmaları durdurur. Bu açık bir risktir.
-- Geriye giden sistem saati (`updated_at < created_at`) İş 7'de çözülmez; İş 10'un
-  bütünlük ve doğrulama kapsamındadır.
+  ve `14.4.13` gereği bütün içe aktarmaları durdurur. İş 10'daki çözümü
+  `14.7.5`'tedir: okuyucu sıkılaştırılmaz; denetim, kullanıcının seçtiği yedeğin
+  geri yükleme onayından önce ve geri almanın içinde yapılır.
+- Geriye giden sistem saati (`updated_at < created_at`) İş 7'de çözülmez; kararı
+  `14.7.3`'tedir.
 - Beklenmeyen kapanışın `backups/` altında bırakabileceği boş ad rezervasyonları
   ve `.part` dosyaları için temizlik eklenmez. `14.4.11` gereği rotation bunları
   sahiplenmez, saymaz ve silmez; yedek okuyucusu boş dosyayı tipli bir sebeple
@@ -1577,9 +1581,13 @@ Varsayılan sıralama:
 $XDG_DATA_HOME/pnp-tracker/pnp.db
 $XDG_DATA_HOME/pnp-tracker/backups/
 $XDG_CONFIG_HOME/pnp-tracker/settings.json
+$XDG_STATE_HOME/pnp-tracker/logs/          (tanılama kayıtları, 14.7.1)
 ```
 
-XDG değişkeni tanımlı değilse standart kullanıcı dizini fallback’i kullanılmalıdır.
+XDG değişkeni tanımlı değilse standart kullanıcı dizini fallback’i kullanılmalıdır
+(`XDG_STATE_HOME` için `~/.local/state`). Tanılama kayıtları veri, yedek ve ayar
+alanlarına **yazılmaz**; o alanlardaki hiçbir dosya log sistemi tarafından
+okunmaz, taşınmaz veya silinmez.
 
 `settings.json` sürümlü, düz UTF-8 bir JSON belgesidir ve **veritabanının
 dışındadır**: bir geri yükleme kullanıcının ayarını değiştirmez, ve açılış
@@ -1895,7 +1903,10 @@ Ortak kurallar:
   (`14.4.1`): `formatVersion` 1, 15 tablo, zorunlu `dataSha256`. İkinci bir biçim
   yoktur.
 - Kullanıcı bu dosyayı `Ayarlar → Yedekten geri yükle` ile açabilir. Bunun tek
-  istisnası migration setinin ham `.db` eşidir (`14.4.9`).
+  istisnası migration setinin ham `.db` eşidir (`14.4.9`). Snapshot, canlı
+  veritabanı kesin bir içe aktarma yaşam döngüsü çelişkisi taşırken alınmışsa
+  geri yükleme onayından önce tipli olarak reddedilir (`14.7.5`); snapshot'ın
+  kendisinin alınması ve doğrulanması bundan etkilenmez.
 - Dosya, `$XDG_DATA_HOME/pnp-tracker/backups/` altına atomik olarak yazılır
   (`14.4.5`). Hedefi kullanıcı seçmez.
 - **Yazıldığı iddia edilen her JSON snapshot, yazıldıktan sonra gerçek
@@ -2037,6 +2048,11 @@ Gerçek veritabanı Room tarafından açılmadan önce sıra kesindir:
 olursa, her iki snapshot artefaktı da korunur ve kullanıcı güvenli açılış hata
 penceresini görür.
 
+`14.7.4` bu sıraya, 2. adımda sürüm okunduktan hemen sonra ve 3.–5. adımlardan
+önce, sürümü `1..8` olan mevcut bir veritabanı için salt okunur bütünlük
+denetimini ekler. Numaralar değişmez; denetim geçmeyen veritabanı için 3.–17.
+adımların hiçbiri çalışmaz (kilit yine bırakılır).
+
 Gerçek veritabanı dosyası, snapshot üretimi dışında hiçbir biçimde değiştirilmez.
 Bir snapshot'ı geri yüklemek için veritabanı, `-wal` veya `-shm` dosyası takas
 **edilmez** (`14.4.3`'ün aynı yasağı).
@@ -2090,6 +2106,11 @@ Döngüsel saklama kuralları:
 - Sıralama, dosya adındaki kanonik zaman damgası ve soneki üzerinden **kararlı**
   yapılır; `mtime`'a güvenilmez, çünkü kopyalama ve eşitleme onu değiştirir,
   adı ise değiştirmez.
+- **Az önce yazılıp doğrulanan yedek hiçbir koşulda fazlalık sayılmaz.** Kota
+  yeni yedek dahil sayılır: yeni yedek ve kendi türünün geri kalanından adına
+  göre en yeni `automaticBackupCount - 1` kayıt tutulur. Sistem saati geri
+  gittiğinde yeni yedeğin adı eskilerinkinden önce sıralanabilir; bu durumda
+  bile silinen o olamaz (`14.7.3`).
 - Rotation durum tutmaz: her çalıştırmada dizini yeniden okur, dolayısıyla
   çökme sonrası tekrar çalıştırılabilir ve **idempotenttir**.
 - Rotation dizin dışına çıkmaz ve symlink takip etmez.
@@ -2159,6 +2180,8 @@ etkidir. `Ayarlar` ekranı bu gecikmeyi kısa ve anlaşılır bir metinle açık
   reddedilir (`14.4.8`).
 - Snapshot seti ile gerçek migration'ın başlangıcı arasındaki koruma
   doğrulanamazsa migration başlamaz.
+- Canlı veritabanı açılış bütünlük denetiminden geçmezse veritabanı açılmaz,
+  snapshot seti üretilmez ve hiçbir dosya değiştirilmez (`14.7.4`).
 
 **Fail open** — kullanıcı verisi risk altında değilse işlem sürer:
 
@@ -2190,6 +2213,723 @@ Kütüphane sürümleri geliştirmeye başlanırken uyumluluk matrisiyle birlikt
 - [Compose Multiplatform masaüstü dağıtımları](https://kotlinlang.org/docs/multiplatform/compose-native-distribution.html)
 - [Room KMP kurulumu ve JVM Desktop desteği](https://developer.android.com/kotlin/multiplatform/room)
 - [Apache POI HSSF/XSSF kullanım rehberi](https://poi.apache.org/components/spreadsheet/quick-guide.html)
+
+### 14.7 Tanılama kayıtları ve veri bütünlüğü hata semantiği
+
+Bu bölüm `18.` Faz 3 / İş 10'un bağlayıcı sözleşmesidir. Kararlar
+kesinleşmiştir ve yeniden tartışılmaz. Beş konuyu kapsar: tanılama kaydının
+biçimi (`14.7.1`), hangi hata sınırının kayıt ürettiği (`14.7.2`), sistem
+saatinin geriye gitmesi (`14.7.3`), canlı veritabanında bütünlük hatası
+(`14.7.4`) ve içe aktarma yaşam döngüsü çelişkileri (`14.7.5`). Uygulama sırası
+`14.7.6`'dadır. Hiçbir dilim Room şemasını veya migration zincirini değiştirmez
+ve yeni bir bağımlılık eklemez.
+
+#### 14.7.1 Tanılama kaydı sözleşmesi
+
+Tanılama kaydı, bir şeyin **neden başarısız olduğunu** geliştiriciye ve destek
+verene söyler. Kullanıcıya gösterilmez, ağa gönderilmez, telemetri değildir ve
+kullanıcı verisi taşımaz. Kullanıcıya gösterilen hata metinleri bugünkü gibi
+tiplidir ve Türkçedir; log sistemi arayüze hiçbir metin taşımaz ve arayüzün
+gösterdiği hiçbir şeyi değiştirmez.
+
+**Bağımlılık.** Yeni üçüncü taraf kütüphane yoktur. Yazıcı JDK'nın `java.nio`
+API'leriyle, satır kodlaması projede zaten bulunan `kotlinx-serialization-json`
+ile yapılır.
+
+**Yer ve adlar.**
+
+```text
+dizin        $XDG_STATE_HOME/pnp-tracker/logs/     (tanımsız veya mutlak değilse
+                                                    ~/.local/state/pnp-tracker/logs/)
+etkin dosya  pnp-tanilama.jsonl
+eski dosyalar pnp-tanilama.1.jsonl … pnp-tanilama.4.jsonl   (1 en yeni)
+süreç kilidi pnp-tanilama.lock
+izinler      dizin 0700, dosyalar 0600
+```
+
+- Dizin ve dosyalar **ilk kayıt yazılırken** oluşturulur. Hiçbir hata yaşanmayan
+  bir çalışma durum dizininde hiçbir şey oluşturmaz.
+- Log sistemi `$XDG_DATA_HOME`, `backups/` ve `$XDG_CONFIG_HOME` altında hiçbir
+  dosyayı okumaz, yazmaz, taşımaz veya silmez.
+- `logs` bir sembolik bağ, dizin olmayan bir nesne veya açılamayan bir yolsa o
+  süreç boyunca kayıt yazılmaz; bağ takip edilmez.
+
+**Biçim.** UTF-8 JSON Lines. BOM yoktur. Her satır tek bir JSON nesnesidir, tek
+bir olay taşır, `\n` ile biter ve kendi başına ayrıştırılabilir. Pretty-print
+yoktur; JSON kaçışları satırın içinde satır sonu bırakmaz. Bir satır en fazla
+2 KiB'tır; sınırı aşacak bir kayıt yazılmaz ve düşürülmüş sayılır.
+
+**Kayıt sözleşmesi, sürüm 1.** Alanlar bu sırayla yazılır:
+
+```text
+alan       zorunlu  tür      içerik
+v          evet     sayı     kayıt biçiminin sürümü: 1
+seq        evet     sayı     bu süreçte yazılan kaydın sırası, 1'den başlar
+at         evet     metin    UTC, milisaniyeli ISO-8601: 2026-09-15T08:21:04.512Z
+level      evet     metin    INFO | WARN | ERROR
+event      evet     metin    14.7.2'deki kapalı olay listesinden bir kod
+app        evet     metin    uygulama sürümü (AppInfo), major.minor.patch
+schema     evet     sayı     bu derlemenin Room şema sürümü
+reason     hayır    metin    olayın kendi tipli sonucunun sabit adı (enum)
+area       hayır    metin    olayın geçtiği uygulama bölgesinin sabit adı
+place      hayır    metin    yalnız yedek reddinde: yedek biçiminin kendi dizi ve
+                             alan adları ("tasks.updatedAt"); başka değer yazılmaz
+fromSchema hayır    sayı     yalnız migration olayında
+toSchema   hayır    sayı     yalnız migration olayında
+count      hayır    sayı     yalnız 14.7.2'de sayı taşıdığı yazılan olaylarda
+exception  hayır    metin    beklenmeyen veya depolama hatasının sınıf adı
+cause      hayır    metin    aynı hatanın kök nedeninin sınıf adı
+```
+
+- Bilinmeyen alan okuyucu tarafından **yok sayılır**; bir alanın anlamı
+  değişirse `v` artar.
+- Satırlar dosyadaki **yazılış sırasıyla** okunur. `at` sistem saatidir ve geri
+  gidebilir (`14.7.3`); okuyucu satırları `at`'e göre sıralamaz. `seq` her
+  süreçte 1'den başlar; bir boşluk düşürülmüş kayıt demektir.
+- Ayrıştırılamayan satır (örneğin çökmede yarım kalmış son satır) atlanır;
+  sonraki satırları geçersiz kılmaz.
+
+**Seviyeler** yalnız üçtür: `INFO` (kullanıcı verisini bütünüyle değiştiren
+seyrek bir olayın başarısı), `WARN` (işlem reddedildi veya yarım kaldı, veri
+risk altında değil), `ERROR` (kullanıcının istediği işlem depolama, dosya
+sistemi veya beklenmeyen bir hata yüzünden gerçekleşmedi).
+
+**Kayda asla yazılmayanlar:** görev, oyun, hücre, renk, not veya ham blok
+metni; içe aktarılan veya yedekten okunan herhangi bir değer; dosya adı (içe
+aktarma, yedek ve CSV dosyası adları kullanıcı verisidir); mutlak veya göreli
+yol; kullanıcı adı, makine adı, ortam değişkeni; UUID ve başka herhangi bir
+kimlik; SQL; PRAGMA çıktısı; ham exception mesajı; stack trace; suppressed
+exception'lar. Kayıt API'si bunları taşıyabilecek bir metin parametresi
+**almaz**: her olay yalnız sabit adlı tiplerden (enum), sayılardan ve sınıf
+adlarından kurulur.
+
+**Exception sınıf adı kararı.** Beklenmeyen veya depolama kaynaklı bir hatada
+yalnız hatanın kendi sınıfının tam adı (`exception`) ve neden zincirinin
+sonundaki sınıfın tam adı (`cause`) yazılabilir. Gerekçe: bir JVM sınıf adı
+derleme zamanında kod tarafından belirlenir; kullanıcının yazdığı, içe aktardığı
+veya seçtiği hiçbir değer bir sınıf adına giremez; bu depo açık kaynak
+yayınlanacağı için uygulamanın kendi sınıf adları zaten gizli değildir. Yol ve
+kullanıcı içeriği exception **mesajında** ve **stack trace**'te durur
+(örneğin dizin oluşturma hatası mutlak yolu, geri alma postcondition'ı görev
+kimliğini mesaja yazar); bu yüzden ikisi hiçbir koşulda yazılmaz. Sınıf adı
+`[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*` biçimine uymuyorsa veya
+200 karakteri aşıyorsa (örneğin JVM'in gizli lambda sınıfları) yerine `?`
+yazılır. Neden zinciri en fazla 16 adım ve döngüye karşı korumalı yürünür.
+
+**Yazıcı.**
+
+- Kayıt isteği çağıranı **bekletmez ve exception fırlatmaz**. İstek sınırlı bir
+  kuyruğa (256 kayıt) bırakılır; kuyruk doluysa kayıt düşürülür ve düşürülenler
+  sayılır. Yer açıldığında `diagnostics.records_dropped` olayı `count` ile yazılır.
+- Kuyruğu **tek bir yazıcı iş parçacığı** boşaltır. Bir satır tek bir tam
+  tampon olarak `APPEND` ile yazılır; aynı süreçteki eşzamanlı istekler satırları
+  birbirine karıştıramaz.
+- Satır başına `fsync` yapılmaz. Süreç öldürülmesi en fazla yazılmakta olan son
+  satırı eksik bırakır; işletim sistemi çökmesi veya güç kesintisi son birkaç
+  satırı kaybettirebilir. Bu bilinçlidir: kayıt kullanıcı verisi değildir ve
+  kullanıcı verisinin kalıcılığı SQLite'ın işidir (`11.4.5`).
+- Etkin dosya açılırken son baytı `\n` değilse önce bir `\n` yazılır; yarım
+  kalmış satır böylece yeni satırlarla birleşmez.
+- Yazma veya rotation sırasında dosya sistemi hatası olursa o kayıt düşürülür;
+  art arda üç başarısızlıktan sonra o süreç boyunca kayıt yazılmaz. Hiçbir durumda
+  hata çağırana dönmez, kullanıcıya gösterilmez ve asıl işlemin sonucunu
+  değiştirmez. Log sistemi `Error` dışındaki her `Exception`'ı kendi içinde tutar.
+- Uygulama normal kapanırken kuyruk en fazla 500 ms beklenerek boşaltılır.
+
+**Tek yazıcı süreci.** `14.4.10`'daki instance kilidi yalnız açılış kapısı
+boyunca tutulur (16. madde) ve açılış bittikten sonra ikinci bir kopya kapıdan
+geçebilir; yani uygulama ömrü boyunca tek süreç güvencesi **yoktur**. Bu yüzden
+yazıcı, ilk kaydı yazmadan önce `pnp-tanilama.lock` üzerinde işletim sistemi
+kilidini (`FileChannel.tryLock`) alır ve süreç bitene kadar tutar. Kilit
+alınamazsa o süreç kayıt yazmaz; beklemez, hata göstermez. Açılış kilidinin
+kapsamı bu işte **değiştirilmez**.
+
+**Döngüsel saklama.** Etkin dosya dahil en fazla **5 dosya**, dosya başına en
+fazla **1 MiB**. Bir satır etkin dosyayı 1 MiB'ın üzerine çıkaracaksa önce
+rotation yapılır:
+
+```text
+1  pnp-tanilama.4.jsonl varsa silinir
+2  3 → 4, 2 → 3, 1 → 2 adları, var olanlar için, aynı dizinde atomik taşınır
+3  etkin dosya → pnp-tanilama.1.jsonl
+4  yeni etkin dosya CREATE_NEW ve 0600 ile oluşturulur
+```
+
+- Rotation yalnız tam olarak bu beş addaki, bağ takip edilmeden (`NOFOLLOW_LINKS`)
+  **normal dosya** olduğu görülen nesnelere dokunur. Bu adlardan biri sembolik
+  bağ, dizin veya başka bir nesneyse rotation hiçbir şeyi silmeden durur ve o
+  süreç kayıt yazmayı bırakır; sınır aşılmaz, bilinmeyen nesne silinmez.
+- Dizindeki başka hiçbir dosya okunmaz, sayılmaz, silinmez.
+- Taşımalarda üzerine yazma yoktur; hedef ad varsa rotation durur.
+- Rotation durum tutmaz. Çökme bir adı eksik bırakabilir; sonraki rotation eksik
+  adları atlar. Sabit adlar yüzünden dosya sayısı hiçbir çökme sırasıyla 5'i
+  aşamaz; toplam boyut yaklaşık 5 MiB ile sınırlıdır.
+- Bu politika, 14.7.2'nin yalnız hata ve seyrek olay yazan kuralıyla birlikte
+  bir kaydın ~200–400 bayt olduğu hesabıyla on binlerce kayıt taşır; sorunlu
+  olduğunu gösteren bir teknik bulgu yoktur.
+
+**Çökme ve veri.** Log sistemi veritabanı bağlantısı, transaction veya uygulama
+verisi dosyası tutmaz. Çökme yalnız son kayıt satırını etkileyebilir; uygulama
+verisini hiçbir koşulda etkilemez.
+
+#### 14.7.2 Kayıt üreten hata sınırları
+
+Kural: bir hata **ham nedenin tipli bir sonuca çevrildiği yerde**, tek bir kez
+kaydedilir. O sonucu gösteren controller aynı hatayı ikinci kez yazmaz.
+Kullanıcı girdisinin doğrulama geri bildirimi (yanlış sütun düzeni, eksik
+hedef, boş ad, CSV dilbilgisi hatası, vazgeçme, dokunulmuş görev yüzünden
+engellenen geri alma gibi) kaydedilmez: deterministiktir ve kullanıcıya zaten
+söylenir. Başarılı rutin işlemler kaydedilmez. Kayıt eklemek hiçbir okuma veya
+yazma yoluna SQL ifadesi eklemez.
+
+```text
+olay                                seviye  alanlar                   sınır ve tetikleyen
+startup.refused                     ERROR   reason=StartupProblem,    Main: açılış kapısı reddetti
+                                            exception, cause          (ANOTHER_COPY_IS_RUNNING → WARN)
+startup.migration_completed         INFO    fromSchema, toSchema      StartupGate: set doğrulandı ve gerçek
+                                                                      migration bitti
+settings.read_problem               WARN    reason=SettingsProblem    ayar dosyası var ve kullanılamıyor
+                                                                      (süreç başına bir kez; dosyanın yokluğu
+                                                                      kaydedilmez)
+settings.write_failed               WARN    reason, exception         ayar kaydedilemedi
+storage.read_failed                 ERROR   area, exception, cause    SQLiteException tipli "okunamadı"
+                                                                      sonucuna çevrildi (export, yedek,
+                                                                      geçmiş, devam eden/onaylanmış içe
+                                                                      aktarmalar, havuz ve Dilim 3'te
+                                                                      tiplenen okumalar)
+storage.write_failed                ERROR   area, reason, exception,  SQLiteException tipli COULD_NOT_SAVE'e
+                                            cause                     çevrildi (hücre metni, görev oluşturma,
+                                                                      düzenleme, ilerleme, oyun, renk, içe
+                                                                      aktarma inceleme/onay/geri alma, taslak
+                                                                      kaldırma, taslak kaydı)
+import.file_unreadable              WARN    reason=ImportFailure,     yalnız NOT_READABLE, DAMAGED_FILE,
+                                            exception, cause          ENCRYPTED, FILE_CHANGED_WHILE_READING,
+                                                                      REJECTED_BY_SAFETY_LIMIT
+import.snapshot_failed              ERROR   reason=SnapshotProblem,   onay öncesi otomatik yedek alınamadı,
+                                            place (varsa), exception  yazılamadı veya doğrulanamadı
+import.changed_meanwhile            WARN    —                         DATA_CHANGED_MEANWHILE
+import.records_contradict           WARN    —                         RECORDS_CONTRADICT_EACH_OTHER
+import.rollback_provenance_broken   WARN    —                         geri alma PROVENANCE_BROKEN
+import.draft_held_by_records        WARN    —                         taslak kaldırma HELD_BY_RECORDS
+backup.write_failed                 WARN    reason=BackupFailure,     manuel yedek: NOT_WRITABLE,
+                                            exception                 TEMPORARY_FILE_FAILED,
+                                                                      TARGET_UNAVAILABLE, WRITE_FAILED,
+                                                                      NOT_ATOMIC, COULD_NOT_BUILD_DOCUMENT
+backup.rotation_incomplete          WARN    area=yedek türü, count    rotation eski yedeklerden count kadarını
+                                                                      silemedi (fail open)
+restore.file_refused                WARN    reason=BackupProblem,     kullanıcının seçtiği yedek reddedildi
+                                            place                     (14.7.5'in yaşam döngüsü kapısı dahil)
+restore.not_completed               ERROR   reason=RestoreProblem,    güvenlik yedeği, canlı transaction veya
+                                            exception, cause          sonradan doğrulama başarısız
+restore.completed                   INFO    —                         canlı veritabanı yedekle değiştirildi
+export.write_failed                 WARN    reason=ExportFailure,     NOT_WRITABLE, WRITE_FAILED, NOT_ATOMIC
+                                            exception
+export.broken_data                  ERROR   reason=ExportInvariant    BROKEN_DATA
+app.unexpected_failure              ERROR   area, exception, cause    yakalanmamış hata (aşağıda)
+diagnostics.records_dropped         WARN    count                     kuyruk dolu veya satır sınırı aşıldı
+```
+
+- İki `INFO` olayın gerekçesi: migration ve geri yükleme kullanıcının bütün
+  verisini değiştirir, seyrektir ve geçmiş ekranına yazılmaz (`14.4.3`,
+  `14.4.7`); sonraki bir hata kaydını okuyabilmek için ne zaman olduklarını
+  bilmek gerekir. Başka hiçbir başarı kaydedilmez; uygulamanın her açılışı da
+  kaydedilmez.
+- `area` sabit bir uygulama bölgesi listesidir (örneğin `EXPORT`, `BACKUP`,
+  `HISTORY`, `TASK_EDIT`, `IMPORT_CONFIRMATION`); ekran adı veya kullanıcı verisi
+  değildir.
+- `startup.refused` ve `startup.migration_completed` açılış kapısının hata
+  ekranını değiştirmez.
+
+**Beklenmeyen hatalar.** `IllegalStateException`, `IllegalArgumentException`,
+`NullPointerException` ve diğer programlama hataları bugün de maskelenmez
+(`14.4.5`) ve bu iş de maskelemez. Bir hata hiçbir tipli sınırda yakalanmadan
+arayüz veya controller'dan yükselirse, mevcut davranışı değişmeden önce
+`app.unexpected_failure` kaydı en fazla 500 ms beklenerek yazılmaya çalışılır.
+Bu hatanın bugün uygulamada **ne yaptığı ölçülmemiştir**; Dilim 2 bunu önce
+ölçer ve aynen korur. Çökme politikasını değiştirmek bu işin kapsamında değildir.
+
+**Tipsiz kaçan sınırlar.** Kod okumasıyla bulunan ve Dilim 2'nin hata enjeksiyonu
+tablosunda ölçülecek adaylar:
+
+```text
+taslak kaydı            ImportDraftStore.save'in SQLiteException'ı ImportController'da
+                        yakalanmıyor
+gözlenen okumalar       oyun tablosu, renk kataloğu ve havuz renk kataloğu okumalarında
+                        tipli "okunamadı" durumu yok
+havuz okuması           tipli "okunamadı" durumu var, fakat catch bütün Throwable'ları
+                        yakalıyor ve programlama hatasını da Failed yapıyor (14.4.5 ile
+                        çelişir)
+açılış dizinleri        veri/yedek/ayar dizini oluşturulamazsa veya ev dizini
+                        çözülemezse pencere açılmadan ham exception yükseliyor
+```
+
+Bunların kullanıcıya tipli Türkçe sonuç olarak söylenmesi Dilim 3'tür.
+
+#### 14.7.3 Sistem saatinin geriye gitmesi
+
+- `updatedAt >= createdAt` (ve `import_batches` için `updatedAt >= importedAt`)
+  uygulama verisinin **bütünlük kuralı değildir**. NTP düzeltmesi, çift işletim
+  sistemi, sanal makine anlık görüntüsü veya elle saat değişimi bunu meşru
+  biçimde bozar ve uygulamanın kendi yazma yolları böyle satırlar üretir.
+- Yedek okuyucusu, geçici veritabanı denemesi ve diğer doğrulama yolları geçerli
+  bir veriyi **yalnız zaman sıralaması yüzünden reddetmez**. `isMoment`
+  aralık denetimi (epoch'tan 9999 yılı sonuna) aynen kalır.
+- Mevcut epoch milisaniye değerleri **aynen korunur**; hiçbir yol onları yeniden
+  yazmaz, `max(now, createdAt)` gibi bir düzeltme uygulamaz.
+- Saat geri gittiğinde içe aktarma snapshot'ı, manuel yedek, geri yükleme ve
+  migration seti kullanılabilir kalır.
+- `11.4.4`'ün dokunulmuşluk ölçütü eşitsizliktir (`updatedAt != createdAt`),
+  "büyüktür" değildir: ters sıralı bir görev dokunulmuş sayılır ve geri almayı
+  engeller. Bu korumacı davranış aynen kalır.
+
+**Sıralama denetimi.** Zamana göre sıralanan her yerin kararlı ikincil anahtarı:
+
+```text
+yer                                   bugünkü sıra                        karar
+devam eden içe aktarmalar             imported_at DESC, id                yeterli
+onaylanmış içe aktarmalar             imported_at DESC, id                yeterli
+aynı dosyanın önceki içe aktarmaları  imported_at DESC                    id eklenir
+(uyarı listesi) ve allBatches
+bir batch'in taslak görevleri         created_at, id                      yeterli
+geçmiş (iki okuma ve birleştirme)     occurred_at DESC, id DESC           yeterli
+ilerleme olayları                     recorded_at DESC, id DESC           yeterli
+tamamlanmış görevler                  completed_at DESC, name, id         yeterli
+otomatik yedek rotation               ad damgası, ek sayısı, set adı      kararlı, fakat az önce
+                                                                          yazılanı silebilir → 14.4.11
+geçmiş tarih süzgeci                  occurred_at >= şimdi − pencere      ileri tarihli satır pencerenin
+                                                                          içinde sayılır; değişmez
+```
+
+Kural: eşit veya ters zaman değerlerinde sıra, zaman alanından sonra satırın
+kimliğiyle (metin olarak) çözülür; zaman değeri düzeltilmez.
+
+**Kötü hazırlanmış bir yedeğe verilen ek serbestlik.** Kural kalkınca elle
+hazırlanmış bir belge `updatedAt < createdAt` taşıyan satırlarla geri
+yüklenebilir. Bunun etkisi: böyle bir görev geri almada dokunulmuş sayılır
+(engeller, silmez); ekranlarda `updatedAt`/`createdAt` gösterilmez ve hiçbir
+sayaç bunlardan türetilmez. Kural zaten bir koruma değildi: belge
+`updatedAt == createdAt` yazarak düzenlenmiş bir görevi dokunulmamış
+gösterebilir ve bunu hiçbir zaman sıralaması kuralı engellemez. Buna karşılık
+kural, saati geri gitmiş her makinede uygulamanın **kendi yazdığı** veriyi
+reddediyor, `14.4.13` gereği bütün içe aktarma onaylarını durduruyor ve
+kullanıcının kendi yedeklerini geri yüklenemez kılıyordu. Veri kaybını önlemek
+bu yüzden daha güçlü gerekçedir.
+
+#### 14.7.4 Canlı veritabanında bütünlük hatası
+
+- Bütünlük denetiminden geçmeyen canlı veritabanı otomatik olarak **onarılmaz,
+  silinmez, taşınmaz, yeniden adlandırılmaz** ve başka bir dosyayla
+  değiştirilmez. `.recover`, `VACUUM`, `REINDEX` veya yazma yapan başka bir
+  işlem çalıştırılmaz.
+- Veritabanında kullanıcı verisi **varmış gibi** davranılır.
+- Uygulama güvenilir olmayan veritabanını Room ile **açmaz**; hiçbir normal
+  yazma, migration, seed veya snapshot seti başlamaz.
+- Kullanıcı Türkçe ve eyleme dönük bir açılış hata ekranı görür. Ekran PRAGMA
+  sonucunu, SQL'i, yolu, dosya adını veya exception metnini göstermez; verinin
+  olduğu gibi durduğunu ve yedek klasöründeki yedeklerin korunduğunu söyler.
+- `backups/` altındaki hiçbir dosyaya dokunulmaz; rotation çalışmaz.
+
+**Denetim.** Açılış kapısının zaten kullandığı **salt okunur** SQLite
+bağlantısı üzerinde `PRAGMA quick_check` çalıştırılır:
+
+```text
+ne zaman   14.4.10'un 2. adımında user_version okunduktan hemen sonra
+kime       sürümü 1..8 olan mevcut veritabanı
+           (dosya yok veya boş → denetim yok; 8'den büyük → önce SCHEMA_TOO_NEW;
+            negatif/okunamaz → önce DATABASE_NOT_READABLE)
+geçer      tek satır ve değeri "ok"
+geçmez     başka her sonuç, veya denetim sırasında SQLiteException
+           → StartupProblem.DATABASE_DAMAGED; kilit bırakılır, hiçbir dosya yazılmaz
+```
+
+Seçimin gerekçesi:
+
+- `quick_check`, bu riskin sınıfı olan **sayfa düzeyindeki** hasarı (bozuk b-tree
+  sayfası, kopuk sayfa zinciri, bozuk freelist, geçersiz kayıt biçimi) bulur ve
+  veritabanının her sayfasını bir kez okur: maliyeti dosya boyutuyla
+  **doğrusaldır**. Her açılışta çalışacak bir denetim için sınırlı olan budur.
+- `integrity_check` bunlara ek olarak her indeks girdisini tablo satırıyla
+  karşılaştırır ve maliyeti büyür (`N log N`). Ham migration klonunda zaten
+  çalışır (`14.4.9`) ve orada kalır; her açılışta çalıştırılmaz.
+- `foreign_key_check` fiziksel hasar değil mantıksal tutarlılık denetler.
+  Yabancı anahtarlar üretim bağlantısında zorlanır; dışarıdan gelen satırlar
+  geçici veritabanı denemesinde ve canlı geri yükleme transaction'ında zaten bu
+  denetimden geçer (`14.4.3`). Açılışta çalıştırılmaz.
+- Denetim Room'dan **önce** ve salt okunur bağlantıda çalıştığı için hasarlı bir
+  dosyaya hiçbir yazma ulaşmaz.
+
+Maliyet bu sözleşmede sayı olarak verilmez; Dilim 8 önce ölçer: İş 9'un 1.203
+görevlik kütüphanesinde ve bunun 10 katında `quick_check`, `integrity_check` ve
+`foreign_key_check` süreleri, `page_count` ve `page_size` kaydedilir (eşik değil
+kayıttır, `18.` İş 9) ve geçici bir kopyaya yerleştirilen hasar sınıflarının
+(bozulmuş tablo sayfası, bozulmuş indeks sayfası, kesilmiş dosya, bozulmuş
+freelist) hangisini hangi denetimin bulduğu ölçülür. `quick_check` sayfa düzeyindeki
+bir sınıfı kaçırırsa dilim durur ve karar istenir.
+
+**Uygulama içinden kurtarma yoktur.** Mevcut sözleşmeyle güvenli bir kurtarma
+kanıtlanamaz:
+
+- Geri yükleme önce canlı veritabanının güvenlik yedeğini ister (`14.4.4`); bu
+  15 tablonun hasarlı dosyadan tam okunmasıdır. Okuma düşerse geri yükleme
+  başlayamaz; düşmezse bile hasarı bilinen bir yapıdan alınmış bir dönüş yolu
+  güvenilir değildir.
+- Geri yükleme transaction'ı DELETE ve INSERT'leri hasarlı dosyanın içindeki
+  b-tree ve freelist üzerinde yapar. SQLite'ın atomik commit güvencesi yapısal
+  olarak bozuk bir dosyayı sağlam hâle getirmez; yazma bozuk freelist
+  sayfalarını yeniden kullanarak hasarı büyütebilir, ve transaction geri
+  alındığında dönülen hâl yine hasarlı hâldir.
+- Hasarlı dosyaya yazmayan tek yol yeni bir dosya kurup takas etmektir; bu
+  `14.4.3` ve `16.` gereği yasaktır.
+
+Bu yüzden İş 10'daki sınır şudur: **tespit et, yazmayı engelle, veriyi
+koru; kurtarma ayrı bir tasarım gerektirir.** Oturum sırasında hasarlı bir
+sayfaya dokunan bir okuma veya yazma bugünkü gibi tipli "okunamadı" ya da
+"kaydedilemedi" sonucuna çevrilir ve `storage.*_failed` olarak kaydedilir; hasar
+sınıfı ayrıca ayırt edilmez. Kullanıcıya elle kurtarma adımlarını anlatan belge
+ayrı bir karar ve `18.` İş 14'ün konusudur.
+
+#### 14.7.5 İçe aktarma yaşam döngüsü çelişkileri
+
+Batch `b` için tanımlar:
+
+```text
+blocks(b)   import_batch_id = b.id olan raw_import_blocks satırları
+drafts(b)   raw_import_block_id'si blocks(b)'de olan draft_tasks satırları
+made(b)     drafts(b) içinde materialized_task_id IS NOT NULL olanlar
+task(d)     d.materialized_task_id'nin gösterdiği tasks satırı
+cells(b)    import_batch_id = b.id olan import_batch_cells satırları
+sourced(b)  source_raw_import_block_id'si blocks(b)'de olan tasks satırları
+claimed(b)  source_import_batch_id = b.id olan games satırları
+```
+
+**Durum geçişleri (kesin).** `DRAFT → CONFIRMED` yalnız onay transaction'ında,
+`CONFIRMED → ROLLED_BACK` yalnız geri alma transaction'ında yazılır; başka geçiş
+ve geri dönüş yoktur. `import_batch_cells` yalnız şema 8'in onay transaction'ında
+yazılır (`Migration7To8` tabloyu boş oluşturur). `ROLLED_BACK` yalnız şema 8
+kodu tarafından yazılır ve yedek biçimi yalnız şema 8 kabul eder. Yedekten
+geri yükleme dışında bir batch'in, bloklarının veya taslaklarının `DRAFT`
+sonrasında değiştiği bir yol yoktur; görevler şema 7'den beri fiziksel olarak
+silinmez.
+
+**Statü başına invariant'lar.**
+
+```text
+DRAFT
+  ¬D1 … ¬D9 (11.4.5)                                         KESİN — İş 7'de ölçüldü
+
+CONFIRMED, cells(b) boş
+  (şema 8 öncesinde onaylanmış batch veya elle hazırlanmış belge)
+  ilişki iddia edilmez                                        KURAL DEĞİL
+  bilinen meşru durumlar: Migration3To4 bütün materialized_task_id'leri temizleyip
+  görevleri düşürür ve created_task_count'u korur (made(b) = ∅, sayaç > 0);
+  şema 7 öncesi onayların IMPORT_CONFIRMED satırı yoktur. Geri alma bu batch'leri
+  NO_CELL_SNAPSHOT ile zaten reddeder.
+
+CONFIRMED, cells(b) dolu (şema 8 onayı)
+  C1  |made(b)| = |drafts(b)| ≥ 1                             KESİN ADAY
+  C2  created_task_count = |drafts(b)|                        KESİN ADAY
+  C3  her d ∈ made(b) için
+      task(d).source_raw_import_block_id = d.raw_import_block_id   KESİN ADAY
+  C4  { cells(b).cell_id } = { d.target_cell_id : d ∈ drafts(b) }
+      ve hiçbir d.target_cell_id boş değil                    KESİN ADAY
+  C5  created_game_count = 0 ve claimed(b) = ∅                KESİN ADAY
+
+ROLLED_BACK
+  RB1 cells(b) dolu                                           KESİN ADAY
+  RB2 C1 … C5                                                 KESİN ADAY
+  RB3 her d ∈ made(b) için task(d).deleted_at IS NOT NULL     KESİN ADAY
+  RB4 hiçbir cell_segments satırı bir task(d)'yi göstermez    KESİN ADAY
+  RB5 her task(d) için kind = TASK_ROLLED_BACK ve task_id = task(d).id
+      olan en az bir history_events satırı                    KESİN ADAY
+
+her statü
+  U1  source_column_type <> 'GAME' olan blokta game_completion_hint = 'NONE'
+  U2  selection_end_index ≤ blok metninin UTF-16 uzunluğu
+  U3  raw_block_count = |blocks(b)|                           ADAY (eski sürümlerde
+                                                              ölçülmedi)
+
+kural DEĞİL (hiçbir statüde)
+  - zaman damgası sıraları (14.7.3)
+  - bir CONFIRMED batch'in görevlerinin silinmemiş, çapalı veya dokunulmamış olması
+    (kullanıcının kararıdır)
+  - IMPORT_CONFIRMED / IMPORT_ROLLED_BACK satırlarının varlığı: oyun satırı bir
+    batch'e bağlanamaz ve şema 7 öncesi onaylar bu satırı taşımaz
+  - kabul edilmiş tamamlanma hedefi oyunun hâlâ tamamlanmış olması
+  - is_processed bayrakları
+  - document_before'un bugünkü hücre metniyle ilişkisi (geri almanın kendi
+    engelleme ölçütüdür)
+```
+
+"KESİN ADAY", her yazma yolunun kod okumasıyla koruduğu fakat henüz gerçek
+hatla ölçülmemiş bir ilişkidir. İş 7'nin kuralı aynen geçerlidir: Dilim 5 her
+adayın (a) uygulamanın kendi yollarıyla ve her eski şema sürümünden gelen
+veritabanında **bozulmadığını**, (b) gerçek yedek okuyucusu, geçici veritabanı
+ve canlı geri yükleme hattından **canlı veritabanına ulaşabildiğini** ölçer.
+Meşru bir yolda bozulan aday kural olmaz; ulaşılamayan aday için denetim
+yazılmaz. Ölçümden sonra kalan kümeye `L` denir.
+
+**Neden okuyucu sıkılaştırılmaz.** `UntrustedBackupReader` yalnız kullanıcının
+seçtiği dosyayı değil, her içe aktarma snapshot'ını (`14.4.8`) ve her migration
+setinin JSON'unu (`14.4.9`) da doğrular. Canlı veritabanı `L`'den bir çelişkiyi
+zaten taşıyorsa, sıkılaşan okuyucu bütün içe aktarma onaylarını (`14.4.13`) ve
+ileride bir migration gerektiğinde **uygulamanın açılışını** durdururdu. `D6`,
+`D7`, `C*` ve `RB*` için kullanıcının bu çelişkiyi uygulama içinden gidereceği
+bir yol yoktur (`D6`/`D7` taslağı gerçek kayıtları korumak için kaldırılamaz;
+`CONFIRMED` ve `ROLLED_BACK` batch kaldırılamaz). Bu yüzden okuyucunun kapıları
+**değişmez**.
+
+**Kararlar.**
+
+1. **Kullanım noktası kapısı (geri alma).** Canlı veritabanında zarar doğuran tek
+   ilişki geri almadadır: `C2`–`C4` bozuksa geri alma, içe aktarmanın
+   üretmediği bir görevi tombstone'layabilir veya yanlış hücreyi geri
+   yükleyebilir. Geri alma ve önizlemesi, `NO_CELL_SNAPSHOT` denetiminden
+   **sonra**, `L ∩ {C2, C3, C4}` bozuksa mevcut `PROVENANCE_BROKEN` ile hiçbir
+   satır yazmadan reddeder. Eski batch'lerin bugünkü ret sebebi değişmez. Bu
+   denetim ek SQL ifadesi gerektirmez: gereken olgular geri almanın mevcut toplu
+   okumalarında vardır.
+2. **Güvenilmeyen yedek kapısı (geri yükleme).** Kullanıcının seçtiği yedek
+   okuyucudan geçtikten sonra ve özet ile onay sorusu gösterilmeden **önce**,
+   belgenin satırları bellekte `L`'deki bütün predicate'lerle denetlenir. Bir
+   çelişki bulunursa belge yeni tipli `BackupProblem.IMPORT_RECORDS_CONTRADICT`
+   ile reddedilir; yıkıcı onay gösterilmez, güvenlik yedeği yazılmaz, canlı
+   veritabanına tek bayt yazılmaz. Hiçbir satır atlanmaz, düzeltilmez veya
+   yeniden numaralandırılmaz. Denetim `11.4.5`'in sınıflandırıcısıyla **aynı
+   predicate tanımlarını** kullanır; olgular veritabanından değil belgeden
+   çıkarılır, ikinci bir tanım yazılmaz. Veritabanı ve dosya açmaz; O(n)'dir.
+   Bu `14.4.3`'ün sırasındaki "invariant denetimleri → kullanıcı onayı"
+   adımıdır.
+3. **Canlı çelişkilerin çözüm yolu.** `D1`–`D5`, `D8`, `D9` taslakları bugünkü
+   `Kaldır` ile giderilir. `D6`, `D7`, `C*` ve `RB*` için uygulama içinden
+   giderme yolu bu işte **eklenmez**; bu batch'ler kullanım noktası kapılarıyla
+   zararsız tutulur (onaylanamaz, kaldırılamaz, geri alınamaz) ve verileri
+   değişmez. Kullanıcının seçebileceği tek bütünsel çıkış, çelişki taşımayan bir
+   yedeği geri yüklemektir; manuel yedek ve güvenlik yedeği bu durumdan
+   etkilenmez.
+4. **Bilinen sonuç.** Canlı veritabanı `L`'den bir çelişki taşırken alınmış bir
+   otomatik veya manuel yedek, geri yükleme kapısında reddedilir (`14.4.7`).
+   Canlı veri korunur ve kullanıcı sebebi Türkçe görür. Böyle bir veritabanı
+   yalnız bu kapıdan önce elle hazırlanmış bir belgenin geri yüklenmesiyle
+   oluşabilir; uygulamanın kendi yolları oluşturamaz (Dilim 5 bunu ölçer).
+
+#### 14.7.6 Uygulama dilimleri
+
+Sıra bağlayıcıdır. Her dilim tek atomik commit'tir, kendi otomatik testleriyle ve
+geçici `XDG_DATA_HOME`, `XDG_CONFIG_HOME` ve `XDG_STATE_HOME` ile yapılan
+smoke turuyla teslim edilir. Hiçbir dilim Room şemasını veya migration zincirini
+değiştirmez, yeni bağımlılık eklemez ve gerçek kullanıcının veri, yedek, ayar
+veya durum dizinine dokunmaz. Süre ve bellek eşik değildir (İş 9).
+
+**Dilim 1 — Kayıt dosyası sözleşmesi, güvenli yazıcı ve rotation.**
+
+- Kapsam: `XdgAppPaths`'e durum ve `logs` dizini; `14.7.1`'in kayıt modeli,
+  olay listesi, satır kodlayıcı, süreç kilidi, sınırlı kuyruklu tek yazıcı ve
+  rotation; `Main`'de yazıcının kurulması ve kapanışta boşaltılması.
+- Kullanıcı davranışı: görünen hiçbir şey değişmez; hata olmayan bir çalışma
+  durum dizininde dosya oluşturmaz.
+- Katmanlar: `commonMain` tanılama modeli ve kayıt arayüzü (varsayılanı
+  kaydetmeyen); `desktopMain` yol çözümü, dosya yazıcısı, rotation.
+- Yapılmayacaklar: hiçbir hata sınırı henüz kayıt üretmez; arayüz, veritabanı,
+  yedek ve ayar yolları değişmez; `fsync`, ağ, sıkıştırma yok.
+- Testler: her alan türü için bayt bayt satır; metin taşıyan hiçbir kayıt
+  parametresi bulunmadığının derleme ve kaynak taraması; sınıf adı süzgeci
+  (gizli lambda sınıfı `?`, döngülü neden zinciri); satır sınırı; 8 iş
+  parçacığı × binlerce kayıtta her satırın ayrıştırılması ve
+  `yazılan + düşürülen = istenen`; kuyruk doluyken çağıranın beklememesi;
+  rotation sonrası en fazla 5 sahipli dosya ve her biri ≤ 1 MiB; sembolik bağ,
+  dizin veya bilinmeyen dosya olan her adda silme olmaması ve dizin dışına
+  yazılmaması; önceden bırakılmış eksik adlarla (çökme durumları) rotation;
+  yarım son satırdan sonra yeni satırın ayrı başlaması; salt okunur dizinde
+  çağıranın hiçbir exception görmemesi; kilidi tutan **gerçek ikinci süreç**
+  varken bu sürecin yazmaması; izinler; `XDG_STATE_HOME` mutlak/göreli/boş
+  çözümü; gerçek durum dizininin varlığının test öncesi ve sonrası aynı olması.
+- Smoke: üç geçici XDG ile açılış ve normal kapanış; `logs/` oluşmamış olmalı.
+- Maliyet: 0 SQL. İlk kayda kadar 0 dosya sistemi işlemi; kayıt başına bir
+  `write`; rotation en fazla bir silme ve dört taşıma.
+- Migration/bağımlılık: yok.
+- Commit: `feat(diagnostics): keep a bounded diagnostic log in the state directory`
+- Sonraki dilime temeli: kayıt API'si metin kabul etmediği için Dilim 2'nin
+  bağladığı hiçbir sınır kullanıcı verisi sızdıramaz.
+
+**Dilim 2 — Tipli hata sınırlarının kayda bağlanması.**
+
+- Kapsam: `14.7.2` tablosundaki her olayın tek üretim noktası; beklenmeyen
+  hatanın bugünkü davranışının ölçülmesi ve kaydın o davranışı değiştirmeden
+  eklenmesi; tipsiz kaçan sınır adaylarının hata enjeksiyonuyla ölçülüp master
+  bağlamda tabloya yazılması.
+- Kullanıcı davranışı: değişmez. Her ekranın durum nesnesi kaydeden ve
+  kaydetmeyen yapılandırmada aynıdır.
+- Katmanlar: store, controller ve açılış sınırları; `Main`.
+- Yapılmayacaklar: yeni kullanıcı metni veya tipli sonuç yok (Dilim 3); başarı
+  kaydı yok (iki `INFO` hariç); çökme politikası değişmez; `14.7.3`–`14.7.5` yok.
+- Testler: tablo güdümlü, her olay için gerçek hata enjeksiyonu
+  (`FailingSqliteDriver`, reddeden/bozan yazıcılar, bozuk ayar dosyası, gerçek
+  okuyucudan geçmeyen belge, açılışı reddeden veritabanları) → tam olarak bir
+  satır, beklenen `event`/`level`/`reason`/`area`; kayıt atan (exception
+  fırlatan) bir kayıt uygulamasıyla aynı sonuç; uçtan uca başarılı bir iş
+  akışında (oyun, hücre, görev, içe aktarma onayı, geri alma, yedek, CSV)
+  `restore.completed`/`startup.migration_completed` dışında **0 satır**; üretilen
+  bütün kayıt baytlarında testin kullandığı Türkçe adların, dosya adlarının,
+  geçici dizin yolunun, ev dizininin, kullanıcı adının, UUID kalıbının, `SELECT`
+  sözcüğünün, exception mesaj parçalarının ve `at dev.` stack satırlarının
+  bulunmaması; §29 ifade haritalarının değişmemesi.
+- Smoke: geçici XDG'de şema sürümü 8'den büyük bir veritabanıyla açılış → açılış
+  hata ekranı ve tek `startup.refused` satırı; satırda yol yok.
+- Maliyet: 0 ek SQL; yalnız hata yollarında kayıt.
+- Migration/bağımlılık: yok.
+- Commit: `feat(diagnostics): record typed failures where they are decided`
+- Sonraki dilime temeli: tipsiz kaçan sınırlar tahminle değil ölçülmüş bir
+  listeyle Dilim 3'e girer.
+
+**Dilim 3 — Tipsiz kaçan hataların tipli Türkçe sonuçlara çevrilmesi.**
+
+- Kapsam: yalnız Dilim 2'nin ölçtüğü tipsiz sınırlar (`14.7.2`'nin aday listesi
+  ölçümle daralabilir, genişleyemez). Depolama hatası `SQLiteException` ile,
+  dosya sistemi hatası `IOException` ile sınırlı yakalanır; her biri mevcut
+  kalıpta tipli sonuç, Türkçe cümle ve `storage.*_failed` kaydı olur. Açılış
+  dizini sorunu için `StartupProblem`'e yeni bir değer ve açılış hata ekranında
+  ayrı bir cümle.
+- Kullanıcı davranışı: bugün ham exception veya sonsuz yükleme olan durumlarda
+  kullanıcı eyleme dönük bir Türkçe cümle görür; başarı yolları değişmez.
+- Katmanlar: ilgili store/controller/state, `Strings` ve `strings.xml`,
+  açılış hata ekranı.
+- Yapılmayacaklar: programlama hataları maskelenmez (havuz okumasının geniş
+  `catch`'i `SQLiteException`'a daraltılır); yeni ekran yok; `14.7.3`–`14.7.5` yok.
+- Testler: her sınır için önce kırmızı test; ekranda yol, SQL, UUID, enum,
+  exception metni bulunmaması; `IllegalStateException`'ın hâlâ yükselmesi; dar
+  pencere ve büyük metin taraması (§17 altyapısı).
+- Smoke: geçici XDG, yazılamaz bir veri dizini → açılış hata ekranı.
+- Maliyet: 0 ek SQL.
+- Migration/bağımlılık: yok.
+- Commit: `fix(storage): say in words when the database or its folders will not answer`
+- Sonraki dilime temeli: her hata yolu tipli ve kayıtlı olduğundan `14.7.3`–`14.7.5`'in
+  getirdiği yeni sonuçlar aynı kalıba eklenir.
+
+**Dilim 4 — Saat geriye gittiğinde veri kullanılabilir kalır (`14.7.3`).**
+
+- Kapsam: yedek okuyucusundan zaman sıralaması kurallarının kaldırılması ve
+  yanlış gerekçeli belgelerinin düzeltilmesi; `EntityTimestamps`'in (üretimde
+  kullanılmayan) sıra şartlarının kaldırılması, `deletedAt == updatedAt` şartının
+  korunması; `batchesWithFingerprint` ve `allBatches` sırasına `id` eklenmesi;
+  rotation'ın az önce yazılanı fazlalık saymaması (`14.4.11`).
+- Kullanıcı davranışı: saati geri gitmiş bir makinede içe aktarma onayı, manuel
+  yedek, geri yükleme ve migration seti çalışır. Normal saatte hiçbir şey
+  değişmez.
+- Katmanlar: `domain/backup/restore`, `domain/backup/retention`,
+  `domain/model`, `ImportDao` sorguları.
+- Yapılmayacaklar: zaman damgası yazma, düzeltme veya yeniden üretme yok;
+  dokunulmuşluk ölçütü değişmez; `isMoment` aralığı değişmez.
+- Testler: geriye adımlayan saatle gerçek yollarla kurulan veritabanında onay +
+  snapshot doğrulaması; manuel yedek → geri yükleme sonrası bütün epoch
+  değerlerinin birebir aynı olması; ters zamanlı satır taşıyan v7 veritabanından
+  migration seti; ters zamanlı görevi olan batch'in geri almasının `EDITED`
+  ile engellenmesi; eşit `imported_at` değerlerinde kararlı liste; 1..N kotada,
+  yeni yedeğin adı bütün eskilerden önce sıralansa bile silinmemesi ve kotanın
+  yeni dahil korunması; `BackupValidationTest`'in ilgili beklentisinin karar
+  gereği "kabul edilir ve aynen korunur" olması.
+- Smoke: geçici XDG ve geçmişe ayarlı test saatiyle yedek alma/geri yükleme.
+- Maliyet: ifade sayısı değişmez; iki sorguya ikincil sıralama sütunu.
+- Migration/bağımlılık: yok.
+- Commit: `fix(backup): keep backups usable after the clock goes backwards`
+- Sonraki dilime temeli: Dilim 5'in ölçümleri saat kaynaklı sahte retlerle
+  karışmaz.
+
+**Dilim 5 — İçe aktarma yaşam döngüsü denetimi (yalnız test, `14.7.5`).**
+
+- Kapsam: `14.7.5`'teki her `KESİN ADAY` ve `ADAY` için ölçüm; sonuç kümesi `L`.
+- Kullanıcı davranışı: yok.
+- Katmanlar: yalnız `desktopTest`.
+- Yapılmayacaklar: üretim kodu, okuyucu, geri alma veya arayüz değişmez.
+- Testler: uygulamanın kendi yollarıyla 1 ve 42 görevli `CONFIRMED` ve
+  `ROLLED_BACK` batch'lerde bütün adayların tutması; `CommittedSchema` ile
+  kurulan şema 3–7 veritabanlarının (şema 3 yalnız renk ve içe aktarma satırıyla) gerçek
+  zincirle yürütülüp dışa aktarılmasında adayların meşru eski durumu çelişki
+  saymaması; her aday için yalnız o ilişkiyi bozan, `dataSha256`'sı biçimin
+  kendi fonksiyonuyla yeniden hesaplanmış belgenin gerçek okuyucu + geçici
+  veritabanı + canlı geri yükleme hattından canlı Room 8 veritabanına ulaşıp
+  ulaşmadığı; `C3`/`C4` bozukluğunun bugünkü geri almada neye yol açtığının
+  geçici veritabanında gözlenmesi (davranış sabitlenmez, kaydedilir).
+- Smoke: yok (yalnız test); gerçek kullanıcı dosyaları önce/sonra aynı.
+- Maliyet: üretimde yok.
+- Migration/bağımlılık: yok.
+- Commit: `test(backup): measure which import lifecycle contradictions a restore can carry`
+- Sonraki dilime temeli: Dilim 6 ve 7 yalnız ölçülmüş `L` üzerinde çalışır. `L`'de
+  `C2`–`C4`'ten hiçbiri kalmazsa veya geri almada zarar gözlenmezse Dilim 6
+  yapılmaz ve bu kayda geçer.
+
+**Dilim 6 — Geri alma yalnız kendi ürettiği görevleri kaldırır (`14.7.5`).**
+
+- Kapsam: `14.7.5` karar 1.
+- Kullanıcı davranışı: çelişkili bir batch için geri alma önizlemesi ve geri
+  alma, bugünkü `PROVENANCE_BROKEN` cümlesiyle reddedilir; uygulamanın kendi
+  batch'lerinde hiçbir şey değişmez.
+- Katmanlar: `ImportRollbackPlan` (saf karar), `ImportDao.rollbackFactsOf`
+  olguları.
+- Yapılmayacaklar: yeni sorgu, yeni ekran, okuyucu değişikliği yok; eski
+  batch'lerin `NO_CELL_SNAPSHOT` sebebi değişmez.
+- Testler: Dilim 5'in zarar gözlemi önce kırmızı; her `L ∩ {C2, C3, C4}` bozukluğu
+  için ret ve bütün tabloların değer düzeyinde aynı kalması; önizleme ile geri
+  almanın aynı kararı vermesi; `ImportRollbackLegacyBatchTest`'in değişmemesi;
+  1 ve 42 görevde geri almanın ifade haritasının değişmemesi;
+  `import.rollback_provenance_broken` kaydı.
+- Smoke: geçici XDG'de uygulamanın kendi içe aktarmasının geri alınması.
+- Maliyet: 0 ek SQL.
+- Migration/bağımlılık: yok.
+- Commit: `fix(import): refuse to take back tasks an import did not make`
+- Sonraki dilime temeli: canlı veritabanındaki tek zarar noktası kapandığı için
+  geri yükleme kapısı kullanıcıyı çözümsüz bir zarara bırakmaz.
+
+**Dilim 7 — Çelişkili içe aktarma taşıyan yedek geri yüklenmez (`14.7.5`).**
+
+- Kapsam: `14.7.5` karar 2; yeni `BackupProblem.IMPORT_RECORDS_CONTRADICT` ve
+  Türkçe cümlesi; `11.4.5` sınıflandırıcısının predicate tanımlarının belgeden
+  çıkarılan olgularla paylaşılması.
+- Kullanıcı davranışı: böyle bir dosya seçildiğinde doğrulama ekranı reddi
+  gösterir; yıkıcı onay hiç görünmez. Başka her dosya bugünkü gibi ilerler.
+- Katmanlar: `domain/importhealth` (paylaşılan saf predicate'ler),
+  `RestoreController`, `RestoreSection` metinleri.
+- Yapılmayacaklar: `UntrustedBackupReader`, `TemporaryBackupProbe`,
+  `VerifiedSnapshotTaker` ve `MigrationSnapshotSetWriter` değişmez; ikinci bir
+  JSON ayrıştırıcı veya checksum yok; hiçbir satır atlanmaz veya düzeltilmez.
+- Testler: `L`'nin her predicate'i için ret, güvenlik yedeği 0 dosya, canlı DB
+  bayt/değer düzeyinde aynı; çelişkisiz belgenin aynen geri yüklenmesi; canlı
+  DB'de `D1` taslağı varken **başka** bir taslağın onayında snapshot'ın hâlâ
+  doğrulanması ve onayın sürmesi; aynı durumda eski şemalı bir veritabanı için
+  migration setinin hâlâ doğrulanması; belge ile canlı sınıflandırıcının aynı
+  girdide aynı sonucu vermesi; 3 ve 1.003 görevli belgede denetimin SQL ve dosya
+  açmaması; ekranda tablo adı, predicate kodu, UUID, enum, yol yok.
+- Smoke: geçici XDG'de çelişkili ve çelişkisiz iki dosyanın seçilmesi.
+- Maliyet: 0 SQL; belge satır sayısıyla doğrusal bellek içi denetim.
+- Migration/bağımlılık: yok.
+- Commit: `feat(backup): refuse a backup whose imports contradict their own records`
+- Sonraki dilime temeli: `14.7.5` tamamlanır; Dilim 8 açılış kapısına dokunurken
+  yedek hattında açık bir değişiklik bırakmaz.
+
+**Dilim 8 — Hasarlı veritabanı açılmaz (`14.7.4`).**
+
+- Kapsam: `14.7.4`; önce maliyet ve tespit ölçümü, sonra açılış kapısında
+  `quick_check`, yeni `StartupProblem.DATABASE_DAMAGED` ve açılış hata ekranında
+  ayrı Türkçe cümle.
+- Kullanıcı davranışı: sağlam veritabanında değişmez; hasarlı veritabanında
+  uygulama yerine açılış hata ekranı.
+- Katmanlar: `ConsistentDatabaseClone` (salt okunur bağlantı), `StartupGate`,
+  `StartupProblem`, `StartupErrorScreen`, metinler.
+- Yapılmayacaklar: onarma, taşıma, silme, `.recover`, `VACUUM`, `REINDEX`,
+  dosya takası, uygulama içi kurtarma yok; `integrity_check` ve
+  `foreign_key_check` açılışa eklenmez; oturum içi hasar sınıflandırması yok.
+- Testler: geçici kopyaya yerleştirilen her hasar sınıfında ret; veritabanı,
+  `-wal` ve `backups/` içeriğinin bayt bayt aynı kalması; set ve rotation
+  çalışmaması; kilidin bırakılması; sağlam v8 ve v1..7 veritabanlarında bugünkü
+  akışın aynen sürmesi; ekran metinlerinde PRAGMA çıktısı, yol, SQL, exception
+  yok; `startup.refused` kaydında `reason=DATABASE_DAMAGED`; §29'daki açılış
+  kapısı maliyet satırının ölçülen yeni hâliyle güncellenmesi.
+- Smoke: geçici XDG'de hasarlı bir veritabanı kopyasıyla açılış → hata ekranı →
+  normal kapanış; dosya hash'i aynı.
+- Maliyet: her açılışta tek bir salt okunur `PRAGMA quick_check` (dosya boyutuyla
+  doğrusal); ölçüm kaydedilir.
+- Migration/bağımlılık: yok.
+- Commit: `feat(startup): refuse to open a damaged database`
+- Sonraki dilime temeli: İş 10 tamamlanır; sıradaki PLAN işi İş 11'dir.
 
 ## 15. Önerilen modül/dizin yapısı
 
@@ -2289,6 +3029,22 @@ Tek modülle başlanabilir. Kod büyümeden gereksiz Gradle modüllerine ayrılm
   engellemez; kullanıcı verisi risk altında değildir (`14.4.13`).
 - Saklama ayarının yazımı atomiktir; yazma başarısızsa eski dosya bayt bayt kalır
   ve çalışma zamanı değeri değişmez (`14.4.12`).
+- Tanılama kaydı yazılamazsa asıl işlem aynı sonucu verir; log sistemi
+  çağırana exception fırlatmaz, onu bekletmez ve uygulamayı düşürmez. Kayıtta
+  kullanıcı verisi, dosya adı, yol, kimlik, SQL, exception mesajı veya stack trace
+  bulunmaz (`14.7.1`).
+- Tanılama kayıtları yalnız `$XDG_STATE_HOME/pnp-tracker/logs/` altındadır, en
+  fazla 5 dosya × 1 MiB ile sınırlıdır ve rotation yalnız kendi adlarındaki normal
+  dosyalara dokunur (`14.7.1`).
+- Zaman damgası sırası bir bütünlük kuralı değildir: saat geri gittiğinde hiçbir
+  doğrulama geçerli veriyi reddetmez, hiçbir yol zaman damgasını düzeltmez, ve
+  az önce yazılmış otomatik yedek rotation'da silinmez (`14.7.3`, `14.4.11`).
+- Açılış bütünlük denetiminden geçmeyen veritabanı açılmaz, onarılmaz, taşınmaz,
+  silinmez veya değiştirilmez (`14.7.4`).
+- Kesin bir içe aktarma yaşam döngüsü çelişkisi taşıyan yedek, geri yükleme onayı
+  sorulmadan önce tipli olarak reddedilir; çelişki sessizce atlanmaz veya
+  düzeltilmez. Geri alma, içe aktarmanın üretmediği bir görevi kaldırmaz
+  (`14.7.5`).
 
 ## 17. Erişilebilirlik ve kullanım kuralları
 
@@ -2560,8 +3316,47 @@ Kişisel kullanımda veri kaybı riski düşük, test edilmiş ve Garuda Linux�
    değiştirmez, onaysız bir kaldırma yolu açmaz, bozuk bir taslağın onayına izin
    veren yeni bir yol açmaz ve açılışı engelleyen bir denetim eklemez.
 8. Klavye kullanımı, odak yönetimi, renk dışı etiketler ve yüksek DPI kontrolünü tamamla.
-9. Büyük ama gerçekçi veri setiyle performans testi yap.
-10. Loglama ve kullanıcıya anlaşılır hata mesajları ekle; hassas kullanıcı içeriğini loglara gereksiz yazma.
+9. Büyük ama gerçekçi veri setiyle performans testi yap. **Tamamlanmıştır.**
+   Kabul ölçütleri makineden bağımsızdır ve süre veya bellek miktarı bir geçme
+   eşiği **değildir**: donanım, JVM ısınması ve sistem yükü bu değerleri güvenilir
+   bir test kapısı olmaktan çıkarır. Bağlayıcı ölçütler:
+   - en az 1.000 görevli, uygulamanın kendi yazma yollarıyla kurulmuş gerçekçi
+     veri kümesinde doğru sonuç;
+   - 42 ve 1.000+ görevde açılış ve ana ekran okumalarının aynı SQL ifade
+     yapısını çalıştırması; hiçbir ifadenin bir okumada satır, oyun veya renk
+     başına tekrar etmemesi (N+1 yok);
+   - arama ve havuz süzgeçlerinin ek SQL ifadesi üretmemesi;
+   - aynı okumanın ilk ve 42. tekrarında aynı ifadeleri çalıştırıp aynı sonucu
+     vermesi;
+   - süre ve yaklaşık bellek değerlerinin yalnız ortam bilgisiyle (işlemci,
+     çekirdek, bellek, işletim sistemi, JDK, test heap'i) birlikte **ölçüm
+     kaydı** olarak tutulması;
+   - yeni bir ölçüm aynı yöntem ve benzer ortamda önceki kayda göre belirgin
+     biçimde kötüleşirse (aynı ölçümün iki katını aşması gibi) bunun dilim
+     raporunda söylenmesi; makineye bağlı sabit bir eşikle testin düşürülmemesi.
+10. Loglama ve kullanıcıya anlaşılır hata mesajları ekle; sistem saatinin geriye
+    gitmesini, canlı veritabanı bütünlük hatasını ve içe aktarma yaşam döngüsü
+    çelişkilerini güvenli biçimde ele al (`14.7`). Kararlar kesinleşmiştir. Log
+    kaydına hiçbir kullanıcı içeriği, yol, kimlik, SQL, exception mesajı veya
+    stack trace yazılmaz. Room şeması ve migration zinciri değişmez, yeni
+    bağımlılık eklenmez. İş sekiz atomik dilimde uygulanır (`14.7.6`):
+   1. Kayıt dosyası sözleşmesi, güvenli yazıcı ve rotation. Hiçbir sınır henüz
+      kayıt üretmez.
+   2. Tipli hata sınırlarının kayda bağlanması ve tipsiz kaçan sınırların
+      ölçülmesi. Kullanıcının gördüğü hiçbir şey değişmez.
+   3. Tipsiz kaçan depolama ve dizin hatalarının tipli Türkçe sonuçlara
+      çevrilmesi.
+   4. Saat geriye gittiğinde verinin kullanılabilir kalması.
+   5. İçe aktarma yaşam döngüsü invariant'larının ölçülmesi. Yalnız test.
+   6. Geri almanın yalnız kendi ürettiği görevleri kaldırması.
+   7. Çelişkili içe aktarma taşıyan yedeğin geri yükleme onayından önce
+      reddedilmesi.
+   8. Hasarlı canlı veritabanının açılmaması.
+   Hiçbir ara commit: kullanıcı verisini kayda yazmaz, bir kayıt hatasıyla asıl
+   işlemin sonucunu değiştirmez, zaman damgası düzeltmez, yedek okuyucusunu
+   sıkılaştırmaz, hasarlı bir veritabanına yazmaz veya onu taşımaz, ve bir
+   içe aktarma snapshot'ını ya da açılışı çözümü olmayan bir çelişki yüzünden
+   kilitlemez.
 11. Self-contained Linux uygulama dağıtımı üret.
 12. Garuda/Arch için kurulabilir paket veya açıkça belgelenmiş taşınabilir paket oluştur.
 13. Temiz Garuda ortamında kurulum, açılış, veri dizini, güncelleme ve kaldırma testi yap.
@@ -2616,7 +3411,31 @@ Kişisel kullanımda veri kaybı riski düşük, test edilmiş ve Garuda Linux�
 - Geri almanın hiçbir progress veya history olayını silmemesi
 - Geri alınmış bir batch’in ikinci geri alma çağrısını reddetmesi
 - Geri alma transaction’ı yarıda kalırsa batch’in `CONFIRMED` kalması
-- 1.000+ görevle açılış, arama ve havuz filtreleme performansı
+- 1.000+ görevle açılış, arama ve havuz filtreleme: doğru sonuç, 42 ve 1.000+
+  görevde aynı SQL ifade yapısı, N+1 yokluğu, arama ve süzgeçte 0 ek ifade,
+  tekrarlı okumada aynı ifade ve sonuç; süre ve bellek yalnız ortamla birlikte
+  kayıt, eşik değil (`18.` Faz 3 / İş 9)
+- Tanılama kaydının her satırının bağımsız ayrıştırılması; eşzamanlı yazımda
+  satırların karışmaması; 5 dosya × 1 MiB sınırının hiçbir çökme sırasında
+  aşılmaması; sembolik bağ, dizin ve bilinmeyen dosyanın silinmemesi
+- Kilidi başka bir süreç tutarken, dizin yazılamazken veya kuyruk doluyken asıl
+  işlemin sonucunun değişmemesi ve çağırana exception ulaşmaması
+- Her kayıt üreten hata sınırında tam olarak bir satır; başarılı rutin işlemlerde
+  hiç satır; hiçbir kayıtta kullanıcı metni, dosya adı, yol, kullanıcı adı, UUID,
+  SQL, exception mesajı veya stack trace bulunmaması
+- Saat geriye gitmiş bir makinede içe aktarma snapshot'ının, manuel yedeğin, geri
+  yüklemenin ve migration setinin çalışması; epoch değerlerinin birebir korunması
+- Yeni yedeğin adı eskilerden önce sıralansa bile rotation'da silinmemesi
+- Hasarlı bir canlı veritabanında açılışın durması ve veritabanı, WAL ve
+  `backups/` içeriğinin bayt bayt aynı kalması
+- `14.7.5` adaylarının uygulamanın kendi yollarında ve eski şemalardan gelen
+  veritabanlarında bozulmaması ve her birinin gerçek geri yükleme hattından
+  ulaşılabilirliğinin ölçülmesi
+- Kesin yaşam döngüsü çelişkisi taşıyan yedeğin geri yükleme onayından önce tipli
+  reddi; canlı veritabanında böyle bir çelişki varken içe aktarma snapshot'ının
+  ve migration setinin hâlâ doğrulanması
+- Geri almanın, içe aktarmanın üretmediği bir görevi taşıyan batch'i hiçbir satır
+  yazmadan reddetmesi
 - Klavye navigasyonu
 - Yüksek DPI ve büyük metin
 - Paketlenmiş uygulamanın temiz Garuda kurulumunda çalışması
