@@ -9,6 +9,10 @@ import dev.pnptracker.data.repository.TaskEditing
 import dev.pnptracker.data.repository.TaskProgressOutcome
 import dev.pnptracker.data.repository.TaskProgressing
 import dev.pnptracker.domain.colors.ColorSummary
+import dev.pnptracker.domain.diagnostics.DiagnosticArea
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.readShownAsFailed
+import dev.pnptracker.domain.diagnostics.recordSafely
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.ProductionStage
@@ -58,6 +62,7 @@ class PoolController(
     private val colors: ColorCatalogue,
     private val taskEditing: TaskEditing,
     private val taskProgress: TaskProgressing,
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) : TaskEditingHost,
     StaleSurfaces {
     var state: PoolScreenState by mutableStateOf(PoolScreenState(poolType = poolType))
@@ -99,8 +104,13 @@ class PoolController(
         pools
             .observePool(poolType)
             .map { it as PoolSnapshot? }
-            .catch { emit(null) }
-            .collect { snapshot -> if (snapshot == null) show(PoolContentState.Failed) else show(snapshot) }
+            // Kept exactly as it was: every failure becomes the one word the screen
+            // has. Whether that hides a defect is settled apart from this
+            // (PLAN 14.7.6); the record already tells the two apart.
+            .catch { failure ->
+                diagnostics.recordSafely { readShownAsFailed(DiagnosticArea.POOLS, failure) }
+                emit(null)
+            }.collect { snapshot -> if (snapshot == null) show(PoolContentState.Failed) else show(snapshot) }
     }
 
     /** Shows one reading of the pool, laid out for whatever is being asked for. */

@@ -91,7 +91,12 @@ class DiagnosticSurfaceTest {
     }
 
     @Test
-    fun `no production failure path records anything yet — that is the next slice`() {
+    fun `every production file the writer reaches is one with a boundary to record`() {
+        // What this test said in the slice before: nothing but Main knew about
+        // diagnostics at all. It is deliberately turned rather than deleted —
+        // the boundaries now record (PLAN 14.7.2), and the claim worth keeping
+        // is that a file only holds the writer if it has a failure of its own to
+        // name. Which event belongs to which file is DiagnosticOwnershipTest.
         val users =
             productionSources()
                 .filterNot { it.startsWith(moduleRoot().resolve(DIAGNOSTICS_COMMON)) }
@@ -100,13 +105,44 @@ class DiagnosticSurfaceTest {
                     val text = Files.readString(file)
                     listOf("DiagnosticRecord", "Diagnostics", "diagnostics.record").any { it in text }
                 }.map { it.fileName.toString() }
+                .toSet()
 
-        // Main builds the writer and closes it; it records nothing.
-        assertEquals(listOf("Main.kt"), users)
-        val main = Files.readString(moduleRoot().resolve("src/desktopMain/kotlin/dev/pnptracker/Main.kt"))
-        assertTrue("QueuedDiagnostics.inDirectory(paths.logsDirectory" in main)
-        assertTrue(".record(" !in main, "Main records something")
-        assertTrue("diagnostics.close()" in main)
+        assertEquals(
+            setOf(
+                // The one place the writer is made, and the two windows it stands behind.
+                "Main.kt",
+                // Storage refusing, at the boundary that turns it into an answer.
+                "CellTextStore.kt",
+                "ColorCatalogueStore.kt",
+                "GameSetupStore.kt",
+                "ImportConfirmationStore.kt",
+                "ImportDraftRemovalStore.kt",
+                "ImportReviewStore.kt",
+                "ImportRollbackStore.kt",
+                "TaskEditStore.kt",
+                "TaskExportStore.kt",
+                "TaskFromTextStore.kt",
+                "TaskProgressStore.kt",
+                "TaskSetupStore.kt",
+                "UnfinishedImportsStore.kt",
+                "LiveBackupRestorer.kt",
+                // Screens and controllers that decide something no store can see.
+                "BackupController.kt",
+                "HistoryController.kt",
+                "ImportController.kt",
+                "PoolController.kt",
+                "PoolControllers.kt",
+                "RestoreController.kt",
+                // Files, settings and the start of the application.
+                "AutomaticBackupHousekeeping.kt",
+                "DesktopBackupFileGateway.kt",
+                "DesktopExportFileGateway.kt",
+                "DesktopSettingsStore.kt",
+                "StartupGate.kt",
+                "VerifiedSnapshotTaker.kt",
+            ),
+            users,
+        )
     }
 
     private fun diagnosticSources(): List<Path> =

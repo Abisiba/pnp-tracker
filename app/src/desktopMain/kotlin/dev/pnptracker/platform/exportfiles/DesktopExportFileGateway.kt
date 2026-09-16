@@ -1,5 +1,9 @@
 package dev.pnptracker.platform.exportfiles
 
+import dev.pnptracker.domain.diagnostics.DiagnosticEvent
+import dev.pnptracker.domain.diagnostics.DiagnosticRecord
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.recordSafely
 import dev.pnptracker.domain.export.ExportFailure
 import dev.pnptracker.domain.export.ExportFileGateway
 import dev.pnptracker.domain.export.ExportFileHandle
@@ -28,6 +32,7 @@ import java.nio.file.Path
 class DesktopExportFileGateway(
     private val picker: ExportFilePicker,
     private val writer: AtomicFileWriter = AtomicFileWriter(temporarySuffix = ".csv.part"),
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) : ExportFileGateway {
     override suspend fun chooseDestination(suggestedName: String): ExportFileHandle? {
         val chosen = picker.chooseDestination(suggestedName) ?: return null
@@ -35,13 +40,14 @@ class DesktopExportFileGateway(
         if (name.isEmpty()) throw TaskExportException(ExportFailure.UNSUPPORTED_FILE_TYPE)
         // Throws for a name this does not write, before anything is read or made.
         val target = chosen.resolveSibling(csvFileNameOf(name))
-        return PathExportFileHandle(target, writer)
+        return PathExportFileHandle(target, writer, diagnostics)
     }
 }
 
 private class PathExportFileHandle(
     private val file: Path,
     private val writer: AtomicFileWriter,
+    private val diagnostics: Diagnostics,
 ) : ExportFileHandle {
     override val fileName: String = file.fileName?.toString().orEmpty()
 
@@ -52,7 +58,11 @@ private class PathExportFileHandle(
             try {
                 writer.write(file, content)
             } catch (refused: AtomicWriteException) {
-                throw TaskExportException(exportFailureOf(refused.failure)).apply { initCause(refused) }
+                // The disk's refusal becomes the user's answer here, so this is its
+                // one record; the file's name and folder are not part of it.
+                val failure = exportFailureOf(refused.failure)
+                diagnostics.recordSafely { DiagnosticRecord(DiagnosticEvent.EXPORT_WRITE_FAILED, reason = failure, failure = refused) }
+                throw TaskExportException(failure).apply { initCause(refused) }
             }
         }
     }

@@ -1,5 +1,10 @@
 package dev.pnptracker.domain.backup.retention
 
+import dev.pnptracker.domain.diagnostics.DiagnosticArea
+import dev.pnptracker.domain.diagnostics.DiagnosticEvent
+import dev.pnptracker.domain.diagnostics.DiagnosticRecord
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.recordSafely
 import dev.pnptracker.domain.settings.SettingsStore
 
 /**
@@ -36,8 +41,29 @@ fun interface AutomaticBackupHousekeeping {
 class SettingsDrivenHousekeeping(
     private val settings: SettingsStore,
     private val rotation: AutomaticBackupRotation,
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) : AutomaticBackupHousekeeping {
     override suspend fun afterWriting(setName: String) {
-        rotation.rotateAfter(setName, settings.read().automaticBackupCount)
+        val outcome = rotation.rotateAfter(setName, settings.read().automaticBackupCount)
+        // Fail open (PLAN 14.4.13): nothing here stops what came before it. What
+        // would not go away is recorded, one record per kind, as how many files
+        // and never which — a backup's name is a moment of somebody's day.
+        outcome.couldNotRemove
+            .mapNotNull { automaticBackupNameOf(it)?.kind }
+            .groupingBy { it }
+            .eachCount()
+            .forEach { (kind, count) ->
+                diagnostics.recordSafely {
+                    DiagnosticRecord(DiagnosticEvent.BACKUP_ROTATION_INCOMPLETE, area = areaOf(kind), count = count.toLong())
+                }
+            }
     }
 }
+
+/** The fixed name of the part of the application that owns each kind of backup. */
+private fun areaOf(kind: AutomaticBackupKind): DiagnosticArea =
+    when (kind) {
+        AutomaticBackupKind.IMPORT -> DiagnosticArea.IMPORT_SNAPSHOTS
+        AutomaticBackupKind.SAFETY -> DiagnosticArea.SAFETY_BACKUPS
+        AutomaticBackupKind.MIGRATION -> DiagnosticArea.MIGRATION_SETS
+    }

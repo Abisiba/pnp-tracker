@@ -10,6 +10,12 @@ import dev.pnptracker.domain.backup.BackupFileGateway
 import dev.pnptracker.domain.backup.BackupFileHandle
 import dev.pnptracker.domain.backup.DatabaseBackupExporter
 import dev.pnptracker.domain.backup.suggestedBackupFileName
+import dev.pnptracker.domain.diagnostics.DiagnosticArea
+import dev.pnptracker.domain.diagnostics.DiagnosticEvent
+import dev.pnptracker.domain.diagnostics.DiagnosticRecord
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.recordSafely
+import dev.pnptracker.domain.diagnostics.storageReadFailed
 import dev.pnptracker.domain.time.localMomentOf
 import kotlinx.serialization.SerializationException
 import kotlin.time.Clock
@@ -38,6 +44,7 @@ class BackupController(
     private val gateway: BackupFileGateway,
     private val exporter: DatabaseBackupExporter,
     private val clock: Clock,
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) {
     var state: BackupScreenState by mutableStateOf(BackupScreenState.Idle)
         private set
@@ -146,6 +153,7 @@ class BackupController(
                 exporter.backupDocument()
             } catch (refused: SQLiteException) {
                 // Storage said no while the snapshot was being read.
+                diagnostics.recordSafely { storageReadFailed(DiagnosticArea.BACKUP, refused, BackupFailure.COULD_NOT_READ_DATABASE) }
                 fail(BackupFailure.COULD_NOT_READ_DATABASE)
                 return
             } catch (refused: SerializationException) {
@@ -153,6 +161,13 @@ class BackupController(
                 // document. Its own answer, because the two call for different
                 // things: one is a database to look at, the other is this
                 // application's own format.
+                diagnostics.recordSafely {
+                    DiagnosticRecord(
+                        DiagnosticEvent.BACKUP_WRITE_FAILED,
+                        reason = BackupFailure.COULD_NOT_BUILD_DOCUMENT,
+                        failure = refused,
+                    )
+                }
                 fail(BackupFailure.COULD_NOT_BUILD_DOCUMENT)
                 return
             }
@@ -164,6 +179,8 @@ class BackupController(
         try {
             chosen.write(document.json.encodeToByteArray())
         } catch (refused: BackupException) {
+            // Recorded by the file gateway, where the disk's refusal became this
+            // failure; not a second time here (PLAN 14.7.2).
             fail(refused.failure)
             return
         }

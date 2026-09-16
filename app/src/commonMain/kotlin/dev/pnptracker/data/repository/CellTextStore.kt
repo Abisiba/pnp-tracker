@@ -2,6 +2,10 @@ package dev.pnptracker.data.repository
 
 import androidx.sqlite.SQLiteException
 import dev.pnptracker.data.database.dao.CellSegmentDao
+import dev.pnptracker.domain.diagnostics.DiagnosticArea
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.recordSafely
+import dev.pnptracker.domain.diagnostics.storageWriteFailed
 import dev.pnptracker.domain.games.CellTextException
 import dev.pnptracker.domain.games.CellTextFailure
 import dev.pnptracker.domain.model.CellColumnType
@@ -49,6 +53,7 @@ class CellTextStore(
     private val cellSegmentDao: CellSegmentDao,
     private val idGenerator: IdGenerator = IdGenerator.Random,
     private val clock: Clock = Clock.System,
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) : CellTextEditing {
     override suspend fun saveDocumentText(
         gameId: EntityId,
@@ -68,6 +73,7 @@ class CellTextStore(
         } catch (cause: SQLiteException) {
             // Only a recognised storage refusal becomes something the user is
             // told about; a broken invariant travels out untouched.
+            diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.CELL_TEXT, CellTextFailure.COULD_NOT_SAVE, cause) }
             throw CellTextException(CellTextFailure.COULD_NOT_SAVE, cause)
         }
 }

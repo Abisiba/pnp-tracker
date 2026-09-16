@@ -13,6 +13,10 @@ import dev.pnptracker.domain.backup.restore.SUPPORTED_SOURCE_SCHEMA_VERSION
 import dev.pnptracker.domain.backup.restore.SafetySnapshot
 import dev.pnptracker.domain.backup.restore.ValidatedBackup
 import dev.pnptracker.domain.backup.sha256Of
+import dev.pnptracker.domain.diagnostics.DiagnosticEvent
+import dev.pnptracker.domain.diagnostics.DiagnosticRecord
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.recordSafely
 
 /**
  * Replaces everything in the live database with a backup, in one transaction.
@@ -55,13 +59,33 @@ import dev.pnptracker.domain.backup.sha256Of
  */
 class LiveBackupRestorer(
     private val database: AppDatabase,
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) : BackupRestorer {
     override suspend fun restore(
         backup: ValidatedBackup,
         asItWas: SafetySnapshot,
     ): RestoreProblem? {
+        val outcome = replace(backup, asItWas)
+        // Recorded after the writer connection has been given back, so the record
+        // is nowhere near the transaction (PLAN 14.7.2). A restore is one of the
+        // two successes that are recorded: it changed all of the user's data.
+        diagnostics.recordSafely {
+            val problem = outcome.problem
+            if (problem == null) {
+                DiagnosticRecord(DiagnosticEvent.RESTORE_COMPLETED)
+            } else {
+                DiagnosticRecord(DiagnosticEvent.RESTORE_NOT_COMPLETED, reason = problem, failure = outcome.failure)
+            }
+        }
+        return outcome.problem
+    }
+
+    private suspend fun replace(
+        backup: ValidatedBackup,
+        asItWas: SafetySnapshot,
+    ): Outcome {
         try {
-            return database.useWriterConnection { transactor ->
+            database.useWriterConnection { transactor ->
                 transactor.immediateTransaction<Unit> {
                     val before = backupDataOf(database.backupDao().snapshot())
                     if (before != asItWas.data) throw ChangedUnderneath()
@@ -76,23 +100,26 @@ class LiveBackupRestorer(
                 // transaction ending and this reading it back.
                 confirmAfterwards(backup)
             }
+            return Outcome(problem = null)
+        } catch (notVerified: NotVerifiedAfterwards) {
+            return Outcome(RestoreProblem.NOT_VERIFIED_AFTERWARDS, notVerified.unreadable)
         } catch (changed: ChangedUnderneath) {
-            return RestoreProblem.DATA_CHANGED_MEANWHILE
+            return Outcome(RestoreProblem.DATA_CHANGED_MEANWHILE)
         } catch (pointsAtNothing: BrokenBackupGraph) {
             // The graph was checked in memory and again in a throwaway database
             // of this very schema, so arriving here means one of those checks
             // has a hole in it. The transaction has already been rolled back; the
             // user is told their data is untouched, which it is.
-            return RestoreProblem.REFERENCES_NOT_WHOLE
+            return Outcome(RestoreProblem.REFERENCES_NOT_WHOLE)
         } catch (didNotHold: PostconditionFailed) {
-            return RestoreProblem.COULD_NOT_APPLY
+            return Outcome(RestoreProblem.COULD_NOT_APPLY)
         } catch (refusedByStorage: SQLiteException) {
-            return RestoreProblem.COULD_NOT_APPLY
+            return Outcome(RestoreProblem.COULD_NOT_APPLY, refusedByStorage)
         } catch (refusedByARow: IllegalArgumentException) {
             // An entity's own invariant, raised while the rows were read back.
             // It is a statement about the backup rather than about this code, and
             // the transaction it happened in is already undone.
-            return RestoreProblem.COULD_NOT_APPLY
+            return Outcome(RestoreProblem.COULD_NOT_APPLY, refusedByARow)
         }
         // A broken invariant of this application's own — an IllegalStateException
         // or a NullPointerException — is deliberately not caught. The transaction
@@ -121,7 +148,7 @@ class LiveBackupRestorer(
      * is impossible unless this code is wrong, so it is raised as the invariant
      * failure it is rather than dressed up as a bad backup (PLAN 14.4.5).
      */
-    private suspend fun confirmAfterwards(backup: ValidatedBackup): RestoreProblem? {
+    private suspend fun confirmAfterwards(backup: ValidatedBackup) {
         val committed =
             try {
                 Confirmation(
@@ -130,7 +157,7 @@ class LiveBackupRestorer(
                     data = backupDataOf(database.backupDao().snapshot()),
                 )
             } catch (unreadable: SQLiteException) {
-                return RestoreProblem.NOT_VERIFIED_AFTERWARDS
+                throw NotVerifiedAfterwards(unreadable)
             }
 
         check(committed.schemaVersion == SUPPORTED_SOURCE_SCHEMA_VERSION) {
@@ -149,7 +176,6 @@ class LiveBackupRestorer(
         // so this is what puts the restored data on them without a restart
         // (PLAN 14.4.3).
         database.invalidationTracker.refresh(*RESTORE_ORDER.map { (table, _) -> table }.toTypedArray())
-        return null
     }
 
     private suspend fun schemaVersion(): Int =
@@ -165,6 +191,12 @@ class LiveBackupRestorer(
             transactor.usePrepared("PRAGMA foreign_key_check") { statement -> !statement.step() }
         }
 
+    /** What came of one restore, and the refusal behind it when there was one. */
+    private class Outcome(
+        val problem: RestoreProblem?,
+        val failure: Throwable? = null,
+    )
+
     private class Confirmation(
         val schemaVersion: Int,
         val referencesWhole: Boolean,
@@ -174,6 +206,11 @@ class LiveBackupRestorer(
 
 /** The live data is no longer what the safety backup describes; nothing is written. */
 private class ChangedUnderneath : Exception("The database changed after the safety backup was taken")
+
+/** The restore committed, and storage would not let it be read back. */
+private class NotVerifiedAfterwards(
+    val unreadable: SQLiteException,
+) : Exception("The restored database could not be read back", unreadable)
 
 /** What went in is not what the backup says, so none of it stays in. */
 private class PostconditionFailed : Exception("The restored rows are not the rows the backup holds")

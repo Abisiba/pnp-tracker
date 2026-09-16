@@ -3,6 +3,10 @@ package dev.pnptracker.data.repository
 import androidx.sqlite.SQLiteException
 import dev.pnptracker.data.database.dao.TaskDao
 import dev.pnptracker.data.database.entity.TaskEntity
+import dev.pnptracker.domain.diagnostics.DiagnosticArea
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.recordSafely
+import dev.pnptracker.domain.diagnostics.storageWriteFailed
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.PoolType
@@ -55,6 +59,7 @@ class TaskSetupStore(
     private val taskDao: TaskDao,
     private val idGenerator: IdGenerator = IdGenerator.Random,
     private val clock: Clock = Clock.System,
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) : TaskSetup {
     override fun observeTasks(gameId: EntityId): Flow<List<TaskSummary>> =
         taskDao.observeActiveTasksOfGame(gameId).map { rows ->
@@ -114,6 +119,7 @@ class TaskSetupStore(
                 moment = moment,
             )
         } catch (cause: SQLiteException) {
+            diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.TASK_SETUP, TaskSetupFailure.COULD_NOT_SAVE, cause) }
             throw TaskSetupException(TaskSetupFailure.COULD_NOT_SAVE, cause)
         }
         return task.id

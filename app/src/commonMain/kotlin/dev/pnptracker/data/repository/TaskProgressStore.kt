@@ -2,6 +2,11 @@ package dev.pnptracker.data.repository
 
 import androidx.sqlite.SQLiteException
 import dev.pnptracker.data.database.dao.TaskProgressDao
+import dev.pnptracker.domain.diagnostics.DiagnosticArea
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.recordSafely
+import dev.pnptracker.domain.diagnostics.storageReadFailed
+import dev.pnptracker.domain.diagnostics.storageWriteFailed
 import dev.pnptracker.domain.games.GameCompletionSnapshot
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
@@ -167,6 +172,7 @@ class TaskProgressStore(
     private val taskProgressDao: TaskProgressDao,
     private val clock: Clock = Clock.System,
     private val idGenerator: IdGenerator = IdGenerator.Random,
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) : TaskProgressing {
     override suspend fun completeTask(
         taskId: EntityId,
@@ -200,6 +206,7 @@ class TaskProgressStore(
         try {
             taskProgressDao.gameCompletionSnapshot(gameId)
         } catch (cause: SQLiteException) {
+            diagnostics.recordSafely { storageReadFailed(DiagnosticArea.TASK_PROGRESS, cause) }
             null
         }
 
@@ -290,6 +297,7 @@ class TaskProgressStore(
         } catch (refusal: TaskProgressException) {
             TaskProgressOutcome.Refused(refusal.failure)
         } catch (cause: SQLiteException) {
+            diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.TASK_PROGRESS, TaskProgressFailure.TASK_NOT_AVAILABLE, cause) }
             TaskProgressOutcome.Refused(TaskProgressFailure.TASK_NOT_AVAILABLE)
         }
 }

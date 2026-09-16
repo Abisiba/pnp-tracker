@@ -2,6 +2,10 @@ package dev.pnptracker.data.repository
 
 import androidx.sqlite.SQLiteException
 import dev.pnptracker.data.database.dao.TaskFromTextDao
+import dev.pnptracker.domain.diagnostics.DiagnosticArea
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.recordSafely
+import dev.pnptracker.domain.diagnostics.storageWriteFailed
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.TrackingMode
@@ -87,6 +91,7 @@ class TaskFromTextStore(
     private val taskFromTextDao: TaskFromTextDao,
     private val idGenerator: IdGenerator = IdGenerator.Random,
     private val clock: Clock = Clock.System,
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) : TaskCreationFromText {
     override suspend fun createTasks(
         selection: CellTextSelection,
@@ -104,6 +109,7 @@ class TaskFromTextStore(
             // told about. A broken invariant travels out untouched: catching it
             // here would file a programming mistake under a problem they are
             // asked to fix.
+            diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.TASK_FROM_TEXT, TaskFromTextFailure.COULD_NOT_SAVE, cause) }
             throw TaskFromTextException(TaskFromTextFailure.COULD_NOT_SAVE, cause = cause)
         }
 }

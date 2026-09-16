@@ -2,6 +2,13 @@ package dev.pnptracker.data.repository
 
 import androidx.sqlite.SQLiteException
 import dev.pnptracker.data.database.dao.ImportDao
+import dev.pnptracker.domain.diagnostics.DiagnosticArea
+import dev.pnptracker.domain.diagnostics.DiagnosticEvent
+import dev.pnptracker.domain.diagnostics.DiagnosticRecord
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.recordSafely
+import dev.pnptracker.domain.diagnostics.storageReadFailed
+import dev.pnptracker.domain.diagnostics.storageWriteFailed
 import dev.pnptracker.domain.importrollback.ImportRollbackException
 import dev.pnptracker.domain.importrollback.ImportRollbackFailure
 import dev.pnptracker.domain.importrollback.ImportRollbackPreview
@@ -80,6 +87,7 @@ class ImportRollbackStore(
     private val importDao: ImportDao,
     private val idGenerator: IdGenerator = IdGenerator.Random,
     private val clock: Clock = Clock.System,
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) : ImportRollback {
     override fun observeSettledImports(): Flow<List<SettledImport>> =
         importDao
@@ -96,22 +104,43 @@ class ImportRollbackStore(
                 }
             }.catch { cause ->
                 if (cause !is SQLiteException) throw cause
-                throw storageRefused(cause)
+                diagnostics.recordSafely { storageReadFailed(DiagnosticArea.SETTLED_IMPORTS, cause) }
+                throw ImportRollbackException(ImportRollbackFailure.COULD_NOT_SAVE, cause = cause)
             }
 
-    override suspend fun previewRollback(batchId: EntityId): ImportRollbackPreview =
-        try {
-            importDao.previewRollback(batchId)
-        } catch (cause: SQLiteException) {
-            throw storageRefused(cause)
-        }
+    override suspend fun previewRollback(batchId: EntityId): ImportRollbackPreview {
+        val preview =
+            try {
+                importDao.previewRollback(batchId)
+            } catch (cause: SQLiteException) {
+                throw storageRefused(cause)
+            }
+        if (preview.blockingFailure == ImportRollbackFailure.PROVENANCE_BROKEN) recordProvenanceBroken()
+        return preview
+    }
 
     override suspend fun rollBack(batchId: EntityId): ImportRollbackResult =
         try {
             importDao.rollBackConfirmedBatch(batchId = batchId, clock = clock, idGenerator = idGenerator)
         } catch (cause: SQLiteException) {
             throw storageRefused(cause)
+        } catch (refused: ImportRollbackException) {
+            // Every other refusal is an answer the user can see the reason for and
+            // is not recorded (PLAN 14.7.2); a batch whose own records do not say
+            // it made these tasks is.
+            if (refused.failure == ImportRollbackFailure.PROVENANCE_BROKEN) recordProvenanceBroken()
+            throw refused
         }
+
+    /**
+     * One record per refusal the user is shown. The preview and the transaction
+     * make the same decision, and each one reaches the user on its own: a preview
+     * that refuses is never followed by a transaction, and a transaction only
+     * refuses after a preview that did not.
+     */
+    private fun recordProvenanceBroken() {
+        diagnostics.recordSafely { DiagnosticRecord(DiagnosticEvent.IMPORT_ROLLBACK_PROVENANCE_BROKEN) }
+    }
 
     /**
      * Storage refused, so the transaction rolled back and nothing at all was
@@ -122,5 +151,8 @@ class ImportRollbackStore(
      * saved-or-not, and dressing one up as "the import looks damaged" would hide
      * a bug behind the user's data.
      */
-    private fun storageRefused(cause: SQLiteException) = ImportRollbackException(ImportRollbackFailure.COULD_NOT_SAVE, cause = cause)
+    private fun storageRefused(cause: SQLiteException): ImportRollbackException {
+        diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.IMPORT_ROLLBACK, ImportRollbackFailure.COULD_NOT_SAVE, cause) }
+        return ImportRollbackException(ImportRollbackFailure.COULD_NOT_SAVE, cause = cause)
+    }
 }

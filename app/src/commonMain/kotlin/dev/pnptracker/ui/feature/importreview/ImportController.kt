@@ -4,6 +4,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.pnptracker.data.repository.ImportDrafts
+import dev.pnptracker.domain.diagnostics.DiagnosticEvent
+import dev.pnptracker.domain.diagnostics.DiagnosticRecord
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.recordSafely
 import dev.pnptracker.domain.importprep.ImportFailure
 import dev.pnptracker.domain.importprep.ImportFileGateway
 import dev.pnptracker.domain.importprep.ImportFileHandle
@@ -32,6 +36,7 @@ class ImportController(
     private val gateway: ImportFileGateway,
     private val store: ImportDrafts,
     private val reader: ImportFileReader = ImportFileReader(),
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) {
     var state: ImportScreenState by mutableStateOf(ImportScreenState.Idle)
         private set
@@ -202,6 +207,33 @@ class ImportController(
         }
     }
 
-    private fun failedFrom(failure: ImportPreparationException) =
-        ImportScreenState.Failed(failure.failure, failure.columnIndex, failure.csvLocation)
+    /**
+     * The one place a file that could not be read becomes what the screen says.
+     *
+     * The reasons come from four readers — the chooser's own checks, the two
+     * format readers and the fingerprint around them — and none of them records,
+     * so this is where each attempt is recorded, once (PLAN 14.7.2). Only the
+     * reasons that are about the file or the machine are; a layout or a CSV that
+     * says something the importer does not accept is the user's to read on screen.
+     */
+    private fun failedFrom(failure: ImportPreparationException): ImportScreenState.Failed {
+        if (failure.failure in UNREADABLE_FILE) {
+            diagnostics.recordSafely {
+                DiagnosticRecord(DiagnosticEvent.IMPORT_FILE_UNREADABLE, reason = failure.failure, failure = failure.cause)
+            }
+        }
+        return ImportScreenState.Failed(failure.failure, failure.columnIndex, failure.csvLocation)
+    }
+
+    private companion object {
+        /** The reader and environment failures PLAN 14.7.2 records; nothing the user wrote. */
+        val UNREADABLE_FILE =
+            setOf(
+                ImportFailure.NOT_READABLE,
+                ImportFailure.DAMAGED_FILE,
+                ImportFailure.ENCRYPTED,
+                ImportFailure.FILE_CHANGED_WHILE_READING,
+                ImportFailure.REJECTED_BY_SAFETY_LIMIT,
+            )
+    }
 }

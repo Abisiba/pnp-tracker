@@ -9,6 +9,10 @@ import dev.pnptracker.domain.backup.automatic.StartupProblem
 import dev.pnptracker.domain.backup.automatic.StartupRefused
 import dev.pnptracker.domain.backup.restore.SUPPORTED_SOURCE_SCHEMA_VERSION
 import dev.pnptracker.domain.backup.retention.AutomaticBackupHousekeeping
+import dev.pnptracker.domain.diagnostics.DiagnosticEvent
+import dev.pnptracker.domain.diagnostics.DiagnosticRecord
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.recordSafely
 import dev.pnptracker.platform.files.XdgAppPaths
 import kotlinx.coroutines.runBlocking
 
@@ -61,6 +65,7 @@ class StartupGate(
     private val housekeeping: AutomaticBackupHousekeeping,
     private val clone: ConsistentDatabaseClone = ConsistentDatabaseClone(),
     private val lock: InstanceLock = InstanceLock(paths.dataDirectory.resolve(INSTANCE_LOCK_NAME)),
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) {
     /**
      * @throws StartupRefused if the application may not go on. The database has
@@ -100,7 +105,18 @@ class StartupGate(
         // newest few its kind keeps. Nothing it does can stop the migration.
         runBlocking { housekeeping.afterWriting(set.setName) }
 
-        return OpenedDatabase(openForReal(), set)
+        val migrated = openForReal()
+        // One of the two successes that are recorded (PLAN 14.7.2): the set is
+        // proved and the real chain has run, so every row the user has was just
+        // rewritten. Only the two version numbers go with it.
+        diagnostics.recordSafely {
+            DiagnosticRecord(
+                DiagnosticEvent.MIGRATION_COMPLETED,
+                fromSchema = fromSchemaVersion,
+                toSchema = SUPPORTED_SOURCE_SCHEMA_VERSION,
+            )
+        }
+        return OpenedDatabase(migrated, set)
     }
 
     /**

@@ -15,6 +15,12 @@ import dev.pnptracker.domain.backup.automatic.SnapshotNotTaken
 import dev.pnptracker.domain.backup.automatic.SnapshotProblem
 import dev.pnptracker.domain.backup.retention.AutomaticBackupHousekeeping
 import dev.pnptracker.domain.backup.retention.automaticBackupNameOf
+import dev.pnptracker.domain.diagnostics.DiagnosticArea
+import dev.pnptracker.domain.diagnostics.DiagnosticEvent
+import dev.pnptracker.domain.diagnostics.DiagnosticRecord
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.recordSafely
+import dev.pnptracker.domain.diagnostics.storageWriteFailed
 import dev.pnptracker.domain.importconfirm.DraftTaskProblem
 import dev.pnptracker.domain.importconfirm.ImportConfirmationException
 import dev.pnptracker.domain.importconfirm.ImportConfirmationFailure
@@ -98,6 +104,7 @@ class ImportConfirmationStore(
     private val housekeeping: AutomaticBackupHousekeeping,
     private val idGenerator: IdGenerator = IdGenerator.Random,
     private val clock: Clock = Clock.System,
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) : ImportConfirmation {
     override fun observeTargetCells(): Flow<List<TargetCellChoice>> =
         combine(gameDao.observeActiveGames(), gameCellDao.observeCellsOfActiveGames()) { games, cells ->
@@ -261,7 +268,7 @@ class ImportConfirmationStore(
                 updatedAt = clock.now(),
             )
         } catch (cause: SQLiteException) {
-            throw ImportConfirmationException(ImportConfirmationFailure.COULD_NOT_SAVE, cause = cause)
+            throw couldNotSave(cause)
         }
     }
 
@@ -315,14 +322,16 @@ class ImportConfirmationStore(
                 importDao.draftHealthOf(batchId)
             } catch (cause: SQLiteException) {
                 // Nothing has been written, and no backup taken, when this is reached.
-                throw ImportConfirmationException(ImportConfirmationFailure.COULD_NOT_SAVE, cause = cause)
+                throw couldNotSave(cause)
             }
-        if (health is DraftHealth.Contradicting) throw contradicting(health)
+        if (health is DraftHealth.Contradicting) throw recordedContradiction(health)
 
         val snapshot =
             try {
                 snapshots.takeBeforeImport()
             } catch (notTaken: SnapshotNotTaken) {
+                // Recorded where the snapshot was refused, which is the one place
+                // that still knows why (PLAN 14.7.2); not a second time here.
                 throw ImportConfirmationException(failureOf(notTaken.problem), cause = notTaken)
             }
         automaticBackupNameOf(snapshot.fileName)?.let { housekeeping.afterWriting(it.setName) }
@@ -331,18 +340,39 @@ class ImportConfirmationStore(
             try {
                 confirmUnlessChanged(batchId, acknowledgeUnprocessedBlocks, snapshot)
             } catch (changed: ChangedUnderneath) {
+                // Every catch here is outside the transaction: it has already been
+                // rolled back when a record is handed over, so recording can add
+                // nothing to it (PLAN 14.7.2).
+                diagnostics.recordSafely { DiagnosticRecord(DiagnosticEvent.IMPORT_CHANGED_MEANWHILE) }
                 throw ImportConfirmationException(ImportConfirmationFailure.DATA_CHANGED_MEANWHILE, cause = changed)
             } catch (contradicts: ContradictsNow) {
-                throw contradicting(contradicts.health, cause = contradicts)
+                throw recordedContradiction(contradicts.health, cause = contradicts)
             } catch (cause: SQLiteException) {
                 // The transaction rolled back, so nothing at all was written.
-                throw ImportConfirmationException(ImportConfirmationFailure.COULD_NOT_SAVE, cause = cause)
+                throw couldNotSave(cause)
             }
         return ImportConfirmationResult(
             batchId = batchId,
             createdTaskCount = createdTaskCount,
             createdGameCount = 0,
         )
+    }
+
+    /** Storage refused; the one record of it, and the answer the user is given. */
+    private fun couldNotSave(cause: SQLiteException): ImportConfirmationException {
+        diagnostics.recordSafely {
+            storageWriteFailed(DiagnosticArea.IMPORT_CONFIRMATION, ImportConfirmationFailure.COULD_NOT_SAVE, cause)
+        }
+        return ImportConfirmationException(ImportConfirmationFailure.COULD_NOT_SAVE, cause = cause)
+    }
+
+    /** Either look found records that disagree; recorded once, whichever look it was. */
+    private fun recordedContradiction(
+        health: DraftHealth.Contradicting,
+        cause: Throwable? = null,
+    ): ImportConfirmationException {
+        diagnostics.recordSafely { DiagnosticRecord(DiagnosticEvent.IMPORT_RECORDS_CONTRADICT) }
+        return contradicting(health, cause)
     }
 
     /**

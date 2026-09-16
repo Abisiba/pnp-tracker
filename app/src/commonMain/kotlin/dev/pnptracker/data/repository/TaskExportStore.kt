@@ -2,6 +2,12 @@ package dev.pnptracker.data.repository
 
 import androidx.sqlite.SQLiteException
 import dev.pnptracker.data.database.dao.TaskExportDao
+import dev.pnptracker.domain.diagnostics.DiagnosticArea
+import dev.pnptracker.domain.diagnostics.DiagnosticEvent
+import dev.pnptracker.domain.diagnostics.DiagnosticRecord
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.recordSafely
+import dev.pnptracker.domain.diagnostics.storageReadFailed
 import dev.pnptracker.domain.export.ExportFailure
 import dev.pnptracker.domain.export.ExportedTask
 import dev.pnptracker.domain.export.TaskExportException
@@ -34,6 +40,7 @@ interface TaskExportSource {
  */
 class TaskExportStore(
     private val exportDao: TaskExportDao,
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) : TaskExportSource {
     override suspend fun exportedTasks(): List<ExportedTask> {
         val snapshot =
@@ -45,8 +52,19 @@ class TaskExportStore(
                 // stuck half way; as a failure, the user is told and can retry.
                 // A broken invariant is deliberately not caught: that is a defect,
                 // not a reading that did not happen.
+                diagnostics.recordSafely { storageReadFailed(DiagnosticArea.EXPORT, refused, ExportFailure.COULD_NOT_READ) }
                 throw TaskExportException(ExportFailure.COULD_NOT_READ).apply { initCause(refused) }
             }
-        return exportedTasksOf(snapshot.tasks, snapshot.colors)
+        return try {
+            exportedTasksOf(snapshot.tasks, snapshot.colors)
+        } catch (broken: TaskExportException) {
+            // The rows were read and one of them breaks what an export promises.
+            // This is where that is decided, so this is where it is recorded; the
+            // screen shows the same failure and records nothing (PLAN 14.7.2).
+            if (broken.failure == ExportFailure.BROKEN_DATA) {
+                diagnostics.recordSafely { DiagnosticRecord(DiagnosticEvent.EXPORT_BROKEN_DATA, reason = broken.invariant) }
+            }
+            throw broken
+        }
     }
 }

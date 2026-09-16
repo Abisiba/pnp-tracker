@@ -12,6 +12,10 @@ import dev.pnptracker.domain.colors.ColorSetupFailure
 import dev.pnptracker.domain.colors.ColorSummary
 import dev.pnptracker.domain.colors.ColorUsage
 import dev.pnptracker.domain.colors.ColorUsageSample
+import dev.pnptracker.domain.diagnostics.DiagnosticArea
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.recordSafely
+import dev.pnptracker.domain.diagnostics.storageWriteFailed
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.rules.isValidColorHex
@@ -102,6 +106,7 @@ interface ColorCatalogue {
 class ColorCatalogueStore(
     private val colorDao: ColorDao,
     private val idGenerator: IdGenerator = IdGenerator.Random,
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) : ColorCatalogue {
     override fun observeColors(): Flow<List<ColorSummary>> = colorDao.observeColors().map { colors -> colors.map(::summaryOf) }
 
@@ -121,6 +126,7 @@ class ColorCatalogueStore(
         try {
             colorDao.addColorToEndOfCatalogue(id = id, canonicalName = cleanName, hex = hex)
         } catch (cause: SQLiteException) {
+            diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.COLORS, ColorSetupFailure.COULD_NOT_SAVE, cause) }
             throw ColorSetupException(ColorSetupFailure.COULD_NOT_SAVE, cause)
         }
         return id
@@ -145,6 +151,7 @@ class ColorCatalogueStore(
                 hex = hex,
             )
         } catch (cause: SQLiteException) {
+            diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.COLORS, ColorSetupFailure.COULD_NOT_SAVE, cause) }
             throw ColorSetupException(ColorSetupFailure.COULD_NOT_SAVE, cause)
         }
     }
@@ -165,6 +172,7 @@ class ColorCatalogueStore(
         try {
             colorDao.deleteColorTheUserHasConfirmed(id)
         } catch (cause: SQLiteException) {
+            diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.COLORS, ColorSetupFailure.COULD_NOT_SAVE, cause) }
             throw ColorSetupException(ColorSetupFailure.COULD_NOT_SAVE, cause)
         }
 
@@ -186,6 +194,7 @@ class ColorCatalogueStore(
         } catch (conflict: BaseColorRestoreConflict) {
             BaseColorRestore.Blocked(listOf(conflict.blocked))
         } catch (cause: SQLiteException) {
+            diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.COLORS, ColorSetupFailure.COULD_NOT_SAVE, cause) }
             throw ColorSetupException(ColorSetupFailure.COULD_NOT_SAVE, cause)
         }
 

@@ -5,6 +5,10 @@ import dev.pnptracker.domain.backup.BackupFailure
 import dev.pnptracker.domain.backup.BackupFileGateway
 import dev.pnptracker.domain.backup.BackupFileHandle
 import dev.pnptracker.domain.backup.jsonFileNameOf
+import dev.pnptracker.domain.diagnostics.DiagnosticEvent
+import dev.pnptracker.domain.diagnostics.DiagnosticRecord
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.recordSafely
 import dev.pnptracker.platform.files.AtomicFileWriter
 import dev.pnptracker.platform.files.AtomicWriteException
 import dev.pnptracker.platform.files.AtomicWriteFailure
@@ -32,6 +36,7 @@ private const val TEMPORARY_SUFFIX = ".json.part"
 class DesktopBackupFileGateway(
     private val picker: BackupFilePicker,
     private val writer: AtomicFileWriter = AtomicFileWriter(temporarySuffix = TEMPORARY_SUFFIX),
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) : BackupFileGateway {
     override suspend fun chooseDestination(suggestedName: String): BackupFileHandle? {
         val chosen = picker.chooseDestination(suggestedName) ?: return null
@@ -39,13 +44,14 @@ class DesktopBackupFileGateway(
         if (name.isEmpty()) throw BackupException(BackupFailure.NO_DESTINATION)
         // Throws for a name this does not write, before anything is read or made.
         val target = chosen.resolveSibling(jsonFileNameOf(name))
-        return PathBackupFileHandle(target, writer)
+        return PathBackupFileHandle(target, writer, diagnostics)
     }
 }
 
 private class PathBackupFileHandle(
     private val file: Path,
     private val writer: AtomicFileWriter,
+    private val diagnostics: Diagnostics,
 ) : BackupFileHandle {
     override val fileName: String = file.fileName?.toString().orEmpty()
 
@@ -56,7 +62,11 @@ private class PathBackupFileHandle(
             try {
                 writer.write(file, bytes)
             } catch (refused: AtomicWriteException) {
-                throw BackupException(backupFailureOf(refused.failure), refused)
+                // The disk's refusal becomes the user's answer here, so this is its
+                // one record; the file's name and folder are not part of it.
+                val failure = backupFailureOf(refused.failure)
+                diagnostics.recordSafely { DiagnosticRecord(DiagnosticEvent.BACKUP_WRITE_FAILED, reason = failure, failure = refused) }
+                throw BackupException(failure, refused)
             }
         }
     }

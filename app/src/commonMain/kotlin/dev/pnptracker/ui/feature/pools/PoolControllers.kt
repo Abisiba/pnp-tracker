@@ -7,6 +7,7 @@ import dev.pnptracker.data.repository.ColorCatalogue
 import dev.pnptracker.data.repository.PoolSource
 import dev.pnptracker.data.repository.TaskEditing
 import dev.pnptracker.data.repository.TaskProgressing
+import dev.pnptracker.domain.diagnostics.Diagnostics
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.pools.PoolNavigationSummary
 import kotlinx.coroutines.flow.collect
@@ -29,6 +30,7 @@ class PoolControllers(
     private val colors: ColorCatalogue,
     private val taskEditing: TaskEditing,
     private val taskProgress: TaskProgressing,
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) {
     private val controllers: Map<PoolType, PoolController> =
         PoolType.entries.associateWith { poolType ->
@@ -38,6 +40,7 @@ class PoolControllers(
                 colors = colors,
                 taskEditing = taskEditing,
                 taskProgress = taskProgress,
+                diagnostics = diagnostics,
             )
         }
 

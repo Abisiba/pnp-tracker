@@ -4,6 +4,10 @@ import androidx.sqlite.SQLiteException
 import dev.pnptracker.data.database.dao.GameCellDao
 import dev.pnptracker.data.database.dao.GameDao
 import dev.pnptracker.data.database.entity.GameEntity
+import dev.pnptracker.domain.diagnostics.DiagnosticArea
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.recordSafely
+import dev.pnptracker.domain.diagnostics.storageWriteFailed
 import dev.pnptracker.domain.games.CellSummary
 import dev.pnptracker.domain.games.GameSetupException
 import dev.pnptracker.domain.games.GameSetupFailure
@@ -69,6 +73,7 @@ class GameSetupStore(
     private val gameCellDao: GameCellDao,
     private val idGenerator: IdGenerator = IdGenerator.Random,
     private val clock: Clock = Clock.System,
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) : GameSetup {
     override fun observeGames(): Flow<List<GameSummary>> =
         gameDao.observeActiveGames().map { games ->
@@ -95,6 +100,7 @@ class GameSetupStore(
         try {
             gameDao.insert(game)
         } catch (cause: SQLiteException) {
+            diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.GAME_SETUP, GameSetupFailure.COULD_NOT_SAVE, cause) }
             throw GameSetupException(GameSetupFailure.COULD_NOT_SAVE, cause)
         }
         return game.id
@@ -118,6 +124,7 @@ class GameSetupStore(
             // more, which is something the user can see and act on.
             throw GameSetupException(GameSetupFailure.GAME_NOT_AVAILABLE, cause)
         } catch (cause: SQLiteException) {
+            diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.GAME_SETUP, GameSetupFailure.COULD_NOT_SAVE, cause) }
             throw GameSetupException(GameSetupFailure.COULD_NOT_SAVE, cause)
         }
     }
@@ -137,6 +144,7 @@ class GameSetupStore(
                     updatedAt = moment,
                 )
             } catch (cause: SQLiteException) {
+                diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.GAME_SETUP, GameSetupFailure.COULD_NOT_SAVE, cause) }
                 throw GameSetupException(GameSetupFailure.COULD_NOT_SAVE, cause)
             }
         if (changed == 0) throw GameSetupException(GameSetupFailure.GAME_NOT_AVAILABLE)

@@ -7,15 +7,21 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** Faz 3 / **İş 10 / Dilim 1** —
-> `feat(diagnostics): keep a bounded diagnostic log in the state directory`.
-> Tanılama kaydının dosya sözleşmesi, güvenli yazıcı, sınırlı kuyruk, kendi süreç
-> kilidi (R15) ve 5 × 1 MiB rotation motoru yazıldı (§25.4 "İş 10 / Dilim 1'de
-> uygulanan hâli"). **Hiçbir üretim hata sınırı henüz kayıt üretmez**; `Main`
-> yazıcıyı kurar ve kapanışta boşaltır. Room şeması, PLAN ve bağımlılıklar
-> değişmedi. Tam koşu: 3579 / 0 / 0 / 0 (251 sınıf); üç geçici XDG dizinli
-> masaüstü smoke geçti. Sıradaki bağlayıcı kod dilimi **İş 10 / Dilim 2**
-> (tipli hata sınırlarının kayda bağlanması).
+> **Son güncelleme:** Faz 3 / **İş 10 / Dilim 2** —
+> `feat(diagnostics): record failures at their typed boundaries`.
+> PLAN `14.7.2`'nin olay matrisi üretime bağlandı: her hata, tipli sonuca
+> çevrildiği sınırda **bir kez** kaydediliyor; kullanıcıya gösterilen hiçbir metin,
+> sonuç veya ekran durumu değişmedi (§25.4 "İş 10 / Dilim 2'de uygulanan hâli").
+> Tipsiz kaçan sınırlar tahmin edilmedi, **ölçüldü**; Dilim 3'ün kapsamı o
+> matristir. Room şeması, PLAN ve bağımlılıklar değişmedi. Tam koşu: 3634 / 0 / 0 / 0 (261 sınıf);
+> üç geçici XDG dizinli masaüstü smoke geçti. Sıradaki bağlayıcı kod dilimi
+> **İş 10 / Dilim 3** (tipsiz kaçan depolama/dizin hatalarının tipli Türkçe
+> sonuçlara çevrilmesi).
+>
+> Daha önce: İş 10 / Dilim 1 (`feat(diagnostics): keep a bounded diagnostic log in
+> the state directory`) kayıt dosyası sözleşmesini, güvenli yazıcıyı, sınırlı
+> kuyruğu, kendi süreç kilidini (R15) ve 5 × 1 MiB rotation motorunu yazdı; o gün
+> hiçbir üretim sınırı kayıt üretmiyordu (3579 / 0 / 0 / 0).
 >
 > Daha önce: İş 9 kapanışı ve İş 10 belge turu (`docs: define diagnostics and data
 > integrity failure semantics`) İş 9'u makineden bağımsız ölçütlerle kapattı ve
@@ -69,54 +75,58 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-HEAD (bu commit öncesi): 2c80dc35ff377ca2ee416b5953a3eb8d3b8ff813
-önceki commit         : docs: define diagnostics and data integrity failure semantics
-bu commit             : feat(diagnostics): keep a bounded diagnostic log in the state directory
+HEAD (bu commit öncesi): ce29d8affa02b152ffba7c2b032ca5d5b413f8e1
+önceki commit         : feat(diagnostics): keep a bounded diagnostic log in the state directory
+bu commit             : feat(diagnostics): record failures at their typed boundaries
 working tree          : başlangıçta temiz
 Room şema sürümü      : 8   (bu commit'te DEĞİŞMEDİ)
 şema dosyaları        : 1.json … 8.json  hepsi bayt bayt aynı
-test durumu           : ./gradlew clean check --rerun-tasks → BUILD SUCCESSFUL
-                        3579 test / 0 failure / 0 error / 0 skipped (251 sınıf)
-                        [2c80dc3 / 85ccc32: 3535 / 246 → +44 test / +5 sınıf:
-                         DiagnosticLineTest 11 (commonTest), DiagnosticLogSinkTest 17,
-                         QueuedDiagnosticsTest 8, DiagnosticSurfaceTest 4,
-                         DiagnosticLogProcessTest 3, XdgAppPathsResolverTest +1
-                         (13 → 14; biri üç XDG değişkenine genişletildi);
-                         AppDirectoryInitializerTest 6 (sayı aynı, state dizininin
-                         açılışta oluşmadığı iddiası eklendi)]
-                        Bu makinede varsayılan ayarlarla iki tam koşu düşük bellek
-                        nedeniyle OS tarafından öldürüldü; geçen koşu kaynak sınırlıdır:
-                        --no-daemon --no-parallel --max-workers=1
-                        -Pkotlin.compiler.execution.strategy=in-process
-                        -Dorg.gradle.jvmargs="-Xmx1536m -XX:MaxMetaspaceSize=512m
-                        -Dfile.encoding=UTF-8" (6 dk 50 s; repo gradle.properties
-                        DEĞİŞMEDİ)
-smoke                 : XDG_DATA_HOME / XDG_CONFIG_HOME / XDG_STATE_HOME üç ayrı geçici
-                        dizin, ./gradlew --no-daemon run: pencere açıldı, DB + kilitler
-                        geçici data'da, wmctrl -i -c ile kapatıldı, çıkış 0, -wal/-shm
-                        kalmadı; kayıt üretilmediği için state altında logs/ OLUŞMADI;
-                        gerçek pnp.db / lck / backups / config / ~/.local/state aynı
-değişen dosyalar      : üretim — yeni commonMain/domain/diagnostics/DiagnosticRecord.kt,
-                        DiagnosticLine.kt; yeni desktopMain/platform/diagnostics/
-                        DiagnosticLogFileSystem.kt, DiagnosticLogSink.kt,
-                        QueuedDiagnostics.kt; değişen XdgAppPaths.kt,
-                        XdgAppPathsResolver.kt, Main.kt
-                        test — yeni desktopTest/platform/diagnostics/ (5 test sınıfı +
-                        DiagnosticLogTestSupport + DiagnosticLogWriterProcess),
-                        commonTest/domain/diagnostics/DiagnosticLineTest; değişen
-                        XdgAppPathsResolverTest, AppDirectoryInitializerTest (ortamına
-                        XDG_STATE_HOME eklendi), LargeLibraryPerformanceTest (XdgAppPaths
-                        iki yeni alan aldı)
+test durumu           : ./gradlew clean check --rerun-tasks (bellek sınırlı, §30) → BUILD SUCCESSFUL
+                        3634 test / 0 failure / 0 error / 0 skipped (261 sınıf)
+                        [ce29d8a: 3579 / 251 → +55 test / +10 sınıf: StorageFailureRecordsTest 10,
+                         ImportFailureRecordsTest 10, BackupFailureRecordsTest 7,
+                         RestoreRecordsTest 5, StartupRecordsTest 5,
+                         UnexpectedFailureRecordsTest 5, RecordingCostTest 3,
+                         UntypedFailureMeasurementTest 3, DiagnosticOwnershipTest 4,
+                         DiagnosticsSmokeTest 3; DiagnosticSurfaceTest 4 (sayı aynı,
+                         dördüncü test bilinçli olarak çevrildi)]
+smoke                 : XDG_DATA_HOME / XDG_CONFIG_HOME / XDG_STATE_HOME üç ayrı geçici dizin;
+                        data'ya user_version = 9 olan bir veritabanı konup ./gradlew --no-daemon run:
+                        "PNP açılamadı" ekranı açıldı, wmctrl -i -c ile kapatıldı, çıkış 0;
+                        state/pnp-tracker/logs/pnp-tanilama.jsonl'de TEK satır —
+                        {"v":1,"seq":1,"at":"…","level":"ERROR","event":"startup.refused",
+                         "app":"0.1.0","schema":8,"reason":"SCHEMA_TOO_NEW"} — yol, dosya adı,
+                        UUID veya exception mesajı YOK; veritabanı bayt bayt aynı kaldı;
+                        arkada süreç kalmadı; gerçek pnp.db / backups / config / ~/.local/state aynı
+değişen dosyalar      : üretim — yeni commonMain/domain/diagnostics/RecordSafely.kt ve
+                        desktopMain/platform/diagnostics/ApplicationFailureRecords.kt;
+                        tanılama parametresi alan ve kaydeden sınırlar: CellTextStore,
+                        TaskFromTextStore, TaskEditStore, TaskSetupStore, GameSetupStore,
+                        ColorCatalogueStore, TaskProgressStore, ImportReviewStore,
+                        ImportConfirmationStore, ImportRollbackStore, ImportDraftRemovalStore,
+                        UnfinishedImportsStore, TaskExportStore, LiveBackupRestorer,
+                        VerifiedSnapshotTaker, AutomaticBackupHousekeeping, ImportController,
+                        HistoryController, PoolController(+PoolControllers), BackupController,
+                        RestoreController, DesktopBackupFileGateway, DesktopExportFileGateway,
+                        DesktopSettingsStore, StartupGate, Main.kt
+                        test — yeni desktopTest/platform/diagnostics/ (StorageFailureRecordsTest,
+                        ImportFailureRecordsTest, BackupFailureRecordsTest, RestoreRecordsTest,
+                        StartupRecordsTest, UnexpectedFailureRecordsTest, RecordingCostTest,
+                        UntypedFailureMeasurementTest, DiagnosticOwnershipTest,
+                        DiagnosticsSmokeTest, DiagnosticDoubles); değişen DiagnosticSurfaceTest
+                        (Dilim 1'in "hiç kayıt yok" testi bilinçli olarak çevrildi),
+                        ConfirmationSnapshots (yardımcıya diagnostics parametresi)
                         PNP_MASTER_CONTEXT.md
 PLAN.md               : bu commit'te DEĞİŞMEDİ (180ff640…)
 ```
 
-**Bu commit Faz 3 / İş 10'un birinci dilimidir.** Sözleşme PLAN `14.7.1`;
-uygulanan hâl, kuyruk/kapanış davranışı, sahiplik ve rotation, R15 mekanizması ve
-testler §25.4 "İş 10 / Dilim 1'de uygulanan hâli"dedir. Kayıt API'si metin
-parametresi almaz; hiçbir üretim sınırı henüz kayıt üretmez (Dilim 2).
+**Bu commit Faz 3 / İş 10'un ikinci dilimidir.** Sözleşme PLAN `14.7.2`;
+bağlanan olay matrisi, kayıt sahipliği, maliyet ve tipsiz kaçışların ölçüm
+matrisi §25.4 "İş 10 / Dilim 2'de uygulanan hâli"dedir. Kullanıcı davranışı
+değişmedi; tipsiz kaçan hatalar Dilim 3'e ölçülmüş bir listeyle giriyor.
 
-**Bir önceki commit (`2c80dc3`) İş 9'u kapatan ve İş 10'u tasarlayan belge turuydu.**
+**Bir önceki commit (`ce29d8a`) İş 10 / Dilim 1'di:** kayıt dosyası sözleşmesi,
+güvenli yazıcı, sınırlı kuyruk, süreç kilidi ve rotation (§25.4).
 
 **Bir önceki commit (`85ccc32`) Faz 3 / İş 8'di; İŞ 8 TAMAMLANDI.** Envanter, tablo güdümlü tüm
 uygulama taraması ve bulunan üç kusurun düzeltmesi §17 "Faz 3 / İş 8"dedir.
@@ -3860,7 +3870,7 @@ kaldırmayı her zaman mümkün göstermek    REDDEDİLDİ  D6/D7'de motor redde
 
 ---
 
-# 25.4 TANILAMA VE VERİ BÜTÜNLÜĞÜ HATA SEMANTİĞİ  *(Faz 3 / İş 10 — TASARLANDI, 1/8 dilim)*
+# 25.4 TANILAMA VE VERİ BÜTÜNLÜĞÜ HATA SEMANTİĞİ  *(Faz 3 / İş 10 — 2/8 dilim)*
 
 Bağlayıcı metin PLAN `14.7` (ve ona bağlanan `14.2`, `11.4.5`, `14.4.7`,
 `14.4.10`, `14.4.11`, `14.4.13`, `16.`, `18.` Faz 3 İş 10 ve testleri). Bu bölüm
@@ -4039,9 +4049,10 @@ U1–U3            aday; Dilim 5           —                       —        
 ```text
 #  kapsam                                        commit                                                            durum
 1  kayıt dosyası sözleşmesi, yazıcı, rotation    feat(diagnostics): keep a bounded diagnostic log in the state directory  TAMAM
-2  tipli sınırların kayda bağlanması + tipsiz     feat(diagnostics): record typed failures where they are decided         SIRADAKİ
-   kaçışların ölçümü
-3  tipsiz kaçan depolama/dizin hataları → tipli  fix(storage): say in words when the database or its folders will not answer  YAPILMADI
+2  tipli sınırların kayda bağlanması + tipsiz     feat(diagnostics): record failures at their typed boundaries             TAMAM
+   kaçışların ölçümü                             (PLAN'daki taslak mesaj "record typed failures where they are decided"di;
+                                                  dilim talimatının mesajı uygulandı)
+3  tipsiz kaçan depolama/dizin hataları → tipli  fix(storage): say in words when the database or its folders will not answer  SIRADAKİ
 4  R12 saat geriye gidince                       fix(backup): keep backups usable after the clock goes backwards          YAPILMADI
 5  R14 aday ölçümü (yalnız test)                 test(backup): measure which import lifecycle contradictions a restore can carry  YAPILMADI
 6  R14 geri alma provenance kapısı               fix(import): refuse to take back tasks an import did not make           YAPILMADI
@@ -4217,6 +4228,163 @@ yeni kullanıcı metni / ayar / log ekranı        YOK
 StartupGate kilidinin ömrü                      DEĞİŞMEDİ (R15)
 fsync, sıkıştırma, ağ                           YOK
 R12, R13, R14                                   Dilim 4–8
+```
+
+## İş 10 / Dilim 2'de uygulanan hâli
+
+Tipli hata sınırları kayda bağlandı. Kullanıcıya gösterilen hiçbir metin, hiçbir
+tipli sonuç ve hiçbir ekran durumu değişmedi; Room şeması, migration zinciri,
+bağımlılıklar ve PLAN değişmedi.
+
+```text
+commonMain/domain/diagnostics/RecordSafely.kt   recordSafely (kayıt hatası çağırana ULAŞMAZ),
+                                                storageWriteFailed / storageReadFailed /
+                                                readShownAsFailed yapıcıları
+desktopMain/platform/diagnostics/
+  ApplicationFailureRecords.kt                  startupRefusalRecord (ANOTHER_COPY → WARN),
+                                                recordingExceptionHandler +
+                                                RecordingWindowExceptionHandlerFactory
+Main.kt                                         tek yazıcı her sınıra VERİLİR; açılış reddini
+                                                kaydeder; iki pencere de kayıt yapan
+                                                handler'ın arkasında; kapanışta close()
+```
+
+### Kayıt sahipliği — hangi olayı kim yazar
+
+Kural: hatayı **tipli sonuca çeviren** katman kaydeder, bir kez; o sonucu
+gösteren controller aynı hatayı ikinci kez yazmaz. İki olayın iki sahibi vardır
+ve ikisi de birbirinin hatasını göremez. `DiagnosticOwnershipTest` bu tabloyu
+kaynak taramasıyla çiviler; her matris testi de "tam bir kayıt" iddia eder.
+
+```text
+olay                               sahip (üretim dosyası)                seviye/alanlar
+startup.refused                    ApplicationFailureRecords + Main      ERROR (ANOTHER_COPY → WARN); reason, exception
+startup.migration_completed        StartupGate                           INFO; fromSchema, toSchema
+settings.read_problem              DesktopSettingsStore                  WARN; reason; SÜREÇ BAŞINA BİR KEZ
+settings.write_failed              DesktopSettingsStore                  WARN; reason, exception, cause
+storage.read_failed                TaskExportStore(EXPORT), BackupController(BACKUP),
+                                   UnfinishedImportsStore, ImportRollbackStore(SETTLED_IMPORTS),
+                                   TaskProgressStore, HistoryController, PoolController
+storage.write_failed               CellTextStore, TaskFromTextStore, TaskEditStore, TaskSetupStore,
+                                   GameSetupStore, ColorCatalogueStore, TaskProgressStore,
+                                   ImportReviewStore, ImportConfirmationStore, ImportRollbackStore,
+                                   ImportDraftRemovalStore                ERROR; area + reason + sınıf adları
+import.file_unreadable             ImportController                      WARN; yalnız NOT_READABLE, DAMAGED_FILE,
+                                                                         ENCRYPTED, FILE_CHANGED_WHILE_READING,
+                                                                         REJECTED_BY_SAFETY_LIMIT
+import.snapshot_failed             VerifiedSnapshotTaker                  ERROR; reason + place (okuyucu reddiyse)
+import.changed_meanwhile           ImportConfirmationStore                WARN
+import.records_contradict          ImportConfirmationStore (iki kapı da)  WARN; tek kayıt
+import.rollback_provenance_broken  ImportRollbackStore (önizleme ve işlem) WARN
+import.draft_held_by_records       ImportDraftRemovalStore                WARN
+backup.write_failed                DesktopBackupFileGateway (disk),       WARN; reason, exception, cause
+                                   BackupController (belge kurulamadı)
+backup.rotation_incomplete         SettingsDrivenHousekeeping             WARN; area = yedek türü, count
+restore.file_refused               RestoreController                      WARN; reason + place
+restore.not_completed              RestoreController (güvenlik yedeği),   ERROR; reason + sınıf adları
+                                   LiveBackupRestorer (transaction)
+restore.completed                  LiveBackupRestorer                     INFO
+export.write_failed                DesktopExportFileGateway               WARN; reason, exception, cause
+export.broken_data                 TaskExportStore                        ERROR; reason = ExportInvariant
+app.unexpected_failure             RecordingWindowExceptionHandlerFactory ERROR; area, sınıf adları
+                                   (pencere), readShownAsFailed (okuma)
+diagnostics.records_dropped        QueuedDiagnostics (Dilim 1)            WARN; count
+```
+
+**Kaydedilmeyenler (ölçüldü):** kullanıcının iptali, yanlış dosya türü, eski
+`.xls`, CSV dilbilgisi hataları, geçersiz renk kodu gibi programlama/doğrulama
+hataları, `ALREADY_REMOVED` / `NOT_A_DRAFT`, olağan açılış ve her başarılı
+işlem. Uçtan uca başarılı bir tur (oyun, hücre, CSV içe aktarma + onay, dışa
+aktarma, geri alma, yedek, ayar) **hiçbir satır yazmaz ve state dizini bile
+oluşmaz** (`DiagnosticsSmokeTest`).
+
+### Kaydın maliyeti ve güvenliği
+
+```text
+kayıt hatası      recordSafely her kaydı kendi try/catch'inde kurar ve verir; atan bir
+                  Diagnostics ile tipli sonuç AYNI (her matris testinde ölçülür)
+transaction       kayıt her zaman transaction bittikten SONRA verilir; kaydederken
+                  veritabanı yeni bir yazma transaction'ını hemen açabiliyor (ProbingDiagnostics)
+SQL               0 ek ifade; §29 ifade haritaları değişmedi
+eşzamanlılık      8 eşzamanlı aynı hata → 8 tam satır, seq 1…8, karışma yok
+beklenmeyen hata  Compose 1.11.1'in varsayılanı ÖLÇÜLDÜ (bytecode): EDT'ye hata
+                  diyaloğu + WINDOW_CLOSING + istisnayı yeniden fırlatma. Sargı önce
+                  kaydeder, sonra AYNI istisnayı aynı handler'a verir; kapanış yolu
+                  diagnostics.close()'a girdiği için satır en fazla 500 ms içinde diske iner
+```
+
+### Tipsiz kaçan hatalar — ölçüm matrisi  *(Dilim 3'ün TAM kapsamı)*
+
+`UntypedFailureMeasurementTest` (gerçek DB + gerçek hata enjeksiyonu). Davranış
+bu dilimde DEĞİŞTİRİLMEDİ; ölçülmeyen hiçbir vaka Dilim 3'e giremez.
+
+```text
+sınıf / işlem                         çıkan exception              hangi katmandan   bugün kullanıcıya  Dilim 3'te
+ImportDraftStore.save (taslak kaydı)  androidx.sqlite.SQLiteException  store → controller  ekran "kaydediliyor"da kalır  ImportFailure (tipli) +
+                                                                                                                        storage.write_failed
+GameTableStore.observeTable           androidx.sqlite.SQLiteException  store → akış        tipli "okunamadı" YOK         tipli okuma hatası +
+ColorCatalogueStore.observeColors     androidx.sqlite.SQLiteException  store → akış        tipli "okunamadı" YOK         storage.read_failed
+PoolController.observePool            (her Throwable)                  controller catch    Failed; kusuru de maskeler    catch SQLiteException'a
+                                                                                                                        daraltılır (kayıt hazır)
+AppDirectoryInitializer.ensureDirectories  java.io.IOException          Main, pencereden    ham exception; mesajda       StartupProblem + Türkçe
+                                                                        ÖNCE               MUTLAK YOL var               açılış ekranı
+```
+
+Son satır neden bugün kaydedilmiyor: hata, yazıcı kurulmadan önce yükselir ve
+mesajı mutlak yol taşır (ölçüldü); Dilim 3 onu tipli bir açılış reddine çevirince
+`startup.refused` ile kaydedilecek.
+
+### Testler
+
+```text
+desktopTest/…/StorageFailureRecordsTest        10  gerçek SQLite reddiyle on sınır: hücre metni,
+                                                   görevi metne dönüştürme, oyun, renk, ilerleme
+                                                   (yazma + okuma), inceleme, taslak kaldırma,
+                                                   devam eden içe aktarmalar, dışa aktarma okuması;
+                                                   her birinde tipli sonuç + TEK kayıt + atan log
+                                                   ile aynı sonuç
+ImportFailureRecordsTest                       10  snapshot'ın üç sebebi (yazılamadı / geri okunamadı +
+                                                   place / DB okunamadı), arada değişen veri, iki
+                                                   kapının çelişkisi, geri almanın provenance'ı
+                                                   (önizleme + işlem), kayıtların tuttuğu taslak,
+                                                   okunamayan dosya; iptal ve kullanıcı hatası 0 kayıt
+BackupFailureRecordsTest                        7  yedek dosyası yazılamadı, DB okunamadı, belge
+                                                   kurulamadı, rotation eksik kaldı (tür + count),
+                                                   bozuk ayar dosyası (SÜREÇTE BİR KEZ), ayar
+                                                   yazılamadı, CSV yazılamadı, bozuk renk yuvası
+RestoreRecordsTest                              5  dosya reddi (+place) ve dosyasız diyalog, güvenlik
+                                                   yedeği okunamadı/yazılamadı, canlı replace geçti
+                                                   (INFO), arada değişen veri, transaction ortasında
+                                                   depolama reddi
+StartupRecordsTest                              5  gerçek v3 → v8 göçü (INFO + fromSchema/toSchema),
+                                                   olağan açılış 0 kayıt, şema 9, veritabanı olmayan
+                                                   dosya, ikinci kopya → WARN
+UnexpectedFailureRecordsTest                    5  geçmiş ve havuz okumasında depolama ≠ kusur ayrımı,
+                                                   pencereye ulaşan hata kaydedilip AYNI handler'a AYNI
+                                                   istisnayla veriliyor, atan log bunu değiştirmiyor
+RecordingCostTest                               3  kayıt transaction bittikten SONRA (ProbingDiagnostics),
+                                                   8 eşzamanlı hata → 8 tam satır (seq 1…8), kusur
+                                                   kaydedilmiyor ve maskelenmiyor
+UntypedFailureMeasurementTest                   3  Dilim 3'ün kapsamı: taslak kaydı, oyun tablosu +
+                                                   renk kataloğu okuması, açılış dizini (IOException,
+                                                   mesajında mutlak yol)
+DiagnosticOwnershipTest                         4  olay → sahip tablosu, depolama sahipleri, recordSafely
+                                                   dışında record() yok, Main tek yazıcıyı kurup dağıtıyor
+DiagnosticsSmokeTest                            3  üç geçici XDG: başarılı tur 0 satır ve state dizini
+                                                   YOK; iki gerçek hata → iki satır, yalnız geçici state
+                                                   altında; geri yükleme INFO satırı
+DiagnosticSurfaceTest                       4 (±0) Dilim 1'in "hiç kayıt yok" testi, yazıcıyı tutan
+                                                   üretim dosyalarının kapalı listesine ÇEVRİLDİ
+```
+
+### Dilim 2'nin bilerek YAPMADIKLARI
+
+```text
+tipsiz kaçan hataları tiplemek                   Dilim 3 (yukarıdaki matris)
+yeni Türkçe metin / yeni tipli sonuç             YOK
+çökme politikasını değiştirmek                   YOK (ölçüldü ve korundu)
+başarı kaydı                                     YOK (yalnız iki INFO)
+R12, R13, R14                                    Dilim 4–8
 ```
 
 ## Açık sınırlar ve karar bekleyenler
@@ -4471,6 +4639,11 @@ Devam eden içe aktarmalar healthOfDraftBatches 1 ve 42 taslak için AYNI üç o
                          eşdeğer. Devam et her basışta draftHealthOf'u YENİDEN
                          okur; kaldırma motoru dışında yazan yol yok, snapshot 0,
                          history 0
+Tanılama sınırları       her tipli hata sınırı TAM BİR kayıt üretir ve controller'ı ikinci
+                         kez yazmaz (matris testleri); başarılı uçtan uca tur 0 satır ve
+                         state dizini bile YOK; kayıt transaction bittikten SONRA verilir
+                         (kaydederken yeni bir yazma transaction'ı hemen açılabiliyor);
+                         8 eşzamanlı aynı hata 8 tam satır; 0 ek SQL ifadesi
 Tanılama kaydı           kayıt verilmeyen yazıcı diskte hiçbir şey oluşturmaz; record()
                          disk I/O yapmaz; 16.000 eşzamanlı kayıt seq sırasıyla, satırlar
                          karışmadan; dosya ≤ 1 MiB (tam 1 MiB'a izin), ≤ 5 dosya; yabancı
@@ -4765,7 +4938,8 @@ PLAN `18.` — Faz 3 işler listesi.
                                               makineden bağımsız kabul ölçütleri,
                                               süre/bellek eşik değil kayıt)
 10  Loglama ve anlaşılır hata mesajları ......... DEVAM EDİYOR (PLAN 14.7, §25.4;
-                                              8 dilimden 1'i: kayıt dosyası + yazıcı)
+                                              8 dilimden 2'si: kayıt dosyası + yazıcı,
+                                              tipli sınırların kayda bağlanması)
 11  Self-contained Linux dağıtımı ....................... YAPILMADI
 12  Garuda/Arch paketi .................................. YAPILMADI
 13  Temiz Garuda ortamında kurulum testi ................ YAPILMADI
@@ -4824,13 +4998,16 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
 
 ## Sıradaki bağlayıcı iş
 
-> **Sıradaki bağlayıcı kod dilimi: Faz 3 / İş 10 / Dilim 2 — tipli hata
-> sınırlarının kayda bağlanması** (PLAN `14.7.2`, `14.7.6`; özet §25.4). Commit
-> mesajı `feat(diagnostics): record typed failures where they are decided`.
-> Dilim 1 bitti: `QueuedDiagnostics` ve `DiagnosticRecord` hazır, `Main` yazıcıyı
-> kurup kapatıyor ama hiçbir yer `record` çağırmıyor (`DiagnosticSurfaceTest`
-> bunu sabitliyor; Dilim 2 bu testi bilinçli olarak dönüştürmeli). Smoke üç
-> geçici XDG (`XDG_DATA_HOME`, `XDG_CONFIG_HOME`, `XDG_STATE_HOME`) ile yapılır.
+> **Sıradaki bağlayıcı kod dilimi: Faz 3 / İş 10 / Dilim 3 — tipsiz kaçan
+> depolama ve dizin hatalarının tipli Türkçe sonuçlara çevrilmesi** (PLAN
+> `14.7.6`; kapsam §25.4'teki ölçüm matrisi ve YALNIZ o). Commit mesajı
+> `fix(storage): say in words when the database or its folders will not answer`.
+> Dilim 2 bitti: her tipli sınır kendi hatasını bir kez kaydediyor, sahiplik
+> `DiagnosticOwnershipTest` ile çivili, kayıt hiçbir transaction'ın içinde
+> verilmiyor ve başarılı bir tur hiç satır yazmıyor. Dilim 3 yeni bir olay
+> EKLEMEZ: ölçülen beş kaçışı tipler ve mevcut `storage.*_failed` /
+> `startup.refused` kayıtlarına bağlar. Smoke üç geçici XDG
+> (`XDG_DATA_HOME`, `XDG_CONFIG_HOME`, `XDG_STATE_HOME`) ile yapılır.
 >
 > **İş 5 TAMAMLANDI (§25 matris). İş 8 TAMAMLANDI (§17). İş 9 TAMAMLANDI (§29).
 > İş 10'un bütün kararları verildi (PLAN `14.7`)** — R12, R13 ve R14 dahil; kod
@@ -5470,6 +5647,12 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   İŞ 9 TAMAMLANDI: kabul makineden bağımsızdır (doğru sonuç, 42/1.000+ aynı ifade
   yapısı, N+1 yok, arama/süzgeç 0 ifade, tekrarda aynı sonuç); süre/bellek EŞİK
   EKLEME, yalnız ortamla kayıt; aynı yöntemde 2 kat kötüleşmeyi raporla.
+- İŞ 10 / DİLİM 2 BİTTİ: hata sınırları kayda bağlandı. Kuralı bozma: hatayı tipli
+  sonuca çeviren katman kaydeder (store/gateway), controller AYNI hatayı ikinci kez
+  YAZMAZ; kaydı her zaman transaction bittikten SONRA ver; recordSafely dışında
+  record() çağırma; yeni olay kodu EKLEME (liste kapalı, PLAN 14.7.2). Sahiplik
+  tablosu DiagnosticOwnershipTest'tedir; yeni bir sınır eklerken orayı da güncelle.
+  Tipsiz kaçan hataların listesi ÖLÇÜLDÜ (§25.4 matrisi) — Dilim 3'ün kapsamı odur.
 - İŞ 10 / DİLİM 1 BİTTİ: tanılama yazıcısı domain/diagnostics (DiagnosticRecord,
   diagnosticLineOf) + platform/diagnostics (DiagnosticLogFileSystem, DiagnosticLogSink,
   QueuedDiagnostics). Yeni olay kaydederken ikinci bir yazıcı, kuyruk, dosya adı
@@ -5769,8 +5952,10 @@ hasarlı bir veritabanı açılmayacak ve dokunulmadan korunacak; elle hazırlan
 bir yedekteki çelişkili içe aktarma kayıtları geri yükleme onayından önce
 reddedilecek ve geri alma yalnız kendi ürettiği görevleri kaldıracak. Bunların
 ilki — sınırlı, kullanıcı verisi taşımayan tanılama kaydı yazıcısı — Dilim 1'de
-yazıldı; henüz hiçbir hata onu kullanmıyor. Sıradaki bağlayıcı kod dilimi İş 10 /
-Dilim 2'dir.
+yazıldı, ve Dilim 2'de uygulamanın bütün tipli hata sınırlarına bağlandı: bir hata
+artık tipli sonuca çevrildiği yerde bir kez kaydediliyor, kullanıcı hiçbir fark
+görmüyor, ve bir işi başarıyla bitiren bir gün hiç satır yazmıyor. Sıradaki
+bağlayıcı kod dilimi İş 10 / Dilim 3'tür.
 
 Bunların ilki — **sürümlü JSON yedek ve geri yükleme** — dört atomik dilimde
 **tamamlanmıştır**. Biçim, kapsam, doğrulama hattı, restore mimarisi (A′),

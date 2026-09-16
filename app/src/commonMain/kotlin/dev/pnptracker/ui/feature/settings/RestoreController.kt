@@ -8,6 +8,7 @@ import dev.pnptracker.domain.backup.BackupException
 import dev.pnptracker.domain.backup.DatabaseBackupExporter
 import dev.pnptracker.domain.backup.restore.BackupProblem
 import dev.pnptracker.domain.backup.restore.BackupReadResult
+import dev.pnptracker.domain.backup.restore.BackupRejection
 import dev.pnptracker.domain.backup.restore.BackupRestorer
 import dev.pnptracker.domain.backup.restore.BackupSourceGateway
 import dev.pnptracker.domain.backup.restore.RestoreProblem
@@ -17,6 +18,10 @@ import dev.pnptracker.domain.backup.restore.UntrustedBackupReader
 import dev.pnptracker.domain.backup.restore.ValidatedBackup
 import dev.pnptracker.domain.backup.retention.AutomaticBackupHousekeeping
 import dev.pnptracker.domain.backup.retention.automaticBackupNameOf
+import dev.pnptracker.domain.diagnostics.DiagnosticEvent
+import dev.pnptracker.domain.diagnostics.DiagnosticRecord
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.recordSafely
 import dev.pnptracker.domain.time.localMomentOf
 import kotlinx.serialization.SerializationException
 import kotlin.time.Clock
@@ -56,6 +61,7 @@ class RestoreController(
     private val restorer: BackupRestorer,
     private val housekeeping: AutomaticBackupHousekeeping,
     private val clock: Clock,
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) {
     var state: RestoreScreenState by mutableStateOf(RestoreScreenState.Idle)
         private set
@@ -106,7 +112,7 @@ class RestoreController(
                 // The dialog answered with something that is not a file at all.
                 // It is refused in the same words as a file that cannot be read,
                 // because that is what it is from here.
-                reject(BackupProblem.UNREADABLE)
+                reject(BackupRejection(BackupProblem.UNREADABLE))
                 return
             }
         // Changing one's mind is not a failure. Nothing was read and nothing was
@@ -119,7 +125,7 @@ class RestoreController(
 
         state = RestoreScreenState.Validating
         when (val read = reader.read(chosen)) {
-            is BackupReadResult.Refused -> reject(read.rejection.problem)
+            is BackupReadResult.Refused -> reject(read.rejection)
             is BackupReadResult.Valid -> {
                 pending = read.backup
                 token++
@@ -159,9 +165,11 @@ class RestoreController(
             try {
                 exporter.backupDocument()
             } catch (unreadable: SQLiteException) {
+                recordNotCompleted(RestoreProblem.SAFETY_BACKUP_NOT_MADE, unreadable)
                 fail(RestoreProblem.SAFETY_BACKUP_NOT_MADE, safetyFileName = null)
                 return
             } catch (unwritable: SerializationException) {
+                recordNotCompleted(RestoreProblem.SAFETY_BACKUP_NOT_MADE, unwritable)
                 fail(RestoreProblem.SAFETY_BACKUP_NOT_MADE, safetyFileName = null)
                 return
             }
@@ -174,6 +182,7 @@ class RestoreController(
             try {
                 safety.writeSafetyBackup(document.json.encodeToByteArray(), localMomentOf(clock.now()))
             } catch (notWritten: BackupException) {
+                recordNotCompleted(RestoreProblem.SAFETY_BACKUP_NOT_WRITTEN, notWritten)
                 fail(RestoreProblem.SAFETY_BACKUP_NOT_WRITTEN, safetyFileName = null)
                 return
             }
@@ -187,6 +196,8 @@ class RestoreController(
                 data = document.envelope.data,
                 dataSha256 = document.envelope.dataSha256,
             )
+        // The restorer records its own outcome, success included, because it is
+        // the only one that knows what refused inside the transaction.
         val problem = restorer.restore(backup, asItWas)
         if (problem != null) {
             fail(problem, safetyFileName)
@@ -218,10 +229,26 @@ class RestoreController(
         state = RestoreScreenState.Idle
     }
 
-    private fun reject(problem: BackupProblem) {
+    /**
+     * The file the user chose is refused, which is recorded here and only here:
+     * the reader is shared with the automatic snapshots, whose refusals are theirs
+     * to record (PLAN 14.7.2). The place is the backup format's own words.
+     */
+    private fun reject(rejection: BackupRejection) {
+        diagnostics.recordSafely {
+            DiagnosticRecord(DiagnosticEvent.RESTORE_FILE_REFUSED, reason = rejection.problem, place = rejection.place)
+        }
         pending = null
-        state = RestoreScreenState.Rejected(problem)
+        state = RestoreScreenState.Rejected(rejection.problem)
         focusRecall++
+    }
+
+    /** The safety backup did not happen, so nothing was replaced. */
+    private fun recordNotCompleted(
+        problem: RestoreProblem,
+        failure: Throwable,
+    ) {
+        diagnostics.recordSafely { DiagnosticRecord(DiagnosticEvent.RESTORE_NOT_COMPLETED, reason = problem, failure = failure) }
     }
 
     private fun fail(

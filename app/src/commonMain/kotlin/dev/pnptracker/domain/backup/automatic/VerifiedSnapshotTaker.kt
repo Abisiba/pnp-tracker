@@ -3,8 +3,13 @@ package dev.pnptracker.domain.backup.automatic
 import androidx.sqlite.SQLiteException
 import dev.pnptracker.domain.backup.BackupException
 import dev.pnptracker.domain.backup.DatabaseBackupExporter
+import dev.pnptracker.domain.backup.restore.BackupPlace
 import dev.pnptracker.domain.backup.restore.BackupReadResult
 import dev.pnptracker.domain.backup.restore.UntrustedBackupReader
+import dev.pnptracker.domain.diagnostics.DiagnosticEvent
+import dev.pnptracker.domain.diagnostics.DiagnosticRecord
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.recordSafely
 import dev.pnptracker.domain.time.localMomentOf
 import kotlinx.serialization.SerializationException
 import kotlin.time.Clock
@@ -37,15 +42,16 @@ class VerifiedSnapshotTaker(
     private val writer: AutomaticSnapshotWriter,
     private val reader: UntrustedBackupReader,
     private val clock: Clock,
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) : AutomaticSnapshotTaker {
     override suspend fun takeBeforeImport(): AutomaticSnapshot {
         val document =
             try {
                 exporter.backupDocument()
             } catch (unreadable: SQLiteException) {
-                throw SnapshotNotTaken(SnapshotProblem.DATABASE_NOT_READ, unreadable)
+                throw notTaken(SnapshotProblem.DATABASE_NOT_READ, unreadable)
             } catch (unwritable: SerializationException) {
-                throw SnapshotNotTaken(SnapshotProblem.DATABASE_NOT_READ, unwritable)
+                throw notTaken(SnapshotProblem.DATABASE_NOT_READ, unwritable)
             }
         // A broken invariant of this application's own is deliberately not caught
         // here. It is a defect rather than an outcome, and hiding one behind "the
@@ -55,17 +61,17 @@ class VerifiedSnapshotTaker(
             try {
                 writer.writeImportSnapshot(document.json.encodeToByteArray(), localMomentOf(clock.now()))
             } catch (notWritten: BackupException) {
-                throw SnapshotNotTaken(SnapshotProblem.NOT_WRITTEN, notWritten)
+                throw notTaken(SnapshotProblem.NOT_WRITTEN, notWritten)
             }
 
         val readBack =
             when (val read = reader.read(written)) {
-                is BackupReadResult.Refused -> throw SnapshotNotTaken(SnapshotProblem.NOT_VERIFIED)
+                is BackupReadResult.Refused -> throw notTaken(SnapshotProblem.NOT_VERIFIED, place = read.rejection.place)
                 is BackupReadResult.Valid -> read.backup
             }
         // The file is a backup. These two say it is this one.
-        if (readBack.dataSha256 != document.envelope.dataSha256) throw SnapshotNotTaken(SnapshotProblem.NOT_VERIFIED)
-        if (readBack.data != document.envelope.data) throw SnapshotNotTaken(SnapshotProblem.NOT_VERIFIED)
+        if (readBack.dataSha256 != document.envelope.dataSha256) throw notTaken(SnapshotProblem.NOT_VERIFIED)
+        if (readBack.data != document.envelope.data) throw notTaken(SnapshotProblem.NOT_VERIFIED)
 
         return AutomaticSnapshot(
             fileName = written.fileName,
@@ -77,5 +83,21 @@ class VerifiedSnapshotTaker(
             data = document.envelope.data,
             dataSha256 = document.envelope.dataSha256,
         )
+    }
+
+    /**
+     * The snapshot did not happen: recorded here, where the reason is still known,
+     * and nowhere above (PLAN 14.7.2). Only the place in the backup's own words and
+     * the classes of what refused survive.
+     */
+    private fun notTaken(
+        problem: SnapshotProblem,
+        failure: Throwable? = null,
+        place: BackupPlace? = null,
+    ): SnapshotNotTaken {
+        diagnostics.recordSafely {
+            DiagnosticRecord(DiagnosticEvent.IMPORT_SNAPSHOT_FAILED, reason = problem, place = place, failure = failure)
+        }
+        return SnapshotNotTaken(problem, failure)
     }
 }

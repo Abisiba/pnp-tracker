@@ -1,5 +1,9 @@
 package dev.pnptracker.platform.settings
 
+import dev.pnptracker.domain.diagnostics.DiagnosticEvent
+import dev.pnptracker.domain.diagnostics.DiagnosticRecord
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.recordSafely
 import dev.pnptracker.domain.settings.AutomaticBackupSettings
 import dev.pnptracker.domain.settings.SettingsNotSaved
 import dev.pnptracker.domain.settings.SettingsProblem
@@ -19,6 +23,7 @@ import java.io.IOException
 import java.nio.charset.MalformedInputException
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** What a half-written settings file is called while it is still half written. */
 private const val TEMPORARY_SUFFIX = ".json.part"
@@ -47,10 +52,26 @@ private const val TEMPORARY_SUFFIX = ".json.part"
 class DesktopSettingsStore(
     private val settingsFile: Path,
     private val writer: AtomicFileWriter = AtomicFileWriter(temporarySuffix = TEMPORARY_SUFFIX),
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) : SettingsStore {
     private val oneAtATime = Mutex()
 
+    /**
+     * Whether a problem with the file has been recorded yet. The number is read
+     * before every automatic backup, and a file that is broken once is broken
+     * every time, so it is said once for the life of the process (PLAN 14.7.2).
+     */
+    private val readProblemRecorded = AtomicBoolean(false)
+
     override suspend fun read(): AutomaticBackupSettings =
+        readFromDisk().also { settings ->
+            val problem = settings.problem
+            if (problem != null && readProblemRecorded.compareAndSet(false, true)) {
+                diagnostics.recordSafely { DiagnosticRecord(DiagnosticEvent.SETTINGS_READ_PROBLEM, reason = problem) }
+            }
+        }
+
+    private suspend fun readFromDisk(): AutomaticBackupSettings =
         oneAtATime.withLock {
             withContext(Dispatchers.IO) {
                 // Not there is not a problem: it is what a machine looks like
@@ -79,7 +100,11 @@ class DesktopSettingsStore(
                 try {
                     writer.write(settingsFile, document.encodeToByteArray())
                 } catch (refused: AtomicWriteException) {
-                    throw SettingsNotSaved(writeFailureOf(refused.failure), refused)
+                    val failure = writeFailureOf(refused.failure)
+                    diagnostics.recordSafely {
+                        DiagnosticRecord(DiagnosticEvent.SETTINGS_WRITE_FAILED, reason = failure, failure = refused)
+                    }
+                    throw SettingsNotSaved(failure, refused)
                 }
             }
         }

@@ -4,6 +4,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.pnptracker.data.repository.HistorySource
+import dev.pnptracker.domain.diagnostics.DiagnosticArea
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.readShownAsFailed
+import dev.pnptracker.domain.diagnostics.recordSafely
 import dev.pnptracker.domain.history.HistoryFilter
 import dev.pnptracker.domain.history.HistoryLog
 import dev.pnptracker.domain.history.HistoryPeriod
@@ -28,6 +32,7 @@ import kotlinx.coroutines.flow.collect
 class HistoryController(
     private val history: HistorySource,
     private val clock: kotlin.time.Clock = kotlin.time.Clock.System,
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) {
     var state: HistoryScreenState by mutableStateOf(HistoryScreenState())
         private set
@@ -44,7 +49,9 @@ class HistoryController(
             history.observeHistory().collect { log -> show(log) }
         } catch (cancellation: CancellationException) {
             throw cancellation
-        } catch (_: Exception) {
+        } catch (failure: Exception) {
+            // The screen says the same thing whatever it was; the record says which.
+            diagnostics.recordSafely { readShownAsFailed(DiagnosticArea.HISTORY, failure) }
             state = state.copy(content = HistoryContentState.Failed)
         }
     }

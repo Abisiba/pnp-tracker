@@ -3,6 +3,10 @@ package dev.pnptracker.data.repository
 import androidx.sqlite.SQLiteException
 import dev.pnptracker.data.database.AppDatabase
 import dev.pnptracker.data.database.dao.ImportDao
+import dev.pnptracker.domain.diagnostics.DiagnosticArea
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.recordSafely
+import dev.pnptracker.domain.diagnostics.storageReadFailed
 import dev.pnptracker.domain.importhealth.DraftContradiction
 import dev.pnptracker.domain.importhealth.DraftHealth
 import dev.pnptracker.domain.importremoval.DraftRemovalOutcome
@@ -81,7 +85,8 @@ interface UnfinishedImports {
 class UnfinishedImportsStore(
     private val database: AppDatabase,
     private val importDao: ImportDao,
-    private val removal: ImportDraftRemoval = ImportDraftRemovalStore(importDao),
+    private val diagnostics: Diagnostics = Diagnostics.None,
+    private val removal: ImportDraftRemoval = ImportDraftRemovalStore(importDao, diagnostics),
 ) : UnfinishedImports {
     override fun observeUnfinishedImports(): Flow<List<UnfinishedImport>> =
         database.invalidationTracker
@@ -92,6 +97,7 @@ class UnfinishedImportsStore(
                 }
             }.catch { cause ->
                 if (cause !is SQLiteException) throw cause
+                diagnostics.recordSafely { storageReadFailed(DiagnosticArea.UNFINISHED_IMPORTS, cause) }
                 throw UnfinishedImportsUnreadable(cause)
             }
 
@@ -99,6 +105,7 @@ class UnfinishedImportsStore(
         try {
             importDao.draftHealthOf(batchId)
         } catch (cause: SQLiteException) {
+            diagnostics.recordSafely { storageReadFailed(DiagnosticArea.UNFINISHED_IMPORTS, cause) }
             throw UnfinishedImportsUnreadable(cause)
         }
 

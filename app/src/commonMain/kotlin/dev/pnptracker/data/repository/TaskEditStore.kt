@@ -2,6 +2,10 @@ package dev.pnptracker.data.repository
 
 import androidx.sqlite.SQLiteException
 import dev.pnptracker.data.database.dao.TaskEditDao
+import dev.pnptracker.domain.diagnostics.DiagnosticArea
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.recordSafely
+import dev.pnptracker.domain.diagnostics.storageWriteFailed
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.TrackingMode
@@ -88,6 +92,7 @@ class TaskEditStore(
     private val taskEditDao: TaskEditDao,
     private val idGenerator: IdGenerator = IdGenerator.Random,
     private val clock: Clock = Clock.System,
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) : TaskEditing {
     override suspend fun editTask(
         taskId: EntityId,
@@ -112,6 +117,7 @@ class TaskEditStore(
         } catch (cause: SQLiteException) {
             // Only a recognised storage refusal becomes something the user is
             // told about; a broken invariant travels out untouched.
+            diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.TASK_EDIT, TaskEditFailure.COULD_NOT_SAVE, cause) }
             throw TaskEditException(TaskEditFailure.COULD_NOT_SAVE, cause = cause)
         }
 
@@ -124,6 +130,7 @@ class TaskEditStore(
                 historyEventId = idGenerator.newId(),
             )
         } catch (cause: SQLiteException) {
+            diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.TASK_EDIT, TaskEditFailure.COULD_NOT_SAVE, cause) }
             throw TaskEditException(TaskEditFailure.COULD_NOT_SAVE, cause = cause)
         }
 }

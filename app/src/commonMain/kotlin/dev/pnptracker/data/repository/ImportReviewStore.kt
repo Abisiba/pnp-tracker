@@ -7,6 +7,10 @@ import dev.pnptracker.data.database.dao.ImportDao
 import dev.pnptracker.data.database.entity.DraftTaskEntity
 import dev.pnptracker.data.database.entity.RawImportBlockEntity
 import dev.pnptracker.domain.colors.ColorSummary
+import dev.pnptracker.domain.diagnostics.DiagnosticArea
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.recordSafely
+import dev.pnptracker.domain.diagnostics.storageWriteFailed
 import dev.pnptracker.domain.importhint.ColorVocabulary
 import dev.pnptracker.domain.importhint.ColorVocabularyEntry
 import dev.pnptracker.domain.importreview.ImportReviewException
@@ -163,6 +167,7 @@ class ImportReviewStore(
     private val colorDao: ColorDao,
     private val idGenerator: IdGenerator = IdGenerator.Random,
     private val clock: Clock = Clock.System,
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) : ImportReview {
     override fun observeDraftBatches(): Flow<List<EarlierImport>> =
         importDao.observeDraftBatches().map { batches ->
@@ -203,6 +208,7 @@ class ImportReviewStore(
         try {
             importDao.setRawBlockProcessed(blockId, isProcessed, clock.now())
         } catch (cause: SQLiteException) {
+            diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.IMPORT_REVIEW, ImportReviewFailure.COULD_NOT_SAVE, cause) }
             throw ImportReviewException(ImportReviewFailure.COULD_NOT_SAVE, cause)
         }
     }
@@ -262,6 +268,7 @@ class ImportReviewStore(
         try {
             importDao.createDraftFromSelectionUnderReview(draftId, blockId, startIndex, endIndex, clock)
         } catch (cause: SQLiteException) {
+            diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.IMPORT_REVIEW, ImportReviewFailure.COULD_NOT_SAVE, cause) }
             throw ImportReviewException(ImportReviewFailure.COULD_NOT_SAVE, cause)
         }
         return draftId
@@ -275,6 +282,7 @@ class ImportReviewStore(
         try {
             importDao.createDraftByHandUnderReview(draftId, blockId, name, clock)
         } catch (cause: SQLiteException) {
+            diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.IMPORT_REVIEW, ImportReviewFailure.COULD_NOT_SAVE, cause) }
             throw ImportReviewException(ImportReviewFailure.COULD_NOT_SAVE, cause)
         }
         return draftId
@@ -299,6 +307,7 @@ class ImportReviewStore(
                 clock = clock,
             )
         } catch (cause: SQLiteException) {
+            diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.IMPORT_REVIEW, ImportReviewFailure.COULD_NOT_SAVE, cause) }
             throw ImportReviewException(ImportReviewFailure.COULD_NOT_SAVE, cause)
         }
 
@@ -309,6 +318,7 @@ class ImportReviewStore(
         try {
             importDao.setDraftCompletionDecisionUnderReview(draftTaskId, decision, clock)
         } catch (cause: SQLiteException) {
+            diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.IMPORT_REVIEW, ImportReviewFailure.COULD_NOT_SAVE, cause) }
             throw ImportReviewException(ImportReviewFailure.COULD_NOT_SAVE, cause)
         }
 
@@ -321,6 +331,7 @@ class ImportReviewStore(
         try {
             importDao.setDraftColorsUnderReview(draftTaskId, colorIds, clock)
         } catch (cause: SQLiteException) {
+            diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.IMPORT_REVIEW, ImportReviewFailure.COULD_NOT_SAVE, cause) }
             throw ImportReviewException(ImportReviewFailure.COULD_NOT_SAVE, cause)
         }
 
@@ -332,6 +343,7 @@ class ImportReviewStore(
         try {
             importDao.setGameCompletionDecisionUnderReview(blockId, decision, targetGameId, clock)
         } catch (cause: SQLiteException) {
+            diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.IMPORT_REVIEW, ImportReviewFailure.COULD_NOT_SAVE, cause) }
             throw ImportReviewException(ImportReviewFailure.COULD_NOT_SAVE, cause)
         }
 }

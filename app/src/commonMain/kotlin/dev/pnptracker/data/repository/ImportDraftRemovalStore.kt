@@ -2,6 +2,12 @@ package dev.pnptracker.data.repository
 
 import androidx.sqlite.SQLiteException
 import dev.pnptracker.data.database.dao.ImportDao
+import dev.pnptracker.domain.diagnostics.DiagnosticArea
+import dev.pnptracker.domain.diagnostics.DiagnosticEvent
+import dev.pnptracker.domain.diagnostics.DiagnosticRecord
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.recordSafely
+import dev.pnptracker.domain.diagnostics.storageWriteFailed
 import dev.pnptracker.domain.importremoval.DraftRemovalOutcome
 import dev.pnptracker.domain.importremoval.DraftRemovalRefusal
 import dev.pnptracker.domain.model.EntityId
@@ -34,14 +40,25 @@ interface ImportDraftRemoval {
  */
 class ImportDraftRemovalStore(
     private val importDao: ImportDao,
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) : ImportDraftRemoval {
-    override suspend fun remove(batchId: EntityId): DraftRemovalOutcome =
-        try {
-            importDao.removeDraftBatch(batchId)
-        } catch (cause: SQLiteException) {
-            // Storage refused, so the transaction rolled back and nothing at all
-            // was written. Only this is turned into an answer; anything else is a
-            // defect and travels out as it is.
-            DraftRemovalOutcome.Refused(batchId, DraftRemovalRefusal.COULD_NOT_SAVE)
+    override suspend fun remove(batchId: EntityId): DraftRemovalOutcome {
+        val outcome =
+            try {
+                importDao.removeDraftBatch(batchId)
+            } catch (cause: SQLiteException) {
+                // Storage refused, so the transaction rolled back and nothing at all
+                // was written. Only this is turned into an answer; anything else is a
+                // defect and travels out as it is.
+                diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.DRAFT_REMOVAL, DraftRemovalRefusal.COULD_NOT_SAVE, cause) }
+                return DraftRemovalOutcome.Refused(batchId, DraftRemovalRefusal.COULD_NOT_SAVE)
+            }
+        // Real records hold the draft: decided inside the transaction, and recorded
+        // here, once, after it has ended (PLAN 14.7.2). The other refusals are
+        // answers about a draft that is gone or settled, and are not recorded.
+        if ((outcome as? DraftRemovalOutcome.Refused)?.refusal == DraftRemovalRefusal.HELD_BY_RECORDS) {
+            diagnostics.recordSafely { DiagnosticRecord(DiagnosticEvent.IMPORT_DRAFT_HELD_BY_RECORDS) }
         }
+        return outcome
+    }
 }

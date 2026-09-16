@@ -10,6 +10,7 @@ import dev.pnptracker.domain.backup.automatic.SnapshotNotTaken
 import dev.pnptracker.domain.backup.automatic.SnapshotProblem
 import dev.pnptracker.domain.backup.automatic.anAutomaticSnapshot
 import dev.pnptracker.domain.backup.retention.AutomaticBackupHousekeeping
+import dev.pnptracker.domain.diagnostics.Diagnostics
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.ui.feature.settings.RecordingHousekeeping
 import kotlin.time.Clock
@@ -59,6 +60,7 @@ fun confirmationStore(
     housekeeping: AutomaticBackupHousekeeping = RecordingHousekeeping(),
     idGenerator: IdGenerator = IdGenerator.Random,
     clock: Clock = Clock.System,
+    diagnostics: Diagnostics = Diagnostics.None,
 ) = ImportConfirmationStore(
     database = database,
     importDao = importDao,
@@ -68,4 +70,5 @@ fun confirmationStore(
     housekeeping = housekeeping,
     idGenerator = idGenerator,
     clock = clock,
+    diagnostics = diagnostics,
 )
