@@ -69,6 +69,8 @@ tasks.register<JavaExec>("desktopWindowSmoke") {
     val desktopTest = kotlin.jvm("desktop").compilations.getByName("test")
     classpath = files(desktopTest.output.allOutputs, desktopTest.runtimeDependencyFiles)
     mainClass = "dev.pnptracker.platform.desktop.DesktopWindowSmokeKt"
+    // `-PsmokeScenario=damaged-database` starts it on a damaged database (PLAN 14.7.4).
+    providers.gradleProperty("smokeScenario").orNull?.let { args(it) }
 }
 
 ktlint {

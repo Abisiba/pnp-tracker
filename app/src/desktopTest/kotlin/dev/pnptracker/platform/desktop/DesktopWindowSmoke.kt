@@ -1,6 +1,11 @@
 package dev.pnptracker.platform.desktop
 
+import dev.pnptracker.data.database.DatabaseFactory
+import dev.pnptracker.data.database.fillWithEverything
 import dev.pnptracker.platform.diagnostics.LogHome
+import dev.pnptracker.platform.startup.DatabaseDamage
+import dev.pnptracker.platform.startup.digestOf
+import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
@@ -10,6 +15,12 @@ import kotlin.system.exitProcess
 
 /** The main window's title, exactly as `strings.xml` gives it (app_window_title). */
 const val MAIN_WINDOW_TITLE: String = "PnP Üretim Takipçisi"
+
+/** The startup problem window's title, exactly as `strings.xml` gives it (startup_title). */
+const val STARTUP_PROBLEM_TITLE: String = "PNP açılamadı"
+
+/** The argument that starts the application on a damaged database instead of none. */
+const val DAMAGED_DATABASE_SCENARIO: String = "damaged-database"
 
 private const val WINDOW_WAIT_SECONDS = 180L
 private const val EXIT_WAIT_SECONDS = 60L
@@ -28,17 +39,27 @@ private const val TEMPORARY_PREFIX = "pnp-desktop-smoke-"
  * folder to be empty (an ordinary run writes no diagnostic line), and the real
  * application's files to be exactly as they were.
  *
+ * With the argument [DAMAGED_DATABASE_SCENARIO]
+ * (`./gradlew desktopWindowSmoke -PsmokeScenario=damaged-database`) the
+ * temporary data folder starts with a version 8 database this run wrote and then
+ * damaged (PLAN 14.7.4). The window expected is then the startup problem window,
+ * closed the same way; afterwards the database must be byte for byte what it was,
+ * nothing may stand beside it, no backup may exist, and the state folder must
+ * hold exactly one line: the refusal, with its reason and no word of SQLite's.
+ *
  * Anything short of that fails the run and says why. If the window cannot be
  * told apart safely, the application is stopped as a process — it is this run's
  * own — and no window is closed.
  */
-fun main() {
+fun main(args: Array<String>) {
+    val damaged = args.firstOrNull() == DAMAGED_DATABASE_SCENARIO
+    require(args.isEmpty() || damaged) { "unknown scenario" }
     val problems = mutableListOf<String>()
     val realBefore = LogHome.realApplicationLocations()
     val root = Files.createTempDirectory(TEMPORARY_PREFIX)
     println("SMOKE: temporary home created")
     try {
-        runTheWindow(root, problems)
+        runTheWindow(root, problems, damaged)
     } finally {
         if (LogHome.realApplicationLocations() != realBefore) problems += "the real application's files changed"
         deleteOwnTemporaryHome(root)
@@ -55,12 +76,16 @@ fun main() {
 private fun runTheWindow(
     root: Path,
     problems: MutableList<String>,
+    damaged: Boolean,
 ) {
     val data = root.resolve("data")
     val config = root.resolve("config")
     val state = root.resolve("state")
     val tmp = Files.createDirectories(root.resolve("tmp"))
     val log = root.resolve("application.log")
+    val title = if (damaged) STARTUP_PROBLEM_TITLE else MAIN_WINDOW_TITLE
+    val database = data.resolve("pnp-tracker").resolve("pnp.db")
+    val damagedDigest = if (damaged) aDamagedDatabase(database) else null
 
     val java = Path.of(System.getProperty("java.home"), "bin", "java").toString()
     val builder =
@@ -79,15 +104,15 @@ private fun runTheWindow(
     // its children would no longer be found under it.
     val started = mutableListOf<ProcessHandle>()
     try {
-        val found = awaitWindow(application, closer)
+        val found = awaitWindow(application, closer, title)
         if (found !is WindowChoice.One) {
             problems += "no window was closed: ${SafeWindowCloser.describe(found)}"
             return
         }
-        println("SMOKE: window ${found.window.id} of process ${found.window.pid}, title exactly \"$MAIN_WINDOW_TITLE\"")
+        println("SMOKE: window ${found.window.id} of process ${found.window.pid}, title exactly \"$title\"")
         started += application.descendants().toList()
 
-        when (val outcome = closer.close(MAIN_WINDOW_TITLE)) {
+        when (val outcome = closer.close(title)) {
             is CloseOutcome.Refused -> {
                 problems += "the window was not closed: ${outcome.why}"
                 return
@@ -107,9 +132,31 @@ private fun runTheWindow(
         println("SMOKE: temporary data folder: $made")
         if ("pnp.db" !in made) problems += "the application made no database in the temporary data folder"
         if (made.any { it.endsWith("-wal") || it.endsWith("-shm") }) problems += "the database was not closed cleanly: $made"
-        val stateFiles = Files.exists(state) && Files.walk(state).use { entries -> entries.anyMatch { Files.isRegularFile(it) } }
-        println("SMOKE: state folder holds a file: $stateFiles")
-        if (stateFiles) problems += "an ordinary run wrote into the state folder"
+        val stateLines =
+            if (!Files.exists(state)) {
+                emptyList()
+            } else {
+                Files.walk(state).use { entries -> entries.filter { Files.isRegularFile(it) }.toList() }.flatMap { Files.readAllLines(it) }
+            }
+        println("SMOKE: lines in the state folder: ${stateLines.size}")
+        if (damagedDigest == null) {
+            if (stateLines.isNotEmpty()) problems += "an ordinary run wrote into the state folder"
+        } else {
+            val same = digestOf(database) == damagedDigest
+            println("SMOKE: damaged database byte for byte as it was: $same")
+            if (!same) problems += "the damaged database was changed"
+            val backups = listed(data.resolve("pnp-tracker").resolve("backups"))
+            println("SMOKE: backups: ${backups.size}")
+            if (backups.isNotEmpty()) problems += "a backup was written for a damaged database"
+            val line = stateLines.singleOrNull()
+            val refused =
+                line != null &&
+                    "\"startup.refused\"" in line &&
+                    "DATABASE_DAMAGED" in line &&
+                    listOf("malformed", "quick_check", "pnp.db", root.toString()).none { it in line }
+            println("SMOKE: one safe startup.refused line with reason DATABASE_DAMAGED: $refused")
+            if (!refused) problems += "the refusal was not recorded as exactly one safe line"
+        }
         val trouble = Files.readAllLines(log).filter { "Exception" in it || it.trimStart().startsWith("at ") }
         println("SMOKE: exception lines in the application's output: ${trouble.size}")
         if (trouble.isNotEmpty()) problems += "the application printed an exception"
@@ -122,10 +169,11 @@ private fun runTheWindow(
 private fun awaitWindow(
     application: Process,
     closer: SafeWindowCloser,
+    title: String,
 ): WindowChoice {
     val giveUpAt = System.nanoTime() + TimeUnit.SECONDS.toNanos(WINDOW_WAIT_SECONDS)
     while (true) {
-        val choice = closer.find(MAIN_WINDOW_TITLE)
+        val choice = closer.find(title)
         if (choice !is WindowChoice.None) return choice
         if (!application.isAlive || System.nanoTime() > giveUpAt) return choice
         // The window manager says nothing when a window appears; it is asked again.
@@ -149,6 +197,22 @@ private fun stopIfStillRunning(
         process.destroyForcibly()
     }
     println("SMOKE: processes left from this run: ${descendants.count { it.isAlive } + if (application.isAlive) 1 else 0}")
+}
+
+/** A version 8 database with something of every kind in it, closed, then damaged; its digest. */
+private fun aDamagedDatabase(file: Path): String {
+    Files.createDirectories(file.parent)
+    val database = DatabaseFactory().open(file)
+    try {
+        runBlocking { fillWithEverything(database) }
+    } finally {
+        database.close()
+    }
+    DatabaseDamage.TABLE_PAGE.applyTo(file)
+    // Room's own lock file may stay; a log or an index beside it may not.
+    check(listed(file.parent).none { it.endsWith("-wal") || it.endsWith("-shm") }) { "the damaged database has a log beside it" }
+    println("SMOKE: damaged version 8 database written")
+    return digestOf(file)
 }
 
 private fun listed(folder: Path): List<String> =
