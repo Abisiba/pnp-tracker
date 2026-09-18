@@ -7,7 +7,18 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** Faz 3 / **İş 10 TAMAMLANDI** — Dilim 4–8 ve belge turu
+> **Son güncelleme:** Faz 3 / **İş 11 ve İş 12 TAMAMLANDI** —
+> `docs: record Linux packaging decisions and results`. Uygulama artık sistemde
+> Java gerektirmeyen, belirlenimci bir `pnp-tracker-0.1.0-linux-x86_64.tar.gz`
+> arşivi (jpackage uygulama imajı + 13 modüllük jlink runtime) ve bu arşivi
+> paketleyen `pnp-tracker-0.1.0-1-x86_64.pkg.tar.zst` Arch paketi olarak
+> üretiliyor; sürümün tek kaynağı Gradle `project.version` (R5 kapandı, R7
+> kapandı). İki paket de gerçek başlatıcılarıyla, depo dışından, geçici XDG
+> dizinleriyle çalıştırılıp `SafeWindowCloser` ile kapatıldı. Room 8, PLAN ve
+> bağımlılıklar değişmedi. Tam koşu 3701 / 0 / 0 / 0 (269 sınıf). Ayrıntı §25.5.
+> **Sıradaki bağlayıcı iş Faz 3 / İş 13'tür.**
+>
+> Daha önce: Faz 3 / **İş 10 TAMAMLANDI** — Dilim 4–8 ve belge turu
 > `docs: record completed diagnostics and integrity work`. Saat geriye gidince
 > yedekler kullanılabilir kalıyor (R12); onaylı ve geri alınmış içe aktarmaların
 > 13 aday çelişkisi ölçüldü ve hepsi `L`'ye girdi (R14); geri alma C2–C4'ü
@@ -104,63 +115,48 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-başlangıç HEAD        : 89dff7ed4928a88dc413bf51d070c659e64aab6a
-                        (test(desktop): make process and window checks deterministic)
-HEAD (bu commit öncesi): a588d0e — test(startup): open a damaged database in the window smoke
-bu commit             : docs: record completed diagnostics and integrity work
-bu turun commit'leri  : efd6f3a fix(backup): keep backups usable after the clock goes backwards      Dilim 4 / R12
-                        feadbf8 test(import): measure confirmed import lifecycle contradictions      Dilim 5 / R14 ölçümü
-                        e5f73f7 fix(import): refuse to take back tasks an import did not make        Dilim 6 / geri alma kapısı
-                        966b546 fix(restore): reject contradictory import lifecycles before confirmation  Dilim 7 / geri yükleme kapısı
-                        34ef740 fix(startup): refuse to open a damaged database                      Dilim 8 / R13
-                        a588d0e test(startup): open a damaged database in the window smoke           Dilim 8 smoke'u
-                        (commit mesajları: Dilim 4 ve 6 PLAN 14.7.6'nın; Dilim 5, 7 ve 8 kullanıcı
-                         talimatınınki — PLAN'daki taslaklar "test(backup): measure which import
-                         lifecycle contradictions a restore can carry", "feat(backup): refuse a
-                         backup whose imports contradict their own records", "feat(startup): refuse
-                         to open a damaged database"dı. a588d0e ayrı test commit'idir: PLAN'ın
-                         Dilim 8 smoke'u desktopWindowSmoke'a senaryo olarak eklendi, tam koşudan önce)
-working tree          : her dilimde temiz
-Room şema sürümü      : 8   (DEĞİŞMEDİ; migration yok, bağımlılık yok)
-şema dosyaları        : 1.json … 8.json  hepsi bayt bayt aynı (hash'ler aşağıda)
-PLAN.md               : DEĞİŞMEDİ (180ff640…)
+başlangıç HEAD        : a6db6c7883241b18364f90f753feade345c39876
+                        (docs: record completed diagnostics and integrity work)
+HEAD (bu commit öncesi): a0d1aa6 — fix(packaging): read the window class only through the window helpers
+bu commit             : docs: record Linux packaging decisions and results
+bu turun commit'leri  : a942683 build(linux): package a self-contained application archive   İş 11
+                        44b329d build(arch): package the application for Garuda and Arch Linux İş 12
+                        a0d1aa6 fix(packaging): read the window class only through the       tam koşunun
+                                window helpers                                               bulduğu hata
+working tree          : her commit'te temiz
+Room şema sürümü      : 8   (DEĞİŞMEDİ; migration yok, yeni üçüncü taraf bağımlılık yok)
+şema dosyaları        : 1.json … 8.json  hepsi bayt bayt aynı
+PLAN.md               : DEĞİŞMEDİ (180ff640…) — İş 11/12 maddeleri seçilen paket türlerini
+                        zaten kapsıyor; kararlar burada (§25.5) kayıtlı
 fixture               : sample-import.xlsx DEĞİŞMEDİ (314780a4…)
-test durumu           : ./gradlew clean check --rerun-tasks (bellek sınırlı, §30) → BUILD SUCCESSFUL
-                        3701 test / 0 failure / 0 error / 0 skipped (269 sınıf), 6 dk 44 sn
-                        [89dff7e: 3675 / 266 → +26 test, +3 sınıf: LifecycleContradictionReachTest,
-                         DatabaseDamageMeasurementTest, DamagedDatabaseStartupTest]
-tam koşu notu         : ilk iki deneme test derlemesinde Claude Code'un arka plan görev yöneticisi
-                        tarafından "sistem belleği azaldı" gerekçesiyle durduruldu (test sonucu
-                        yok, OS OOM değil, geride süreç yok). Üçüncü deneme aynı komutla, görev
-                        yöneticisinden ayrılmış (setsid nohup) çalıştı ve geçti. Bir önceki tam
-                        koşu da (Dilim 8 smoke değişikliği gelince) derleme öncesi elle durdurulmuştu.
-dar koşular           : Dilim 4 → 16 sınıf / 183 test; Dilim 6 → 11 sınıf / 101 test;
-                        Dilim 7 → 21 sınıf / 167 test + RestoreSmokeTest 2/2 (red smoke'u eklendikten sonra);
-                        Dilim 8 → 14 sınıf / 94 test; hepsi 0 başarısız, ktlint temiz
-smoke                 : ./gradlew desktopWindowSmoke (tam koşudan sonra): pencere 0x03e00007 (süreç
-                        52155, başlık tam "PnP Üretim Takipçisi") SafeWindowCloser ile kapandı; çıkış 0;
-                        [backups, pnp-baslangic.lock, pnp.db, pnp.db.lck], -wal/-shm yok; state boş;
-                        exception 0; arkada süreç 0 → PASSED
-                        ./gradlew desktopWindowSmoke -PsmokeScenario=damaged-database: hasarlı v8 DB;
-                        pencere 0x03e00007 (süreç 52457, başlık tam "PNP açılamadı") SafeWindowCloser
-                        ile kapandı; çıkış 0; DB bayt bayt aynı; -wal/-shm yok; yedek 0; state'te tam
-                        bir güvenli startup.refused satırı (DATABASE_DAMAGED); exception 0; süreç 0 → PASSED
-                        Dilim 7 red smoke'u: RestoreSmokeTest "…refused, and nothing moves" (geçici XDG,
-                        gerçek dosya + okuyucu + controller + güvenlik yazıcısı + canlı DB; yalnız dosya
-                        diyaloğu yerine seçilen dosya) — iki seçim, DB ve yedek klasörü aynı
-                        Sıcak WAL: DamagedDatabaseStartupTest (sağlam v8, commit'li satır yalnız WAL'da →
-                        açılıyor ve satır duruyor; hasarlı + sıcak WAL → db, -wal, -shm bayt bayt aynı)
-gerçek kullanıcı alanı: başlangıç ve bitişte yalnız hash/metadata ile karşılaştırıldı — pnp.db, pnp.db.lck,
-                        backups, config, ~/.local/state: birebir aynı (değerler bilinçli olarak yazılmadı)
-değişen dosyalar      : üretim — domain/importhealth/ImportLifecycle.kt (yeni), DraftHealthRows,
-                        BackupValues, EntityTimestamps, ImportDao, AutomaticBackupRotation,
-                        ImportRollbackPlan, BackupProblem, RestoreController, RestoreSection,
-                        MigrationSnapshotSet (StartupProblem), StartupGate, ConsistentDatabaseClone,
-                        StartupErrorScreen, Strings, strings.xml
-                        test — ayrıntı §25.4; build — app/build.gradle.kts (smokeScenario argümanı)
+test durumu           : ./gradlew clean check --rerun-tasks (bellek sınırlı, §30; ayrılmış süreçle)
+                        → BUILD SUCCESSFUL, 3701 / 0 / 0 / 0 (269 sınıf), 7 dk 32 sn
+                        (paket denetimleri test sınıfı değil, ayrı Gradle görevleridir)
+tam koşu geçmişi      : (1) 44b329d'de 3701 test, 1 başarısız: SafeWindowCloserTest'in yüzey testi
+                        paket denetiminin doğrudan xprop çağırdığını yakaladı → a0d1aa6;
+                        (2) a0d1aa6'da yukarıdaki satır
+dar koşular           : AppInfoTest dahil sürümü kullanan sınıflar → 3 sınıf / 29 test;
+                        SafeWindowCloserTest 13/13; desktopWindowSmoke PASSED; ktlint temiz
+paket smoke'ları      : ./gradlew :app:verifyLinuxPackage → PACKAGE: PASSED (§25.5)
+(tam koşudan sonra)     ./gradlew :app:verifyArchPackage  → PACKAGE: PASSED (§25.5)
+çıktılar              : pnp-tracker-0.1.0-linux-x86_64.tar.gz   94.309.676 bayt
+                          SHA-256 a66bbb88dea52969889b6e5555e55b679827cb151fae48d0094e8c43cd958716
+                        pnp-tracker-0.1.0-1-x86_64.pkg.tar.zst  92.537.371 bayt (kurulu 181.025.904)
+                          SHA-256 eb296a35f43f352ba1da02ff25abfd5985f56c84afd1af14e3c805f0abe870ea
+                        (ikisi de ardışık üretimlerde bayt bayt aynı; bu makinede, bu araçlarla)
+gerçek kullanıcı alanı: başlangıç ve bitişte yalnız hash/metadata — pnp.db, pnp.db.lck, backups,
+                        config, ~/.local/state birebir aynı; /opt ve /usr/bin'e hiçbir şey
+                        kurulmadı, sudo kullanılmadı
 ```
 
-**Bu commit İş 10'u kapatan belge turudur; İŞ 10 TAMAMLANDI.** Dilim 4–8'in
+**Bu commit İş 11 ve İş 12'yi kapatan belge turudur.** Paket türleri, sürüm
+kaynağı, runtime, belirlenimcilik, doğrulama ve bilinen sınırlar §25.5'tedir.
+Sıradaki bağlayıcı iş **Faz 3 / İş 13**'tür (temiz Garuda ortamında kurulum,
+açılış, veri dizini, güncelleme ve kaldırma testi — §33 R6: ayrı bir temiz
+ortam gerektirir).
+
+**Önceki belge commit'i (`a6db6c7`) İş 10'u kapatıyordu; İŞ 10 TAMAMLANDI.**
+ Dilim 4–8'in
 uygulanan hâli, R14 ölçüm matrisi ve R13 maliyet/tespit ölçümü §25.4 "İş 10 /
 Dilim 4–8'de uygulanan hâli"ndedir. Sıradaki bağlayıcı iş **Faz 3 / İş 11**'dir
 (paket türü, JRE, sürüm kaynağı R5 — kullanıcı kararı bekler).
@@ -4983,6 +4979,168 @@ turunda kapandı, aşağıda.)
 
 ---
 
+# 25.5 LINUX PAKETLEME  *(Faz 3 / İş 11 ve İş 12 — TAMAMLANDI)*
+
+## Verilmiş kararlar  *(kullanıcı adına verildi; yeniden tartışılmaz)*
+
+```text
+ 1  İş 11 çıktısı: sistemde Java gerektirmeyen self-contained uygulama dizini ve onun
+    belirlenimci tar.gz arşivi; JRE paketin içinde
+ 2  İş 12 çıktısı: pacman ile kurulabilen .pkg.tar.zst; uygulama /opt/pnp-tracker,
+    başlatıcı /usr/bin/pnp-tracker, masaüstü girdisi ve ikon freedesktop konumları
+ 3  Sürümün tek kaynağı Gradle project.version (0.1.0 korundu, yükseltilmedi)
+ 4  İş 12, İş 11'in doğrulanmış arşivini paketler; ikinci derleme hattı yok
+ 5  Yayın, GitHub Release, AUR, imzalama, CI bu işlerin kapsamı DEĞİL
+ 6  Yeni üçüncü taraf bağımlılık yok; Room şeması ve migration zinciri değişmedi
+```
+
+Paket türlerinin nedeni: arşiv her dağıtımda açılıp çalışabilen, Java'sız
+taşınabilir biçimdir (PLAN İş 12'nin "açıkça belgelenmiş taşınabilir paket"
+seçeneği de budur); `.pkg.tar.zst` ise Garuda/Arch'ın kendi paket yöneticisiyle
+kurulan, kaldırılan ve güncellenen biçimdir. İkisi aynı uygulama dizinidir.
+
+## Sürüm — tek kaynak  *(R5 kapandı)*
+
+`app/build.gradle.kts`: `version = "0.1.0"`. `generateApplicationVersion` görevi
+bundan `dev.pnptracker.APPLICATION_VERSION` sabitini üretir (commonMain'e
+kaynak olarak eklenir); `AppInfo.Current.version` onu okur — yedek belgelerine
+yazılan sürüm dahil. jpackage `packageVersion`, arşiv adı, `VERSION` dosyası,
+`.jpackage.xml`, başlatıcının `-Djpackage.app-version`, PKGBUILD `pkgver` ve
+`.PKGINFO` hep aynı değerden türer ve iki denetim görevi her birini sınar.
+
+## İş 11 — self-contained arşiv  *(`a942683`)*
+
+```text
+araç            Compose Multiplatform 1.11.1 nativeDistributions → createDistributable
+                (jpackage uygulama imajı, Temurin 21.0.12) → stageLinuxApplication (Sync)
+                → packageLinuxArchive (Gradle Tar, GZIP). Elle yazılmış runtime düzeni YOK.
+çıktı           app/build/linux/dist/pnp-tracker-0.1.0-linux-x86_64.tar.gz
+                94.309.676 bayt; açılmış hâli 181.014.768 bayt (runtime ≈90 MB, jar'lar ≈82 MB)
+                SHA-256 a66bbb88dea52969889b6e5555e55b679827cb151fae48d0094e8c43cd958716
+mimari          os.arch → uname adı (amd64 → x86_64; aarch64); başka mimaride görev durur
+içerik          pnp-tracker-0.1.0/ tek üst dizin (221 girdi, 0 sembolik bağ, sahip 0/0)
+                  bin/pnp-tracker            jpackage native başlatıcı (755)
+                  lib/libapplauncher.so, lib/pnp-tracker.png
+                  lib/app/*.jar, pnp-tracker.cfg, .jpackage.xml, libskiko-linux-x64.so
+                  lib/runtime/               jlink runtime (bin/ YOK: --strip-native-commands,
+                                             --strip-debug, --no-man-pages, --no-header-files,
+                                             --compress); release dosyası JAVA_VERSION ve MODULES
+                  README.txt                 Türkçe içerik açıklaması; LİSANS UYDURULMADI
+                  VERSION                    name=pnp-tracker / version=0.1.0 / arch=x86_64
+runtime modülleri (13) java.base java.datatransfer java.desktop java.instrument java.logging
+                java.naming java.prefs java.security.jgss java.security.sasl java.xml
+                java.xml.crypto jdk.crypto.ec jdk.unsupported
+                (kök: Compose'un varsayılanı java.base/desktop/logging + jdk.crypto.ec ve
+                 suggestRuntimeModules'un jdeps önerisi java.instrument, java.security.jgss,
+                 java.xml.crypto, jdk.unsupported; gerisi bağımlılık kapanışı. jdk.localedata /
+                 jdk.charsets gerekmedi: kod Locale.ROOT ve UTF-8 kullanıyor — tarandı)
+ikon            packaging/linux/pnp-tracker.svg (elle, yazısız) + 256×256 PNG (rsvg-convert ile bir
+                kez üretildi, commit'li; PNG'de metin/zaman parçası yok)
+belirlenimcilik bütün AbstractArchiveTask'lar zaman damgasız ve sabit sırada. Tek değişken:
+                Compose'un FileUtils.transformJar'ı skiko-awt-runtime jar'ını derleme saatiyle
+                yeniden yazıyor (içinde yalnız MANIFEST), adı içerik özetini taşıdığı için .cfg de
+                değişiyordu. normaliseRepackedJars hazırlık kopyasında onu aynı girdi ve baytlarla
+                sabit saatte yeniden yazar, özetle adlandırır, .cfg'deki tek satırı günceller ve
+                içeriğin değişmediğini denetler. Sonuç: iki temiz, cache'siz üretimde ve sonraki
+                oturumlarda arşiv BAYT BAYT aynı (a66bbb88…).
+sızıntı         yok: .cfg yalnız $APPDIR; depo yolu, ev yolu, kullanıcı adı, .gradle/caches,
+                build/compose hiçbir baytta yok (192 dosya taranır)
+```
+
+## İş 12 — Arch paketi  *(`44b329d`)*
+
+```text
+tarif           packaging/arch/PKGBUILD (şablon: @PKGVER@ @ARCH@ @ARCHIVE@ @…_SHA256@) +
+                packaging/arch/pnp-tracker.desktop
+görev           :app:packageArch — şablonu doldurur, arşivi ve masaüstü girdisini
+                $TMPDIR/pnp-tracker-makepkg/ altına koyar (yalnız kendi işaret dosyasını taşıyan
+                dizini siler), makepkg --nodeps --noconfirm --nosign --force --clean'i kendi
+                HOME'u, PATH=/usr/bin:/bin, SOURCE_DATE_EPOCH=0, PACKAGER="pnp-tracker local build
+                <build@pnp-tracker.invalid>" ile çalıştırır; paketi app/build/arch/dist/'e alır.
+                pacman'e hiç dokunmaz; uygulama yeniden derlenmez (kaynak = İş 11 arşivi)
+çıktı           pnp-tracker-0.1.0-1-x86_64.pkg.tar.zst  92.537.371 bayt, kurulu 181.025.904
+                SHA-256 eb296a35f43f352ba1da02ff25abfd5985f56c84afd1af14e3c805f0abe870ea
+                (iki ardışık üretimde aynı)
+yerleşim        /opt/pnp-tracker/                                   uygulama dizini (root, 755/644)
+                /usr/bin/pnp-tracker -> ../../opt/pnp-tracker/bin/pnp-tracker   (göreli bağ)
+                /usr/share/applications/pnp-tracker.desktop
+                /usr/share/icons/hicolor/256x256/apps/pnp-tracker.png
+depends         glibc libstdc++ libglvnd libx11 libxext libxi libxrender libxtst fontconfig
+                — her açılışta yüklenen libskiko ve libawt_xawt'nin NEEDED listesi (objdump +
+                pacman -Qo). alsa-lib (yalnız libjsound) ve libsplashscreen'in kütüphaneleri
+                uygulama tarafından hiç yüklenmez → eklenmedi. GTK3 yığını AWT tarafından
+                varsa dlopen ile yüklenir, yoksa geri çekilir → eklenmedi. Sistem Java'sı YOK.
+options         !strip !debug (sistem makepkg.conf strip+debug açık; gömülü JDK ve Skia
+                soyulmamalı/bölünmemeli)
+license         LicenseRef-unknown — lisans henüz seçilmedi (İş 15); uydurulmadı
+masaüstü        Name=PnP Üretim Takipçisi, Exec=pnp-tracker, Icon=pnp-tracker, Terminal=false,
+                Categories=Utility;, StartupWMClass=dev-pnptracker-MainKt (pencerede ölçüldü);
+                desktop-file-validate temiz
+kurulum betiği  YOK (.INSTALL yok): HOME'a yazmaz, uygulamayı başlatmaz, kullanıcı verisine
+                dokunmaz
+```
+
+## Doğrulama  *(her ikisi de ekran ister; `check`'e bağlı değil)*
+
+`:app:verifyLinuxPackage` ve `:app:verifyArchPackage` aynı programı çalıştırır
+(`desktopTest/.../packaging/LinuxPackageCheck.kt`); her şey depo dışında, bu
+koşunun yarattığı ve sonunda sildiği tek bir `/tmp/pnp-package-check-*`
+dizininde olur.
+
+```text
+statik          dosya adı = sürüm + mimari; girdiler tek üst dizinde (arşiv) / yalnız opt ve usr
+                altında (paket), .. ve mutlak yol yok, sembolik bağ hedefi içeride, sahip 0/0,
+                grup/diğerleri yazamaz; beklenen dosyalar; başlatıcı herkes için çalıştırılabilir;
+                .cfg sınıf yolu yalnız $APPDIR, app.runtime yok, mutlak yol yok; sürüm .cfg,
+                .jpackage.xml, uygulama jar'ı, VERSION, .PKGINFO'da; runtime kök modülleri var,
+                araç modülü (jdk.compiler, jdk.jlink, …) ve runtime/bin yok; /usr/lib/jvm,
+                JAVA_HOME, /usr/bin/java referansı yok; her baytta depo/ev yolu, kullanıcı adı
+                (metinde), .gradle/caches yok; .kt/.class yok; .PKGINFO/.BUILDINFO sızıntısız;
+                paket için desktop-file-validate ve ikonun uygulama ikonuyla aynı olması
+sistem Java'sı  runtime'ı çıkarılmış bir kopya, JAVA_HOME ve PATH'te gerçek bir JDK varken
+                "Failed to find JVM in …/lib/runtime" ile 1 döner, hiçbir veri yazmaz
+yoklama         gerçek başlatıcı, JAVA_TOOL_OPTIONS=-javaagent ile PackageRuntimeProbe: java.home
+                ve /proc/self/maps'teki libjvm.so paketin içinde; XLSX (sample-import.xlsx:
+                2 sayfa, 23 hücre), CSV yaz/oku (UTF-8, BOM, Türkçe), Room + gömülü SQLite +
+                JSON yedek yaz/oku/geçici DB'ye yükle, tanılama satırı, AWT fontları (582 aile,
+                Türkçe çizim), Skia native + FontMgr (595 aile, Türkçe çizim); sonra süreç biter
+pencere          gerçek başlatıcı (paket için /usr/bin/pnp-tracker, geçici kökte /opt'a çözülür);
+                ortam temizlenir: PATH boş bir dizin, JAVA_HOME yok, HOME/cwd/XDG_DATA/CONFIG/STATE
+                ve java.io.tmpdir geçici; pencere tam başlık + süreç ağacı ile SafeWindowCloser'la
+                kapanır; /proc/<pid>/exe = paketin başlatıcısı, libjvm.so ve bütün Java
+                kütüphaneleri paketten; çıkış 0; pnp.db var, -wal/-shm yok; state boş; cwd, HOME
+                ve tmp boş; çıktıda exception yok; süreç kalmaz
+paket ek        çalıştırmadan sonra /opt/pnp-tracker'ın her dosyası bayt bayt aynı (geçici kökte
+                kullanıcı yazabilirken bile yazılmadı); paket dosyaları pacman gibi silinince
+                kök temizlenir, geçici data/config/state bayt bayt aynı kalır
+```
+
+Son koşularda gözlenen (tam koşudan sonra, `a0d1aa6`): iki görev de
+`PACKAGE: PASSED`; pencere `WM_CLASS` = `dev-pnptracker-MainKt`; çalışan uygulama
+89 sistem kütüphanesi eşledi (GTK3, pango, cairo, nvidia-utils GL sürücüsü dahil —
+isteğe bağlı yüklemeler).
+
+## Bilinen taşınabilirlik sınırları
+
+```text
+glibc/x86_64    jpackage başlatıcısı ve runtime bu makinenin glibc'siyle bağlı; musl ve başka
+                mimari desteklenmez; arşiv üretildiği mimaride çalışır
+X11             AWT X11 araç takımı; Wayland oturumunda XWayland gerekir
+depends         libGL (libglvnd + bir GL sürücüsü) ve fontconfig zorunlu; GTK3 yoksa AWT
+                masaüstü temasını okuyamaz ama çalışır (ölçülmedi: GTK'siz sistem yok)
+.BUILDINFO      makepkg her pakete derleme makinesinin KURULU PAKET LİSTESİNİ (1365 satır) ve
+                buildenv/options'ı yazar — Arch'ın tekrarlanabilir derleme standardı, kapatılamaz;
+                kişisel yol/ad içermez (builddir/startdir = /tmp/pnp-tracker-makepkg/…)
+belirlenimcilik aynı makine + aynı araçlar içinde kanıtlandı; farklı JDK/zstd/makepkg sürümü farklı
+                bayt üretebilir
+log4j           POI'nin log4j-api'si ilk XLSX okumasında stderr'e "Log4j API could not find a
+                logging provider" yazar (geliştirme sürümünde de aynı; exception değil)
+namcap          bu makinede YOK; talimat gereği kurulmadı → yerine yapısal denetim (yukarıda)
+temiz ortam     gerçek pacman -U kurulumu, güncelleme ve kaldırma İş 13'tür (R6)
+```
+
+---
+
 # 26. DB / ŞEMA KORUMA
 
 ```text
@@ -5467,6 +5625,15 @@ systemd-run --user --scope -p CPUQuota=25% --quiet -- ./gradlew desktopTest --re
   --no-daemon --no-parallel --max-workers=1 --tests '<sınıf>' …
 ```
 
+Linux paketleri (§25.5; doğrulamalar ekran ister, `check`'e bağlı değil):
+
+```bash
+./gradlew :app:packageLinuxArchive   # app/build/linux/dist/pnp-tracker-<sürüm>-linux-<mimari>.tar.gz
+./gradlew :app:verifyLinuxPackage    # arşiv sözleşmesi + yoklama + pencere, depo dışında
+./gradlew :app:packageArch           # app/build/arch/dist/pnp-tracker-<sürüm>-1-<mimari>.pkg.tar.zst
+./gradlew :app:verifyArchPackage     # paket sözleşmesi + geçici kökte yoklama + pencere + kaldırma
+```
+
 Masaüstü smoke (gerçek pencere, geçici XDG, yalnız kendi penceresini kapatır):
 
 ```bash
@@ -5566,7 +5733,7 @@ yardımcı işler
       yapılandırılmış görev CSV dışa aktarma
 ```
 
-## Faz 3 — BAŞLADI, 16 İŞTEN 10'U BİTTİ
+## Faz 3 — BAŞLADI, 16 İŞTEN 12'Sİ BİTTİ
 
 PLAN `18.` — Faz 3 işler listesi.
 
@@ -5590,8 +5757,10 @@ PLAN `18.` — Faz 3 işler listesi.
                                               tipli sınırlar, tipsiz kaçışlar, R12 saat,
                                               R14 ölçüm + geri alma + geri yükleme
                                               kapıları, R13 quick_check açılış kapısı)
-11  Self-contained Linux dağıtımı ....................... YAPILMADI
-12  Garuda/Arch paketi .................................. YAPILMADI
+11  Self-contained Linux dağıtımı ....................... TAMAM (§25.5; belirlenimci tar.gz,
+                                              jlink runtime, verifyLinuxPackage)
+12  Garuda/Arch paketi .................................. TAMAM (§25.5; .pkg.tar.zst,
+                                              /opt + /usr/bin, verifyArchPackage)
 13  Temiz Garuda ortamında kurulum testi ................ YAPILMADI
 14  README, kullanıcı kılavuzu, katkı yönergeleri ....... YAPILMADI
 15  Açık kaynak lisansı + LICENSE ....................... YAPILMADI
@@ -5648,9 +5817,14 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
 
 ## Sıradaki bağlayıcı iş
 
-> **Sıradaki bağlayıcı iş: Faz 3 / İş 11 — self-contained Linux dağıtımı**
-> (PLAN `18.`). Paket türü, JRE ve sürüm kaynağı (R5) kullanıcı kararı bekler;
-> İş 11'e bu turda geçilmedi.
+> **Sıradaki bağlayıcı iş: Faz 3 / İş 13 — temiz Garuda ortamında kurulum,
+> açılış, veri dizini, güncelleme ve kaldırma testi** (PLAN `18.`; §33 R6: bu
+> makinede yapılamaz, ayrı temiz ortam gerekir). İş 13'e bu turda geçilmedi.
+>
+> **İş 11 ve İş 12 TAMAMLANDI** (§25.5): Java'sız, belirlenimci
+> `pnp-tracker-0.1.0-linux-x86_64.tar.gz` ve onu paketleyen
+> `pnp-tracker-0.1.0-1-x86_64.pkg.tar.zst`; sürüm tek kaynaktan (Gradle
+> `project.version`); ikisi de gerçek başlatıcılarıyla depo dışından çalıştırıldı.
 >
 > **İş 10 TAMAMLANDI** (§25.4 "İş 10 / Dilim 4–8'de uygulanan hâli"): R12 saat
 > geriye gidince yedekler kullanılabilir; R14'ün 13 adayı ölçüldü, geri alma
@@ -5947,22 +6121,23 @@ duran soft-delete edilmiş bir görev oyun tablosunda çizilir. Bu şekli **hiç
 yolu üretmez** (metne dönüştürme parçayı kaldırır, başka silme yolu yok). İş 2 gerçek
 bir silme yolu getirdiğinde kusura dönüşür.
 
-## R5 — Sürüm numarası ikiye ayrılabilir  *(paketlemede)*
+## R5 — Sürüm numarası ikiye ayrılabilir  *(KAPANDI — İş 11, `a942683`)*
 
-`AppInfo.kt` içinde `"0.1.0"` elle yazılıdır ve Gradle proje sürümüne bağlı değildir.
-Paketleme yapılandırıldığında paket sürümüyle sapabilir.
+Eskiden `AppInfo.kt` içinde `"0.1.0"` elle yazılıydı. Artık tek kaynak Gradle
+`project.version`'dır; `AppInfo` üretilen `APPLICATION_VERSION` sabitini okur ve
+paket adları, jpackage, PKGBUILD aynı değerden türer (§25.5).
 
 ## R6 — Bu makinede doğrulanamayan madde
 
 PLAN `18.` Faz 3 (İş 13 ve testleri) "temiz Garuda ortamında kurulum, açılış, veri dizini, güncelleme ve
 kaldırma testi" ayrı bir temiz ortam gerektirir.
 
-## R7 — Paketleme yapılandırması yok
+## R7 — Paketleme yapılandırması yok  *(KAPANDI — İş 11 ve 12)*
 
-`app/build.gradle.kts` içinde `compose.desktop { application { mainClass } }` dışında
-bir şey yok. `nativeDistributions` bloğu tanımlı olmadığı için `packageDeb` /
-`packageRpm` / `packageAppImage` görevleri **hiç oluşmuyor**. `LICENSE` dosyası ve
-`.github/` dizini de yok.
+`nativeDistributions` tanımlı; `createDistributable`, `packageLinuxArchive`,
+`packageArch` ve iki doğrulama görevi var (§25.5). `targetFormats` bilinçli
+olarak boş: deb/rpm/AppImage bu projenin çıktısı değildir. `LICENSE` dosyası
+(İş 15) ve `.github/` dizini (İş 16) hâlâ yok.
 
 ---
 
@@ -6332,6 +6507,11 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   İŞ 9 TAMAMLANDI: kabul makineden bağımsızdır (doğru sonuç, 42/1.000+ aynı ifade
   yapısı, N+1 yok, arama/süzgeç 0 ifade, tekrarda aynı sonuç); süre/bellek EŞİK
   EKLEME, yalnız ortamla kayıt; aynı yöntemde 2 kat kötüleşmeyi raporla.
+- İŞ 11 VE İŞ 12 TAMAMLANDI (§25.5). Kuralı bozma: sürüm yalnız app/build.gradle.kts
+  `version`; AppInfo'ya veya pakete elle sürüm YAZMA. İş 12 arşivi paketler, ikinci
+  derleme hattı KURMA. Paket denetimlerinde pencere araçlarını yalnız DesktopWindows.kt
+  üzerinden kullan (SafeWindowCloserTest yüzey testi bunu çivili tutar). Gerçek
+  sisteme paket kurma/sudo kullanma. Sıradaki: Faz 3 / İş 13 (temiz ortam, R6).
 - İŞ 10 TAMAMLANDI (Dilim 4–8, §25.4). Kuralı bozma: zaman sırası bütünlük kuralı
   DEĞİLDİR (epoch düzeltme, sıralamada eşitliği id ile çöz); D1–D9 ve C/RB/U'nun tek
   tanımı domain/importhealth/ImportLifecycle.kt — ikinci kopya YAZMA; okuyucuyu
@@ -6685,7 +6865,10 @@ ve içe aktarma kullanılabilir kalıyor; bir içe aktarmanın birbirini tutmaya
 kayıtları ne geri almada başka bir görevi kaldırabiliyor ne de bir yedekle
 canlı veritabanına girebiliyor; ve hasarlı bir veritabanı, Room onu açmadan ve
 hiçbir dosyaya dokunulmadan, Türkçe bir açılış ekranıyla reddediliyor.
-**İş 10 TAMAMLANDI; sıradaki bağlayıcı iş Faz 3 / İş 11'dir.**
+**İş 10 TAMAMLANDI.** Ardından İş 11 ve İş 12 uygulamayı Java'sız, belirlenimci
+bir Linux arşivine ve Garuda/Arch paketine dönüştürdü; ikisi de gerçek
+başlatıcılarıyla depo dışından çalıştırılıp güvenle kapatıldı.
+**Sıradaki bağlayıcı iş Faz 3 / İş 13'tür.**
 
 Bunların ilki — **sürümlü JSON yedek ve geri yükleme** — dört atomik dilimde
 **tamamlanmıştır**. Biçim, kapsam, doğrulama hattı, restore mimarisi (A′),
