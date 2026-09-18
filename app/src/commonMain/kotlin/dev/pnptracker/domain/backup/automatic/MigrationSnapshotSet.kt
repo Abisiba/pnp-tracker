@@ -55,6 +55,13 @@ enum class StartupProblem {
     /** The file is there and is not a database this application can read. */
     DATABASE_NOT_READABLE,
 
+    /**
+     * The file reads as a database of a version this build knows, and SQLite's
+     * page-level check finds it damaged (PLAN 14.7.4). Nothing was opened,
+     * migrated, repaired or written, and no backup was touched.
+     */
+    DATABASE_DAMAGED,
+
     /** The database was written by a newer version of the application. */
     SCHEMA_TOO_NEW,
 

@@ -80,6 +80,7 @@ fun messageOf(problem: StartupProblem): StringResource =
         StartupProblem.ANOTHER_COPY_IS_RUNNING -> Strings.Startup.anotherCopy
         StartupProblem.FOLDERS_NOT_CREATED -> Strings.Startup.foldersNotCreated
         StartupProblem.DATABASE_NOT_READABLE -> Strings.Startup.notReadable
+        StartupProblem.DATABASE_DAMAGED -> Strings.Startup.damaged
         StartupProblem.SCHEMA_TOO_NEW -> Strings.Startup.tooNew
         StartupProblem.SNAPSHOT_NOT_CLONED -> Strings.Startup.notCloned
         StartupProblem.SNAPSHOT_NOT_MIGRATED -> Strings.Startup.notMigrated

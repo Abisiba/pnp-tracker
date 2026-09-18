@@ -494,6 +494,7 @@
     <string name="startup_another_copy">PNP zaten açık görünüyor. Aynı veriyle iki kopya birden çalışamaz. Açık olan pencereyi kapatıp yeniden deneyin.</string>
     <string name="startup_folders_not_created">PNP kendi klasörlerini oluşturamadı, bu yüzden veri dosyanız hiç açılmadı. Disk dolu olabilir ya da klasörlerin izinleri değişmiş olabilir; kontrol edip PNP'yi yeniden başlatın.</string>
     <string name="startup_not_readable">Veri dosyanız okunamadı. Dosya bozulmuş ya da başka bir programın dosyasıyla değiştirilmiş olabilir. Elinizde bir yedek varsa onu kullanabilirsiniz.</string>
+    <string name="startup_database_damaged">Veri dosyanızda bir hasar bulundu, bu yüzden PNP onu açmadı ve üzerine hiçbir şey yazmadı. Yedek klasörünüzdeki yedekler de olduğu gibi duruyor. Veri dosyasını ve yedekleri silmeyin; verilerinizi bir yedekten kurtarmak için yardım alın.</string>
     <string name="startup_too_new">Veri dosyanız PNP'nin daha yeni bir sürümüyle oluşturulmuş. Bu sürüm onu açamaz; PNP'yi güncelleyip yeniden deneyin.</string>
     <string name="startup_not_cloned">Verilerinizin güvenlik kopyası alınamadı, bu yüzden güncelleme başlatılmadı. Diskte yer olduğundan emin olup yeniden deneyin.</string>
     <string name="startup_not_migrated">Verilerinizin kopyası yeni sürüme taşınamadı, bu yüzden asıl verilerinize hiç dokunulmadı. Yeniden deneyin; sorun sürerse bu sürümü kullanmayı bırakıp önceki sürüme dönün.</string>

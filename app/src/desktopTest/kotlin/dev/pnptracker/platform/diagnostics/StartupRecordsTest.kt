@@ -26,6 +26,7 @@ import dev.pnptracker.platform.files.AtomicFileWriter
 import dev.pnptracker.platform.files.XdgAppPaths
 import dev.pnptracker.platform.files.XdgAppPathsResolver
 import dev.pnptracker.platform.settings.DesktopSettingsStore
+import dev.pnptracker.platform.startup.DatabaseDamage
 import dev.pnptracker.platform.startup.MigrationSnapshotSetWriter
 import dev.pnptracker.platform.startup.StartupGate
 import dev.pnptracker.platform.startup.deleteTemporaryTree
@@ -187,6 +188,32 @@ class StartupRecordsTest {
             diagnostics.only(),
         )
         assertLinesCarryNothingOfTheUsers(diagnostics, "bu benim dosyam", home.toString())
+    }
+
+    @Test
+    fun `a damaged database is one refusal, one line, and nothing of the file`() {
+        CommittedSchema.createDatabase(paths.databaseFile, version = 8)
+        DatabaseDamage.TABLE_PAGE.applyTo(paths.databaseFile)
+
+        val refused = assertFailsWith<StartupRefused> { gate().open() }
+        diagnostics.recordSafely { startupRefusalRecord(refused) }
+
+        assertEquals(StartupProblem.DATABASE_DAMAGED, refused.problem)
+        assertRecordedAsPlanned(
+            ExpectedRecord(
+                DiagnosticEvent.STARTUP_REFUSED,
+                level = DiagnosticLevel.ERROR,
+                reason = StartupProblem.DATABASE_DAMAGED,
+                // A scrambled table page stops quick_check with SQLite's own
+                // exception (measured); its class travels, its words do not.
+                exception = "androidx.sqlite.SQLiteException",
+            ),
+            diagnostics.only(),
+        )
+        // SQLite's own words name the damage — "malformed", pages, tables — and
+        // stay out of the line, as the path and the file name do.
+        assertLinesCarryNothingOfTheUsers(diagnostics, "malformed", "pnp.db", "tasks", "quick_check")
+        assertNothingLeaked()
     }
 
     @Test

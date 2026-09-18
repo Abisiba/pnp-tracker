@@ -763,6 +763,7 @@ import dev.pnptracker.resources.stage_print
 import dev.pnptracker.resources.startup_another_copy
 import dev.pnptracker.resources.startup_close
 import dev.pnptracker.resources.startup_data_safe
+import dev.pnptracker.resources.startup_database_damaged
 import dev.pnptracker.resources.startup_folders_not_created
 import dev.pnptracker.resources.startup_migration_failed
 import dev.pnptracker.resources.startup_not_cloned
@@ -1748,6 +1749,7 @@ object Strings {
         val anotherCopy = Res.string.startup_another_copy
         val foldersNotCreated = Res.string.startup_folders_not_created
         val notReadable = Res.string.startup_not_readable
+        val damaged = Res.string.startup_database_damaged
         val tooNew = Res.string.startup_too_new
         val notCloned = Res.string.startup_not_cloned
         val notMigrated = Res.string.startup_not_migrated

@@ -34,11 +34,12 @@ class OpenedDatabase(
  *
  * ```text
  *  1  the instance lock is taken, or the copy stops here
- *  2  the file's existence and user_version are established without Room
+ *  2  the file's existence and user_version are established without Room,
+ *     and a database of version 1..8 must pass quick_check (PLAN 14.7.4)
  *  3  no file, or nothing written yet  → ordinary creation, no snapshot
  *  4  version 8                        → no snapshot; open it
  *  5  version 1..7                     → a snapshot set is built first
- *  6  above 8, or unreadable           → the database is NOT opened
+ *  6  above 8, unreadable or damaged   → the database is NOT opened
  *  7-12 the set is made and proved  (MigrationSnapshotSetWriter)
  * 13  nothing below runs until the set has succeeded
  * 14  so a failed clone or document means the real database is never migrated
@@ -91,11 +92,30 @@ class StartupGate(
 
         return when {
             version == NO_SCHEMA_YET -> OpenedDatabase(openForReal(), set = null)
-            version == SUPPORTED_SOURCE_SCHEMA_VERSION -> OpenedDatabase(openForReal(), set = null)
             version > SUPPORTED_SOURCE_SCHEMA_VERSION -> throw StartupRefused(StartupProblem.SCHEMA_TOO_NEW)
             version < 0 -> throw StartupRefused(StartupProblem.DATABASE_NOT_READABLE)
-            else -> migrateBehindASet(version)
+            else -> {
+                refuseIfDamaged()
+                if (version == SUPPORTED_SOURCE_SCHEMA_VERSION) OpenedDatabase(openForReal(), set = null) else migrateBehindASet(version)
+            }
         }
+    }
+
+    /**
+     * PLAN 14.7.4: a database that does not pass `quick_check` is not opened by
+     * Room, not migrated, not snapshotted, and not written to in any way. The
+     * check's own rows never leave here — they can name tables and pages — so a
+     * refusal carries at most the class of what SQLite threw. Only SQLite's
+     * answer is damage: anything else this throws is a defect and goes up as it is.
+     */
+    private fun refuseIfDamaged() {
+        val whole =
+            try {
+                clone.passesQuickCheck(paths.databaseFile)
+            } catch (damaged: SQLiteException) {
+                throw StartupRefused(StartupProblem.DATABASE_DAMAGED, damaged)
+            }
+        if (!whole) throw StartupRefused(StartupProblem.DATABASE_DAMAGED)
     }
 
     private fun migrateBehindASet(fromSchemaVersion: Int): OpenedDatabase {

@@ -4,6 +4,7 @@ import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.SQLiteException
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.driver.bundled.SQLITE_OPEN_READONLY
+import androidx.sqlite.driver.bundled.SQLITE_OPEN_URI
 import androidx.sqlite.execSQL
 import java.nio.file.Files
 import java.nio.file.Path
@@ -51,6 +52,16 @@ const val NO_SCHEMA_YET: Int = 0
  */
 class ConsistentDatabaseClone(
     /**
+     * Every row `PRAGMA quick_check` answers. A seam for the one thing a real
+     * damaged file cannot be made to do on demand: fail with something that is
+     * not SQLite's answer at all, which must not be taken for damage.
+     */
+    private val quickCheck: (SQLiteConnection) -> List<String> = { connection ->
+        connection.prepare("PRAGMA quick_check").use { statement ->
+            buildList { while (statement.step()) add(statement.getText(0)) }
+        }
+    },
+    /**
      * The one statement that does the copying.
      *
      * A seam for the same reason [dev.pnptracker.platform.files.AtomicFileWriter]
@@ -80,13 +91,31 @@ class ConsistentDatabaseClone(
      */
     fun schemaVersionOf(databaseFile: Path): Int {
         if (!Files.exists(databaseFile) || Files.size(databaseFile) == 0L) return NO_SCHEMA_YET
-        return readOnly(databaseFile) { connection ->
+        return readWithoutTouching(databaseFile) { connection ->
             connection.prepare("PRAGMA user_version").use { statement ->
                 check(statement.step()) { "PRAGMA user_version returned no row" }
                 statement.getInt(0)
             }
         }
     }
+
+    /**
+     * Whether SQLite finds every page of [databaseFile] where it should be
+     * (PLAN 14.7.4): `PRAGMA quick_check` on the same read-only connection, so
+     * a damaged file is not written to by being checked.
+     *
+     * Passes only on the single row `ok`. `quick_check` rather than
+     * `integrity_check` because it is the page-level check and it is linear in
+     * the file; Dilim 8 measured it finding a scrambled table page, a scrambled
+     * index page, a truncated file and a freelist naming a page in use, at about
+     * 2 ms for İş 9's 1,203 tasks and 12 ms for ten times that (master §29).
+     * A hot WAL is read, as everywhere else here.
+     *
+     * @throws SQLiteException if SQLite stops before it can answer — which, for
+     *   a file whose version it has just read, is damage too.
+     */
+    fun passesQuickCheck(databaseFile: Path): Boolean =
+        readWithoutTouching(databaseFile) { connection -> quickCheck(connection) == listOf("ok") }
 
     /**
      * Clones [databaseFile] into [target], which must not already exist.
@@ -137,6 +166,52 @@ class ConsistentDatabaseClone(
             connection.prepare("PRAGMA foreign_key_check").use { statement -> !statement.step() }
         }
 
+    /**
+     * A read-only connection for the two questions asked before Room: the
+     * version and `quick_check` (PLAN 14.4.10 step 2, 14.7.4). Unlike
+     * [readOnly], it leaves every file that is already there exactly as it was,
+     * so a database that is then refused has not been changed by being asked.
+     *
+     * Measured in Dilim 8, because a plain read-only connection is not quite
+     * that: in WAL mode it rewrites the `-shm` it finds, and next to a closed
+     * database it creates an empty `-wal` and a `-shm` and leaves them. So:
+     *
+     * ```text
+     * no -wal             immutable=1     no log means nothing to read from one;
+     *                                     nothing is created, nothing is written
+     * -wal and -shm       readonly_shm=1  the log is read, the index is not written
+     * -wal and no -shm    read-only       the log is read and is not written;
+     *                                     SQLite has to create a -shm to read it
+     * ```
+     *
+     * `immutable` is safe here because the instance lock is held: no copy of this
+     * application is writing, and without a log there is no newer page than the
+     * file's own.
+     */
+    private fun <T> readWithoutTouching(
+        databaseFile: Path,
+        use: (SQLiteConnection) -> T,
+    ): T {
+        val path = databaseFile.toAbsolutePath().normalize()
+        val parameter =
+            when {
+                Files.notExists(Path.of("$path-wal")) -> "immutable=1"
+                Files.exists(Path.of("$path-shm")) -> "readonly_shm=1"
+                else -> null
+            }
+        val connection =
+            if (parameter == null) {
+                BundledSQLiteDriver().open(path.toString(), SQLITE_OPEN_READONLY)
+            } else {
+                BundledSQLiteDriver().open("file:${uriPathOf(path)}?$parameter", SQLITE_OPEN_READONLY or SQLITE_OPEN_URI)
+            }
+        return try {
+            use(connection)
+        } finally {
+            connection.close()
+        }
+    }
+
     private fun <T> readOnly(
         databaseFile: Path,
         use: (SQLiteConnection) -> T,
@@ -150,3 +225,15 @@ class ConsistentDatabaseClone(
         }
     }
 }
+
+/**
+ * A path as the path part of a SQLite URI: the three characters SQLite reads as
+ * syntax there are escaped and everything else, spaces and Turkish letters
+ * included, is taken as it is.
+ */
+private fun uriPathOf(path: Path): String =
+    path
+        .toString()
+        .replace("%", "%25")
+        .replace("?", "%3F")
+        .replace("#", "%23")
