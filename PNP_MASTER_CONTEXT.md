@@ -7,7 +7,19 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** İş 10 / Dilim 3 sonrası **stabilizasyon turu** —
+> **Son güncelleme:** Faz 3 / **İş 10 TAMAMLANDI** — Dilim 4–8 ve belge turu
+> `docs: record completed diagnostics and integrity work`. Saat geriye gidince
+> yedekler kullanılabilir kalıyor (R12); onaylı ve geri alınmış içe aktarmaların
+> 13 aday çelişkisi ölçüldü ve hepsi `L`'ye girdi (R14); geri alma C2–C4'ü
+> bozuk bir batch'i `PROVENANCE_BROKEN` ile reddediyor; kayıtları çelişen bir
+> yedek, onay sorusundan ve güvenlik yedeğinden önce `IMPORT_RECORDS_CONTRADICT`
+> ile reddediliyor; hasarlı canlı veritabanı Room'dan önce salt okunur
+> `quick_check` ile bulunup `DATABASE_DAMAGED` ile açılmıyor (R13). Room 8, PLAN
+> ve bağımlılıklar değişmedi. Tam koşu 3701 / 0 / 0 / 0 (269 sınıf). Ayrıntı
+> §25.4 "İş 10 / Dilim 4–8'de uygulanan hâli". **Sıradaki bağlayıcı iş Faz 3 /
+> İş 11'dir.**
+>
+> Daha önce: İş 10 / Dilim 3 sonrası **stabilizasyon turu** —
 > `test(desktop): make process and window checks deterministic`. Üretim kodu
 > değişmedi. Tanılama testleri artık makinenin 500 ms'de kaç satır yazabildiğini
 > ölçmüyor: işçi olayla (diske inen satır, kapıda tutulan yazma, alınan/reddedilen
@@ -92,54 +104,69 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-HEAD (bu commit öncesi): 62e36a090e899af78c40b67fb5b5a2ad93f29ed1
-önceki commit         : fix(errors): report storage and directory failures safely
-bu commit             : test(desktop): make process and window checks deterministic
-working tree          : başlangıçta temiz
-üretim kodu           : DEĞİŞMEDİ (commonMain/desktopMain'de tek satır yok)
-Room şema sürümü      : 8   (bu commit'te DEĞİŞMEDİ)
-şema dosyaları        : 1.json … 8.json  hepsi bayt bayt aynı
+başlangıç HEAD        : 89dff7ed4928a88dc413bf51d070c659e64aab6a
+                        (test(desktop): make process and window checks deterministic)
+HEAD (bu commit öncesi): a588d0e — test(startup): open a damaged database in the window smoke
+bu commit             : docs: record completed diagnostics and integrity work
+bu turun commit'leri  : efd6f3a fix(backup): keep backups usable after the clock goes backwards      Dilim 4 / R12
+                        feadbf8 test(import): measure confirmed import lifecycle contradictions      Dilim 5 / R14 ölçümü
+                        e5f73f7 fix(import): refuse to take back tasks an import did not make        Dilim 6 / geri alma kapısı
+                        966b546 fix(restore): reject contradictory import lifecycles before confirmation  Dilim 7 / geri yükleme kapısı
+                        34ef740 fix(startup): refuse to open a damaged database                      Dilim 8 / R13
+                        a588d0e test(startup): open a damaged database in the window smoke           Dilim 8 smoke'u
+                        (commit mesajları: Dilim 4 ve 6 PLAN 14.7.6'nın; Dilim 5, 7 ve 8 kullanıcı
+                         talimatınınki — PLAN'daki taslaklar "test(backup): measure which import
+                         lifecycle contradictions a restore can carry", "feat(backup): refuse a
+                         backup whose imports contradict their own records", "feat(startup): refuse
+                         to open a damaged database"dı. a588d0e ayrı test commit'idir: PLAN'ın
+                         Dilim 8 smoke'u desktopWindowSmoke'a senaryo olarak eklendi, tam koşudan önce)
+working tree          : her dilimde temiz
+Room şema sürümü      : 8   (DEĞİŞMEDİ; migration yok, bağımlılık yok)
+şema dosyaları        : 1.json … 8.json  hepsi bayt bayt aynı (hash'ler aşağıda)
+PLAN.md               : DEĞİŞMEDİ (180ff640…)
+fixture               : sample-import.xlsx DEĞİŞMEDİ (314780a4…)
 test durumu           : ./gradlew clean check --rerun-tasks (bellek sınırlı, §30) → BUILD SUCCESSFUL
-                        3675 test / 0 failure / 0 error / 0 skipped (266 sınıf), 8 dk 3 sn;
-                        bellek öldürmesi yok (en düşük boş bellek ~1,6 GiB); cihaz o sırada
-                        prizdeydi — başarı koşulu DEĞİL, aşağıdaki kota koşusu bunu gösterir
-                        [62e36a0: 3660 / 265 → +15 test, +1 sınıf: SafeWindowCloserTest 13,
-                         UnreadableReadingsTest +2 (IllegalArgumentException, Error);
-                         QueuedDiagnosticsTest 8 ve DiagnosticLogProcessTest 3 sayıca aynı,
-                         olay tabanlı hâle getirildi (iki kapanış testi daha güçlü iki testle
-                         değiştirildi, eski iddiaların hepsi duruyor)]
-tam koşu geçmişi      : (1) 3675/0, 7 dk 5 sn; (2) SafeWindowCloserTest'in test verisindeki makine adı
-                        ve masaüstünden alınmış pencere kimlikleri nötr değerlerle değiştirildikten
-                        sonra: testler 3675/0 ama ktlint bir satırı 140 karakter üstünde buldu →
-                        satır bölündü; (3) yukarıdaki satır
-kota koşusu           : (1)'deki ağaçla, yani yalnız test verisi sabitleri farklıyken: bütün test paketi (./gradlew desktopTest --rerun) yalnız kendi Gradle
-                        sürecine systemd-run CPUQuota=%100 (tek çekirdek) verilerek → BUILD
-                        SUCCESSFUL, 3675 / 0 / 0 / 0 (266 sınıf), 5 dk; sistem güç ayarına
-                        dokunulmadı
-dar koşular           : QueuedDiagnosticsTest + DiagnosticLogProcessTest + DiagnosticLogSinkTest +
-                        UnreadableReadingsTest + SafeWindowCloserTest = 55 test; normal ×3,
-                        CPUQuota %100, %50, %25 → her seferinde 55/55 (%25'te süreç testi 65 sn).
-                        Kontrol: değişikliksiz 62e36a0 aynı %50 kotada 3 test düşürdü
-                        ("unexpected 0 lines", 201 yerine 200 EXPORT, 16.000 yerine 8.043)
-smoke                 : ./gradlew desktopWindowSmoke — geçici XDG_DATA/CONFIG/STATE_HOME ve
-                        java.io.tmpdir; uygulama süreç 18492; pencere 0x00400007 (süreç 18492,
-                        başlık tam "PnP Üretim Takipçisi") SafeWindowCloser ile seçildi ve
-                        YALNIZ ona kapatma isteği gitti; çıkış 0; geçici veri dizini
-                        [backups, pnp-baslangic.lock, pnp.db, pnp.db.lck], -wal/-shm yok;
-                        state boş; çıktıda exception 0; arkada süreç 0; geçici dizin silindi;
-                        kullanıcının pencere listesi (id + süreç) öncesi/sonrası birebir aynı;
-                        gerçek pnp.db / .lck / backups / config / ~/.local/state aynı
-değişen dosyalar      : test — DiagnosticLogTestSupport (FaultyLogFileSystem olayları),
-                        QueuedDiagnosticsTest, DiagnosticLogProcessTest, DiagnosticLogWriterProcess,
-                        UnreadableReadingsTest; yeni platform/desktop/DesktopWindows.kt,
-                        SafeWindowCloserTest, DesktopWindowSmoke.kt
-                        build — app/build.gradle.kts: desktopWindowSmoke görevi (check'e bağlı
-                        değil; bağımlılık DEĞİŞMEDİ)
-                        PNP_MASTER_CONTEXT.md
-PLAN.md               : bu commit'te DEĞİŞMEDİ (180ff640…)
+                        3701 test / 0 failure / 0 error / 0 skipped (269 sınıf), 6 dk 44 sn
+                        [89dff7e: 3675 / 266 → +26 test, +3 sınıf: LifecycleContradictionReachTest,
+                         DatabaseDamageMeasurementTest, DamagedDatabaseStartupTest]
+tam koşu notu         : ilk iki deneme test derlemesinde Claude Code'un arka plan görev yöneticisi
+                        tarafından "sistem belleği azaldı" gerekçesiyle durduruldu (test sonucu
+                        yok, OS OOM değil, geride süreç yok). Üçüncü deneme aynı komutla, görev
+                        yöneticisinden ayrılmış (setsid nohup) çalıştı ve geçti. Bir önceki tam
+                        koşu da (Dilim 8 smoke değişikliği gelince) derleme öncesi elle durdurulmuştu.
+dar koşular           : Dilim 4 → 16 sınıf / 183 test; Dilim 6 → 11 sınıf / 101 test;
+                        Dilim 7 → 21 sınıf / 167 test + RestoreSmokeTest 2/2 (red smoke'u eklendikten sonra);
+                        Dilim 8 → 14 sınıf / 94 test; hepsi 0 başarısız, ktlint temiz
+smoke                 : ./gradlew desktopWindowSmoke (tam koşudan sonra): pencere 0x03e00007 (süreç
+                        52155, başlık tam "PnP Üretim Takipçisi") SafeWindowCloser ile kapandı; çıkış 0;
+                        [backups, pnp-baslangic.lock, pnp.db, pnp.db.lck], -wal/-shm yok; state boş;
+                        exception 0; arkada süreç 0 → PASSED
+                        ./gradlew desktopWindowSmoke -PsmokeScenario=damaged-database: hasarlı v8 DB;
+                        pencere 0x03e00007 (süreç 52457, başlık tam "PNP açılamadı") SafeWindowCloser
+                        ile kapandı; çıkış 0; DB bayt bayt aynı; -wal/-shm yok; yedek 0; state'te tam
+                        bir güvenli startup.refused satırı (DATABASE_DAMAGED); exception 0; süreç 0 → PASSED
+                        Dilim 7 red smoke'u: RestoreSmokeTest "…refused, and nothing moves" (geçici XDG,
+                        gerçek dosya + okuyucu + controller + güvenlik yazıcısı + canlı DB; yalnız dosya
+                        diyaloğu yerine seçilen dosya) — iki seçim, DB ve yedek klasörü aynı
+                        Sıcak WAL: DamagedDatabaseStartupTest (sağlam v8, commit'li satır yalnız WAL'da →
+                        açılıyor ve satır duruyor; hasarlı + sıcak WAL → db, -wal, -shm bayt bayt aynı)
+gerçek kullanıcı alanı: başlangıç ve bitişte yalnız hash/metadata ile karşılaştırıldı — pnp.db, pnp.db.lck,
+                        backups, config, ~/.local/state: birebir aynı (değerler bilinçli olarak yazılmadı)
+değişen dosyalar      : üretim — domain/importhealth/ImportLifecycle.kt (yeni), DraftHealthRows,
+                        BackupValues, EntityTimestamps, ImportDao, AutomaticBackupRotation,
+                        ImportRollbackPlan, BackupProblem, RestoreController, RestoreSection,
+                        MigrationSnapshotSet (StartupProblem), StartupGate, ConsistentDatabaseClone,
+                        StartupErrorScreen, Strings, strings.xml
+                        test — ayrıntı §25.4; build — app/build.gradle.kts (smokeScenario argümanı)
 ```
 
-**Bu commit bir stabilizasyon turudur, dilim değildir.** İş 10 / Dilim 3'ün
+**Bu commit İş 10'u kapatan belge turudur; İŞ 10 TAMAMLANDI.** Dilim 4–8'in
+uygulanan hâli, R14 ölçüm matrisi ve R13 maliyet/tespit ölçümü §25.4 "İş 10 /
+Dilim 4–8'de uygulanan hâli"ndedir. Sıradaki bağlayıcı iş **Faz 3 / İş 11**'dir
+(paket türü, JRE, sürüm kaynağı R5 — kullanıcı kararı bekler).
+
+**Önceki commit (`89dff7e`) bir stabilizasyon turuydu, dilim değildi.**
+ İş 10 / Dilim 3'ün
 doğrulama altyapısındaki iki kararsızlık kapandı — CPU hızına bağlı tanılama süreç
 testi ve pencereyi kısmi başlıkla seçen smoke — ve üç okuma yolunun
 `IllegalArgumentException`/`Error` sınırları testle çivilendi. Ayrıntı §25.4
@@ -372,7 +399,7 @@ veritabanının parmak izi orada durmamalıdır. Bunun yerine kural şudur:
 
 Gerçek DB hiçbir aşamada açılmaz, kopyalanmaz veya migrate edilmez. Bütün testler ve
 manuel turlar geçici Room veritabanları ve geçici XDG dizinleri kullanır. Bu koruma
-`assertRealApplicationDatabaseUntouched` yardımcı fonksiyonuyla **112 test sınıfında**
+`assertRealApplicationDatabaseUntouched` yardımcı fonksiyonuyla **113 test sınıfında**
 uygulanmaktadır. (Sayı İş 10 / Dilim 3'te düzeltildi: belgede 103 yazıyordu, gerçek
 değer o commit'ten önce zaten 109'du; bu dilim üç sınıf ekledi.) Sayı tek bir yerde tutulur; §29 aynı değeri anar ve tarama
 `grep -rl 'assertRealApplicationDatabaseUntouched' app/src/*Test` ile yapılır.
@@ -3900,7 +3927,7 @@ kaldırmayı her zaman mümkün göstermek    REDDEDİLDİ  D6/D7'de motor redde
 
 ---
 
-# 25.4 TANILAMA VE VERİ BÜTÜNLÜĞÜ HATA SEMANTİĞİ  *(Faz 3 / İş 10 — 3/8 dilim)*
+# 25.4 TANILAMA VE VERİ BÜTÜNLÜĞÜ HATA SEMANTİĞİ  *(Faz 3 / İş 10 — 8/8 dilim, TAMAMLANDI)*
 
 Bağlayıcı metin PLAN `14.7` (ve ona bağlanan `14.2`, `11.4.5`, `14.4.7`,
 `14.4.10`, `14.4.11`, `14.4.13`, `16.`, `18.` Faz 3 İş 10 ve testleri). Bu bölüm
@@ -4057,6 +4084,8 @@ ROLLED_BACK           RB1 cells dolu · RB2 C1–C5 · RB3 görevler  KESİN ADA
 her statü             U1 hint yalnız GAME sütununda · U2 seçim  ADAY (eski sürümde
                       ≤ UTF-16 uzunluk · U3 raw_block_count     ölçülmedi)
                       = blok sayısı
+                      → Dilim 5 ÖLÇTÜ: 13 adayın 13'ü de KESİN; L = D1–D9 ∪
+                        C1–C5 ∪ RB1–RB5 ∪ U1–U3 (aşağıda "Dilim 5")
 kural değil           zaman sıraları; görevlerin silinmemesi/çapası/dokunulmamışlığı;
                       IMPORT_CONFIRMED/IMPORT_ROLLED_BACK varlığı (oyun satırı batch'e
                       bağlanamaz, şema 7 öncesi yok); tamamlanma hedefinin hâlâ
@@ -4071,7 +4100,7 @@ D6, D7           onay, kaldırma          onay kapısı VAR;        YOK         
 C2, C3, C4       geri alma yanlış görevi Dilim 6                 YOK (zararsız Dilim 7 reddeder
                  kaldırabilir                                    tutulur)
 C1, C5, RB*      kullanım noktası yok    —                       gerek yok     Dilim 7 reddeder
-U1–U3            aday; Dilim 5           —                       —             L'ye girerse
+U1–U3            yok (ölçüldü)           —                       —             Dilim 7 reddeder
 ```
 
 ## Dilimler
@@ -4085,11 +4114,17 @@ U1–U3            aday; Dilim 5           —                       —        
 3  tipsiz kaçan depolama/dizin hataları → tipli  fix(errors): report storage and directory failures safely                 TAMAM
    Türkçe sonuçlar                               (PLAN'daki taslak mesaj "fix(storage): say in words when the database or
                                                   its folders will not answer"dı; dilim talimatının mesajı uygulandı)
-4  R12 saat geriye gidince                       fix(backup): keep backups usable after the clock goes backwards          SIRADAKİ
-5  R14 aday ölçümü (yalnız test)                 test(backup): measure which import lifecycle contradictions a restore can carry  YAPILMADI
-6  R14 geri alma provenance kapısı               fix(import): refuse to take back tasks an import did not make           YAPILMADI
-7  R14 geri yükleme yaşam döngüsü kapısı         feat(backup): refuse a backup whose imports contradict their own records YAPILMADI
-8  R13 hasarlı veritabanı açılmaz                feat(startup): refuse to open a damaged database                         YAPILMADI
+4  R12 saat geriye gidince                       efd6f3a fix(backup): keep backups usable after the clock goes backwards  TAMAM
+5  R14 aday ölçümü (yalnız test)                 feadbf8 test(import): measure confirmed import lifecycle contradictions  TAMAM
+                                                 (PLAN taslağı "test(backup): measure which import lifecycle
+                                                  contradictions a restore can carry"dı; kullanıcı talimatınınki uygulandı)
+6  R14 geri alma provenance kapısı               e5f73f7 fix(import): refuse to take back tasks an import did not make   TAMAM
+7  R14 geri yükleme yaşam döngüsü kapısı         966b546 fix(restore): reject contradictory import lifecycles before      TAMAM
+                                                 confirmation (PLAN taslağı "feat(backup): refuse a backup whose
+                                                  imports contradict their own records"dı; kullanıcı talimatınınki)
+8  R13 hasarlı veritabanı açılmaz                34ef740 fix(startup): refuse to open a damaged database                  TAMAM
+                                                 (PLAN taslağı "feat(…)"; kullanıcı talimatınınki) + a588d0e
+                                                 test(startup): open a damaged database in the window smoke
 ```
 
 **Sıranın gerekçesi.** Kayıt altyapısı (1) olmadan sınırlar (2) bağlanamaz;
@@ -4768,13 +4803,168 @@ kaydedilmez. Mevcut `IllegalStateException`, `NullPointerException` ve
 `CancellationException` testleri korundu. Üretimde `Throwable`/`Error` yakalayan
 kod eklenmedi.
 
+## İş 10 / Dilim 4–8'de uygulanan hâli
+
+### Dilim 4 — R12: saat geriye gidince  *(`efd6f3a`)*
+
+```text
+BackupValues          import_batches'te updatedAt < importedAt ve her satırda updatedAt <
+                      createdAt reddi KALDIRILDI; yalnız "geçerli an mı" kaldı
+EntityTimestamps      updatedAt >= createdAt ve deletedAt >= createdAt şartları KALDIRILDI;
+                      deletedAt == updatedAt KORUNDU
+ImportDao             allBatches, batchesWithFingerprint → ORDER BY imported_at DESC, id;
+                      draftTasksOfBlock → ORDER BY created_at, name, id (eşitlik id ile çözülür)
+AutomaticBackupRotation surplusOf: az önce yazılan set her zaman "en yeni" sayılır, sonra damga,
+                      deneme, ad; keep 1..5 için az önce yazılan hiçbir zaman fazlalık değildir
+epoch değerleri       aynen taşınır; hiçbir yol düzeltmez
+```
+
+Testler: geriye giden anlarla yedek → geri yükleme → yeniden yedek; geriye
+giden saatte düzenlenmiş bir görevin geri alınması `TASKS_WERE_EDITED`; bir gün
+geriye giden inceleme saatiyle bütün içe aktarma yolculuğu; v7 migration seti
+ters satırlarla; rotation keep 1..5 + migration seti. Dar koşu 16 sınıf / 183.
+
+### Dilim 5 — R14 ölçümü  *(`feadbf8`, yalnız test)*
+
+`LifecycleContradictionReachTest` İş 7'nin kalıbıyla: kanonik belge → tek
+mutasyon → `backupDocumentOf` → gerçek `UntrustedBackupReader` +
+`TemporaryBackupProbe` → `LiveBackupRestorer` → canlı DB eşitliği + sağlamlık.
+
+```text
+aday     canlı DB'ye ulaşır   canlı DB'de bozulan    Dilim 6'dan önce geri alma
+C1       evet                 C1                     PROVENANCE_BROKEN (zaten)
+C2       evet                 C2                     zararsız
+C3       evet                 C3                     ZARAR: içe aktarmanın yapmadığı görev tombstone'landı
+C4       evet                 C4                     ZARAR: içe aktarmanın yazmadığı hücre geri yüklendi
+C5       evet                 C5                     zararsız
+RB1      evet                 RB1 + RB2              (geri alınmış; geri alma yok)
+RB2–RB5  evet                 yalnız kendisi         (geri alınmış)
+U1–U3    evet                 yalnız kendisi         zararsız
+kendi yollar  1 ve 42 görevde onay, geri alma, taslak → hiçbir aday bozulmaz
+eski şemalar  3–7 migrate edilince hiçbir aday sayılmaz
+```
+
+Sonuç: `L` = D1–D9 ∪ 13 aday; PLAN'ın bağlayıcı kararı uygulanabilir kaldı.
+
+### Dilim 6 — geri alma kapısı  *(`e5f73f7`)*
+
+`planImportRollback`, `NO_CELL_SNAPSHOT` denetiminden sonra C2 (sayılan görev
+= taslak sayısı), C3 (üretilen görevin kaynağı taslağın bloğu) ve C4 (boş hedef
+yok, hedefler = kayıtlı hücreler) bozuksa `PROVENANCE_BROKEN` döner.
+`ImportDao.rollbackFactsOf` bu olguları var olan okumalardan doldurur: **0 ek
+SQL** (`ImportRollbackQueryCountTest` aynı). Ölçüm testi artık C1–C4 için
+önizleme ve geri almada `PROVENANCE_BROKEN`, C5 ve U1–U3 için zararsız geri alma
+bekler. Dar koşu 11 sınıf / 101.
+
+### Dilim 7 — geri yükleme kapısı  *(`966b546`)*
+
+```text
+tek tanım             domain/importhealth/ImportLifecycle.kt: draftContradictionsOf(DraftRecords)
+                      D1–D9'un TEK tanımı — veritabanı sınıflandırıcısı (draftHealthOf) ve
+                      bellek içi kapı ikisi de onu çağırır; LifecycleContradiction C1…U3;
+                      importRecordsHealthIn(BackupData) her batch için {draft, lifecycle}
+                      (CONFIRMED + boş cells → C iddiası yok; U1–U3 yalnız DRAFT dışı)
+kapı yeri             RestoreController.chooseBackup, okuyucu Valid dedikten SONRA, Confirming'den
+                      ÖNCE; okuyucu SIKILAŞTIRILMADI (içe aktarma snapshot'ı ve migration seti aynı
+                      okuyucudan geçer)
+sonuç                 BackupRejection(IMPORT_RECORDS_CONTRADICT, place "importBatches") →
+                      Rejected; restore.file_refused tek satır (seçim başına bir kez)
+yan etki              yok: exporter okuması 0, güvenlik yedeği 0, restorer 0; canlı DB ve yedek
+                      klasörü aynı (RestoreSmokeTest ile gerçek bileşenlerde de)
+Türkçe cümle          "Bu yedekteki bir içe aktarmanın kayıtları birbiriyle uyuşmuyor, bu yüzden
+                      geri yüklenemez. Verileriniz olduğu gibi duruyor ve hiçbir şey yazılmadı;
+                      başka bir yedek seçebilirsiniz." — kod, tablo, UUID, yol yok
+kusur                 kapı hiçbir exception yakalamaz; kusur aynen yükselir
+```
+
+Fixture ayrımı: `aWholeBackup` ve `fillWithEverything` biçim/tam kapsam
+fixture'ları olarak **değişmedi** (ölçülen çelişkileri: `fillWithEverything`
+DRAFT [D3], CONFIRMED [C1, C4, C5, U1], ROLLED_BACK [RB1, RB2, U3];
+`aWholeBackup` [C2, C5]). Gerçekten geri yükleme kabulü gereken akış testleri
+tutarlı türevleri kullanır: `aRestorableBackup()` (kendi içinde sağlam olduğunu
+denetler) ve `fillWithEverythingARestoreAccepts` — içe aktarma kayıtlarını
+**silmez**, tutarlı hâle getirir, her tablo dolu kalır; smoke A durumunun
+`importRecordsHealthIn` ile sağlam olduğunu ayrıca doğrular. Dar koşu 21 sınıf /
+167 + RestoreSmokeTest 2/2.
+
+### Dilim 8 — R13: hasarlı veritabanı açılmaz  *(`34ef740`, smoke `a588d0e`)*
+
+Önce ölçüldü (`DatabaseDamageMeasurementTest`, tam koşudaki değerler; eşik değil
+kayıt, makineye bağlı):
+
+```text
+görev    page_count  page_size  bayt        quick_check  integrity_check  foreign_key_check
+1.203    350         4096       1.433.600   1,5 ms       5,0 ms           1,3 ms
+12.030   2.869       4096       11.751.424  12,2 ms      72,8 ms          18,0 ms
+
+hasar (geçici kopyada)              user_version  quick_check          integrity_check   foreign_key_check
+tablo yaprak sayfası çöp            8             BULDU (SQLiteExc.)   BULDU             BULDU (exception)
+indeks yaprak sayfası çöp           8             BULDU (2 satır)      BULDU             KAÇIRDI
+dosya yarıdan kesik                 OKUNAMADI     BULDU (SQLiteExc.)   BULDU             BULDU (exception)
+başlık freelist'i kullanımdaki      8             BULDU (6 satır)      BULDU             KAÇIRDI
+  bir sayfayı gösteriyor
+```
+
+`quick_check` dört sınıfın dördünü buldu; dilim durmadı. Uygulamanın
+veritabanları `auto_vacuum = FULL`'dur (ölçüldü): freelist her commit'te boşalır,
+bozulabilecek bir trunk sayfası kalmaz; bu yüzden freelist sınıfı başlığın
+freelist işaretçisinin kullanımdaki bir sayfayı göstermesi olarak kuruldu.
+Kesik dosyada `user_version` okunamadığı için PLAN sırasıyla önce
+`DATABASE_NOT_READABLE` gelir; o da Room'dan önce reddedilir.
+
+```text
+kapı                  StartupGate: user_version okunduktan hemen sonra, sürüm 1..8 için
+                      ConsistentDatabaseClone.passesQuickCheck; tek satır "ok" dışında her şey ve
+                      SQLiteException → StartupProblem.DATABASE_DAMAGED (satırlar hiçbir yere
+                      taşınmaz; kayıtta en çok exception sınıfı); dosya yok/boş → denetim yok;
+                      > 8 → önce SCHEMA_TOO_NEW; okunamaz → önce DATABASE_NOT_READABLE
+kusur                 IllegalStateException, IllegalArgumentException, CancellationException,
+                      Error DATABASE_DAMAGED yapılmaz, aynen yükselir; kilit yine bırakılır
+dokunmayan bağlantı   ÖLÇÜLDÜ: düz salt okunur bağlantı var olan -shm'yi yeniden yazıyor ve kapalı
+                      bir WAL veritabanının yanına boş -wal + -shm bırakıyordu (İş 4'ten beri sürüm
+                      okumasında da). Room'dan önceki iki soru (sürüm, quick_check) artık:
+                        -wal yok            → immutable=1   (log yoksa okunacak log da yok; hiçbir
+                                                             dosya oluşmaz, kilit tutuluyor)
+                        -wal ve -shm var    → readonly_shm=1 (log okunur, indeks yazılmaz)
+                        -wal var, -shm yok  → salt okunur   (-wal yazılmaz; SQLite -shm oluşturmak zorunda)
+                      URI yolunda %, ?, # kaçırılır ("veri ?#% ğüşİ" dizininde testli).
+                      Klonlama (VACUUM INTO) ve klon denetimleri DEĞİŞMEDİ.
+ekran                 "Veri dosyanızda bir hasar bulundu, bu yüzden PNP onu açmadı ve üzerine hiçbir
+                      şey yazmadı. Yedek klasörünüzdeki yedekler de olduğu gibi duruyor. Veri
+                      dosyasını ve yedekleri silmeyin; verilerinizi bir yedekten kurtarmak için
+                      yardım alın." + "Verileriniz olduğu gibi duruyor…" satırı
+kayıt                 startup.refused, reason=DATABASE_DAMAGED, ERROR, tam bir satır; "malformed",
+                      "tasks", "quick_check", yol ve dosya adı yok
+```
+
+Testler (`DamagedDatabaseStartupTest`, `StartupRecordsTest`,
+`StartupErrorScreenTest`): sağlam v8 açılır; sağlam sıcak WAL'daki commit'li satır
+kaybolmaz; tablo/indeks/freelist hasarı iki denemede de `DATABASE_DAMAGED`,
+Room sürücüsü hiç açılmaz, ev dizinindeki her dosya (kilit dosyası hariç) bayt
+bayt aynı, yedek yok; hasarlı + sıcak WAL'da db, -wal, -shm bayt bayt aynı;
+kesik dosya `DATABASE_NOT_READABLE`; hasarlı v3 için set ve migration yok, sürüm
+3 kalır; ret sonrası kilit boş; kapalı DB'nin yanında dosya belirmez; tuhaf yol;
+kusurlar maskelenmez. Olmayan DB'nin ilk çalıştırmada oluşması ve ikinci kopyanın
+reddi `StartupGateTest`'in mevcut testleridir. Dar koşu 14 sınıf / 94.
+
+### İş 10 / Dilim 4–8'in bilerek YAPMADIKLARI
+
+- Okuyucu sıkılaştırılmadı; canlı DB'deki `L` çelişkileri uygulama içinden
+  çözülmez (zararsız tutulur; o DB'nin yedekleri geri yüklemede reddedilir).
+- Hasarlı veritabanı onarılmaz, taşınmaz, silinmez; `.recover`, `VACUUM`,
+  `REINDEX`, dosya takası, uygulama içi kurtarma yok; açılışa `integrity_check`
+  ve `foreign_key_check` eklenmedi.
+- Room şeması, migration zinciri, instance kilidi, snapshot kapısı ve açılış hata
+  ekranının yapısı değişmedi.
+
 ## Açık sınırlar ve karar bekleyenler
 
 ```text
 R13 elle kurtarma belgesi         İş 14 + ayrı karar (uygulama içi kurtarma YOK)
-R13 indeks-içerik uyuşmazlığı     açılışta aranmaz; ölçüm Dilim 8
+R13 indeks-içerik uyuşmazlığı     açılışta aranmaz (bilinçli; integrity_check yalnız migration klonunda)
 R13 oturum içi hasar sınıfı       ayırt edilmez (storage.*_failed)
-quick_check tespit kapsamı        Dilim 8 ölçer; sayfa düzeyi bir sınıfı kaçırırsa DUR
+R13 -wal var, -shm yok            salt okunur okuma için SQLite yeni bir -shm oluşturur (-wal değişmez)
+R13 kesik dosya                   çoğunlukla DATABASE_NOT_READABLE olarak reddedilir (sürüm okunamaz)
 R14 D6/D7, C*, RB* canlı çözüm    uygulama içinden yok; zararsız tutulur
 R15 tek kopya politikası          ayrı ürün kararı; İş 10 değiştirmez
 beklenmeyen hata davranışı        ölçülmedi; Dilim 2 ölçer ve korur; değiştirmek ayrı karar
@@ -4898,7 +5088,7 @@ geçmez. Hash'i dilim başında/sonunda kontrol edilir ve kapsam dışında değ
 
 ```text
 TemporaryDatabaseDirectory              geçici Room DB + gerçek DB koruma iddiası
-assertRealApplicationDatabaseUntouched  112 test sınıfında kullanılıyor
+assertRealApplicationDatabaseUntouched  113 test sınıfında kullanılıyor
 CommittedSchema                         eski sürümleri commit'li JSON'dan kurar
 LegacyRowFixtures                       v1…v6 satır yazıcıları
                                         (v6 raw block = v7 raw block; şema aynı)
@@ -5081,10 +5271,11 @@ Kapanış izleri           normal kapanış ile SIGKILL sonrası ilk açılış 
                          listesini bırakır; işaret/kurtarma dosyası yok
 Açılış kapısı            v8 bir veritabanında EK MALİYET YOK: yalnız kilit +
                          Room'suz tek PRAGMA okuması; klon, çalışma kopyası ve
-                         belge SADECE sürüm 1..7 ise üretilir
-                         (İş 10 / Dilim 8 buna her açılışta tek salt okunur
-                          PRAGMA quick_check ekleyecek; satır o dilimde ölçülen
-                          hâliyle güncellenir — PLAN 14.7.4)
+                         belge SADECE sürüm 1..7 ise üretilir.
+                         İş 10 / Dilim 8'den beri sürüm 1..8'de her açılışta
+                         tek salt okunur PRAGMA quick_check (dosya boyutuyla
+                         doğrusal; ölçülen: 1.203 görev ≈ 1,5 ms, 12.030 görev
+                         ≈ 12 ms — kayıt, eşik değil; §25.4)
 Geri alma                önizleme 1 ve 42 görev için AYNI ifadeleri çalıştırır;
                          geri alma sorguları görev/hücre sayısıyla büyümez ve
                          geçmiş uzadıkça artmaz. Yazımlar büyür: görev başına
@@ -5280,7 +5471,12 @@ Masaüstü smoke (gerçek pencere, geçici XDG, yalnız kendi penceresini kapat�
 
 ```bash
 ./gradlew desktopWindowSmoke --no-daemon
+./gradlew desktopWindowSmoke -PsmokeScenario=damaged-database --no-daemon   # R13, PLAN 14.7.4
 ```
+
+Claude Code içinde tam koşu arka plan görevi olarak başlatılırsa görev yöneticisi
+bellek baskısında onu durdurabilir (İş 10 kapanışında iki kez, test derlemesinde).
+O zaman aynı komut `setsid nohup … &` ile ayrılmış çalıştırılır ve log izlenir.
 
 Farklı bir senaryo için elle tur (örneğin yazılamaz bir veri dizini):
 
@@ -5370,7 +5566,7 @@ yardımcı işler
       yapılandırılmış görev CSV dışa aktarma
 ```
 
-## Faz 3 — BAŞLADI, 16 İŞTEN 9'U BİTTİ; İş 10 TASARLANDI
+## Faz 3 — BAŞLADI, 16 İŞTEN 10'U BİTTİ
 
 PLAN `18.` — Faz 3 işler listesi.
 
@@ -5389,14 +5585,11 @@ PLAN `18.` — Faz 3 işler listesi.
  9  Büyük veri setiyle performans testi ......... TAMAM (1.203 görev, §29;
                                               makineden bağımsız kabul ölçütleri,
                                               süre/bellek eşik değil kayıt)
-10  Loglama ve anlaşılır hata mesajları ......... DEVAM EDİYOR (PLAN 14.7, §25.4;
-                                              8 dilimden 3'ü: kayıt dosyası + yazıcı,
-                                              tipli sınırların kayda bağlanması,
-                                              tipsiz kaçan depolama/dizin hatalarının
-                                              tipli Türkçe sonuçlara çevrilmesi;
-                                              ardından bir stabilizasyon turu:
-                                              olay tabanlı tanılama testleri +
-                                              güvenli pencere kapatma)
+10  Loglama ve anlaşılır hata mesajları ......... TAMAM (PLAN 14.7, §25.4; sekiz
+                                              dilim + stabilizasyon turu: kayıt dosyası,
+                                              tipli sınırlar, tipsiz kaçışlar, R12 saat,
+                                              R14 ölçüm + geri alma + geri yükleme
+                                              kapıları, R13 quick_check açılış kapısı)
 11  Self-contained Linux dağıtımı ....................... YAPILMADI
 12  Garuda/Arch paketi .................................. YAPILMADI
 13  Temiz Garuda ortamında kurulum testi ................ YAPILMADI
@@ -5455,16 +5648,15 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
 
 ## Sıradaki bağlayıcı iş
 
-> **Sıradaki bağlayıcı kod dilimi: Faz 3 / İş 10 / Dilim 4 — saat geriye
-> gittiğinde veri kullanılabilir kalır** (PLAN `14.7.3` ve `14.7.6`; kapsam
-> §33 R12 ve YALNIZ o). Commit mesajı
-> `fix(backup): keep backups usable after the clock goes backwards`.
-> Kapsam: yedek okuyucusundan zaman sıralaması kurallarının kaldırılması ve
-> yanlış gerekçeli belgelerinin düzeltilmesi; `EntityTimestamps`'in (üretimde
-> kullanılmayan) sıra şartlarının kaldırılması, `deletedAt == updatedAt`
-> şartının korunması; `batchesWithFingerprint` ve `allBatches` sırasına `id`
-> eklenmesi; rotation'ın az önce yazılanı fazlalık saymaması (`14.4.11`).
-> Zaman damgası DÜZELTİLMEZ, epoch aynen taşınır.
+> **Sıradaki bağlayıcı iş: Faz 3 / İş 11 — self-contained Linux dağıtımı**
+> (PLAN `18.`). Paket türü, JRE ve sürüm kaynağı (R5) kullanıcı kararı bekler;
+> İş 11'e bu turda geçilmedi.
+>
+> **İş 10 TAMAMLANDI** (§25.4 "İş 10 / Dilim 4–8'de uygulanan hâli"): R12 saat
+> geriye gidince yedekler kullanılabilir; R14'ün 13 adayı ölçüldü, geri alma
+> C2–C4'te `PROVENANCE_BROKEN`, geri yükleme `L`'de onaydan önce
+> `IMPORT_RECORDS_CONTRADICT`; R13 hasarlı DB Room'dan önce `quick_check` ile
+> `DATABASE_DAMAGED`. Tam koşu 3701 / 0 / 0 / 0 (269 sınıf).
 >
 > Stabilizasyon turu bitti (`test(desktop): make process and window checks
 > deterministic`, üretim kodu değişmedi): tanılama testleri olay tabanlı, tam koşu
@@ -5934,7 +6126,7 @@ kopyalama sırasında araya giren bir checkpoint tutarsız bir üçlü bırakır
 
 ---
 
-## R12 — Geriye giden bir saat içe aktarmayı tamamen durdurur  *(KARAR VERİLDİ — PLAN 14.7.3; kodda UYGULANMADI → İş 10 / Dilim 4)*
+## R12 — Geriye giden bir saat içe aktarmayı tamamen durdurur  *(KAPANDI — PLAN 14.7.3; İş 10 / Dilim 4, `efd6f3a`)*
 
 Bulgunun kendisi (İş 4 / Dilim 3 smoke'u): yedek okuyucusu `updated_at < created_at`
 olan bir satırı **DOMAIN_INVARIANT** ile reddeder (`BackupValues.checkWrittenAndChanged`;
@@ -5955,7 +6147,11 @@ türünde en az `keep` eski yedek varsa **az önce yazılıp doğrulanan yedek
 silinir** ve içe aktarma onayı yine de sürer. PLAN `14.4.11` artık bunu yasaklar;
 düzeltme Dilim 4'tedir.
 
-## R13 — Veritabanının geneli `integrity_check`'ten geçmezse  *(SINIR BELİRLENDİ — PLAN 14.7.4; kodda UYGULANMADI → İş 10 / Dilim 8)*
+**Uygulandı (`efd6f3a`):** okuyucu ve `EntityTimestamps` zaman sırasını
+reddetmiyor, epoch aynen korunuyor, eşitlikler `id` ile çözülüyor, rotation az
+önce yazılanı hiçbir zaman fazlalık saymıyor (keep 1..5 testli). Açık kalan yok.
+
+## R13 — Veritabanının geneli `integrity_check`'ten geçmezse  *(TESPİT KAPANDI — PLAN 14.7.4; İş 10 / Dilim 8, `34ef740`; kurtarma bilinçli olarak açık)*
 
 Bugün açılış kapısı canlı veritabanında bütünlük denetimi çalıştırmaz; yalnız ham
 migration klonunda `integrity_check` + `foreign_key_check` çalışır
@@ -5973,7 +6169,14 @@ Dilim 8'de ölçülecek; indeks-içerik uyuşmazlığı açılışta aranmaz; ot
 sırasında oluşan hasar ayrıca sınıflandırılmaz; elle kurtarma belgesi İş 14 +
 ayrı karar.
 
-## R14 — Yedek okuyucusu import yaşam döngüsünü denetlemiyor  *(KARAR VERİLDİ — PLAN 14.7.5; kodda UYGULANMADI → İş 10 / Dilim 5–7)*
+**Uygulandı (`34ef740`, smoke `a588d0e`):** ölçümde `quick_check` dört hasar
+sınıfının dördünü buldu (1.203 görevde ≈ 1,5 ms, 12.030'da ≈ 12 ms); kapı sürüm
+1..8'de Room'dan önce çalışıyor, kusurları maskelemiyor ve var olan yan
+dosyalara dokunmayan bir salt okunur bağlantı kullanıyor (§25.4). Bilinçli
+olarak açık: kurtarma (İş 14 + ayrı karar), indeks-içerik uyuşmazlığı, oturum
+içi hasar sınıfı, `-shm`'siz sıcak WAL'da SQLite'ın oluşturduğu `-shm`.
+
+## R14 — Yedek okuyucusu import yaşam döngüsünü denetlemiyor  *(KAPANDI — PLAN 14.7.5; İş 10 / Dilim 5–7, `feadbf8`, `e5f73f7`, `966b546`)*
 
 Bulgu ve İş 7 ölçümü aynen geçerlidir: `BackupValues` ve `BackupGraph` batch
 durumunu çocuk satırlarla karşılaştırmaz; `D1`–`D9`'un dokuzu da gerçek restore
@@ -6003,6 +6206,15 @@ görevi tombstone'lar.
 
 Bilinen ve kabul edilen sonuç: canlı DB `L`'den bir çelişki taşırken alınmış bir
 yedek geri yükleme kapısında reddedilir (PLAN `14.4.7`); canlı veri korunur.
+
+**Uygulandı:** Dilim 5 (`feadbf8`) 13 adayın 13'ünün canlı DB'ye ulaştığını,
+uygulamanın kendi yollarının ve şema 3–7 verisinin hiçbirini bozmadığını ve
+C3/C4'ün geri almada gerçek zarar verdiğini ölçtü → `L` = D1–D9 ∪ C1–C5 ∪
+RB1–RB5 ∪ U1–U3. Dilim 6 (`e5f73f7`) geri almayı C2–C4'te `PROVENANCE_BROKEN`
+ile durduruyor (0 ek SQL). Dilim 7 (`966b546`) kullanıcının seçtiği yedeği
+onay sorusundan ve güvenlik yedeğinden önce `IMPORT_RECORDS_CONTRADICT` ile
+reddediyor; D1–D9'un tek tanımı `domain/importhealth`. Bilinçli olarak açık:
+canlı DB'deki çelişkilerin uygulama içi çözümü yok.
 
 ## R15 — Instance kilidi yalnız açılış boyunca tutulur  *(GÖZLEM — İş 10 belge turunda kod okumasıyla bulundu; İş 10 için karar gerekmez)*
 
@@ -6120,6 +6332,14 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   İŞ 9 TAMAMLANDI: kabul makineden bağımsızdır (doğru sonuç, 42/1.000+ aynı ifade
   yapısı, N+1 yok, arama/süzgeç 0 ifade, tekrarda aynı sonuç); süre/bellek EŞİK
   EKLEME, yalnız ortamla kayıt; aynı yöntemde 2 kat kötüleşmeyi raporla.
+- İŞ 10 TAMAMLANDI (Dilim 4–8, §25.4). Kuralı bozma: zaman sırası bütünlük kuralı
+  DEĞİLDİR (epoch düzeltme, sıralamada eşitliği id ile çöz); D1–D9 ve C/RB/U'nun tek
+  tanımı domain/importhealth/ImportLifecycle.kt — ikinci kopya YAZMA; okuyucuyu
+  SIKILAŞTIRMA, kapı RestoreController'da onaydan önce; açılışta yalnız quick_check
+  (integrity/foreign_key_check EKLEME), Room'dan önceki okumalar
+  ConsistentDatabaseClone.readWithoutTouching ile; hasarlı DB'yi onarma/taşıma/silme.
+  Smoke: ./gradlew desktopWindowSmoke [-PsmokeScenario=damaged-database].
+  Sıradaki: Faz 3 / İş 11 (paket türü, JRE, sürüm kaynağı — kullanıcı kararı).
 - İŞ 10 STABİLİZASYON TURU BİTTİ (Dilim 3 ile 4 arası; üretim kodu değişmedi):
   tanılama testinde "close() dönünce N satır diskte" GİBİ HIZ VARSAYIMI YAZMA —
   işçiyle FaultyLogFileSystem'in olaylarıyla konuş (awaitLines, awaitLineWith,
@@ -6460,7 +6680,12 @@ Ardından gelen stabilizasyon turu doğrulamanın kendisini sağlamlaştırdı: 
 testleri artık makinenin hızını değil sözleşmeyi ölçüyor, tam koşu prizde olmayı
 gerektirmiyor, ve masaüstü smoke'u yalnız kendi başlattığı sürecin, tam başlıklı
 ve kapatmadan hemen önce yeniden doğrulanmış penceresini kapatıyor.
-Sıradaki bağlayıcı kod dilimi İş 10 / Dilim 4'tür.
+İş 10'un son beş dilimi veri bütünlüğünü kapattı: saat geriye gidince yedekler
+ve içe aktarma kullanılabilir kalıyor; bir içe aktarmanın birbirini tutmayan
+kayıtları ne geri almada başka bir görevi kaldırabiliyor ne de bir yedekle
+canlı veritabanına girebiliyor; ve hasarlı bir veritabanı, Room onu açmadan ve
+hiçbir dosyaya dokunulmadan, Türkçe bir açılış ekranıyla reddediliyor.
+**İş 10 TAMAMLANDI; sıradaki bağlayıcı iş Faz 3 / İş 11'dir.**
 
 Bunların ilki — **sürümlü JSON yedek ve geri yükleme** — dört atomik dilimde
 **tamamlanmıştır**. Biçim, kapsam, doğrulama hattı, restore mimarisi (A′),
