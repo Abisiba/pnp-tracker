@@ -175,7 +175,10 @@ class PackageCheck {
         }
         parsed.filter { it.name.removePrefix("./") !in metadata }.forEach { entry ->
             expect(entry.owner == "0/0") { "${entry.name} is owned by ${entry.owner}, not root" }
-            expect(entry.mode[5] != 'w' && entry.mode[8] != 'w') { "${entry.name} is writable by others: ${entry.mode}" }
+            // A symbolic link's own permission bits mean nothing; what it points at is checked below.
+            expect(
+                entry.type == 'l' || (entry.mode[5] != 'w' && entry.mode[8] != 'w'),
+            ) { "${entry.name} is writable by others: ${entry.mode}" }
             expect(!entry.name.split('/').contains("..") && !entry.name.startsWith("/")) { "unsafe path ${entry.name}" }
         }
         val usrBin = parsed.single { it.name.removePrefix("./") == "usr/bin/pnp-tracker" }
@@ -509,6 +512,9 @@ class PackageCheck {
             }
             report("window ${found.window.id} of process ${found.window.pid}, title exactly \"$MAIN_WINDOW_TITLE\"")
             started += application0.descendants().toList()
+            val wmClass = ProcessBuilder("xprop", "-id", found.window.id, "WM_CLASS").redirectErrorStream(true).start()
+            report("window ${wmClass.inputStream.bufferedReader().readText().trim()}")
+            wmClass.waitFor()
             checkTheRunningJvm(run, launcher, application)
             when (val outcome = closer.close(MAIN_WINDOW_TITLE)) {
                 is CloseOutcome.Refused -> {
@@ -587,6 +593,23 @@ class PackageCheck {
             "Java libraries from outside the package: ${javaLibraries.filterNot { Path.of(it).startsWith(home) }}"
         }
         report("running JVM: process $pid is the package's launcher; libjvm.so and every Java library from the package")
+        val system = libraries.filterNot { Path.of(it).startsWith(home) }.filter { ".so" in it }.sorted()
+        val owners =
+            if (Files.isExecutable(Path.of("/usr/bin/pacman"))) {
+                system
+                    .mapNotNull { library ->
+                        val query = ProcessBuilder("/usr/bin/pacman", "-Qoq", library).redirectErrorStream(true).start()
+                        val owner =
+                            query.inputStream
+                                .bufferedReader()
+                                .readText()
+                                .trim()
+                        if (query.waitFor() == 0) owner else null
+                    }.toSortedSet()
+            } else {
+                sortedSetOf()
+            }
+        report("system libraries the running application mapped: ${system.size}, from packages $owners")
     }
 
     /** No PATH, no JAVA_HOME, no JDK options; a HOME, three XDG folders and a working directory of its own. */

@@ -1,0 +1,33 @@
+# PnP Üretim Takipçisi — Garuda/Arch Linux package (Faz 3 / İş 12).
+#
+# This is the template `./gradlew :app:packageArch` fills in and builds with
+# makepkg; it is not meant to be run by hand. The @…@ values come from the
+# Gradle build: the version is the Gradle project version and nothing else, and
+# the source is the self-contained archive `:app:packageLinuxArchive` made and
+# `:app:verifyLinuxPackage` checked. Nothing is compiled here.
+
+pkgname=pnp-tracker
+pkgver=@PKGVER@
+pkgrel=1
+pkgdesc='PnP masa oyunları için 3D baskı, kart ve mukavva üretim takibi'
+arch=('@ARCH@')
+# No open source license has been chosen yet (Faz 3 / İş 15).
+license=('LicenseRef-unknown')
+# What the application's own native code loads every time it starts: Skia
+# (libGL, libX11, fontconfig, libstdc++) and AWT's X11 toolkit. The Java runtime
+# is inside the package; freetype and zlib come with it.
+depends=('glibc' 'libstdc++' 'libglvnd' 'libx11' 'libxext' 'libxi' 'libxrender' 'libxtst' 'fontconfig')
+# The embedded Java runtime and Skia must not be stripped or split.
+options=('!strip' '!debug')
+source=("@ARCHIVE@" 'pnp-tracker.desktop')
+sha256sums=('@ARCHIVE_SHA256@' '@DESKTOP_SHA256@')
+
+package() {
+  install -d "$pkgdir/opt"
+  cp -a "$srcdir/pnp-tracker-$pkgver" "$pkgdir/opt/pnp-tracker"
+  install -d "$pkgdir/usr/bin"
+  ln -s ../../opt/pnp-tracker/bin/pnp-tracker "$pkgdir/usr/bin/pnp-tracker"
+  install -Dm644 "$srcdir/pnp-tracker.desktop" "$pkgdir/usr/share/applications/pnp-tracker.desktop"
+  install -Dm644 "$srcdir/pnp-tracker-$pkgver/lib/pnp-tracker.png" \
+    "$pkgdir/usr/share/icons/hicolor/256x256/apps/pnp-tracker.png"
+}

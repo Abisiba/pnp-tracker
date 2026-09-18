@@ -271,3 +271,121 @@ tasks.register<JavaExec>("verifyLinuxPackage") {
         },
     )
 }
+
+// ---------------------------------------------------------------- Arch package
+
+// `pnp-tracker-<version>-1-<arch>.pkg.tar.zst` (Faz 3 / İş 12): makepkg over the
+// PKGBUILD template, packaging the very archive `packageLinuxArchive` made — no
+// second build of the application. makepkg runs in a directory of its own under
+// the system temporary directory, with a HOME of its own, so neither this
+// repository's path nor the user's makepkg settings reach the package, and it
+// is never allowed near pacman: --nodeps, nothing is installed.
+val packageArch by tasks.registering {
+    group = "distribution"
+    description = "Builds the Garuda/Arch Linux package from the self-contained archive."
+    dependsOn(packageLinuxArchive)
+    val archive = packageLinuxArchive.flatMap { it.archiveFile }
+    val template = rootProject.file("packaging/arch/PKGBUILD")
+    val desktop = rootProject.file("packaging/arch/pnp-tracker.desktop")
+    val version = project.version.toString()
+    val arch = linuxArch
+    val output = layout.buildDirectory.dir("arch")
+    inputs.file(archive)
+    inputs.files(template, desktop)
+    inputs.property("version", version)
+    outputs.dir(output)
+    doLast {
+        fun sha256(file: File) = MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) }
+        val archiveFile = archive.get().asFile
+        val pkgbuild =
+            template
+                .readText()
+                .replace("@PKGVER@", version)
+                .replace("@ARCH@", arch)
+                .replace("@ARCHIVE@", archiveFile.name)
+                .replace("@ARCHIVE_SHA256@", sha256(archiveFile))
+                .replace("@DESKTOP_SHA256@", sha256(desktop))
+        check(!Regex("@[A-Z0-9_]+@").containsMatchIn(pkgbuild)) { "the PKGBUILD template has a value nobody filled in" }
+
+        val work = File(System.getProperty("java.io.tmpdir"), "pnp-tracker-makepkg")
+        val marker = work.resolve(".made-by-pnp-tracker-build")
+        if (work.exists()) {
+            check(marker.isFile) { "$work exists and was not made by this build; it is left alone" }
+            work.walkTopDown().forEach { it.setWritable(true, true) }
+            work.deleteRecursively()
+        }
+        try {
+            val start = work.resolve("start").apply { mkdirs() }
+            marker.writeText("")
+            start.resolve("PKGBUILD").writeText(pkgbuild)
+            archiveFile.copyTo(start.resolve(archiveFile.name))
+            desktop.copyTo(start.resolve(desktop.name))
+            val home = work.resolve("home").apply { mkdirs() }
+            val built = work.resolve("out").apply { mkdirs() }
+            val process =
+                ProcessBuilder("makepkg", "--nodeps", "--noconfirm", "--nosign", "--noprogressbar", "--force", "--clean")
+                    .directory(start)
+                    .redirectErrorStream(true)
+                    .also { builder ->
+                        val environment = builder.environment()
+                        environment.clear()
+                        environment["PATH"] = "/usr/bin:/bin"
+                        environment["HOME"] = home.path
+                        environment["XDG_CONFIG_HOME"] = home.resolve(".config").path
+                        environment["LANG"] = "C.UTF-8"
+                        environment["PKGDEST"] = built.path
+                        environment["SRCDEST"] = start.path
+                        environment["BUILDDIR"] = work.resolve("build").path
+                        environment["PACKAGER"] = "pnp-tracker local build <build@pnp-tracker.invalid>"
+                        environment["SOURCE_DATE_EPOCH"] = "0"
+                    }.start()
+            val log = process.inputStream.bufferedReader().readText()
+            check(process.waitFor() == 0) { "makepkg failed:\n$log" }
+            logger.lifecycle(log.lines().filter { it.startsWith("==>") }.joinToString("\n"))
+            val destination = output.get().asFile
+            destination.deleteRecursively()
+            destination.resolve("dist").mkdirs()
+            destination.resolve("PKGBUILD").writeText(pkgbuild)
+            val made = built.listFiles()!!.single { it.name.endsWith(".pkg.tar.zst") }
+            check(made.name == "pnp-tracker-$version-1-$arch.pkg.tar.zst") { "makepkg made ${made.name}" }
+            made.copyTo(destination.resolve("dist/${made.name}"))
+        } finally {
+            if (marker.isFile) {
+                work.walkTopDown().forEach { it.setWritable(true, true) }
+                work.deleteRecursively()
+            }
+        }
+    }
+}
+
+// The Arch package's contract: its four places, its metadata, the version, the
+// desktop entry, no path of this machine; then installed into a temporary root,
+// /usr/bin/pnp-tracker run as in verifyLinuxPackage, and its files removed as
+// pacman would without touching the user's areas. Needs a display.
+tasks.register<JavaExec>("verifyArchPackage") {
+    group = "verification"
+    description = "Checks the Arch package and runs it from a temporary root."
+    val desktopTest = kotlin.jvm("desktop").compilations.getByName("test")
+    dependsOn(packageArch, linuxPackageProbeJar)
+    classpath = files(desktopTest.output.allOutputs, desktopTest.runtimeDependencyFiles)
+    mainClass = "dev.pnptracker.packaging.LinuxPackageCheckKt"
+    val version = project.version.toString()
+    val arch = linuxArch
+    val packageFile = layout.buildDirectory.file("arch/dist/pnp-tracker-$version-1-$arch.pkg.tar.zst")
+    val probe = linuxPackageProbeJar.flatMap { it.archiveFile }
+    val sample = file("src/desktopTest/resources/sample-import.xlsx")
+    val repository = rootProject.projectDir
+    argumentProviders.add(
+        CommandLineArgumentProvider {
+            listOf(
+                "arch",
+                packageFile.get().asFile.absolutePath,
+                version,
+                arch,
+                probe.get().asFile.absolutePath,
+                sample.absolutePath,
+                repository.absolutePath,
+            )
+        },
+    )
+}

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=PnP Üretim Takipçisi
+GenericName=Üretim takibi
+Comment=PnP masa oyunları için 3D baskı, kart ve mukavva üretimini takip eder
+Exec=pnp-tracker
+Icon=pnp-tracker
+Terminal=false
+Categories=Utility;
+StartupWMClass=dev-pnptracker-MainKt

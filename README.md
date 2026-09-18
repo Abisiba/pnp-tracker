@@ -29,3 +29,16 @@ arşiv ve uygulama sürümü oradan türetilir.
 Arşiv, Java kurulumu gerektirmeyen kendi başına bir uygulama dizinidir
 (`pnp-tracker-<sürüm>/bin/pnp-tracker`); içinde yalnız gereken modülleri taşıyan
 bir Java çalışma ortamı bulunur.
+
+## Garuda/Arch paketi
+
+```bash
+./gradlew :app:packageArch           # app/build/arch/dist/pnp-tracker-<sürüm>-1-<mimari>.pkg.tar.zst
+./gradlew :app:verifyArchPackage     # paketi geçici bir köke açar, denetler ve çalıştırır (ekran gerekir)
+sudo pacman -U app/build/arch/dist/pnp-tracker-<sürüm>-1-<mimari>.pkg.tar.zst
+```
+
+Paket, yukarıdaki arşivi `packaging/arch/PKGBUILD` ile `makepkg`'e verir; uygulama
+yeniden derlenmez. Uygulama `/opt/pnp-tracker` altına, başlatıcı
+`/usr/bin/pnp-tracker`, masaüstü girdisi ve simge freedesktop konumlarına kurulur.
+Sistemde Java gerekmez; veriler yine kullanıcının XDG dizinlerindedir.
