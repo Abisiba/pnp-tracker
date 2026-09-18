@@ -7,16 +7,23 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** Faz 3 / **İş 10 / Dilim 2** —
+> **Son güncelleme:** Faz 3 / **İş 10 / Dilim 3** —
+> `fix(errors): report storage and directory failures safely`.
+> Dilim 2'nin **ölçtüğü** beş tipsiz kaçış tipli Türkçe sonuçlara çevrildi:
+> taslak kaydı, oyun tablosu okuması, renk kataloğu okuması, havuz okuması ve
+> açılış dizinleri (§25.4 "İş 10 / Dilim 3'te uygulanan hâli"). Yeni olay kodu
+> eklenmedi; üç gözlenen okuma tek bir dar seam'den geçiyor ve yalnız
+> `SQLiteException` cevaplanıyor — kusur ve cancellation aynen yükseliyor.
+> Sıradaki bağlayıcı kod dilimi **İş 10 / Dilim 4** (R12: saat geriye gidince).
+>
+> Daha önce: İş 10 / Dilim 2 —
 > `feat(diagnostics): record failures at their typed boundaries`.
 > PLAN `14.7.2`'nin olay matrisi üretime bağlandı: her hata, tipli sonuca
 > çevrildiği sınırda **bir kez** kaydediliyor; kullanıcıya gösterilen hiçbir metin,
 > sonuç veya ekran durumu değişmedi (§25.4 "İş 10 / Dilim 2'de uygulanan hâli").
 > Tipsiz kaçan sınırlar tahmin edilmedi, **ölçüldü**; Dilim 3'ün kapsamı o
-> matristir. Room şeması, PLAN ve bağımlılıklar değişmedi. Tam koşu: 3634 / 0 / 0 / 0 (261 sınıf);
-> üç geçici XDG dizinli masaüstü smoke geçti. Sıradaki bağlayıcı kod dilimi
-> **İş 10 / Dilim 3** (tipsiz kaçan depolama/dizin hatalarının tipli Türkçe
-> sonuçlara çevrilmesi).
+> matristir. Room şeması, PLAN ve bağımlılıklar değişmedi. O günkü tam koşu:
+> 3634 / 0 / 0 / 0 (261 sınıf).
 >
 > Daha önce: İş 10 / Dilim 1 (`feat(diagnostics): keep a bounded diagnostic log in
 > the state directory`) kayıt dosyası sözleşmesini, güvenli yazıcıyı, sınırlı
@@ -75,57 +82,71 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-HEAD (bu commit öncesi): ce29d8affa02b152ffba7c2b032ca5d5b413f8e1
-önceki commit         : feat(diagnostics): keep a bounded diagnostic log in the state directory
-bu commit             : feat(diagnostics): record failures at their typed boundaries
+HEAD (bu commit öncesi): e8081047cae195083167ad6ee97281aed4d69e4e
+önceki commit         : feat(diagnostics): record failures at their typed boundaries
+bu commit             : fix(errors): report storage and directory failures safely
 working tree          : başlangıçta temiz
 Room şema sürümü      : 8   (bu commit'te DEĞİŞMEDİ)
 şema dosyaları        : 1.json … 8.json  hepsi bayt bayt aynı
 test durumu           : ./gradlew clean check --rerun-tasks (bellek sınırlı, §30) → BUILD SUCCESSFUL
-                        3634 test / 0 failure / 0 error / 0 skipped (261 sınıf)
-                        [ce29d8a: 3579 / 251 → +55 test / +10 sınıf: StorageFailureRecordsTest 10,
-                         ImportFailureRecordsTest 10, BackupFailureRecordsTest 7,
-                         RestoreRecordsTest 5, StartupRecordsTest 5,
-                         UnexpectedFailureRecordsTest 5, RecordingCostTest 3,
-                         UntypedFailureMeasurementTest 3, DiagnosticOwnershipTest 4,
-                         DiagnosticsSmokeTest 3; DiagnosticSurfaceTest 4 (sayı aynı,
-                         dördüncü test bilinçli olarak çevrildi)]
-smoke                 : XDG_DATA_HOME / XDG_CONFIG_HOME / XDG_STATE_HOME üç ayrı geçici dizin;
-                        data'ya user_version = 9 olan bir veritabanı konup ./gradlew --no-daemon run:
-                        "PNP açılamadı" ekranı açıldı, wmctrl -i -c ile kapatıldı, çıkış 0;
-                        state/pnp-tracker/logs/pnp-tanilama.jsonl'de TEK satır —
+                        3660 test / 0 failure / 0 error / 0 skipped (265 sınıf), 6 dk 57 sn;
+                        bellek öldürmesi yok (en düşük boş bellek ~1,7 GiB)
+                        [e808104: 3634 / 261 → +29 / −3 test, +5 / −1 sınıf:
+                         DraftSaveRefusalTest 5, UnreadableReadingsTest 12,
+                         StartupFolderRefusalTest 5, ReadingRefusalSurfaceTest 3,
+                         ui/UnreadableScreensTest 4; KALDIRILAN UntypedFailureMeasurementTest 3
+                         (ölçtüğü üç vaka artık tipli ve davranışla çivili);
+                         UnexpectedFailureRecordsTest 5 ve ImportDraftStoreTest (sayılar aynı; havuz
+                         kusuru testi ve ham SQLiteException bekleyen taslak testi bilinçli
+                         olarak çevrildi)]
+tam koşu geçmişi      : (1) 3660/1 — ImportDraftStoreTest ham SQLiteException bekliyordu → bilinçli
+                        çevrildi; (2) bellek yetersizliğiyle durduruldu, makine yeniden başladı;
+                        (3) 3660/1 — Dilim 1'in DiagnosticLogProcessTest'i ("unexpected 932
+                        lines"): dizüstü PİLDE, CPU powersave; aynı test DEĞİŞİKLİKSİZ HEAD'de
+                        (ayrı worktree) de düştü (1615), prize takılınca üçü de geçti — test
+                        close()'un 500 ms'lik boşaltma süresine güveniyor (§25.4 açık sınırlar);
+                        (4) prizde 3660/0 — yukarıdaki satır
+smoke                 : XDG_DATA_HOME yazılamaz bir dizinin altında (chmod 500; hesap kipi
+                        gerçekten uyguluyor), XDG_CONFIG_HOME ve XDG_STATE_HOME yazılabilir geçici
+                        dizinler; ./gradlew --no-daemon run: "PNP açılamadı" penceresi açıldı,
+                        wmctrl -i -c ile normal kapatıldı, çıkış 0; veri dizininde 0 girdi (DB
+                        hiç oluşmadı/açılmadı), config'te 0 girdi; state/pnp-tracker/logs/
+                        pnp-tanilama.jsonl'de TEK satır —
                         {"v":1,"seq":1,"at":"…","level":"ERROR","event":"startup.refused",
-                         "app":"0.1.0","schema":8,"reason":"SCHEMA_TOO_NEW"} — yol, dosya adı,
-                        UUID veya exception mesajı YOK; veritabanı bayt bayt aynı kaldı;
-                        arkada süreç kalmadı; gerçek pnp.db / backups / config / ~/.local/state aynı
-değişen dosyalar      : üretim — yeni commonMain/domain/diagnostics/RecordSafely.kt ve
-                        desktopMain/platform/diagnostics/ApplicationFailureRecords.kt;
-                        tanılama parametresi alan ve kaydeden sınırlar: CellTextStore,
-                        TaskFromTextStore, TaskEditStore, TaskSetupStore, GameSetupStore,
-                        ColorCatalogueStore, TaskProgressStore, ImportReviewStore,
-                        ImportConfirmationStore, ImportRollbackStore, ImportDraftRemovalStore,
-                        UnfinishedImportsStore, TaskExportStore, LiveBackupRestorer,
-                        VerifiedSnapshotTaker, AutomaticBackupHousekeeping, ImportController,
-                        HistoryController, PoolController(+PoolControllers), BackupController,
-                        RestoreController, DesktopBackupFileGateway, DesktopExportFileGateway,
-                        DesktopSettingsStore, StartupGate, Main.kt
-                        test — yeni desktopTest/platform/diagnostics/ (StorageFailureRecordsTest,
-                        ImportFailureRecordsTest, BackupFailureRecordsTest, RestoreRecordsTest,
-                        StartupRecordsTest, UnexpectedFailureRecordsTest, RecordingCostTest,
-                        UntypedFailureMeasurementTest, DiagnosticOwnershipTest,
-                        DiagnosticsSmokeTest, DiagnosticDoubles); değişen DiagnosticSurfaceTest
-                        (Dilim 1'in "hiç kayıt yok" testi bilinçli olarak çevrildi),
-                        ConfirmationSnapshots (yardımcıya diagnostics parametresi)
+                         "app":"0.1.0","schema":8,"reason":"FOLDERS_NOT_CREATED",
+                         "exception":"java.io.IOException",
+                         "cause":"java.nio.file.AccessDeniedException"} — yol, kullanıcı adı,
+                        SQL veya mesaj YOK; çalıştırma logunda exception yok; arkada süreç
+                        kalmadı; gerçek pnp.db / .lck / backups / config / ~/.local/state aynı
+değişen dosyalar      : üretim — yeni commonMain/domain/diagnostics/ObservedReadings.kt;
+                        ImportFailure(+COULD_NOT_SAVE), ImportDraftStore, ImportScreenState(+NotSaved),
+                        ImportController, ImportScreen, ImportTexts, GameTableScreenState(+Failed),
+                        GameTableController, GameTableScreen, ColorCatalogueState(+Failed),
+                        ColorCatalogueController, ColorCatalogueScreen, PoolController, PoolScreen,
+                        MigrationSnapshotSet(+FOLDERS_NOT_CREATED), StartupErrorScreen,
+                        AppDirectoryInitializer, Main.kt, Strings.kt, strings.xml
+                        test — değişen ImportDraftStoreTest (ham SQLiteException yerine tipli ret);
+                        yeni DraftSaveRefusalTest, UnreadableReadingsTest,
+                        StartupFolderRefusalTest, ReadingRefusalSurfaceTest, RefusingSources,
+                        ui/UnreadableScreensTest; değişen DiagnosticOwnershipTest,
+                        DiagnosticSurfaceTest, UnexpectedFailureRecordsTest (havuz kusuru testi
+                        bilinçli olarak çevrildi), StartupErrorScreenTest;
+                        KALDIRILAN UntypedFailureMeasurementTest
                         PNP_MASTER_CONTEXT.md
 PLAN.md               : bu commit'te DEĞİŞMEDİ (180ff640…)
 ```
 
-**Bu commit Faz 3 / İş 10'un ikinci dilimidir.** Sözleşme PLAN `14.7.2`;
-bağlanan olay matrisi, kayıt sahipliği, maliyet ve tipsiz kaçışların ölçüm
-matrisi §25.4 "İş 10 / Dilim 2'de uygulanan hâli"dedir. Kullanıcı davranışı
-değişmedi; tipsiz kaçan hatalar Dilim 3'e ölçülmüş bir listeyle giriyor.
+**Bu commit Faz 3 / İş 10'un üçüncü dilimidir.** Sözleşme PLAN `14.7.6`;
+kapsam Dilim 2'nin ölçtüğü beş tipsiz kaçıştır ve yalnız odur. Beş yolun önceki
+ve yeni davranışı, Türkçe cümleleri, kayıt sahipliği ve toparlanma modeli §25.4
+"İş 10 / Dilim 3'te uygulanan hâli"dedir. Yeni olay kodu eklenmedi; kullanıcı
+artık asılı kalan bir ekran, sahte bir boş liste ya da maskelenmiş bir kusur
+görmüyor.
 
-**Bir önceki commit (`ce29d8a`) İş 10 / Dilim 1'di:** kayıt dosyası sözleşmesi,
+**Bir önceki commit (`e808104`) İş 10 / Dilim 2'ydi:** PLAN `14.7.2`'nin olay
+matrisi üretime bağlandı ve tipsiz kaçışlar ölçüldü (§25.4).
+
+**Ondan önceki commit (`ce29d8a`) İş 10 / Dilim 1'di:** kayıt dosyası sözleşmesi,
 güvenli yazıcı, sınırlı kuyruk, süreç kilidi ve rotation (§25.4).
 
 **Bir önceki commit (`85ccc32`) Faz 3 / İş 8'di; İŞ 8 TAMAMLANDI.** Envanter, tablo güdümlü tüm
@@ -344,8 +365,9 @@ veritabanının parmak izi orada durmamalıdır. Bunun yerine kural şudur:
 
 Gerçek DB hiçbir aşamada açılmaz, kopyalanmaz veya migrate edilmez. Bütün testler ve
 manuel turlar geçici Room veritabanları ve geçici XDG dizinleri kullanır. Bu koruma
-`assertRealApplicationDatabaseUntouched` yardımcı fonksiyonuyla **103 test sınıfında**
-uygulanmaktadır. Sayı tek bir yerde tutulur; §29 aynı değeri anar ve tarama
+`assertRealApplicationDatabaseUntouched` yardımcı fonksiyonuyla **112 test sınıfında**
+uygulanmaktadır. (Sayı İş 10 / Dilim 3'te düzeltildi: belgede 103 yazıyordu, gerçek
+değer o commit'ten önce zaten 109'du; bu dilim üç sınıf ekledi.) Sayı tek bir yerde tutulur; §29 aynı değeri anar ve tarama
 `grep -rl 'assertRealApplicationDatabaseUntouched' app/src/*Test` ile yapılır.
 
 ## Yaklaşan migration hakkında soyut gözlem  *(İş 4 için belirleyici)*
@@ -3870,7 +3892,7 @@ kaldırmayı her zaman mümkün göstermek    REDDEDİLDİ  D6/D7'de motor redde
 
 ---
 
-# 25.4 TANILAMA VE VERİ BÜTÜNLÜĞÜ HATA SEMANTİĞİ  *(Faz 3 / İş 10 — 2/8 dilim)*
+# 25.4 TANILAMA VE VERİ BÜTÜNLÜĞÜ HATA SEMANTİĞİ  *(Faz 3 / İş 10 — 3/8 dilim)*
 
 Bağlayıcı metin PLAN `14.7` (ve ona bağlanan `14.2`, `11.4.5`, `14.4.7`,
 `14.4.10`, `14.4.11`, `14.4.13`, `16.`, `18.` Faz 3 İş 10 ve testleri). Bu bölüm
@@ -4052,8 +4074,10 @@ U1–U3            aday; Dilim 5           —                       —        
 2  tipli sınırların kayda bağlanması + tipsiz     feat(diagnostics): record failures at their typed boundaries             TAMAM
    kaçışların ölçümü                             (PLAN'daki taslak mesaj "record typed failures where they are decided"di;
                                                   dilim talimatının mesajı uygulandı)
-3  tipsiz kaçan depolama/dizin hataları → tipli  fix(storage): say in words when the database or its folders will not answer  SIRADAKİ
-4  R12 saat geriye gidince                       fix(backup): keep backups usable after the clock goes backwards          YAPILMADI
+3  tipsiz kaçan depolama/dizin hataları → tipli  fix(errors): report storage and directory failures safely                 TAMAM
+   Türkçe sonuçlar                               (PLAN'daki taslak mesaj "fix(storage): say in words when the database or
+                                                  its folders will not answer"dı; dilim talimatının mesajı uygulandı)
+4  R12 saat geriye gidince                       fix(backup): keep backups usable after the clock goes backwards          SIRADAKİ
 5  R14 aday ölçümü (yalnız test)                 test(backup): measure which import lifecycle contradictions a restore can carry  YAPILMADI
 6  R14 geri alma provenance kapısı               fix(import): refuse to take back tasks an import did not make           YAPILMADI
 7  R14 geri yükleme yaşam döngüsü kapısı         feat(backup): refuse a backup whose imports contradict their own records YAPILMADI
@@ -4313,10 +4337,12 @@ beklenmeyen hata  Compose 1.11.1'in varsayılanı ÖLÇÜLDÜ (bytecode): EDT'ye
                   diagnostics.close()'a girdiği için satır en fazla 500 ms içinde diske iner
 ```
 
-### Tipsiz kaçan hatalar — ölçüm matrisi  *(Dilim 3'ün TAM kapsamı)*
+### Tipsiz kaçan hatalar — ölçüm matrisi  *(Dilim 3'ün TAM kapsamı — HARCANDI)*
 
 `UntypedFailureMeasurementTest` (gerçek DB + gerçek hata enjeksiyonu). Davranış
-bu dilimde DEĞİŞTİRİLMEDİ; ölçülmeyen hiçbir vaka Dilim 3'e giremez.
+Dilim 2'de DEĞİŞTİRİLMEDİ; ölçülmeyen hiçbir vaka Dilim 3'e giremedi. **Beşinin
+beşi de Dilim 3'te tiplendi** (aşağıda); ölçüm testi o dilimde, yerini alan
+davranış testleriyle birlikte kaldırıldı.
 
 ```text
 sınıf / işlem                         çıkan exception              hangi katmandan   bugün kullanıcıya  Dilim 3'te
@@ -4387,6 +4413,187 @@ başarı kaydı                                     YOK (yalnız iki INFO)
 R12, R13, R14                                    Dilim 4–8
 ```
 
+## İş 10 / Dilim 3'te uygulanan hâli
+
+Dilim 2'nin **ölçtüğü** beş tipsiz kaçış tiplendi; başka hiçbir yol açılmadı ve
+yeni bir olay kodu eklenmedi. Room şeması, migration zinciri, fixture, PLAN ve
+bağımlılıklar değişmedi.
+
+```text
+commonMain/domain/diagnostics/ObservedReadings.kt   answeringStorageRefusal: gözlenen bir okumanın
+                                                    SQLiteException'ını tipli cevaba çevirir, TEK
+                                                    kayıt verir, başka her şeyi AYNEN yükseltir
+domain/importprep/ImportFailure.kt                  + COULD_NOT_SAVE (yapıcı DEĞİŞMEDİ: dört üretim
+                                                    yeri initCause çağırıyor, ikinci argüman onları kırardı)
+data/repository/ImportDraftStore.kt                 saveDraftBatch'in SQLiteException'ı → tipli sonuç +
+                                                    storage.write_failed (area IMPORT_DRAFT)
+ui/feature/importreview/ImportScreenState.kt         + NotSaved(session)
+ui/feature/importreview/ImportController.kt          COULD_NOT_SAVE oturumu KORUYARAK NotSaved'e düşer
+ui/feature/importreview/ImportScreen.kt              NotSaved = önizlemenin kendisi + üstte tek cümle
+ui/feature/games/GameTableScreenState.kt             + GameTableRowsState.Failed
+ui/feature/games/GameTableController.kt              readAttempt/readAgain; iki akış da seamden geçer;
+                                                     redrawn() reddedilmiş okumayı boş tabloya çevirmez
+ui/feature/games/GameTableScreen.kt                  UnreadableTable + LaunchedEffect(readAttempt)
+ui/feature/colors/ColorCatalogueState.kt             + ColorCatalogueState.Failed
+ui/feature/colors/ColorCatalogueController.kt        readAttempt/readAgain; seam
+ui/feature/colors/ColorCatalogueScreen.kt            UnreadableCatalogue + LaunchedEffect(readAttempt)
+ui/feature/pools/PoolController.kt                   geniş catch KALKTI; seam; readAttempt/readAgain;
+                                                     nullable snapshot dansı da kalktı
+ui/feature/pools/PoolScreen.kt                       UnreadablePool + LaunchedEffect(readAttempt)
+domain/backup/automatic/MigrationSnapshotSet.kt      + StartupProblem.FOLDERS_NOT_CREATED
+platform/files/AppDirectoryInitializer.kt            IOException → StartupRefused(FOLDERS_NOT_CREATED);
+                                                     mesajdaki MUTLAK YOL kaldırıldı
+ui/feature/startup/StartupErrorScreen.kt             dokuzuncu Türkçe cümle (exhaustive when)
+Main.kt                                              sıra: yollar → tanılama yazıcısı → dizinler → kapı;
+                                                     dizin hatası da aynı catch'ten, aynı kayıttan geçer
+```
+
+### Beş yolun önceki ve yeni davranışı
+
+```text
+yol                          önce                                yeni
+ImportDraftStore.save        ham SQLiteException controller'dan   ImportFailure.COULD_NOT_SAVE (reddin
+                                                                  kendisi store'da kalır; sınıfları zaten
+                                                                  kayıtta, mesajı SQL);
+                             çıkıyor, ekran "kaydediliyor"da      NotSaved(session): önizleme, dosya adı
+                             kalıyordu                            ve taslak duruyor, düğme geri geliyor,
+                                                                  aynı taslak yeniden kaydedilebiliyor
+GameTableStore.observeTable  ham SQLiteException akıştan çıkıyor  GameTableRowsState.Failed + "Yeniden dene";
+                             (tipli "okunamadı" YOK)              görünüm/süzgeç değişimi boş tablo çizmez
+ColorCatalogueStore          ham SQLiteException akıştan çıkıyor  ColorCatalogueState.Failed + "Yeniden dene";
+  .observeColors                                                  tablo ve havuzun editör listesi ELİNDEKİ
+                                                                  renkleri korur (boş listeye düşmez)
+PoolController.observePool   catch her Throwable'ı Failed yapıyor yalnız SQLiteException Failed olur;
+                             (kusuru da maskeliyordu)             kusur ve cancellation AYNEN yükselir;
+                                                                  "Yeniden dene" eklendi
+AppDirectoryInitializer      pencereden ÖNCE ham java.io.         StartupRefused(FOLDERS_NOT_CREATED);
+  .ensureDirectories         IOException; mesajında MUTLAK YOL    açılış hata ekranı + tek startup.refused;
+                                                                  DB ve kapı hiç açılmaz; yol silindi
+```
+
+### Kullanıcının gördüğü Türkçe cümleler
+
+```text
+import_error_could_not_save  İçe aktarma kaydedilemedi. Dosyadan okunanlar olduğu gibi duruyor ve
+                             hiçbir şey yarım kaydedilmedi. Biraz sonra yeniden kaydetmeyi deneyin.
+table_unreadable             Oyun tablosu okunamadı.
+colors_unreadable            Renk kataloğu okunamadı.
+pool_error                   Havuz okunamadı.        (eskiden "…Uygulamayı yeniden başlatmayı deneyin."
+                                                      diyordu; artık ekranda düğme var)
+reading_unreadable_hint      Verileriniz olduğu gibi duruyor; hiçbir şey değiştirilmedi.
+                             Biraz sonra yeniden deneyebilirsiniz.
+reading_read_again           Yeniden dene
+startup_folders_not_created  PNP kendi klasörlerini oluşturamadı, bu yüzden veri dosyanız hiç açılmadı.
+                             Disk dolu olabilir ya da klasörlerin izinleri değişmiş olabilir;
+                             kontrol edip PNP'yi yeniden başlatın.
+```
+
+Üç ekran ortak bir hata modelini paylaşıyor (`Strings.Reading`: ipucu + düğme)
+ama **ne olduğunu her ekran kendi sözcükleriyle söylüyor**; genel bir "bir
+şeyler yanlış gitti" durumu yok.
+
+### Kayıt sahipliği — bu dilimde eklenenler
+
+```text
+olay                  sahip                       alanlar
+storage.write_failed  ImportDraftStore            area=IMPORT_DRAFT, reason=COULD_NOT_SAVE, sınıf adları
+storage.read_failed   GameTableController         area=GAME_TABLE
+storage.read_failed   ColorCatalogueController    area=COLORS
+storage.read_failed   GameTableController (katalog) / PoolController (katalog)   area=COLORS
+storage.read_failed   PoolController              area=POOLS
+startup.refused       ApplicationFailureRecords + Main   reason=FOLDERS_NOT_CREATED, sınıf adları
+```
+
+`readShownAsFailed` artık yalnız `HistoryController`'ın; havuz onu bırakıp
+tipe göre daraltan seam'e geçti. Yeni olay kodu **yok**.
+
+### Toparlanma ve log fırtınası
+
+```text
+akış biter        bir ret akışı BİTİRİR; okunmamış bir okumadan gelecek başka satır yoktur
+tek satır         ekran ne kadar açık kalırsa kalsın bir ret bir satır yazar
+yeniden deneme    readAttempt LaunchedEffect'in anahtarıdır; düğme onu artırır, eski toplama
+                  biter, yenisi başlar
+toparlanma        gelen ilk başarılı okuma Failed'ı temizler (tablo, katalog ve havuz için testli)
+editör listesi    tablo/havuz kataloğu reddedilirse ELİNDEKİ renkler kalır; boş listeye düşmez
+```
+
+### Programlama hatası ve cancellation
+
+```text
+SQLiteException        tipli sonuç + TEK kayıt
+IllegalStateException  AYNEN yükselir, kaydedilmez  (üç akışta da testli)
+IllegalArgumentException / NullPointerException   aynı
+Error                  yakalanmaz
+CancellationException  AYNEN yükselir, kaydedilmez — ekranı kapatmak hata değildir
+```
+
+Yapısal kanıt `ReadingRefusalSurfaceTest`: üç controller'da `.catch {` yok,
+`catch (… : Throwable|Exception)` yok, üçü de seam'den geçiyor ve seam tipe göre
+daraltıp geri fırlatıyor.
+
+### Testler
+
+```text
+desktopTest/…/DraftSaveRefusalTest              5  gerçek DB + gerçek SQLite reddi + gerçek
+                                                   ImportController: NotSaved oturumu KORUYOR,
+                                                   isBusy false, aynı taslak yeniden kaydediliyor;
+                                                   0 batch / 0 raw block kalıyor; TEK kayıt ve
+                                                   controller ikinci kez yazmıyor; atan log sonucu
+                                                   değiştirmiyor; başarılı kayıt 0 satır
+UnreadableReadingsTest                         12  üç okuma: tipli Failed + TEK güvenli kayıt;
+                                                   görünüm/süzgeç değişimi boş tablo çizmiyor;
+                                                   üçü de sonraki başarılı okumayla toparlanıyor ve
+                                                   ikinci kayıt YAZMIYOR; tablonun editör renkleri
+                                                   elde kalıyor; IllegalState/NullPointer ve
+                                                   CancellationException AYNEN yükseliyor ve
+                                                   kaydedilmiyor; atan log üç cevabı da değiştirmiyor
+StartupFolderRefusalTest                        5  yazılamaz dizin → StartupRefused
+                                                   (FOLDERS_NOT_CREATED); DB/ayar/yedek dosyası
+                                                   OLUŞMUYOR; uygulamanın yazdığı iki cümlede yol yok
+                                                   (dosya sisteminin kendi nedeni yalnız SINIF adı için
+                                                   tutuluyor); kayıt tek güvenli satır; state de
+                                                   yazılamazken ikinci hata yok ve hiçbir şey
+                                                   oluşmuyor; olağan açılış 0 satır
+ReadingRefusalSurfaceTest                       3  yapısal: havuzda ve üç controller'da `.catch {` ve
+                                                   geniş catch YOK, üçü de seam'den geçiyor, seam tipe
+                                                   göre daraltıp geri fırlatıyor
+desktopTest/…/ui/UnreadableScreensTest          4  gerçek Compose sahnesi, 1100×720 1× ve 640×460 2×
+                                                   metin ×1,3: üç ekran da kendi cümlesini ve
+                                                   `Yeniden dene`yi gösteriyor, "boş" cümlelerini
+                                                   GÖSTERMİYOR, sınıf adı/SQL/yol/enum sızmıyor;
+                                                   okunabilen katalog "okunamadı" demiyor
+UntypedFailureMeasurementTest                  -3  Dilim 2'nin ölçüm testi KALDIRILDI: ölçtüğü üç
+                                                   vakanın üçü de artık tipli ve yukarıdaki davranış
+                                                   testleriyle çivili (kendi belgesi bu turu şart
+                                                   koşuyordu)
+UnexpectedFailureRecordsTest                4 (±0) "havuz kusuru app.unexpected_failure yazar" testi
+                                                   bilerek ÇEVRİLDİ: kusur artık AYNEN yükseliyor,
+                                                   kaydedilmiyor ve havuz Loading'de kalıyor
+AppDirectoryInitializerTest                 6 (±0) davranış aynı; yalnız fırlatılan tip değişti
+StartupErrorScreenTest                      6 (±0) dokuzuncu neden taramaya kendiliğinden girdi
+ImportDraftStoreTest                        (±0)   "hücre yazılamazsa import geri alınır" testi bilinçli
+                                                   ÇEVRİLDİ: artık COULD_NOT_SAVE bekliyor, mesajda SQL/
+                                                   tablo/koordinat OLMADIĞINI iddia ediyor; yarım batch
+                                                   kalmadığı iddiası aynen duruyor
+ImportControllerTest / CsvImportScreenTest  (±0)   mevcut içe aktarma akışı gerilemedi
+```
+
+### Dilim 3'ün bilerek YAPMADIKLARI
+
+```text
+yeni olay kodu                                   YOK (liste kapalı, PLAN 14.7.2)
+yeni ekran                                       YOK (üç mevcut ekran birer durum kazandı)
+otomatik yeniden deneme / geri çekilme döngüsü   YOK — yeniden deneme kullanıcının basışıdır
+ölçülmemiş bir yolu tiplemek                     YOK (PoolControllers.observeNavigationSummary,
+                                                 ImportReviewStore.observeColors ve HistoryController
+                                                 olduğu gibi bırakıldı; ölçüm matrisinde yokturlar)
+başarı kaydı / kayıt sayısının artması           YOK
+transaction veya atomiklik değişikliği           YOK (taslak kaydı hâlâ tek transaction)
+R12, R13, R14                                    Dilim 4–8
+```
+
+
 ## Açık sınırlar ve karar bekleyenler
 
 ```text
@@ -4398,6 +4605,11 @@ R14 D6/D7, C*, RB* canlı çözüm    uygulama içinden yok; zararsız tutulur
 R15 tek kopya politikası          ayrı ürün kararı; İş 10 değiştirmez
 beklenmeyen hata davranışı        ölçülmedi; Dilim 2 ölçer ve korur; değiştirmek ayrı karar
 Compose pencere hata handler'ı    1.11.1'de kullanılabilirliği Dilim 2'de doğrulanır
+DiagnosticLogProcessTest zamanlaması  "iki süreç aynı anda" testi 3000 satırın close()'un 500 ms'lik
+                                  boşaltma süresinde bitmesine güveniyor; pilde/powersave'de
+                                  bitmiyor ve test düşüyor (Dilim 3'te ölçüldü: HEAD'de de aynı).
+                                  Kod davranışı sözleşmeye uygun; testin varsayımı ayrı bir
+                                  düzeltme ister. Tam koşu prizde koşulmalıdır
 ```
 
 ---
@@ -4507,7 +4719,7 @@ geçmez. Hash'i dilim başında/sonunda kontrol edilir ve kapsam dışında değ
 
 ```text
 TemporaryDatabaseDirectory              geçici Room DB + gerçek DB koruma iddiası
-assertRealApplicationDatabaseUntouched  103 test sınıfında kullanılıyor
+assertRealApplicationDatabaseUntouched  112 test sınıfında kullanılıyor
 CommittedSchema                         eski sürümleri commit'li JSON'dan kurar
 LegacyRowFixtures                       v1…v6 satır yazıcıları
                                         (v6 raw block = v7 raw block; şema aynı)
@@ -4644,6 +4856,20 @@ Tanılama sınırları       her tipli hata sınırı TAM BİR kayıt üretir ve
                          state dizini bile YOK; kayıt transaction bittikten SONRA verilir
                          (kaydederken yeni bir yazma transaction'ı hemen açılabiliyor);
                          8 eşzamanlı aynı hata 8 tam satır; 0 ek SQL ifadesi
+Gözlenen okuma reddi     oyun tablosu, renk kataloğu ve havuz akışlarında YALNIZ
+                         SQLiteException tipli "okunamadı"ya çevrilir ve TEK satır yazar;
+                         IllegalState/IllegalArgument/NullPointer/Error ve
+                         CancellationException AYNEN yükselir ve kaydedilmez; bir ret akışı
+                         BİTİRİR, tek satır yazar ve yalnız `readAttempt` yeni bir toplama
+                         başlatır; gelen ilk başarılı okuma hata durumunu temizler; reddedilen
+                         okuma ASLA boş liste/boş tablo olarak çizilmez (görünüm ve süzgeç
+                         değişimi dâhil). Üç controller'da `.catch {` ve geniş
+                         `catch (Throwable|Exception)` YOK (yapısal test)
+Açılış dizinleri         data/backups/config oluşturulamazsa StartupRefused
+                         (FOLDERS_NOT_CREATED): DB ve StartupGate HİÇ açılmaz, kullanıcı
+                         alanında dosya oluşmaz, uygulamanın yazdığı hiçbir cümlede MUTLAK
+                         YOL yoktur, tek `startup.refused` satırı yalnız sınıf adları taşır;
+                         state alanı da yazılamazsa ikinci bir hata OLUŞMAZ
 Tanılama kaydı           kayıt verilmeyen yazıcı diskte hiçbir şey oluşturmaz; record()
                          disk I/O yapmaz; 16.000 eşzamanlı kayıt seq sırasıyla, satırlar
                          karışmadan; dosya ≤ 1 MiB (tam 1 MiB'a izin), ≤ 5 dosya; yabancı
@@ -4837,6 +5063,10 @@ dokunmadan seri ve sınırlı koşulur:
   -Dorg.gradle.jvmargs="-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8"
 ```
 
+Dizüstü **prizde** olmalıdır: pilde (CPU `powersave`) `DiagnosticLogProcessTest`'in
+"iki süreç aynı anda" testi zamanlama yüzünden düşer (İş 10 / Dilim 3'te ölçüldü,
+değişiklik öncesi HEAD'de de aynı; §25.4 açık sınırlar).
+
 Manuel tur:
 
 ```bash
@@ -4938,8 +5168,10 @@ PLAN `18.` — Faz 3 işler listesi.
                                               makineden bağımsız kabul ölçütleri,
                                               süre/bellek eşik değil kayıt)
 10  Loglama ve anlaşılır hata mesajları ......... DEVAM EDİYOR (PLAN 14.7, §25.4;
-                                              8 dilimden 2'si: kayıt dosyası + yazıcı,
-                                              tipli sınırların kayda bağlanması)
+                                              8 dilimden 3'ü: kayıt dosyası + yazıcı,
+                                              tipli sınırların kayda bağlanması,
+                                              tipsiz kaçan depolama/dizin hatalarının
+                                              tipli Türkçe sonuçlara çevrilmesi)
 11  Self-contained Linux dağıtımı ....................... YAPILMADI
 12  Garuda/Arch paketi .................................. YAPILMADI
 13  Temiz Garuda ortamında kurulum testi ................ YAPILMADI
@@ -4998,16 +5230,26 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
 
 ## Sıradaki bağlayıcı iş
 
-> **Sıradaki bağlayıcı kod dilimi: Faz 3 / İş 10 / Dilim 3 — tipsiz kaçan
-> depolama ve dizin hatalarının tipli Türkçe sonuçlara çevrilmesi** (PLAN
-> `14.7.6`; kapsam §25.4'teki ölçüm matrisi ve YALNIZ o). Commit mesajı
-> `fix(storage): say in words when the database or its folders will not answer`.
-> Dilim 2 bitti: her tipli sınır kendi hatasını bir kez kaydediyor, sahiplik
-> `DiagnosticOwnershipTest` ile çivili, kayıt hiçbir transaction'ın içinde
-> verilmiyor ve başarılı bir tur hiç satır yazmıyor. Dilim 3 yeni bir olay
-> EKLEMEZ: ölçülen beş kaçışı tipler ve mevcut `storage.*_failed` /
-> `startup.refused` kayıtlarına bağlar. Smoke üç geçici XDG
-> (`XDG_DATA_HOME`, `XDG_CONFIG_HOME`, `XDG_STATE_HOME`) ile yapılır.
+> **Sıradaki bağlayıcı kod dilimi: Faz 3 / İş 10 / Dilim 4 — saat geriye
+> gittiğinde veri kullanılabilir kalır** (PLAN `14.7.3` ve `14.7.6`; kapsam
+> §33 R12 ve YALNIZ o). Commit mesajı
+> `fix(backup): keep backups usable after the clock goes backwards`.
+> Kapsam: yedek okuyucusundan zaman sıralaması kurallarının kaldırılması ve
+> yanlış gerekçeli belgelerinin düzeltilmesi; `EntityTimestamps`'in (üretimde
+> kullanılmayan) sıra şartlarının kaldırılması, `deletedAt == updatedAt`
+> şartının korunması; `batchesWithFingerprint` ve `allBatches` sırasına `id`
+> eklenmesi; rotation'ın az önce yazılanı fazlalık saymaması (`14.4.11`).
+> Zaman damgası DÜZELTİLMEZ, epoch aynen taşınır.
+>
+> Dilim 3 bitti: Dilim 2'nin ölçtüğü beş tipsiz kaçışın beşi de tipli Türkçe
+> sonuca çevrildi (§25.4 "İş 10 / Dilim 3'te uygulanan hâli"). Yeni olay kodu
+> eklenmedi; üç gözlenen okuma tek bir dar seam'den (`answeringStorageRefusal`)
+> geçiyor, yalnız `SQLiteException` cevaplanıyor, kusur ve cancellation aynen
+> yükseliyor, ve reddedilen bir okuma asla boş liste olarak çizilmiyor. Açılış
+> dizini hatası artık `StartupProblem.FOLDERS_NOT_CREATED`; mesajındaki mutlak
+> yol kaldırıldı. Dilim 2 zaten bitmişti: her tipli sınır kendi hatasını bir kez
+> kaydediyor, sahiplik `DiagnosticOwnershipTest` ile çivili, kayıt hiçbir
+> transaction'ın içinde verilmiyor ve başarılı bir tur hiç satır yazmıyor.
 >
 > **İş 5 TAMAMLANDI (§25 matris). İş 8 TAMAMLANDI (§17). İş 9 TAMAMLANDI (§29).
 > İş 10'un bütün kararları verildi (PLAN `14.7`)** — R12, R13 ve R14 dahil; kod
@@ -5647,6 +5889,16 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   İŞ 9 TAMAMLANDI: kabul makineden bağımsızdır (doğru sonuç, 42/1.000+ aynı ifade
   yapısı, N+1 yok, arama/süzgeç 0 ifade, tekrarda aynı sonuç); süre/bellek EŞİK
   EKLEME, yalnız ortamla kayıt; aynı yöntemde 2 kat kötüleşmeyi raporla.
+- İŞ 10 / DİLİM 3 BİTTİ: Dilim 2'nin ÖLÇTÜĞÜ beş tipsiz kaçış tiplendi (taslak
+  kaydı, oyun tablosu okuması, renk kataloğu okuması, havuz okuması, açılış
+  dizinleri). Kuralı bozma: gözlenen bir okumada YALNIZ SQLiteException cevaplanır
+  ve bunu TEK seam yapar (`answeringStorageRefusal`); `.catch {` veya geniş
+  `catch (Throwable/Exception)` EKLEME; IllegalState/IllegalArgument/NullPointer/
+  Error ve CancellationException AYNEN yükselir ve KAYDEDİLMEZ; reddedilen bir
+  okumayı boş liste/boş tablo olarak ÇİZME (görünüm ve süzgeç değişimi dâhil);
+  yeniden deneme `readAttempt` + LaunchedEffect anahtarıdır, otomatik yeniden
+  deneme veya döngü EKLEME. Açılış dizini hatası StartupRefused
+  (FOLDERS_NOT_CREATED) olur; hata mesajına MUTLAK YOL yazma. Yeni olay kodu YOK.
 - İŞ 10 / DİLİM 2 BİTTİ: hata sınırları kayda bağlandı. Kuralı bozma: hatayı tipli
   sonuca çeviren katman kaydeder (store/gateway), controller AYNI hatayı ikinci kez
   YAZMAZ; kaydı her zaman transaction bittikten SONRA ver; recordSafely dışında
@@ -5954,8 +6206,15 @@ reddedilecek ve geri alma yalnız kendi ürettiği görevleri kaldıracak. Bunla
 ilki — sınırlı, kullanıcı verisi taşımayan tanılama kaydı yazıcısı — Dilim 1'de
 yazıldı, ve Dilim 2'de uygulamanın bütün tipli hata sınırlarına bağlandı: bir hata
 artık tipli sonuca çevrildiği yerde bir kez kaydediliyor, kullanıcı hiçbir fark
-görmüyor, ve bir işi başarıyla bitiren bir gün hiç satır yazmıyor. Sıradaki
-bağlayıcı kod dilimi İş 10 / Dilim 3'tür.
+görmüyor, ve bir işi başarıyla bitiren bir gün hiç satır yazmıyor. Dilim 3'te de
+o kaydın ölçtüğü beş boşluk kapandı: bir taslak kaydedilemezse ekran artık
+"kaydediliyor"da asılı kalmıyor, önizlemeyi koruyup tekrar denemeyi öneriyor;
+oyun tablosu, renk kataloğu ve havuz okunamadığında kullanıcı boş bir liste değil
+"okunamadı" ve bir `Yeniden dene` düğmesi görüyor; ve uygulama kendi klasörlerini
+oluşturamazsa veritabanına hiç dokunmadan, hiçbir yol göstermeden Türkçe bir
+açılış ekranı açıyor. Aynı dilimde havuzun her `Throwable`'ı yutan yakalaması
+kaldırıldı: bir programlama hatası artık depolama sorunu gibi görünmüyor.
+Sıradaki bağlayıcı kod dilimi İş 10 / Dilim 4'tür.
 
 Bunların ilki — **sürümlü JSON yedek ve geri yükleme** — dört atomik dilimde
 **tamamlanmıştır**. Biçim, kapsam, doğrulama hattı, restore mimarisi (A′),

@@ -43,6 +43,15 @@ enum class StartupProblem {
     /** Another copy of the application is starting or migrating on this database. */
     ANOTHER_COPY_IS_RUNNING,
 
+    /**
+     * The folders this application keeps its data in could not be made.
+     *
+     * Decided before anything is opened, and the only reason here that is not
+     * about the database at all: nothing of the user's has been read, written,
+     * moved or removed, because there was nowhere yet to do it in.
+     */
+    FOLDERS_NOT_CREATED,
+
     /** The file is there and is not a database this application can read. */
     DATABASE_NOT_READABLE,
 

@@ -123,20 +123,21 @@ class UnexpectedFailureRecordsTest {
             )
             diagnostics.forget()
 
+            // Deliberately turned in Dilim 3. This used to say that a defect in
+            // the pool reading became `app.unexpected_failure` and the same one
+            // word on screen, because the catch there took every `Throwable`.
+            // That was the measurement, not the intention: PLAN 14.4.5 will not
+            // have a defect masked, so the catch is narrowed to storage refusing
+            // and a defect now rises out of the reading untouched — unrecorded,
+            // unanswered, and left to the window's own handler, which is where
+            // `app.unexpected_failure` is written (the test below this one).
             val broken = poolController(RefusingPools { IllegalStateException("bir havuz iki kez") })
 
-            broken.observePool()
+            val defect = assertFailsWith<IllegalStateException> { broken.observePool() }
 
-            assertIs<PoolContentState.Failed>(broken.state.content)
-            assertRecordedAsPlanned(
-                ExpectedRecord(
-                    DiagnosticEvent.UNEXPECTED_FAILURE,
-                    area = DiagnosticArea.POOLS,
-                    exception = "java.lang.IllegalStateException",
-                ),
-                diagnostics.only(),
-            )
-            assertLinesCarryNothingOfTheUsers(diagnostics, "bir havuz iki kez")
+            assertEquals("bir havuz iki kez", defect.message)
+            assertEquals(PoolContentState.Loading, broken.state.content, "a defect was answered as a pool that would not read")
+            assertEquals(emptyList(), diagnostics.records.map { it.event.code }, "a defect was filed as a storage problem")
         }
 
     @OptIn(ExperimentalComposeUiApi::class)

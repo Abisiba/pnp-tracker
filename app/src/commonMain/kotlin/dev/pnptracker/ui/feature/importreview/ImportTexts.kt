@@ -40,6 +40,7 @@ internal fun messageFor(failure: ImportFailure): StringResource =
         ImportFailure.CSV_RAGGED_ROW -> Strings.ImportErrors.csvRaggedRow
         ImportFailure.CSV_BLANK_REQUIRED_VALUE -> Strings.ImportErrors.csvBlankRequiredValue
         ImportFailure.CSV_UNKNOWN_SOURCE_TYPE -> Strings.ImportErrors.csvUnknownSourceType
+        ImportFailure.COULD_NOT_SAVE -> Strings.ImportErrors.couldNotSave
     }
 
 internal fun nameOf(sourceFormat: ImportSourceFormat): StringResource =

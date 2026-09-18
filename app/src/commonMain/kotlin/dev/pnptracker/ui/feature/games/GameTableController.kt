@@ -15,6 +15,9 @@ import dev.pnptracker.domain.colors.ColorSetupException
 import dev.pnptracker.domain.colors.ColorSummary
 import dev.pnptracker.domain.colors.WheelNudge
 import dev.pnptracker.domain.colors.WheelPoint
+import dev.pnptracker.domain.diagnostics.DiagnosticArea
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.answeringStorageRefusal
 import dev.pnptracker.domain.games.CellSegmentPreview
 import dev.pnptracker.domain.games.CellTextException
 import dev.pnptracker.domain.games.CellTextFailure
@@ -79,9 +82,22 @@ class GameTableController(
     private val taskEditing: TaskEditing,
     private val taskProgress: TaskProgressing,
     private val idGenerator: IdGenerator = IdGenerator.Random,
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) : TaskEditingHost,
     StaleSurfaces {
     var state: GameTableScreenState by mutableStateOf(GameTableScreenState())
+        private set
+
+    /**
+     * Bumped whenever the user asks for the screen to be read again.
+     *
+     * The screen collects on this, so raising it ends the old collection and
+     * starts a new one. A reading storage refused ends the stream it was on —
+     * there is nothing more coming from a read that did not happen — and this is
+     * the one thing that starts another, which is why one refusal writes one
+     * line however long the screen is left open (PLAN 14.7.6).
+     */
+    var readAttempt: Int by mutableStateOf(0)
         private set
 
     /** True while a change is on its way to the database. */
@@ -91,16 +107,40 @@ class GameTableController(
     /** Every active game, whatever view is open. */
     private var allRows: List<GameTableRow> = emptyList()
 
+    /**
+     * True while the last reading of the table is one storage refused.
+     *
+     * Kept beside [allRows] because it is the other half of the same fact: what
+     * the last reading said. Views and filters narrow rows, and there are none
+     * to narrow until a reading comes back, so changing either while this stands
+     * must not quietly draw an empty table (PLAN 14.7.6).
+     */
+    private var tableWasRefused: Boolean = false
+
     /** Collects the table until cancelled. */
     suspend fun observeTable() {
-        table.observeTable().collect { rows ->
-            allRows = rows
-            // Whatever has arrived is no longer being waited for.
-            settleTick()
-            // The work is settled first, so a surface that has just closed does
-            // not hold its row in a view it no longer belongs to.
-            state = state.copy(work = stillValid(state.work), rowWork = stillValid(state.rowWork)).redrawn()
-        }
+        table
+            .observeTable()
+            // Storage refusing is the one thing answered here; a defect and the
+            // cancellation that closes the screen rise untouched (PLAN 14.4.5).
+            .answeringStorageRefusal(DiagnosticArea.GAME_TABLE, diagnostics) {
+                tableWasRefused = true
+                state = state.copy(rows = GameTableRowsState.Failed)
+            }.collect { rows ->
+                allRows = rows
+                // A reading that arrived says the table can be read after all.
+                tableWasRefused = false
+                // Whatever has arrived is no longer being waited for.
+                settleTick()
+                // The work is settled first, so a surface that has just closed does
+                // not hold its row in a view it no longer belongs to.
+                state = state.copy(work = stillValid(state.work), rowWork = stillValid(state.rowWork)).redrawn()
+            }
+    }
+
+    /** Asks for the screen to be read again, after a reading storage refused. */
+    fun readAgain() {
+        readAttempt += 1
     }
 
     /**
@@ -111,14 +151,22 @@ class GameTableController(
      * there at all is settled once, inside the transaction that writes.
      */
     suspend fun observeColorCatalogue() {
-        colors.observeColors().collect { catalogue ->
-            state =
-                state.copy(
-                    colors = catalogue,
-                    // Whatever has arrived is no longer being waited for.
-                    awaitedColorIds = state.awaitedColorIds - catalogue.mapTo(mutableSetOf()) { it.id },
-                )
-        }
+        colors
+            .observeColors()
+            // The colours already in hand stay in hand. The catalogue is the
+            // editor's list of choices and nothing else on this screen, so
+            // replacing it with an empty one would offer a task no colour at
+            // all and call that the truth. The table's own reading is what the
+            // user is told about, and asking again reads both (PLAN 14.7.6).
+            .answeringStorageRefusal(DiagnosticArea.COLORS, diagnostics) {}
+            .collect { catalogue ->
+                state =
+                    state.copy(
+                        colors = catalogue,
+                        // Whatever has arrived is no longer being waited for.
+                        awaitedColorIds = state.awaitedColorIds - catalogue.mapTo(mutableSetOf()) { it.id },
+                    )
+            }
     }
 
     /**
@@ -1793,9 +1841,19 @@ class GameTableController(
         }
     }
 
-    /** The same state with the table drawn for whatever is open in it now. */
+    /**
+     * The same state with the table drawn for whatever is open in it now.
+     *
+     * A reading storage refused has nothing to lay out again, so changing the
+     * view or loosening a filter leaves it saying so rather than drawing the
+     * empty table those rows would otherwise make.
+     */
     private fun GameTableScreenState.redrawn(): GameTableScreenState =
-        copy(rows = rowsFor(view, filter, setOfNotNull(work?.gameId, rowWork?.gameId)))
+        if (tableWasRefused) {
+            copy(rows = GameTableRowsState.Failed)
+        } else {
+            copy(rows = rowsFor(view, filter, setOfNotNull(work?.gameId, rowWork?.gameId)))
+        }
 }
 
 /**

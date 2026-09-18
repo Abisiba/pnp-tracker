@@ -100,13 +100,17 @@ fun main() {
     // is read once while the toolkit is being created.
     applyLinuxFileDialogPolicy()
 
+    // Where everything lives, worked out and nothing more: this reads the
+    // environment and makes no folder and no file.
     val paths = XdgAppPathsResolver().resolve()
-    AppDirectoryInitializer().ensureDirectories(paths)
-    // The diagnostic log (PLAN 14.7.1). Until a first line is written it makes no
-    // folder, no file and no lock, and closing it hands whatever is queued to the
-    // disk for at most half a second. It is handed to each boundary that turns a
-    // failure into a typed answer, and each failure is recorded by that boundary
-    // alone (PLAN 14.7.2); nothing above a boundary records the same failure again.
+    // The diagnostic log (PLAN 14.7.1), built before the first thing that can
+    // fail. Until a first line is written it makes no folder, no file and no
+    // lock, and closing it hands whatever is queued to the disk for at most half
+    // a second. A state folder that cannot be made is not a second failure: the
+    // writer simply never writes, and nothing here is told about it. It is
+    // handed to each boundary that turns a failure into a typed answer, and each
+    // failure is recorded by that boundary alone (PLAN 14.7.2); nothing above a
+    // boundary records the same failure again.
     val diagnostics = QueuedDiagnostics.inDirectory(paths.logsDirectory, AppInfo.Current)
     // The one setting this application has, and the only thing that writes it is
     // the user pressing save. Reading it creates nothing (PLAN 14.4.12).
@@ -127,6 +131,10 @@ fun main() {
     // and proved before the real migration is allowed to begin.
     val opened =
         try {
+            // The folders come before the gate and before the database, so a
+            // folder that could not be made stops the application where nothing
+            // of the user's has been touched yet (PLAN 14.7.6).
+            AppDirectoryInitializer().ensureDirectories(paths)
             StartupGate(
                 paths = paths,
                 databases = DatabaseFactory(),
@@ -140,8 +148,8 @@ fun main() {
                 diagnostics = diagnostics,
             ).open()
         } catch (refused: StartupRefused) {
-            // The refusal is decided inside the gate and becomes what the user sees
-            // here, so this is its one record.
+            // The refusal is decided by the folders or inside the gate and
+            // becomes what the user sees here, so this is its one record.
             diagnostics.recordSafely { startupRefusalRecord(refused) }
             showTheStartupProblem(refused.problem, diagnostics)
             return
@@ -153,7 +161,7 @@ fun main() {
             // The picker owns the only Path in the import flow; everything above
             // it is handed a file name and nothing else.
             gateway = DesktopImportFileGateway(AwtImportFilePicker(title = FILE_DIALOG_TITLE)),
-            store = ImportDraftStore(database.importDao()),
+            store = ImportDraftStore(database.importDao(), diagnostics = diagnostics),
             diagnostics = diagnostics,
         )
     val reviewController =
@@ -209,6 +217,7 @@ fun main() {
             taskCreation = TaskFromTextStore(database.taskFromTextDao(), diagnostics = diagnostics),
             taskEditing = TaskEditStore(database.taskEditDao(), diagnostics = diagnostics),
             taskProgress = taskProgress,
+            diagnostics = diagnostics,
         )
     // The exporter owns the only Path on its side of the application, exactly as
     // the import picker does; everything above it is handed a file name.
@@ -245,7 +254,7 @@ fun main() {
             diagnostics = diagnostics,
         )
     val retentionController = RetentionController(settingsStore)
-    val colorCatalogueController = ColorCatalogueController(colorCatalogue)
+    val colorCatalogueController = ColorCatalogueController(colorCatalogue, diagnostics = diagnostics)
     // The pools read the same tasks the table reads and write through the same
     // editing transaction, so they are given the very same store rather than one
     // of their own.

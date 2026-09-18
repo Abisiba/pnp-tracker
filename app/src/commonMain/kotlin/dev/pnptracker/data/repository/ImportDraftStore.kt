@@ -1,8 +1,15 @@
 package dev.pnptracker.data.repository
 
+import androidx.sqlite.SQLiteException
 import dev.pnptracker.data.database.dao.ImportDao
 import dev.pnptracker.data.database.entity.ImportBatchEntity
 import dev.pnptracker.data.database.entity.RawImportBlockEntity
+import dev.pnptracker.domain.diagnostics.DiagnosticArea
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.recordSafely
+import dev.pnptracker.domain.diagnostics.storageWriteFailed
+import dev.pnptracker.domain.importprep.ImportFailure
+import dev.pnptracker.domain.importprep.ImportPreparationException
 import dev.pnptracker.domain.importprep.PreparedImportDraft
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
@@ -42,7 +49,13 @@ interface ImportDrafts {
      */
     suspend fun earlierImportsOf(sha256: String): List<EarlierImport>
 
-    /** Writes [draft] as a single draft import. Nothing is written if any part fails. */
+    /**
+     * Writes [draft] as a single draft import. Nothing is written if any part fails.
+     *
+     * @throws ImportPreparationException with [ImportFailure.COULD_NOT_SAVE] when
+     *   storage would not take it. The draft in hand is untouched by that and can
+     *   be offered again as it stands.
+     */
     suspend fun save(draft: PreparedImportDraft): SavedImportSummary
 }
 
@@ -63,6 +76,7 @@ class ImportDraftStore(
     private val importDao: ImportDao,
     private val idGenerator: IdGenerator = IdGenerator.Random,
     private val clock: Clock = Clock.System,
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) : ImportDrafts {
     override suspend fun earlierImportsOf(sha256: String): List<EarlierImport> =
         importDao.batchesWithFingerprint(sha256).map { batch ->
@@ -116,7 +130,20 @@ class ImportDraftStore(
                 )
             }
 
-        importDao.saveDraftBatch(batch, blocks)
+        // The one transaction the whole draft is written in, so a refusal here
+        // leaves no batch and no block behind — which is what lets the screen
+        // offer the very same draft again (PLAN 14.7.6). This is where storage
+        // refusing becomes the answer the user is given, so this is where it is
+        // recorded, once; nothing above it records it again (PLAN 14.7.2).
+        try {
+            importDao.saveDraftBatch(batch, blocks)
+        } catch (cause: SQLiteException) {
+            diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.IMPORT_DRAFT, ImportFailure.COULD_NOT_SAVE, cause) }
+            // The refusal itself stays here: its classes are already in the
+            // record, its message is SQL, and the exception the screen catches
+            // carries the reason and nothing else (PLAN 14.4.5, PLAN 14.7.1).
+            throw ImportPreparationException(ImportFailure.COULD_NOT_SAVE)
+        }
 
         return SavedImportSummary(
             batchId = batchId,

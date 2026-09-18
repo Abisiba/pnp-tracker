@@ -28,6 +28,16 @@ sealed interface ColorCatalogueState {
     data class Content(
         val colors: List<ColorSummary>,
     ) : ColorCatalogueState
+
+    /**
+     * The catalogue could not be read.
+     *
+     * Its own case rather than an empty [Content], because an empty catalogue is
+     * a real state — every colour can be removed — and showing one for a reading
+     * that never happened would tell the user their colours had gone. What broke
+     * is not shown (PLAN 17); asking again is all there is to do.
+     */
+    data object Failed : ColorCatalogueState
 }
 
 /**

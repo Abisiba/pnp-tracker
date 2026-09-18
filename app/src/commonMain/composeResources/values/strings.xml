@@ -120,6 +120,7 @@
     <string name="import_error_csv_ragged_row">Bu satırdaki alan sayısı başlık satırıyla aynı değil. Hiçbir değer kaydırılmadı.</string>
     <string name="import_error_csv_blank_required_value">Bu satırda zorunlu bir değer boş bırakılmış.</string>
     <string name="import_error_csv_unknown_source_type">Bu satırdaki source_type değeri tanınmadı. Tahmin edilmedi ve hiçbir havuza atanmadı.</string>
+    <string name="import_error_could_not_save">İçe aktarma kaydedilemedi. Dosyadan okunanlar olduğu gibi duruyor ve hiçbir şey yarım kaydedilmedi. Biraz sonra yeniden kaydetmeyi deneyin.</string>
     <string name="import_error_csv_line">Satır %1$d</string>
     <string name="import_error_csv_line_column">Satır %1$d, sütun: %2$s</string>
 
@@ -277,6 +278,10 @@
     <string name="table_view_ongoing">Devam Eden</string>
     <string name="table_view_completed">Tamamlanan</string>
     <string name="table_view_all">Tümü</string>
+    <!-- A reading storage would not answer, on the screens that follow one -->
+    <string name="reading_unreadable_hint">Verileriniz olduğu gibi duruyor; hiçbir şey değiştirilmedi. Biraz sonra yeniden deneyebilirsiniz.</string>
+    <string name="reading_read_again">Yeniden dene</string>
+    <string name="table_unreadable">Oyun tablosu okunamadı.</string>
     <string name="table_loading">Oyun tablosu yükleniyor…</string>
     <string name="table_empty_ongoing">Devam eden oyun yok.</string>
     <string name="table_empty_ongoing_hint">Yeni bir oyun ekleyin ya da Tümü görünümüne geçin.</string>
@@ -487,6 +492,7 @@
     <string name="startup_data_safe">Verileriniz olduğu gibi duruyor; hiçbir şey değiştirilmedi.</string>
     <string name="startup_close">Kapat</string>
     <string name="startup_another_copy">PNP zaten açık görünüyor. Aynı veriyle iki kopya birden çalışamaz. Açık olan pencereyi kapatıp yeniden deneyin.</string>
+    <string name="startup_folders_not_created">PNP kendi klasörlerini oluşturamadı, bu yüzden veri dosyanız hiç açılmadı. Disk dolu olabilir ya da klasörlerin izinleri değişmiş olabilir; kontrol edip PNP'yi yeniden başlatın.</string>
     <string name="startup_not_readable">Veri dosyanız okunamadı. Dosya bozulmuş ya da başka bir programın dosyasıyla değiştirilmiş olabilir. Elinizde bir yedek varsa onu kullanabilirsiniz.</string>
     <string name="startup_too_new">Veri dosyanız PNP'nin daha yeni bir sürümüyle oluşturulmuş. Bu sürüm onu açamaz; PNP'yi güncelleyip yeniden deneyin.</string>
     <string name="startup_not_cloned">Verilerinizin güvenlik kopyası alınamadı, bu yüzden güncelleme başlatılmadı. Diskte yer olduğundan emin olup yeniden deneyin.</string>
@@ -699,6 +705,7 @@
     <string name="retention_error_could_not_write">Yazma tamamlanamadı. Biraz sonra tekrar deneyin.</string>
     <string name="retention_error_kept">Önceki ayarınız olduğu gibi duruyor; uygulama %1$s saklamaya devam ediyor.</string>
     <string name="colors_loading">Renk kataloğu yükleniyor…</string>
+    <string name="colors_unreadable">Renk kataloğu okunamadı.</string>
     <string name="colors_count">Katalogda %1$s renk var.</string>
     <string name="colors_create">Yeni renk ekle</string>
     <string name="colors_name_label">Renk adı</string>
@@ -819,7 +826,7 @@
     <string name="pool_special_remaining">Kalan: %1$s</string>
     <string name="pool_special_game">Oyun: %1$s</string>
     <string name="pool_task_spoken">%1$s, %2$s oyunu, %3$s</string>
-    <string name="pool_error">Havuz okunamadı. Uygulamayı yeniden başlatmayı deneyin.</string>
+    <string name="pool_error">Havuz okunamadı.</string>
     <string name="stage_print">Basıldı</string>
     <string name="stage_laminate">Lamine edildi</string>
     <string name="stage_glue">Yapıştırıldı</string>

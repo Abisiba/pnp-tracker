@@ -52,6 +52,18 @@ sealed interface GameTableRowsState {
     data class Content(
         val rows: List<GameTableRow>,
     ) : GameTableRowsState
+
+    /**
+     * The table could not be read.
+     *
+     * Kept apart from [Empty] because they are not the same news and must not be
+     * answered the same way. A library with no games invites the user to start
+     * one; a reading storage refused says nothing at all about how many games
+     * there are, and showing an empty table for it would tell them their work
+     * had gone. What broke is never shown — PLAN 17 keeps the developer's words
+     * off the screen — and asking again is the whole of what happens next.
+     */
+    data object Failed : GameTableRowsState
 }
 
 /**

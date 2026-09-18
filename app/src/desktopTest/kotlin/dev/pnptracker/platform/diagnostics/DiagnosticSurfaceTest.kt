@@ -117,6 +117,7 @@ class DiagnosticSurfaceTest {
                 "GameSetupStore.kt",
                 "ImportConfirmationStore.kt",
                 "ImportDraftRemovalStore.kt",
+                "ImportDraftStore.kt",
                 "ImportReviewStore.kt",
                 "ImportRollbackStore.kt",
                 "TaskEditStore.kt",
@@ -128,6 +129,11 @@ class DiagnosticSurfaceTest {
                 "LiveBackupRestorer.kt",
                 // Screens and controllers that decide something no store can see.
                 "BackupController.kt",
+                // The three observed readings of Dilim 3: a stream cannot carry a
+                // typed refusal in its own element type, so the screen that shows
+                // one is where it is named.
+                "ColorCatalogueController.kt",
+                "GameTableController.kt",
                 "HistoryController.kt",
                 "ImportController.kt",
                 "PoolController.kt",

@@ -108,6 +108,19 @@ sealed interface ImportScreenState {
         val summary: SavedImportSummary,
     ) : ImportScreenState
 
+    /**
+     * Storage would not take the draft, and everything read is still in hand.
+     *
+     * Its own case rather than [Failed], because the two ask different things of
+     * the user. A file that could not be read is over: there is nothing to go
+     * back to and the only way on is another file. A write that did not land
+     * leaves the file, the sheet and the whole preview exactly as they were, so
+     * the screen keeps them and the same button tries again (PLAN 14.7.6).
+     */
+    data class NotSaved(
+        val session: ImportSession,
+    ) : ImportScreenState
+
     data class Failed(
         val failure: ImportFailure,
         val columnIndex: Int? = null,

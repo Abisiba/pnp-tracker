@@ -52,6 +52,7 @@ class StartupErrorScreenTest {
         val expected =
             mapOf(
                 StartupProblem.ANOTHER_COPY_IS_RUNNING to "Açık olan pencereyi kapatıp",
+                StartupProblem.FOLDERS_NOT_CREATED to "kendi klasörlerini oluşturamadı",
                 StartupProblem.DATABASE_NOT_READABLE to "okunamadı",
                 StartupProblem.SCHEMA_TOO_NEW to "güncelleyip yeniden deneyin",
                 StartupProblem.SNAPSHOT_NOT_CLONED to "Diskte yer olduğundan emin olup",
@@ -94,6 +95,7 @@ class StartupErrorScreenTest {
                     "SNAPSHOT_",
                     "MIGRATION_FAILED",
                     "ANOTHER_COPY",
+                    "FOLDERS_NOT_CREATED",
                     "Exception",
                     "SQLite",
                     "SELECT",

@@ -115,6 +115,16 @@ class ImportController(
             handle = null
             state = ImportScreenState.Saved(summary)
         } catch (failure: ImportPreparationException) {
+            // A write that did not land is the one failure here that leaves
+            // everything in hand: the file is unchanged, the preview is still
+            // true of it and the draft wrote nothing, so the session stays and
+            // the same button tries again. The file is kept too, so the retry
+            // checks the fingerprint once more (PLAN 14.7.6). Its record was
+            // made by the store that named it, and this makes no second one.
+            if (failure.failure == ImportFailure.COULD_NOT_SAVE) {
+                state = ImportScreenState.NotSaved(session)
+                return
+            }
             handle = null
             state = failedFrom(failure)
         }
@@ -146,6 +156,10 @@ class ImportController(
             is ImportScreenState.PreviewReady -> current.session
             is ImportScreenState.DuplicateWarning -> current.session
             is ImportScreenState.Saving -> current.session
+            // A save that did not land keeps its session, which is what makes
+            // pressing save again a second attempt at the same draft rather
+            // than a new import.
+            is ImportScreenState.NotSaved -> current.session
             else -> null
         }
 

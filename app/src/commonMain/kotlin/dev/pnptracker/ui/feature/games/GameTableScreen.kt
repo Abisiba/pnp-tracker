@@ -246,8 +246,10 @@ fun GameTableScreen(
      */
     exportAction: @Composable () -> Unit = {},
 ) {
-    LaunchedEffect(controller) { controller.observeTable() }
-    LaunchedEffect(controller) { controller.observeColorCatalogue() }
+    // Keyed on the attempt as well, so asking again ends the collection a
+    // refusal left standing and starts a fresh one (PLAN 14.7.6).
+    LaunchedEffect(controller, controller.readAttempt) { controller.observeTable() }
+    LaunchedEffect(controller, controller.readAttempt) { controller.observeColorCatalogue() }
 
     val state = controller.state
     BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(24.dp)) {
@@ -280,6 +282,7 @@ fun GameTableScreen(
                 GameTableRowsState.Loading -> Message(stringResource(Strings.Table.loading))
                 is GameTableRowsState.Empty -> EmptyTable(rows, controller::clearFilters)
                 is GameTableRowsState.Content -> Table(rows.rows, controller, state)
+                GameTableRowsState.Failed -> UnreadableTable(controller::readAgain)
             }
         }
     }
@@ -3118,6 +3121,29 @@ private fun EmptyTable(
             TextButton(onClick = onClearFilters, modifier = Modifier.focusOutline(ComposerShape)) {
                 Text(text = stringResource(Strings.Search.clearAll), style = MaterialTheme.typography.labelMedium)
             }
+        }
+    }
+}
+
+/**
+ * What the table says when storage would not answer it.
+ *
+ * Deliberately not the empty table: that one says there are no games, and this
+ * one says nothing at all is known about how many there are. It carries no
+ * cause, no class name and no path (PLAN 17), and the only thing it offers is
+ * another go.
+ */
+@Composable
+private fun UnreadableTable(onReadAgain: () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(text = stringResource(Strings.Table.unreadable), style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = stringResource(Strings.Reading.hint),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        TextButton(onClick = onReadAgain, modifier = Modifier.focusOutline(ComposerShape)) {
+            Text(text = stringResource(Strings.Reading.readAgain), style = MaterialTheme.typography.labelMedium)
         }
     }
 }

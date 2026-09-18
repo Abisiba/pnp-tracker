@@ -77,7 +77,9 @@ fun ColorCatalogueScreen(
     val scope = rememberCoroutineScope()
     val state = controller.state
 
-    LaunchedEffect(Unit) { controller.observeColors() }
+    // Keyed on the attempt, so asking again ends the collection a refusal
+    // left standing and starts a fresh one (PLAN 14.7.6).
+    LaunchedEffect(controller.readAttempt) { controller.observeColors() }
 
     Column(
         modifier = modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 28.dp),
@@ -128,6 +130,34 @@ fun ColorCatalogueScreen(
                         )
                     }
                 }
+
+            ColorCatalogueState.Failed -> UnreadableCatalogue(controller::readAgain)
+        }
+    }
+}
+
+/**
+ * What the colour screen says when storage would not answer it.
+ *
+ * Deliberately not an empty catalogue: PLAN 5.9 lets every colour be removed, so
+ * an empty list is a real answer and would be read as one. It carries no cause,
+ * no class name and no path (PLAN 17), and the only thing it offers is another
+ * go.
+ */
+@Composable
+private fun UnreadableCatalogue(onReadAgain: () -> Unit) {
+    Column(
+        modifier = Modifier.widthIn(max = MAX_CONTENT_WIDTH),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(text = stringResource(Strings.Colors.unreadable), style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = stringResource(Strings.Reading.hint),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        TextButton(onClick = onReadAgain) {
+            Text(text = stringResource(Strings.Reading.readAgain), style = MaterialTheme.typography.labelMedium)
         }
     }
 }

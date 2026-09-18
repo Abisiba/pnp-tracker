@@ -1,9 +1,10 @@
 package dev.pnptracker.data.repository
 
-import androidx.sqlite.SQLiteException
 import dev.pnptracker.data.database.AppDatabase
 import dev.pnptracker.data.database.DatabaseFactory
 import dev.pnptracker.data.database.TemporaryDatabaseDirectory
+import dev.pnptracker.domain.importprep.ImportFailure
+import dev.pnptracker.domain.importprep.ImportPreparationException
 import dev.pnptracker.domain.importprep.PreparedImportDraft
 import dev.pnptracker.domain.importprep.PreparedRawBlock
 import dev.pnptracker.domain.importprep.unpackArgb
@@ -21,6 +22,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -179,12 +181,21 @@ class ImportDraftStoreTest {
                     PreparedRawBlock(1, 0, SourceColumnType.GAME, "Aynı yer", null, HintDecision.NONE),
                 )
 
-            val thrown = assertFailsWith<SQLiteException> { store.save(draft(blocks = clashing)) }
+            // Deliberately turned in Dilim 3. This used to catch the driver's own
+            // `SQLiteException` and read "UNIQUE" out of its message — which is
+            // precisely the escape that slice closed: the exception travelled out
+            // of the controller's coroutine and the screen sat on "kaydediliyor".
+            // The transaction half of the claim is unchanged and is what this
+            // test is really for.
+            val refused = assertFailsWith<ImportPreparationException> { store.save(draft(blocks = clashing)) }
 
-            assertTrue(
-                thrown.message.orEmpty().contains("UNIQUE", ignoreCase = true),
-                "expected the unique index to refuse it, got: ${thrown.message}",
-            )
+            assertEquals(ImportFailure.COULD_NOT_SAVE, refused.failure)
+            // Stronger than the old claim rather than weaker: the typed answer
+            // carries no SQL, no table and no coordinates at all (PLAN 14.7.1).
+            val words = refused.message.orEmpty()
+            listOf("UNIQUE", "INSERT", "raw_import_blocks", "import_batches", "Aynı yer").forEach {
+                assertFalse(it in words, "`$it` reached the typed answer: $words")
+            }
             assertEquals(emptyList(), database.importDao().allBatches(), "no half written batch may be left")
         }
 

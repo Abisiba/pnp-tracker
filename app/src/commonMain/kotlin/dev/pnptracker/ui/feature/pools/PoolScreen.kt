@@ -107,8 +107,10 @@ private const val POPOVER_GAP = 4
  */
 @Composable
 fun PoolScreen(controller: PoolController) {
-    LaunchedEffect(controller) { controller.observePool() }
-    LaunchedEffect(controller) { controller.observeColorCatalogue() }
+    // Keyed on the attempt as well, so asking again ends the collection a
+    // refusal left standing and starts a fresh one (PLAN 14.7.6).
+    LaunchedEffect(controller, controller.readAttempt) { controller.observePool() }
+    LaunchedEffect(controller, controller.readAttempt) { controller.observeColorCatalogue() }
 
     val state = controller.state
     Column(
@@ -128,7 +130,7 @@ fun PoolScreen(controller: PoolController) {
         PoolToolbar(controller, state)
         when (val content = state.content) {
             PoolContentState.Loading -> Message(stringResource(Strings.Pool.loading))
-            PoolContentState.Failed -> Message(stringResource(Strings.Pool.error))
+            PoolContentState.Failed -> UnreadablePool(controller::readAgain)
             is PoolContentState.Content ->
                 if (content.model.isEmpty) {
                     // Two different empty pools, and they are answered
@@ -330,6 +332,29 @@ private fun FilteredEmpty(
         )
         TextButton(onClick = onClearAll, modifier = Modifier.focusOutline(CardShape)) {
             Text(text = stringResource(Strings.Search.clearAll), style = MaterialTheme.typography.labelMedium)
+        }
+    }
+}
+
+/**
+ * What a pool says when storage would not answer it.
+ *
+ * Deliberately not an empty pool: an empty pool is good news and this is not
+ * news about the pool at all. It carries no cause, no class name and no path
+ * (PLAN 17), and the only thing it offers is another go — which it can offer
+ * now, where it used to send the user off to restart the application.
+ */
+@Composable
+private fun UnreadablePool(onReadAgain: () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(text = stringResource(Strings.Pool.error), style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = stringResource(Strings.Reading.hint),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        TextButton(onClick = onReadAgain, modifier = Modifier.focusOutline(CardShape)) {
+            Text(text = stringResource(Strings.Reading.readAgain), style = MaterialTheme.typography.labelMedium)
         }
     }
 }

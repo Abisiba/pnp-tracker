@@ -9,6 +9,9 @@ import dev.pnptracker.domain.colors.ColorSetupException
 import dev.pnptracker.domain.colors.ColorSummary
 import dev.pnptracker.domain.colors.WheelNudge
 import dev.pnptracker.domain.colors.WheelPoint
+import dev.pnptracker.domain.diagnostics.DiagnosticArea
+import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.answeringStorageRefusal
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.ui.StaleSurfaces
 import kotlinx.coroutines.flow.collect
@@ -28,8 +31,20 @@ import kotlinx.coroutines.flow.collect
  */
 class ColorCatalogueController(
     private val catalogue: ColorCatalogue,
+    private val diagnostics: Diagnostics = Diagnostics.None,
 ) : StaleSurfaces {
     var state: ColorCatalogueScreenState by mutableStateOf(ColorCatalogueScreenState())
+        private set
+
+    /**
+     * Bumped whenever the user asks for the catalogue to be read again.
+     *
+     * The screen collects on this, so raising it ends a collection a refusal
+     * left standing and starts a fresh one. It is the only thing that does, so
+     * one refusal writes one line however long the screen is left open
+     * (PLAN 14.7.6).
+     */
+    var readAttempt: Int by mutableStateOf(0)
         private set
 
     /** True while something is on its way to the database. */
@@ -67,9 +82,23 @@ class ColorCatalogueController(
 
     /** Collects the catalogue until cancelled. */
     suspend fun observeColors() {
-        catalogue.observeColors().collect { colors ->
-            state = state.copy(catalogue = ColorCatalogueState.Content(colors))
-        }
+        catalogue
+            .observeColors()
+            // Storage refusing says nothing about how many colours there are, so
+            // the screen says that and not an empty catalogue. A defect and the
+            // cancellation that closes the screen rise untouched (PLAN 14.4.5).
+            .answeringStorageRefusal(DiagnosticArea.COLORS, diagnostics) {
+                state = state.copy(catalogue = ColorCatalogueState.Failed)
+            }.collect { colors ->
+                // A reading that arrived is the catalogue again, whatever the
+                // last one did.
+                state = state.copy(catalogue = ColorCatalogueState.Content(colors))
+            }
+    }
+
+    /** Asks for the catalogue to be read again, after a reading storage refused. */
+    fun readAgain() {
+        readAttempt += 1
     }
 
     /** Every colour the section is showing, or nothing while it is still loading. */

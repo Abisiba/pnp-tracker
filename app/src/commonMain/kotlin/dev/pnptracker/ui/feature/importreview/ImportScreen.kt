@@ -125,6 +125,19 @@ fun ImportScreen(
                     onOpenReview = { onOpenReview(state.summary.batchId) },
                 )
 
+            // Everything read is still on screen and the same button tries the
+            // write again; only a sentence is added above it (PLAN 14.7.6).
+            is ImportScreenState.NotSaved ->
+                SessionSection(
+                    session = state.session,
+                    isSaving = false,
+                    askForSheet = state.session.sheets.size > 1,
+                    onSelectSheet = { name -> scope.launch { controller.selectSheet(name) } },
+                    onSave = { scope.launch { controller.saveDraft() } },
+                    onChooseAnother = { scope.launch { controller.chooseFile() } },
+                    notice = stringResource(Strings.ImportErrors.couldNotSave),
+                )
+
             is ImportScreenState.Failed ->
                 FailedSection(
                     state = state,
@@ -176,11 +189,15 @@ private fun SessionSection(
     onSelectSheet: (String) -> Unit,
     onSave: () -> Unit,
     onChooseAnother: () -> Unit,
+    /** Said above everything else when the last attempt at this draft failed. */
+    notice: String? = null,
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier.widthIn(max = MAX_CONTENT_WIDTH),
     ) {
+        // First, so it is the first thing read out and the first thing seen.
+        notice?.let { ProblemCard(title = stringResource(Strings.ImportErrors.title), detail = it) }
         Text(
             text = stringResource(Strings.Import.fileLabel, session.fileName),
             style = MaterialTheme.typography.titleMedium,

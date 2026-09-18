@@ -11,8 +11,7 @@ import dev.pnptracker.data.repository.TaskProgressing
 import dev.pnptracker.domain.colors.ColorSummary
 import dev.pnptracker.domain.diagnostics.DiagnosticArea
 import dev.pnptracker.domain.diagnostics.Diagnostics
-import dev.pnptracker.domain.diagnostics.readShownAsFailed
-import dev.pnptracker.domain.diagnostics.recordSafely
+import dev.pnptracker.domain.diagnostics.answeringStorageRefusal
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.ProductionStage
@@ -38,9 +37,7 @@ import dev.pnptracker.ui.StaleSurfaces
 import dev.pnptracker.ui.feature.games.TaskEditor
 import dev.pnptracker.ui.feature.tasks.TaskEditingHost
 import dev.pnptracker.ui.feature.tasks.TaskEditingSnapshot
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.map
 
 /**
  * One pool screen.
@@ -66,6 +63,17 @@ class PoolController(
 ) : TaskEditingHost,
     StaleSurfaces {
     var state: PoolScreenState by mutableStateOf(PoolScreenState(poolType = poolType))
+        private set
+
+    /**
+     * Bumped whenever the user asks for the pool to be read again.
+     *
+     * The screen collects on this, so raising it ends a collection a refusal
+     * left standing and starts a fresh one. It is the only thing that does, so
+     * one refusal writes one line however long the screen is left open
+     * (PLAN 14.7.6).
+     */
+    var readAttempt: Int by mutableStateOf(0)
         private set
 
     /**
@@ -103,14 +111,20 @@ class PoolController(
     suspend fun observePool() {
         pools
             .observePool(poolType)
-            .map { it as PoolSnapshot? }
-            // Kept exactly as it was: every failure becomes the one word the screen
-            // has. Whether that hides a defect is settled apart from this
-            // (PLAN 14.7.6); the record already tells the two apart.
-            .catch { failure ->
-                diagnostics.recordSafely { readShownAsFailed(DiagnosticArea.POOLS, failure) }
-                emit(null)
-            }.collect { snapshot -> if (snapshot == null) show(PoolContentState.Failed) else show(snapshot) }
+            // Storage refusing is the one thing that becomes the word the screen
+            // has. It used to be every failure, which made a defect above or
+            // below this read indistinguishable from a database that would not
+            // answer and let it disappear behind a sentence; a defect now rises
+            // unchanged, and so does the cancellation that closes the screen
+            // (PLAN 14.4.5, PLAN 14.7.6). The nullable snapshot that carried the
+            // old answer through the stream went with it.
+            .answeringStorageRefusal(DiagnosticArea.POOLS, diagnostics) { show(PoolContentState.Failed) }
+            .collect { snapshot -> show(snapshot) }
+    }
+
+    /** Asks for the pool to be read again, after a reading storage refused. */
+    fun readAgain() {
+        readAttempt += 1
     }
 
     /** Shows one reading of the pool, laid out for whatever is being asked for. */
@@ -168,7 +182,15 @@ class PoolController(
 
     /** Follows the catalogue, which only the editor uses. */
     suspend fun observeColorCatalogue() {
-        colors.observeColors().collect(::showColors)
+        colors
+            .observeColors()
+            // The colours already in hand stay in hand. The catalogue is the
+            // editor's list of choices and nothing else here, so replacing it
+            // with an empty one would offer a task no colour at all and call
+            // that the truth. The pool's own reading is what the user is told
+            // about, and asking again reads both (PLAN 14.7.6).
+            .answeringStorageRefusal(DiagnosticArea.COLORS, diagnostics) {}
+            .collect(::showColors)
     }
 
     /**

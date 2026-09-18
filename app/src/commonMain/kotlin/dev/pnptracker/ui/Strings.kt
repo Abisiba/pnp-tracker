@@ -172,6 +172,7 @@ import dev.pnptracker.resources.colors_stranded_dismiss
 import dev.pnptracker.resources.colors_swatch
 import dev.pnptracker.resources.colors_swatch_of
 import dev.pnptracker.resources.colors_title
+import dev.pnptracker.resources.colors_unreadable
 import dev.pnptracker.resources.colors_value
 import dev.pnptracker.resources.colors_wheel_hint
 import dev.pnptracker.resources.colors_wheel_label
@@ -352,6 +353,7 @@ import dev.pnptracker.resources.import_duplicate_count
 import dev.pnptracker.resources.import_duplicate_entry
 import dev.pnptracker.resources.import_duplicate_question
 import dev.pnptracker.resources.import_duplicate_title
+import dev.pnptracker.resources.import_error_could_not_save
 import dev.pnptracker.resources.import_error_csv_ambiguous_delimiter
 import dev.pnptracker.resources.import_error_csv_blank_required_value
 import dev.pnptracker.resources.import_error_csv_duplicate_header_column
@@ -483,6 +485,8 @@ import dev.pnptracker.resources.pool_task_quantity
 import dev.pnptracker.resources.pool_task_quantity_unknown
 import dev.pnptracker.resources.pool_task_spoken
 import dev.pnptracker.resources.pool_three_d
+import dev.pnptracker.resources.reading_read_again
+import dev.pnptracker.resources.reading_unreadable_hint
 import dev.pnptracker.resources.restore_action
 import dev.pnptracker.resources.restore_action_description
 import dev.pnptracker.resources.restore_applying
@@ -758,6 +762,7 @@ import dev.pnptracker.resources.stage_print
 import dev.pnptracker.resources.startup_another_copy
 import dev.pnptracker.resources.startup_close
 import dev.pnptracker.resources.startup_data_safe
+import dev.pnptracker.resources.startup_folders_not_created
 import dev.pnptracker.resources.startup_migration_failed
 import dev.pnptracker.resources.startup_not_cloned
 import dev.pnptracker.resources.startup_not_migrated
@@ -795,6 +800,7 @@ import dev.pnptracker.resources.table_loading
 import dev.pnptracker.resources.table_row_completed
 import dev.pnptracker.resources.table_row_description
 import dev.pnptracker.resources.table_row_ongoing
+import dev.pnptracker.resources.table_unreadable
 import dev.pnptracker.resources.table_view_all
 import dev.pnptracker.resources.table_view_completed
 import dev.pnptracker.resources.table_view_label
@@ -1300,11 +1306,28 @@ object Strings {
         val restoreNothingMissing = Res.string.colors_restore_nothing_missing
         val noticeDismiss = Res.string.colors_notice_dismiss
 
+        /** Said when storage would not answer the catalogue; never that it is empty. */
+        val unreadable = Res.string.colors_unreadable
+
         val errorCouldNotSave = Res.string.colors_error_could_not_save
         val errorNameUsed = Res.string.colors_error_name_used
         val errorNameIsAlias = Res.string.colors_error_name_is_alias
         val errorColorGone = Res.string.colors_error_color_gone
         val errorChanged = Res.string.colors_error_changed
+    }
+
+    /**
+     * A reading storage would not answer, and asking for another go.
+     *
+     * One group for the three screens that follow a reading, because a refusal
+     * tells all of them the same two things: that nothing was read and that it
+     * can be tried again. Each screen still names what it was that could not be
+     * read, so nobody is left with a general "something went wrong"
+     * (PLAN 14.7.6).
+     */
+    object Reading {
+        val hint = Res.string.reading_unreadable_hint
+        val readAgain = Res.string.reading_read_again
     }
 
     /** The columns of the game table. */
@@ -1319,6 +1342,9 @@ object Strings {
     object Table {
         val label = Res.string.table_label
         val loading = Res.string.table_loading
+
+        /** Said when storage would not answer the table; never that it is empty. */
+        val unreadable = Res.string.table_unreadable
 
         val viewLabel = Res.string.table_view_label
         val viewOngoing = Res.string.table_view_ongoing
@@ -1719,6 +1745,7 @@ object Strings {
         val dataSafe = Res.string.startup_data_safe
         val close = Res.string.startup_close
         val anotherCopy = Res.string.startup_another_copy
+        val foldersNotCreated = Res.string.startup_folders_not_created
         val notReadable = Res.string.startup_not_readable
         val tooNew = Res.string.startup_too_new
         val notCloned = Res.string.startup_not_cloned
@@ -2049,6 +2076,9 @@ object Strings {
         val csvRaggedRow = Res.string.import_error_csv_ragged_row
         val csvBlankRequiredValue = Res.string.import_error_csv_blank_required_value
         val csvUnknownSourceType = Res.string.import_error_csv_unknown_source_type
+
+        /** Storage would not take the draft; the file and the preview are unharmed. */
+        val couldNotSave = Res.string.import_error_could_not_save
 
         /** Takes the line number. */
         val csvLine = Res.string.import_error_csv_line

@@ -65,6 +65,16 @@ enum class ImportFailure {
 
     /** A row names a `source_type` this version does not recognise. */
     CSV_UNKNOWN_SOURCE_TYPE,
+
+    /**
+     * The file was read and storage would not take what it said.
+     *
+     * The one reason here that is about neither the file nor its layout: what
+     * was read is still good, and the user has nothing to correct. It is written
+     * in one transaction, so a save that failed left no batch and no block
+     * behind and the very same draft can be offered again (PLAN 14.7.6).
+     */
+    COULD_NOT_SAVE,
 }
 
 /**

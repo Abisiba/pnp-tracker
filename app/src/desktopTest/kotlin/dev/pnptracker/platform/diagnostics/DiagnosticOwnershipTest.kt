@@ -62,6 +62,7 @@ class DiagnosticOwnershipTest {
             "GameSetupStore.kt",
             "ImportConfirmationStore.kt",
             "ImportDraftRemovalStore.kt",
+            "ImportDraftStore.kt",
             "ImportReviewStore.kt",
             "ImportRollbackStore.kt",
             "TaskEditStore.kt",
@@ -72,7 +73,13 @@ class DiagnosticOwnershipTest {
             "UnfinishedImportsStore.kt",
             "BackupController.kt",
             "HistoryController.kt",
+            // The three observed readings Dilim 3 typed. They record through the
+            // one seam that narrows a stream's failure to storage refusing, and
+            // the seam itself is where the record is built.
+            "ColorCatalogueController.kt",
+            "GameTableController.kt",
             "PoolController.kt",
+            "ObservedReadings.kt",
             "RecordSafely.kt",
         )
 
@@ -90,7 +97,10 @@ class DiagnosticOwnershipTest {
         // refusal from a defect, so its callers belong to the same list.
         assertEquals(
             storageOwners,
-            filesMentioning("storageWriteFailed") + filesMentioning("storageReadFailed") + filesMentioning("readShownAsFailed"),
+            filesMentioning("storageWriteFailed") +
+                filesMentioning("storageReadFailed") +
+                filesMentioning("readShownAsFailed") +
+                filesMentioning("answeringStorageRefusal"),
         )
     }
 
