@@ -14,6 +14,8 @@ import dev.pnptracker.domain.backup.restore.BackupReadResult
 import dev.pnptracker.domain.backup.restore.BackupRejection
 import dev.pnptracker.domain.backup.restore.FakeBackupInput
 import dev.pnptracker.domain.backup.restore.UntrustedBackupReader
+import dev.pnptracker.domain.importhealth.LifecycleContradiction
+import dev.pnptracker.domain.importhealth.importRecordsHealthIn
 import dev.pnptracker.domain.importprep.PreparedRawBlock
 import dev.pnptracker.domain.importrollback.ImportRollbackException
 import dev.pnptracker.domain.model.CellColumnType
@@ -81,6 +83,17 @@ class LifecycleContradictionReachTest {
         directory.delete()
     }
 
+    /**
+     * The candidates each batch breaks, by the production definitions the restore
+     * gate uses since Dilim 7 (they were a test-side instrument in Dilim 5).
+     * No batch here is a draft with a contradiction, which is said as well.
+     */
+    private fun lifecycleCandidatesBrokenIn(data: BackupData): Map<String, Set<LifecycleContradiction>> {
+        val health = importRecordsHealthIn(data)
+        assertEquals(emptyList(), health.filter { it.draft.isNotEmpty() }, "a draft contradiction appeared")
+        return health.associate { it.batchId to it.lifecycle }
+    }
+
     // ------------------------------------------------ built the way a person builds it
 
     /** A game with an empty 3D cell of its own; the cell. */
@@ -142,7 +155,7 @@ class LifecycleContradictionReachTest {
 
             val data = wholeDatabase(live)
             assertEquals(mapOf("CONFIRMED" to 2, "ROLLED_BACK" to 2, "DRAFT" to 1), data.importBatches.groupingBy { it.status }.eachCount())
-            assertEquals(data.importBatches.associate { it.id to emptySet<LifecycleCandidate>() }, lifecycleCandidatesBrokenIn(data))
+            assertEquals(data.importBatches.associate { it.id to emptySet<LifecycleContradiction>() }, lifecycleCandidatesBrokenIn(data))
         }
 
     // ------------------------------------------------------- (a) older schemas
@@ -269,7 +282,7 @@ class LifecycleContradictionReachTest {
             val confirmed = confirmedId.toString()
             val base = wholeDatabase(live)
             assertEquals(Reach.Live, measure(base))
-            assertEquals(base.importBatches.associate { it.id to emptySet<LifecycleCandidate>() }, lifecycleCandidatesBrokenIn(base))
+            assertEquals(base.importBatches.associate { it.id to emptySet<LifecycleContradiction>() }, lifecycleCandidatesBrokenIn(base))
 
             fun BackupData.batch(
                 id: String,
@@ -286,16 +299,16 @@ class LifecycleContradictionReachTest {
             val firstMade = draftsOf(confirmed).first()
             val firstRolled = draftsOf(rolledBack).first()
 
-            val mutations: List<Triple<LifecycleCandidate, String, (BackupData) -> BackupData>> =
+            val mutations: List<Triple<LifecycleContradiction, String, (BackupData) -> BackupData>> =
                 listOf(
-                    Triple(LifecycleCandidate.C1, confirmed) { d ->
+                    Triple(LifecycleContradiction.C1, confirmed) { d ->
                         d.copy(draftTasks = d.draftTasks.map { if (it.id == firstMade.id) it.copy(materializedTaskId = null) else it })
                     },
                     Triple(
-                        LifecycleCandidate.C2,
+                        LifecycleContradiction.C2,
                         confirmed,
                     ) { d -> d.batch(confirmed) { it.copy(createdTaskCount = it.createdTaskCount + 1) } },
-                    Triple(LifecycleCandidate.C3, confirmed) { d ->
+                    Triple(LifecycleContradiction.C3, confirmed) { d ->
                         d.copy(
                             tasks =
                                 d.tasks.map {
@@ -309,15 +322,15 @@ class LifecycleContradictionReachTest {
                                 },
                         )
                     },
-                    Triple(LifecycleCandidate.C4, confirmed) { d ->
+                    Triple(LifecycleContradiction.C4, confirmed) { d ->
                         d.copy(
                             importBatchCells =
                                 (d.importBatchCells + BackupImportBatchCellRow(confirmed, ownCell.toString(), "Kendi notum"))
                                     .sortedWith(compareBy({ it.importBatchId }, { it.cellId })),
                         )
                     },
-                    Triple(LifecycleCandidate.C5, confirmed) { d -> d.batch(confirmed) { it.copy(createdGameCount = 1) } },
-                    Triple(LifecycleCandidate.RB1, rolledBack) { d ->
+                    Triple(LifecycleContradiction.C5, confirmed) { d -> d.batch(confirmed) { it.copy(createdGameCount = 1) } },
+                    Triple(LifecycleContradiction.RB1, rolledBack) { d ->
                         d.copy(
                             importBatchCells =
                                 d.importBatchCells.filter {
@@ -326,7 +339,7 @@ class LifecycleContradictionReachTest {
                                 },
                         )
                     },
-                    Triple(LifecycleCandidate.RB2, rolledBack) { d ->
+                    Triple(LifecycleContradiction.RB2, rolledBack) { d ->
                         d.batch(rolledBack) {
                             it.copy(
                                 createdTaskCount =
@@ -334,10 +347,10 @@ class LifecycleContradictionReachTest {
                             )
                         }
                     },
-                    Triple(LifecycleCandidate.RB3, rolledBack) { d ->
+                    Triple(LifecycleContradiction.RB3, rolledBack) { d ->
                         d.copy(tasks = d.tasks.map { if (it.id == firstRolled.materializedTaskId) it.copy(deletedAt = null) else it })
                     },
-                    Triple(LifecycleCandidate.RB4, rolledBack) { d ->
+                    Triple(LifecycleContradiction.RB4, rolledBack) { d ->
                         val last = d.cellSegments.filter { it.cellId == cellA.toString() }.maxOf { it.orderIndex }
                         val piece =
                             BackupCellSegmentRow(
@@ -352,7 +365,7 @@ class LifecycleContradictionReachTest {
                             )
                         d.copy(cellSegments = (d.cellSegments + piece).sortedWith(compareBy({ it.cellId }, { it.orderIndex })))
                     },
-                    Triple(LifecycleCandidate.RB5, rolledBack) { d ->
+                    Triple(LifecycleContradiction.RB5, rolledBack) { d ->
                         d.copy(
                             historyEvents =
                                 d.historyEvents.filterNot {
@@ -361,7 +374,7 @@ class LifecycleContradictionReachTest {
                                 },
                         )
                     },
-                    Triple(LifecycleCandidate.U1, confirmed) { d ->
+                    Triple(LifecycleContradiction.U1, confirmed) { d ->
                         d.copy(
                             rawImportBlocks =
                                 d.rawImportBlocks.map {
@@ -375,7 +388,7 @@ class LifecycleContradictionReachTest {
                                 },
                         )
                     },
-                    Triple(LifecycleCandidate.U2, confirmed) { d ->
+                    Triple(LifecycleContradiction.U2, confirmed) { d ->
                         val text = d.rawImportBlocks.single { it.id == firstMade.rawImportBlockId }.rawText
                         d.copy(
                             draftTasks =
@@ -390,7 +403,10 @@ class LifecycleContradictionReachTest {
                                 },
                         )
                     },
-                    Triple(LifecycleCandidate.U3, confirmed) { d -> d.batch(confirmed) { it.copy(rawBlockCount = it.rawBlockCount + 1) } },
+                    Triple(
+                        LifecycleContradiction.U3,
+                        confirmed,
+                    ) { d -> d.batch(confirmed) { it.copy(rawBlockCount = it.rawBlockCount + 1) } },
                 )
 
             val observed =
@@ -409,9 +425,9 @@ class LifecycleContradictionReachTest {
                 val (reach, breaks, _) = observed.getValue(candidate)
                 assertEquals(Reach.Live, reach, "$candidate")
                 val expected =
-                    if (candidate == LifecycleCandidate.RB1) {
+                    if (candidate == LifecycleContradiction.RB1) {
                         // A rolled back batch without its cells no longer meets C4 either.
-                        setOf(LifecycleCandidate.RB1, LifecycleCandidate.RB2)
+                        setOf(LifecycleContradiction.RB1, LifecycleContradiction.RB2)
                     } else {
                         setOf(candidate)
                     }
@@ -425,11 +441,11 @@ class LifecycleContradictionReachTest {
             // Dilim 6 all three — like C1 before them — are refused, and a refusal
             // writes nothing anywhere (checked inside rollbackOutcome).
             val rollback = observed.mapValues { it.value.third }
-            listOf(LifecycleCandidate.C1, LifecycleCandidate.C2, LifecycleCandidate.C3, LifecycleCandidate.C4).forEach {
+            listOf(LifecycleContradiction.C1, LifecycleContradiction.C2, LifecycleContradiction.C3, LifecycleContradiction.C4).forEach {
                 assertEquals("refused: preview=PROVENANCE_BROKEN, rollback=PROVENANCE_BROKEN", rollback[it], "$it")
             }
             // C5 and U1–U3 change nothing about what a rollback touches.
-            listOf(LifecycleCandidate.C5, LifecycleCandidate.U1, LifecycleCandidate.U2, LifecycleCandidate.U3).forEach {
+            listOf(LifecycleContradiction.C5, LifecycleContradiction.U1, LifecycleContradiction.U2, LifecycleContradiction.U3).forEach {
                 assertEquals(HARMLESS_ROLLBACK, rollback[it], "$it")
             }
         }

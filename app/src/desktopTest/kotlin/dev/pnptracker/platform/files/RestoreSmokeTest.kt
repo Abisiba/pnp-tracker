@@ -11,17 +11,20 @@ import dev.pnptracker.data.database.aCell
 import dev.pnptracker.data.database.aGame
 import dev.pnptracker.data.database.aTask
 import dev.pnptracker.data.database.fillWithEverything
+import dev.pnptracker.data.database.fillWithEverythingARestoreAccepts
 import dev.pnptracker.data.database.rowCount
 import dev.pnptracker.data.repository.BackupStore
 import dev.pnptracker.domain.backup.BackupData
 import dev.pnptracker.domain.backup.DatabaseBackupExporter
 import dev.pnptracker.domain.backup.canonicalBackupDataJson
+import dev.pnptracker.domain.backup.restore.BackupProblem
 import dev.pnptracker.domain.backup.restore.BackupReadResult
 import dev.pnptracker.domain.backup.restore.SAFETY_BACKUP_PREFIX
 import dev.pnptracker.domain.backup.restore.UntrustedBackupReader
 import dev.pnptracker.domain.backup.retention.AutomaticBackupRotation
 import dev.pnptracker.domain.backup.retention.SettingsDrivenHousekeeping
 import dev.pnptracker.domain.backup.sha256Of
+import dev.pnptracker.domain.importhealth.importRecordsHealthIn
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.platform.backupfiles.BackupSourcePicker
@@ -152,10 +155,11 @@ class RestoreSmokeTest {
             val opened = DatabaseFactory().open(paths.databaseFile)
             database = opened
             opened.gameDao().activeCount()
-            fillWithEverything(opened)
+            fillWithEverythingARestoreAccepts(opened)
             val stateA = BackupStore(opened).snapshot().data
             val countsA = TABLES.associateWith { rowCount(opened, it) }
             assertTrue(countsA.values.all { it > 0 }, "a table stayed empty: $countsA")
+            assertTrue(importRecordsHealthIn(stateA).all { it.isSound }, "state A carries import records that contradict")
 
             // 3. The manual backup of A, written where the user would have put it.
             val document = DatabaseBackupExporter(BackupStore(opened), AppInfo.Current, StoppedClock(MOMENT)).backupDocument()
@@ -253,6 +257,58 @@ class RestoreSmokeTest {
             // the settings file appears when somebody presses save and at no
             // other moment (PLAN 14.4.12).
             assertTrue(Files.notExists(paths.settingsFile), "a restore created the settings file by itself")
+        }
+
+    @Test
+    fun `a backup whose imports contradict their own records is refused, and nothing moves`() =
+        runBlocking<Unit> {
+            val data = home.resolve("data")
+            val config = home.resolve("config")
+            val paths =
+                XdgAppPathsResolver(
+                    environment = { name ->
+                        when (name) {
+                            "XDG_DATA_HOME" -> data.toString()
+                            "XDG_CONFIG_HOME" -> config.toString()
+                            else -> null
+                        }
+                    },
+                ).resolve()
+            AppDirectoryInitializer().ensureDirectories(paths)
+
+            // The file: a backup this application really writes, of a database
+            // holding the full fixture — whose import records contradict each
+            // other in ways no path of the application can produce.
+            val source = DatabaseFactory().open(Files.createDirectories(home.resolve("elsewhere")).resolve("pnp.db"))
+            val contradicting =
+                try {
+                    fillWithEverything(source)
+                    DatabaseBackupExporter(BackupStore(source), AppInfo.Current, StoppedClock(MOMENT)).backupDocument()
+                } finally {
+                    source.close()
+                }
+            assertTrue(importRecordsHealthIn(contradicting.envelope.data).any { !it.isSound })
+            val file = paths.backupsDirectory.resolve("pnp-yedek-celiskili.json")
+            AtomicFileWriter(temporarySuffix = ".json.part").write(file, contradicting.json.encodeToByteArray())
+
+            // The live database, sound, with something in it.
+            val opened = DatabaseFactory().open(paths.databaseFile)
+            database = opened
+            fillWithEverythingARestoreAccepts(opened)
+            val before = BackupStore(opened).snapshot().data
+            val filesBefore = namesIn(paths.backupsDirectory)
+
+            // Chosen twice: refused before the question each time, with nothing
+            // read for a way back, nothing written, nothing replaced.
+            val controller = controllerFor(file, paths, opened)
+            repeat(2) {
+                controller.chooseBackup()
+                assertEquals(RestoreScreenState.Rejected(BackupProblem.IMPORT_RECORDS_CONTRADICT), controller.state)
+                assertEquals(before, BackupStore(opened).snapshot().data, "a refused file changed the database")
+                assertEquals(filesBefore, namesIn(paths.backupsDirectory), "a refused file wrote a safety backup")
+            }
+            probeRoots.forEach { assertTrue(Files.notExists(it), "a throwaway database outlived the refusal") }
+            assertTrue(Files.notExists(paths.settingsFile), "a refusal created the settings file")
         }
 
     /**

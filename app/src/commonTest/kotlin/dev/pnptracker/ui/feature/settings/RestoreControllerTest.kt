@@ -7,7 +7,7 @@ import dev.pnptracker.domain.backup.restore.BackupProblem
 import dev.pnptracker.domain.backup.restore.CountingProbe
 import dev.pnptracker.domain.backup.restore.RestoreProblem
 import dev.pnptracker.domain.backup.restore.UntrustedBackupReader
-import dev.pnptracker.domain.backup.restore.aWholeBackup
+import dev.pnptracker.domain.backup.restore.aRestorableBackup
 import dev.pnptracker.domain.backup.restore.canonicalChecksumOf
 import dev.pnptracker.domain.backup.restore.documentOf
 import dev.pnptracker.domain.backup.restore.fileOf
@@ -138,7 +138,7 @@ class RestoreControllerTest {
     @Test
     fun `agreeing saves a way back before it replaces anything`() =
         runBlocking<Unit> {
-            val data = aWholeBackup()
+            val data = aRestorableBackup()
             val source = FakeBackupSource(data)
             val safety = FakeSafetyWriter()
             val restorer = FakeRestorer()

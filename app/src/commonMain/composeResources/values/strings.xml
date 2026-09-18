@@ -672,6 +672,7 @@
     <string name="restore_error_safety_not_written">Güvenlik yedeği diske yazılamadı, bu yüzden geri yükleme hiç başlamadı. Verileriniz olduğu gibi duruyor; diskte yer olduğundan emin olup yeniden deneyin.</string>
     <string name="restore_error_data_changed">Verileriniz işlem sırasında değişti, bu yüzden hiçbir şey geri yüklenmedi. Yedeği yeniden denetleyip tekrar deneyin.</string>
     <string name="restore_error_not_applied">Geri yükleme tamamlanamadı ve tamamı geri alındı. Verileriniz işlemden önceki hâlinde; yeniden deneyin.</string>
+    <string name="restore_error_imports_contradict">Bu yedekteki bir içe aktarmanın kayıtları birbiriyle uyuşmuyor, bu yüzden geri yüklenemez. Verileriniz olduğu gibi duruyor ve hiçbir şey yazılmadı; başka bir yedek seçebilirsiniz.</string>
     <string name="restore_error_references">Yedeğin kayıtları veritabanına olduğu gibi yazılamadı ve tamamı geri alındı. Verileriniz işlemden önceki hâlinde.</string>
     <string name="restore_error_not_verified">Geri yükleme yapıldı ama sonuç doğrulanamadı. Uygulamayı kapatıp yeniden açın; gerekirse aşağıdaki güvenlik yedeğini geri yükleyin.</string>
     <string name="restore_error_safety_kept">İşlemden önceki verileriniz %1$s dosyasında duruyor.</string>

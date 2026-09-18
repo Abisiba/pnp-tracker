@@ -387,6 +387,8 @@ internal fun messageFor(problem: BackupProblem): StringResource =
         BackupProblem.DOMAIN_INVARIANT -> Strings.RestoreErrors.inconsistent
 
         BackupProblem.TEMP_VALIDATION_FAILED -> Strings.RestoreErrors.didNotPass
+
+        BackupProblem.IMPORT_RECORDS_CONTRADICT -> Strings.RestoreErrors.importsContradict
     }
 
 /**

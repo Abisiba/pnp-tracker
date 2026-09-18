@@ -556,3 +556,44 @@ private suspend fun writeDrafts(rows: Rows) {
         ),
     )
 }
+
+/**
+ * [fillWithEverything] with import records that agree with each other, for the
+ * tests that take a backup of the database back through the restore screen.
+ *
+ * The full fixture writes every shape a row can take, including import records
+ * that contradict each other (D3; C1, C4, C5, U1; RB1, RB2, U3 — measured). No
+ * path of this application can write those, and since İş 10 / Dilim 7 a backup
+ * carrying them is refused before the restore question (PLAN 14.7.5 decisions 2
+ * and 4). The format and live-replace tests keep the full fixture; the flow
+ * tests get this one, where every table still has rows:
+ *
+ * - the pending raw cell and its bare draft move to the draft batch, whose
+ *   count of two raw cells is then true (D3), without a completion hint on a
+ *   column that is not the game column (D9);
+ * - the confirmed batch keeps one raw cell, one draft, the task it made and the
+ *   one cell that draft targets (C1, C2, C4, U3), no hint outside the game
+ *   column (U1), and no game counted or sourced from it (C5);
+ * - the rolled back batch, which carried no raw cells and no recorded cells
+ *   (RB1, RB2, U3), is left out — rolling back is covered where it is made.
+ */
+suspend fun fillWithEverythingARestoreAccepts(database: AppDatabase) {
+    fillWithEverything(database)
+    executeRawSql(
+        database,
+        "UPDATE raw_import_blocks SET import_batch_id = '$BATCH_DRAFT', game_completion_hint = 'NONE' " +
+            "WHERE id = '$RAW_BLOCK_PENDING'",
+    )
+    executeRawSql(
+        database,
+        "UPDATE raw_import_blocks SET game_completion_hint = 'NONE', completion_target_game_id = NULL " +
+            "WHERE id = '$RAW_BLOCK_ACCEPTED'",
+    )
+    executeRawSql(
+        database,
+        "UPDATE import_batches SET raw_block_count = 1, created_task_count = 1 WHERE id = '$BATCH_CONFIRMED'",
+    )
+    executeRawSql(database, "DELETE FROM import_batch_cells WHERE cell_id = '$CELL_NOTES'")
+    executeRawSql(database, "UPDATE games SET source_import_batch_id = NULL")
+    executeRawSql(database, "DELETE FROM import_batches WHERE id = '$BATCH_ROLLED_BACK'")
+}

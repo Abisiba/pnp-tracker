@@ -17,6 +17,7 @@ import dev.pnptracker.domain.importconfirm.ImportConfirmationException
 import dev.pnptracker.domain.importconfirm.ImportConfirmationFailure
 import dev.pnptracker.domain.importhealth.DraftContradiction
 import dev.pnptracker.domain.importhealth.DraftHealth
+import dev.pnptracker.domain.importhealth.importRecordsHealthIn
 import dev.pnptracker.domain.importremoval.DraftRemovalOutcome
 import dev.pnptracker.domain.importremoval.DraftRemovalRefusal
 import dev.pnptracker.domain.model.EntityId
@@ -154,6 +155,10 @@ class DraftContradictionReachTest {
 
         // 1. The real line carries it into the live database.
         assertEquals(Reach.Live, measure(damaged))
+
+        // 1b. The document, held against the same definitions in memory, says
+        // the same as the live classifier below — the restore gate's answer.
+        assertEquals(setOf(expected), importRecordsHealthIn(damaged).single { it.batchId == batch }.draft)
 
         // 2. The classifier names it, and only it, and says so every time.
         val importDao = live.importDao()

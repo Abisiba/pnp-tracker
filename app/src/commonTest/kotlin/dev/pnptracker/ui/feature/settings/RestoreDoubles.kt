@@ -19,6 +19,7 @@ import dev.pnptracker.domain.backup.restore.SafetyBackupWriter
 import dev.pnptracker.domain.backup.restore.SafetySnapshot
 import dev.pnptracker.domain.backup.restore.UntrustedBackupReader
 import dev.pnptracker.domain.backup.restore.ValidatedBackup
+import dev.pnptracker.domain.backup.restore.aRestorableBackup
 import dev.pnptracker.domain.backup.restore.aWholeBackup
 import dev.pnptracker.domain.backup.restore.canonicalChecksumOf
 import dev.pnptracker.domain.backup.restore.documentOf
@@ -136,7 +137,7 @@ class FakeBackupSource(
 }
 
 /** A file holding a backup this application really wrote. */
-fun aRealBackupFile(data: BackupData = aWholeBackup()) = fileOf(documentOf(data))
+fun aRealBackupFile(data: BackupData = aRestorableBackup()) = fileOf(documentOf(data))
 
 /**
  * A backup that has been through every check, obtained the only way there is one.

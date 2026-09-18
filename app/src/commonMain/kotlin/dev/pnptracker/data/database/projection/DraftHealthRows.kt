@@ -2,8 +2,9 @@ package dev.pnptracker.data.database.projection
 
 import androidx.room3.ColumnInfo
 import dev.pnptracker.data.database.entity.ImportBatchEntity
-import dev.pnptracker.domain.importhealth.DraftContradiction
 import dev.pnptracker.domain.importhealth.DraftHealth
+import dev.pnptracker.domain.importhealth.DraftRecords
+import dev.pnptracker.domain.importhealth.draftContradictionsOf
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.ImportBatchStatus
 
@@ -112,16 +113,19 @@ fun draftHealthOf(
 ): DraftHealth {
     if (batch.status != ImportBatchStatus.DRAFT) return DraftHealth.NotADraft(batch.id, batch.status)
     val contradictions =
-        buildSet {
-            if (batch.createdTaskCount != 0) add(DraftContradiction.TASKS_COUNTED_BEFORE_CONFIRMATION)
-            if (batch.createdGameCount != 0) add(DraftContradiction.GAMES_COUNTED_BEFORE_CONFIRMATION)
-            if (batch.rawBlockCount != facts.rawBlockRows) add(DraftContradiction.RAW_CELL_COUNT_DISAGREES)
-            if (facts.materializedDraftCount > 0) add(DraftContradiction.DRAFT_ALREADY_MATERIALIZED)
-            if (facts.cellSnapshotCount > 0) add(DraftContradiction.CELL_RECORDED_BEFORE_CONFIRMATION)
-            if (facts.sourcedTaskCount > 0) add(DraftContradiction.TASK_SOURCED_FROM_DRAFT)
-            if (facts.sourcedGameCount > 0) add(DraftContradiction.GAME_SOURCED_FROM_DRAFT)
-            if (selections.any { it.isBeyondItsText }) add(DraftContradiction.SELECTION_BEYOND_ITS_TEXT)
-            if (facts.hintOutsideGameCount > 0) add(DraftContradiction.COMPLETION_HINT_OUTSIDE_GAME_COLUMN)
-        }
+        draftContradictionsOf(
+            DraftRecords(
+                createdTaskCount = batch.createdTaskCount,
+                createdGameCount = batch.createdGameCount,
+                rawBlockCount = batch.rawBlockCount,
+                rawBlockRows = facts.rawBlockRows,
+                materializedDraftCount = facts.materializedDraftCount,
+                cellSnapshotCount = facts.cellSnapshotCount,
+                sourcedTaskCount = facts.sourcedTaskCount,
+                sourcedGameCount = facts.sourcedGameCount,
+                hintOutsideGameCount = facts.hintOutsideGameCount,
+                selectionBeyondItsText = selections.any { it.isBeyondItsText },
+            ),
+        )
     return if (contradictions.isEmpty()) DraftHealth.Sound(batch.id) else DraftHealth.Contradicting(batch.id, contradictions)
 }

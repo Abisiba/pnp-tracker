@@ -96,6 +96,14 @@ enum class BackupProblem {
 
     /** Loading it into a throwaway database of the current schema did not work out. */
     TEMP_VALIDATION_FAILED,
+
+    /**
+     * Every row stands up, but an import's own records contradict each other
+     * (PLAN 14.7.5 decision 2): decided after the reader, only for the file a
+     * person chose to restore — never by the reader, which also verifies
+     * import snapshots and migration sets.
+     */
+    IMPORT_RECORDS_CONTRADICT,
 }
 
 /**

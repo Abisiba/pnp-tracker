@@ -7,15 +7,18 @@ import dev.pnptracker.data.database.FailingSqliteDriver
 import dev.pnptracker.data.database.LiveBackupRestorer
 import dev.pnptracker.data.database.TemporaryBackupProbe
 import dev.pnptracker.data.database.TemporaryDatabaseDirectory
-import dev.pnptracker.data.database.fillWithEverything
+import dev.pnptracker.data.database.fillWithEverythingARestoreAccepts
 import dev.pnptracker.data.repository.BackupStore
 import dev.pnptracker.domain.backup.BackupData
 import dev.pnptracker.domain.backup.BackupFailure
 import dev.pnptracker.domain.backup.DatabaseBackupExporter
 import dev.pnptracker.domain.backup.restore.BackupProblem
+import dev.pnptracker.domain.backup.restore.BackupReadResult
 import dev.pnptracker.domain.backup.restore.FakeBackupInput
 import dev.pnptracker.domain.backup.restore.RestoreProblem
 import dev.pnptracker.domain.backup.restore.UntrustedBackupReader
+import dev.pnptracker.domain.backup.restore.aWholeBackup
+import dev.pnptracker.domain.backup.restore.documentOf
 import dev.pnptracker.domain.diagnostics.DiagnosticEvent
 import dev.pnptracker.ui.feature.settings.FakeBackupSource
 import dev.pnptracker.ui.feature.settings.FakeRestorer
@@ -124,6 +127,42 @@ class RestoreRecordsTest {
         }
 
     @Test
+    fun `a backup whose imports contradict their own records is refused before the question, once per choice`() =
+        runBlocking {
+            // PLAN 14.7.5 decision 2. A raw cell count that is not the number of
+            // raw cells is D3 for a draft and U3 for anything else.
+            val whole = aWholeBackup()
+            val bytes = documentOf(whole.copy(importBatches = whole.importBatches.map { it.copy(rawBlockCount = it.rawBlockCount + 1) }))
+            // The reader alone still takes it: it also verifies import snapshots
+            // and migration sets, and those must keep working (it is not tightened).
+            assertIs<BackupReadResult.Valid>(UntrustedBackupReader(TemporaryBackupProbe()).read(FakeBackupInput(bytes.encodeToByteArray())))
+            val source = FakeBackupSource()
+            val safety = FakeSafetyWriter()
+            val restorer = FakeRestorer()
+
+            repeat(2) {
+                val chosen =
+                    controller(chosen = FakeBackupInput(bytes.encodeToByteArray()), source = source, safety = safety, restorer = restorer)
+                chosen.chooseBackup()
+                assertEquals(RestoreScreenState.Rejected(BackupProblem.IMPORT_RECORDS_CONTRADICT), chosen.state)
+            }
+
+            // No question, no database read, no way back written, nothing replaced.
+            assertEquals(0, source.reads)
+            assertEquals(0, safety.writes)
+            assertEquals(0, restorer.applied)
+            assertEquals(2, diagnostics.records.size)
+            diagnostics.records.forEach { record ->
+                assertRecordedAsPlanned(
+                    ExpectedRecord(DiagnosticEvent.RESTORE_FILE_REFUSED, reason = BackupProblem.IMPORT_RECORDS_CONTRADICT),
+                    record,
+                )
+                assertEquals("importBatches", record.place?.toString())
+            }
+            assertNothingLeaked()
+        }
+
+    @Test
     fun `the way back cannot be read, and cannot be written`() =
         runBlocking {
             val unreadable = controller(chosen = aRealBackupInput(), source = FakeBackupSource(refusal = ::storageRefusal))
@@ -224,6 +263,6 @@ class RestoreRecordsTest {
             .open(directory.databaseFile)
             .also {
                 opened += it
-                fillWithEverything(it)
+                fillWithEverythingARestoreAccepts(it)
             }
 }

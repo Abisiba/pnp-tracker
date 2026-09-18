@@ -506,6 +506,7 @@ import dev.pnptracker.resources.restore_error_changed_file
 import dev.pnptracker.resources.restore_error_data_changed
 import dev.pnptracker.resources.restore_error_did_not_pass
 import dev.pnptracker.resources.restore_error_empty
+import dev.pnptracker.resources.restore_error_imports_contradict
 import dev.pnptracker.resources.restore_error_inconsistent
 import dev.pnptracker.resources.restore_error_not_a_backup
 import dev.pnptracker.resources.restore_error_not_applied
@@ -2179,6 +2180,7 @@ object Strings {
         val badRecords = Res.string.restore_error_bad_records
         val inconsistent = Res.string.restore_error_inconsistent
         val didNotPass = Res.string.restore_error_did_not_pass
+        val importsContradict = Res.string.restore_error_imports_contradict
 
         val safetyNotMade = Res.string.restore_error_safety_not_made
         val safetyNotWritten = Res.string.restore_error_safety_not_written

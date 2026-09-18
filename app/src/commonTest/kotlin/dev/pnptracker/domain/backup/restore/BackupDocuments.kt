@@ -19,6 +19,7 @@ import dev.pnptracker.domain.backup.BackupTaskStageRow
 import dev.pnptracker.domain.backup.backupDocumentOf
 import dev.pnptracker.domain.backup.canonicalBackupDataJson
 import dev.pnptracker.domain.backup.sha256Of
+import dev.pnptracker.domain.importhealth.importRecordsHealthIn
 import kotlin.time.Instant
 
 /*
@@ -367,3 +368,20 @@ fun anEmptyBackup(): BackupData =
         draftTasks = emptyList(),
         draftTaskColors = emptyList(),
     )
+
+/**
+ * [aWholeBackup] with its one import made to agree with itself (PLAN 14.7.5).
+ *
+ * The whole backup fills every column on purpose, and so its import counts a
+ * game it sourced and two tasks for one draft (C5, C2). Since İş 10 / Dilim 7 a
+ * restore refuses that before asking anything, so the restore flow's tests
+ * choose this one; the format's own tests keep the whole one.
+ */
+fun aRestorableBackup(): BackupData =
+    aWholeBackup()
+        .let { whole ->
+            whole.copy(
+                importBatches = whole.importBatches.map { it.copy(createdGameCount = 0, createdTaskCount = 1) },
+                games = whole.games.map { it.copy(sourceImportBatchId = null) },
+            )
+        }.also { data -> check(importRecordsHealthIn(data).all { it.isSound }) { "the restorable backup still contradicts itself" } }

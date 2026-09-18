@@ -6,7 +6,7 @@ import dev.pnptracker.data.database.DatabaseFactory
 import dev.pnptracker.data.database.LiveBackupRestorer
 import dev.pnptracker.data.database.TemporaryBackupProbe
 import dev.pnptracker.data.database.TemporaryDatabaseDirectory
-import dev.pnptracker.data.database.fillWithEverything
+import dev.pnptracker.data.database.fillWithEverythingARestoreAccepts
 import dev.pnptracker.data.repository.BackupStore
 import dev.pnptracker.data.repository.ImportConfirmationStore
 import dev.pnptracker.domain.backup.DatabaseBackupExporter
@@ -324,7 +324,7 @@ class RetentionAfterRestoreTest {
             database = it
             runBlocking {
                 it.gameDao().activeCount()
-                fillWithEverything(it)
+                fillWithEverythingARestoreAccepts(it)
             }
         }
 

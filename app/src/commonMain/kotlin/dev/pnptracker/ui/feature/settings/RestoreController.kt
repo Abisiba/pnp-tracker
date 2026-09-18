@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.sqlite.SQLiteException
 import dev.pnptracker.domain.backup.BackupException
 import dev.pnptracker.domain.backup.DatabaseBackupExporter
+import dev.pnptracker.domain.backup.restore.BackupPlace
 import dev.pnptracker.domain.backup.restore.BackupProblem
 import dev.pnptracker.domain.backup.restore.BackupReadResult
 import dev.pnptracker.domain.backup.restore.BackupRejection
@@ -22,6 +23,7 @@ import dev.pnptracker.domain.diagnostics.DiagnosticEvent
 import dev.pnptracker.domain.diagnostics.DiagnosticRecord
 import dev.pnptracker.domain.diagnostics.Diagnostics
 import dev.pnptracker.domain.diagnostics.recordSafely
+import dev.pnptracker.domain.importhealth.importRecordsHealthIn
 import dev.pnptracker.domain.time.localMomentOf
 import kotlinx.serialization.SerializationException
 import kotlin.time.Clock
@@ -127,6 +129,16 @@ class RestoreController(
         when (val read = reader.read(chosen)) {
             is BackupReadResult.Refused -> reject(read.rejection)
             is BackupReadResult.Valid -> {
+                // The last check before the destructive question (PLAN 14.4.3,
+                // 14.7.5 decision 2): the document's import records against L, in
+                // memory. Here and not in the reader, which also verifies import
+                // snapshots and migration sets — a stricter reader would lock a
+                // live database that already carries a contradiction out of every
+                // import and, one day, out of its own start.
+                if (importRecordsHealthIn(read.backup.data).any { !it.isSound }) {
+                    reject(BackupRejection(BackupProblem.IMPORT_RECORDS_CONTRADICT, BackupPlace("importBatches")))
+                    return
+                }
                 pending = read.backup
                 token++
                 state = RestoreScreenState.Confirming(token, read.backup.summary)
