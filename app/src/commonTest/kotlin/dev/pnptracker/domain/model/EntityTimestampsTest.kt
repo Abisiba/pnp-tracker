@@ -125,23 +125,22 @@ class EntityTimestampsTest {
     }
 
     @Test
-    fun `updatedAt before createdAt is rejected`() {
-        val failure =
-            assertFailsWith<IllegalArgumentException> {
-                EntityTimestamps(createdAt = changed, updatedAt = created)
-            }
+    fun `a change recorded after the clock went back is a real record, kept as it is`() {
+        // PLAN 14.7.3: time order is not an integrity rule.
+        val timestamps = EntityTimestamps(createdAt = changed, updatedAt = created)
 
-        assertTrue(failure.message.orEmpty().contains("updatedAt"))
+        assertEquals(changed, timestamps.createdAt)
+        assertEquals(created, timestamps.updatedAt)
+        assertEquals(created, EntityTimestamps.create(TestClock(changed)).touch(TestClock(created)).updatedAt)
     }
 
     @Test
-    fun `deletedAt before createdAt is rejected`() {
-        val failure =
-            assertFailsWith<IllegalArgumentException> {
-                EntityTimestamps(createdAt = changed, updatedAt = changed, deletedAt = created)
-            }
+    fun `a deletion recorded after the clock went back is a real record, kept as it is`() {
+        val deleted = EntityTimestamps(createdAt = changed, updatedAt = created, deletedAt = created)
 
-        assertTrue(failure.message.orEmpty().contains("deletedAt"))
+        assertEquals(created, deleted.deletedAt)
+        assertTrue(deleted.isDeleted)
+        assertEquals(created, EntityTimestamps.create(TestClock(changed)).softDelete(TestClock(created)).deletedAt)
     }
 
     @Test

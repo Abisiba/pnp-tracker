@@ -235,6 +235,35 @@ class MigrationSnapshotSetWriterTest {
     }
 
     @Test
+    fun `a version seven database whose rows run backwards in time still produces a set, every moment kept`() {
+        // PLAN 14.7.3: a clock that went back left a game changed "before" it was
+        // created. The migration's document half must still read back as a
+        // backup, or the gate would refuse to migrate the user's own data.
+        val gameId = IdGenerator.Random.newId()
+        val file = home.resolve("geri.db")
+        open +=
+            openWithHotWal(file, version = 7) { connection ->
+                insertVersion4Game(connection, gameId = gameId, name = "Harmonies")
+                connection.prepare("UPDATE games SET created_at = ?, updated_at = ? WHERE id = ?").use { statement ->
+                    statement.bindLong(1, 1_700_000_600_000)
+                    statement.bindLong(2, 1_700_000_000_000)
+                    statement.bindText(3, gameId.toString())
+                    statement.step()
+                }
+            }
+
+        val set = writer().writeSetFor(file, fromSchemaVersion = 7)
+
+        val read = runBlocking { realReader().read(PathBackupInput(backups.resolve("${set.setName}.json"))) }
+        val valid = read as? BackupReadResult.Valid ?: error("the document half was refused: $read")
+        val game =
+            valid.backup.data.games
+                .single()
+        assertEquals(1_700_000_600_000, game.createdAt)
+        assertEquals(1_700_000_000_000, game.updatedAt)
+    }
+
+    @Test
     fun `a second set of the same second takes the next ordinal, on both halves`() {
         val first = anOldDatabase(3, name = "bir.db")
         val second = anOldDatabase(3, name = "iki.db")

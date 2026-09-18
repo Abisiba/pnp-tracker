@@ -4,6 +4,7 @@ import dev.pnptracker.AppInfo
 import dev.pnptracker.data.database.AppDatabase
 import dev.pnptracker.data.database.CommittedSchema
 import dev.pnptracker.data.database.DatabaseFactory
+import dev.pnptracker.data.database.EPOCH_MILLISECONDS_CREATED
 import dev.pnptracker.data.database.LiveBackupRestorer
 import dev.pnptracker.data.database.StoppedClock
 import dev.pnptracker.data.database.TemporaryBackupProbe
@@ -17,6 +18,7 @@ import dev.pnptracker.data.database.anImportBatch
 import dev.pnptracker.data.database.fillWithEverything
 import dev.pnptracker.data.repository.BackupStore
 import dev.pnptracker.data.repository.ImportRollbackStore
+import dev.pnptracker.data.repository.TaskEditStore
 import dev.pnptracker.domain.backup.BackupData
 import dev.pnptracker.domain.backup.DatabaseBackupExporter
 import dev.pnptracker.domain.backup.canonicalBackupDataJson
@@ -24,6 +26,9 @@ import dev.pnptracker.domain.backup.restore.BackupReadResult
 import dev.pnptracker.domain.backup.restore.RestoreProblem
 import dev.pnptracker.domain.backup.restore.UntrustedBackupReader
 import dev.pnptracker.domain.backup.sha256Of
+import dev.pnptracker.domain.importrollback.ImportRollbackException
+import dev.pnptracker.domain.importrollback.ImportRollbackFailure
+import dev.pnptracker.domain.importrollback.TaskObstacle
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
@@ -40,12 +45,17 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
 
 private val MOMENT = Instant.fromEpochMilliseconds(1_757_320_364_031)
+
+/** An hour, and two, before the fixture's import was read: where a clock that went back lands. */
+private val HOUR_BEFORE_THE_IMPORT = Instant.fromEpochMilliseconds(EPOCH_MILLISECONDS_CREATED - 3_600_000)
+private val TWO_HOURS_BEFORE_THE_IMPORT = Instant.fromEpochMilliseconds(EPOCH_MILLISECONDS_CREATED - 7_200_000)
 
 /** What the cell reads before any import touches it, and must read again afterwards. */
 private const val DOCUMENT_BEFORE = "Önce yazdıklarım"
@@ -254,6 +264,75 @@ class BackupRestoreLifecycleTest {
             )
         }
 
+    // --------------------------------------------- a clock that went backwards
+
+    @Test
+    fun `a database written on a clock that went back goes out and comes back with every moment as it was`() =
+        runBlocking<Unit> {
+            // PLAN 14.7.3. The import is confirmed an hour "before" it was read,
+            // and one of its tasks is then changed an hour before that — which is
+            // what this application writes when the system clock steps back.
+            val database = open("saat.db")
+            givenAReversibleConfirmedImport(database, confirmedAt = HOUR_BEFORE_THE_IMPORT)
+            changeAnImportedTask(database, at = TWO_HOURS_BEFORE_THE_IMPORT)
+            val written = snapshotOf(database)
+            assertTrue(written.tasks.any { it.updatedAt < it.createdAt }, "no task ran backwards; the test proves nothing")
+            assertTrue(written.importBatches.any { it.updatedAt < it.importedAt }, "no import ran backwards")
+
+            // Out to a file and read by the reader every restore and every import
+            // snapshot goes through: accepted, and not one moment corrected.
+            val file = writeBackup(database, "pnp-yedek-saat.json")
+            assertEquals(written, dataOf(readBackup(file)))
+
+            // Back into a database that has moved on since, exactly.
+            becomeB(database)
+            assertNull(restore(database, file).problem)
+            assertEquals(written, snapshotOf(database))
+            // And out once more: the second backup says what the first said.
+            assertEquals(written, dataOf(readBackup(writeBackup(database, "pnp-yedek-saat-2.json"))))
+        }
+
+    @Test
+    fun `a task changed on a clock that went back still counts as touched and stops the rollback`() =
+        runBlocking<Unit> {
+            // PLAN 11.4.4 compares with `!=`, not `>`: a change stamped before the
+            // creation is still a change, and the import can no longer be taken
+            // back without undoing it (PLAN 14.7.3 keeps this as it is).
+            val database = open("saat.db")
+            val batchId = givenAReversibleConfirmedImport(database)
+            val changed = changeAnImportedTask(database, at = HOUR_BEFORE_THE_IMPORT)
+            val before = snapshotOf(database)
+            assertTrue(before.tasks.single { it.id == changed.toString() }.let { it.updatedAt < it.createdAt })
+
+            val preview = rollbackOf(database).previewRollback(batchId)
+            val refused = assertFailsWith<ImportRollbackException> { rollbackOf(database).rollBack(batchId) }
+
+            assertEquals(ImportRollbackFailure.TASKS_WERE_EDITED, preview.blockingFailure)
+            assertEquals(listOf(changed to TaskObstacle.EDITED), preview.blockedTasks.map { it.taskId to it.obstacle })
+            assertEquals(ImportRollbackFailure.TASKS_WERE_EDITED, refused.failure)
+            assertEquals(before, snapshotOf(database), "a refused rollback changed something")
+        }
+
+    /** Renames one task the import made, through the real editing store, at [at]. */
+    private suspend fun changeAnImportedTask(
+        database: AppDatabase,
+        at: Instant,
+    ): EntityId {
+        val task = snapshotOf(database).tasks.first { it.sourceRawImportBlockId != null && it.deletedAt == null }
+        val id = EntityId.parse(task.id)
+        val changed =
+            TaskEditStore(database.taskEditDao(), clock = StoppedClock(at)).editTask(
+                taskId = id,
+                name = "${task.name} (düzeltildi)",
+                colorId = null,
+                requiredQuantity = task.requiredQuantity,
+                notes = task.notes,
+                trackingMode = TrackingMode.valueOf(task.trackingMode),
+            )
+        assertTrue(changed, "the edit changed nothing")
+        return id
+    }
+
     // --------------------------------------------------------------- the plumbing
 
     private class Restored(
@@ -318,7 +397,10 @@ class BackupRestoreLifecycleTest {
      * The shape a rollback is allowed to undo: nothing touched since, and the
      * cell's earlier text recorded where the confirmation put it.
      */
-    private suspend fun givenAReversibleConfirmedImport(database: AppDatabase): EntityId {
+    private suspend fun givenAReversibleConfirmedImport(
+        database: AppDatabase,
+        confirmedAt: Instant = MOMENT,
+    ): EntityId {
         val clock = StoppedClock(MOMENT)
         val game = aGame(name = "Harmonies")
         database.gameDao().insert(game)
@@ -342,7 +424,7 @@ class BackupRestoreLifecycleTest {
             database.importDao().addDraftTask(draft)
             database.importDao().setDraftTargetUnderReview(draft.id, cellId, PoolType.THREE_D, TrackingMode.THREE_D_BATCH, MOMENT)
         }
-        database.importDao().confirmDraftBatch(batch.id, true, clock, IdGenerator.Random)
+        database.importDao().confirmDraftBatch(batch.id, true, StoppedClock(confirmedAt), IdGenerator.Random)
         return batch.id
     }
 

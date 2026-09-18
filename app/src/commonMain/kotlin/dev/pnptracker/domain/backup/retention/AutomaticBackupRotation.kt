@@ -128,6 +128,13 @@ class AutomaticBackupRotation(
      * verified anything has no set name to offer, and an invented one removes
      * nothing.
      *
+     * It is also never surplus itself. The order of backups comes from the stamps
+     * in their names, which come from the clock, and a clock that has gone back
+     * stamps the newest backup earlier than every old one; sorted by name alone
+     * it would be the first to go, straight after being written and verified
+     * (PLAN 14.4.11, 14.7.3). So it is counted first, and the rest of its kind
+     * fill what is left of the count by their names.
+     *
      * @param keep how many of each kind to keep, the new one included.
      */
     suspend fun rotateAfter(
@@ -142,7 +149,7 @@ class AutomaticBackupRotation(
 
         val removed = mutableListOf<String>()
         val couldNotRemove = mutableListOf<String>()
-        surplusOf(owned, keep).forEach { backup ->
+        surplusOf(owned, keep, justWritten).forEach { backup ->
             backup.fileNames.forEach { fileName ->
                 if (directory.remove(fileName)) removed += fileName else couldNotRemove += fileName
             }
@@ -206,7 +213,8 @@ private fun migrationSetsIn(usable: List<InspectedBackupFile>): List<OwnedBackup
         }
 
 /**
- * The backups past the newest [keep] of their own kind.
+ * The backups past the newest [keep] of their own kind, [justWritten] always
+ * counted among the kept.
  *
  * Ordered by the stamp and then the ordinal, both read out of the name, because
  * PLAN 14.4.11 refuses to sort by `mtime`: copying a folder, restoring it from
@@ -214,16 +222,25 @@ private fun migrationSetsIn(usable: List<InspectedBackupFile>): List<OwnedBackup
  * name. The ordinal is compared as a number so that the tenth backup of one
  * second comes after the second rather than before it, and the set name settles
  * the rest so that two runs over one folder always choose the same files.
+ *
+ * The one exception to the order is the backup this pass runs for: it is put
+ * first whatever its name says, so a clock that went back cannot make it the
+ * oldest (PLAN 14.7.3). The count still includes it.
  */
 private fun surplusOf(
     owned: List<OwnedBackup>,
     keep: Int,
+    justWritten: String,
 ): List<OwnedBackup> =
     owned
         .groupBy { it.kind }
         .values
         .flatMap { ofOneKind ->
             ofOneKind
-                .sortedWith(compareByDescending<OwnedBackup> { it.stamp }.thenByDescending { it.attempt }.thenByDescending { it.setName })
-                .drop(keep)
+                .sortedWith(
+                    compareByDescending<OwnedBackup> { it.setName == justWritten }
+                        .thenByDescending { it.stamp }
+                        .thenByDescending { it.attempt }
+                        .thenByDescending { it.setName },
+                ).drop(keep)
         }

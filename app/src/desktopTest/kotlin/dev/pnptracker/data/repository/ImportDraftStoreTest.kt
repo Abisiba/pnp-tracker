@@ -3,6 +3,7 @@ package dev.pnptracker.data.repository
 import dev.pnptracker.data.database.AppDatabase
 import dev.pnptracker.data.database.DatabaseFactory
 import dev.pnptracker.data.database.TemporaryDatabaseDirectory
+import dev.pnptracker.data.database.anImportBatch
 import dev.pnptracker.domain.importprep.ImportFailure
 import dev.pnptracker.domain.importprep.ImportPreparationException
 import dev.pnptracker.domain.importprep.PreparedImportDraft
@@ -26,10 +27,16 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
 
 private const val SHA_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 private const val SHA_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+/** Three identities in text order, which is the order SQLite settles ties by. */
+private const val FIRST = "10000000-0000-4000-8000-000000000000"
+private const val SECOND = "20000000-0000-4000-8000-000000000000"
+private const val THIRD = "30000000-0000-4000-8000-000000000000"
 
 /** A clock that never moves, so every row of one import can be compared exactly. */
 private class FixedClock(
@@ -272,6 +279,32 @@ class ImportDraftStoreTest {
             assertTrue(first.batchId != second.batchId, "each import is its own batch")
             assertEquals(2, store.earlierImportsOf(SHA_A).size)
             assertEquals(2, database.importDao().allBatches().size)
+        }
+
+    @Test
+    fun `imports of one moment, or stamped earlier by a clock that went back, are listed in one order every time`() =
+        runBlocking<Unit> {
+            // PLAN 14.7.3: newest first, and equal moments settled by identity,
+            // with no moment corrected. Written in the opposite of identity order
+            // on purpose, so an order that falls back on how rows were stored
+            // shows up here.
+            val earlier = moment - 1.hours
+            listOf(THIRD to moment, FIRST to moment, SECOND to earlier).forEach { (id, at) ->
+                database.importDao().insertBatch(
+                    anImportBatch(id = EntityId.parse(id), sha256 = SHA_A).copy(importedAt = at, updatedAt = at - 1.hours),
+                )
+            }
+
+            val expected = listOf(FIRST, THIRD, SECOND)
+            repeat(3) {
+                assertEquals(expected, store.earlierImportsOf(SHA_A).map { it.batchId.toString() })
+                assertEquals(expected, database.importDao().allBatches().map { it.id.toString() })
+            }
+            // The moments are the ones written, the backwards update included.
+            assertEquals(
+                listOf(moment, moment, earlier),
+                database.importDao().allBatches().map { it.importedAt },
+            )
         }
 
     @Test

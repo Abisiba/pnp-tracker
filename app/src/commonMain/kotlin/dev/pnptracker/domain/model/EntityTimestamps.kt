@@ -18,15 +18,11 @@ data class EntityTimestamps(
 ) {
     init {
         // The system clock is not monotonic, so nothing here assumes that time
-        // moves forward between two reads; these only reject states that cannot
-        // describe a real record.
-        require(updatedAt >= createdAt) {
-            "updatedAt ($updatedAt) cannot be before createdAt ($createdAt)."
-        }
+        // moves forward between two reads: a change or a deletion recorded after
+        // the clock went back comes before the creation, and that is a real
+        // record (PLAN 14.7.3). The one state that cannot describe a record is a
+        // deletion that is not also its last change.
         if (deletedAt != null) {
-            require(deletedAt >= createdAt) {
-                "deletedAt ($deletedAt) cannot be before createdAt ($createdAt)."
-            }
             require(deletedAt == updatedAt) {
                 "A deleted record must carry the deletion as its last change, " +
                     "but deletedAt ($deletedAt) differs from updatedAt ($updatedAt)."

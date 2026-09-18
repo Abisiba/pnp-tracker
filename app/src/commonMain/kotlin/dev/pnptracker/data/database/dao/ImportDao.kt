@@ -127,14 +127,18 @@ abstract class ImportDao {
     @Query("SELECT * FROM import_batches WHERE id = :id")
     abstract suspend fun batchById(id: EntityId): ImportBatchEntity?
 
-    @Query("SELECT * FROM import_batches ORDER BY imported_at DESC")
+    @Query("SELECT * FROM import_batches ORDER BY imported_at DESC, id")
     abstract suspend fun allBatches(): List<ImportBatchEntity>
 
     /**
      * Every earlier import of a file with this fingerprint, newest first. An empty
      * list means this file has not been imported before.
+     *
+     * Two imports of one moment — or a later one stamped earlier by a clock that
+     * went back — are settled by identity, so the list reads the same every time
+     * (PLAN 14.7.3); the stored moments are never corrected.
      */
-    @Query("SELECT * FROM import_batches WHERE sha256 = :sha256 ORDER BY imported_at DESC")
+    @Query("SELECT * FROM import_batches WHERE sha256 = :sha256 ORDER BY imported_at DESC, id")
     abstract suspend fun batchesWithFingerprint(sha256: String): List<ImportBatchEntity>
 
     @Query(
@@ -282,7 +286,7 @@ abstract class ImportDao {
         markRawBlockProcessed(blockId, isProcessed, updatedAt)
     }
 
-    @Query("SELECT * FROM draft_tasks WHERE raw_import_block_id = :blockId ORDER BY created_at, name")
+    @Query("SELECT * FROM draft_tasks WHERE raw_import_block_id = :blockId ORDER BY created_at, name, id")
     abstract suspend fun draftTasksOfBlock(blockId: EntityId): List<DraftTaskEntity>
 
     @Query("SELECT * FROM draft_tasks WHERE id = :id")

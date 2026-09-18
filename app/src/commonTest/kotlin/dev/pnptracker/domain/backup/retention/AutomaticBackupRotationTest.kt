@@ -168,6 +168,38 @@ class AutomaticBackupRotationTest {
         }
 
     @Test
+    fun `a backup stamped before all the others by a clock that went back is kept, and the count still holds`() =
+        runBlocking<Unit> {
+            // PLAN 14.7.3 / 14.4.11: the clock went back an hour between the old
+            // backups and the new one, so the new one's name sorts first.
+            (1..5).forEach { keep ->
+                val folder = FakeBackupDirectory()
+                (1..5).forEach { folder.put(importSnapshotFileName(momentAt(30 + it))) }
+                val earlier = importSnapshotFileName(momentAt(10))
+                folder.put(earlier)
+
+                val outcome = AutomaticBackupRotation(folder).rotateAfter(earlier.removeSuffix(".json"), keep = keep)
+
+                assertTrue(earlier in folder.remaining, "keep=$keep: the backup just written was removed")
+                assertFalse(earlier in outcome.removed, "keep=$keep")
+                assertEquals(keep, folder.remaining.size, "keep=$keep: ${folder.remaining}")
+                // The others that stay are the newest by name, as before.
+                val keptOthers = (1..5).reversed().take(keep - 1).map { importSnapshotFileName(momentAt(30 + it)) }
+                assertEquals((keptOthers + earlier).sorted(), folder.remaining, "keep=$keep")
+            }
+
+            // The same for a migration set, which is one backup of two files.
+            val folder = FakeBackupDirectory()
+            (1..3).forEach { folder.putMigrationSet("pnp-otomatik-migration-v3-v8-2026-09-09-150${it}00") }
+            val earlier = "pnp-otomatik-migration-v3-v8-2026-09-09-090000"
+            folder.putMigrationSet(earlier)
+
+            AutomaticBackupRotation(folder).rotateAfter(earlier, keep = 1)
+
+            assertEquals(listOf("$earlier.db", "$earlier.json"), folder.remaining)
+        }
+
+    @Test
     fun `half a migration set is not a set, and neither half is removed`() =
         runBlocking<Unit> {
             // An interrupted write, or a deletion that only half succeeded. PLAN

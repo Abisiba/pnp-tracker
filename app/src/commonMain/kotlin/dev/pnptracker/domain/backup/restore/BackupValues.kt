@@ -100,8 +100,10 @@ private fun checkImports(data: BackupData): BackupRejection? {
         if (row.rawBlockCount < 0) return place.bad(BackupProblem.INVALID_VALUE, "rawBlockCount")
         if (row.createdTaskCount < 0) return place.bad(BackupProblem.INVALID_VALUE, "createdTaskCount")
         if (!isMoment(row.importedAt)) return place.bad(BackupProblem.INVALID_VALUE, "importedAt")
+        // Only that it is a moment: a confirmation or a rollback on a clock that
+        // had gone back writes an updatedAt before importedAt, and that is the
+        // application's own data (PLAN 14.7.3).
         if (!isMoment(row.updatedAt)) return place.bad(BackupProblem.INVALID_VALUE, "updatedAt")
-        if (row.updatedAt < row.importedAt) return place.bad(BackupProblem.DOMAIN_INVARIANT, "updatedAt")
 
         val bounds = listOf(row.startRowIndex, row.endRowIndex, row.startColumnIndex, row.endColumnIndex)
         if (bounds.any { it == null } && bounds.any { it != null }) {
@@ -334,12 +336,21 @@ private fun checkDrafts(data: BackupData): BackupRejection? {
 }
 
 /**
- * When a row was written and when it last changed.
+ * When a row was written and when it last changed: both real moments, and
+ * nothing more.
  *
- * Both have to be real moments, and the change cannot come before the writing.
- * That second one is not tidiness: PLAN 11.4.4 decides whether an imported task
- * has been touched by comparing the two, so a row whose moments run backwards
- * would make an import that cannot be taken back look like one that can.
+ * In particular not that the change comes after the writing. The system clock
+ * is not monotonic — an NTP correction, a second operating system, a restored
+ * virtual machine or a hand-set clock all move it back — and this application's
+ * own writes then leave `updatedAt < createdAt`. Refusing that refused the
+ * user's own data: every import snapshot on such a machine failed to verify and
+ * stopped the import, and their own backups would not go back (PLAN 14.7.3).
+ *
+ * Nor did the rule protect anything. PLAN 11.4.4 decides whether an imported
+ * task was touched by `updatedAt != createdAt`, so a row that runs backwards
+ * counts as touched and stops a rollback rather than enabling one; and a
+ * document can claim "untouched" with two equal values, which no ordering rule
+ * would ever catch. The values travel exactly as they are, never corrected.
  */
 private fun checkWrittenAndChanged(
     place: BackupPlace,
@@ -348,7 +359,6 @@ private fun checkWrittenAndChanged(
 ): BackupRejection? {
     if (!isMoment(createdAt)) return place.bad(BackupProblem.INVALID_VALUE, "createdAt")
     if (!isMoment(updatedAt)) return place.bad(BackupProblem.INVALID_VALUE, "updatedAt")
-    if (updatedAt < createdAt) return place.bad(BackupProblem.DOMAIN_INVARIANT, "updatedAt")
     return null
 }
 

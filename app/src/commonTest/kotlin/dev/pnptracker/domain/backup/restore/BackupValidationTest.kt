@@ -131,16 +131,25 @@ class BackupValidationTest {
         }
 
     @Test
-    fun `a row that changed before it was written is refused`() =
+    fun `a row that changed before it was written is accepted and kept exactly as it is`() =
         runBlocking<Unit> {
-            // PLAN 11.4.4 decides whether an imported task has been touched by
-            // comparing these two, so a row whose moments run backwards would
-            // make an import that cannot be taken back look like one that can.
+            // PLAN 14.7.3: a clock that went back writes these, and they are the
+            // user's own data. Once refused as "moments running backwards"; that
+            // protected nothing (PLAN 11.4.4 compares with `!=`, so such a task
+            // counts as touched) and stopped every import on such a machine.
             val whole = aWholeBackup()
-            val data = whole.copy(tasks = whole.tasks.map { it.copy(createdAt = UPDATED, updatedAt = CREATED) })
+            val data =
+                whole.copy(
+                    games = whole.games.map { it.copy(createdAt = UPDATED, updatedAt = CREATED) },
+                    tasks = whole.tasks.map { it.copy(createdAt = UPDATED, updatedAt = CREATED) },
+                    gameCells = whole.gameCells.map { it.copy(createdAt = UPDATED, updatedAt = UPDATED) },
+                    importBatches = whole.importBatches.map { it.copy(importedAt = UPDATED, updatedAt = CREATED) },
+                )
 
-            assertEquals(BackupProblem.DOMAIN_INVARIANT, refusalOf(data))
-            assertEquals(BackupPlace("tasks", "updatedAt"), placeOf(data))
+            val read = reader.read(fileOf(documentOf(data)))
+
+            // Not a single moment corrected: the backup read back is the backup written.
+            assertEquals(data, (read as? BackupReadResult.Valid ?: error("refused: $read")).backup.data)
         }
 
     @Test

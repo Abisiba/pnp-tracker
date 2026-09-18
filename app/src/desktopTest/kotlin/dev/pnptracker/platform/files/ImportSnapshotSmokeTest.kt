@@ -163,13 +163,39 @@ class ImportSnapshotSmokeTest {
             theWholeJourney(batchId)
         }
 
+    @Test
+    fun `an import reviewed on a clock that went back a day is still backed up and confirmed`() =
+        runBlocking<Unit> {
+            // PLAN 14.7.3: the review writes rows a day "before" the draft was
+            // saved. The snapshot must still verify and the import still go
+            // through, with every moment as it was written.
+            reviewClock = SteppingClock(Clock.System.now() - Duration.parse("1d"))
+            val text =
+                """
+                game,source_type,raw_text
+                Harmonies,3D,12 KIRMIZI
+                """.trimIndent()
+            val file = home.resolve("geri.csv")
+            Files.write(file, text.toByteArray(StandardCharsets.UTF_8))
+            val batchId = importFile(file, expect = ImportSourceFormat.CSV)
+            val cellId = aGameWithACell()
+            aimEveryDraft(batchId, cellId)
+            val before = everything()
+            val importedAt = before.importBatches.single().importedAt
+            assertTrue(before.draftTasks.all { it.createdAt < importedAt }, "nothing ran backwards; the test proves nothing")
+
+            theWholeJourney(batchId, alreadyAimed = true)
+        }
+
     /**
      * Aim every draft, confirm through the controller a button press drives, and
      * hold the file that appeared against the database that was there.
      */
-    private suspend fun theWholeJourney(batchId: EntityId) {
-        val cellId = aGameWithACell()
-        aimEveryDraft(batchId, cellId)
+    private suspend fun theWholeJourney(
+        batchId: EntityId,
+        alreadyAimed: Boolean = false,
+    ) {
+        if (!alreadyAimed) aimEveryDraft(batchId, aGameWithACell())
         val before = everything()
         assertEquals(emptyList(), snapshots(), "something was in the backups folder before the import")
 
@@ -204,17 +230,20 @@ class ImportSnapshotSmokeTest {
     private val importDao get() = database.importDao()
 
     /**
-     * One review store for the whole smoke, with a clock that only moves forward
-     * from now.
+     * The review store's clock: one that moves a second on every reading, from
+     * now unless a test sets it earlier before the first review.
      *
-     * Not a stopped clock in the past, and the reason is worth keeping: the
-     * draft store above it writes with the system clock, so a review clock set
-     * earlier would leave rows whose `updated_at` precedes their `created_at` —
-     * which the backup reader refuses as a broken domain invariant, and which
-     * would therefore stop the import rather than merely look odd.
+     * The draft store writes with the system clock, so a review clock set in the
+     * past leaves rows whose `updated_at` precedes their `created_at`. That once
+     * stopped the import outright — the backup reader refused such rows, so the
+     * snapshot never verified. It is the application's own data and is accepted
+     * now (PLAN 14.7.3); the test below walks exactly that road.
      */
+    private var reviewClock: Clock = SteppingClock(Clock.System.now())
+
+    /** One review store for the whole smoke. */
     private val review: ImportReviewStore by lazy {
-        ImportReviewStore(importDao, database.gameDao(), database.colorDao(), clock = SteppingClock(Clock.System.now()))
+        ImportReviewStore(importDao, database.gameDao(), database.colorDao(), clock = reviewClock)
     }
 
     private fun confirmations() =
