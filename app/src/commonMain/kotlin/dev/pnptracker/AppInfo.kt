@@ -23,6 +23,7 @@ data class AppInfo(
         private val ID_PATTERN = Regex("[a-z][a-z0-9]*(-[a-z0-9]+)*")
         private val VERSION_PATTERN = Regex("\\d+\\.\\d+\\.\\d+")
 
-        val Current = AppInfo(id = "pnp-tracker", version = "0.1.0")
+        /** The version is the Gradle project version, generated at build time. */
+        val Current = AppInfo(id = "pnp-tracker", version = APPLICATION_VERSION)
     }
 }

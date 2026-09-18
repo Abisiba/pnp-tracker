@@ -3,6 +3,7 @@ package dev.pnptracker
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 class AppInfoTest {
     @Test
@@ -11,8 +12,9 @@ class AppInfoTest {
     }
 
     @Test
-    fun `current version follows major minor patch`() {
-        assertEquals("0.1.0", AppInfo.Current.version)
+    fun `current version is the build's own and follows major minor patch`() {
+        assertEquals(APPLICATION_VERSION, AppInfo.Current.version)
+        assertTrue(Regex("\\d+\\.\\d+\\.\\d+").matches(AppInfo.Current.version))
     }
 
     @Test

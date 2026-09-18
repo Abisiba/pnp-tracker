@@ -166,7 +166,7 @@ private fun runTheWindow(
 }
 
 /** Looks until exactly one window of the run has the title, the run ends, or the listing cannot be trusted. */
-private fun awaitWindow(
+internal fun awaitWindow(
     application: Process,
     closer: SafeWindowCloser,
     title: String,
@@ -181,7 +181,7 @@ private fun awaitWindow(
     }
 }
 
-private fun stopIfStillRunning(
+internal fun stopIfStillRunning(
     application: Process,
     seen: List<ProcessHandle>,
     problems: MutableList<String>,
@@ -215,7 +215,7 @@ private fun aDamagedDatabase(file: Path): String {
     return digestOf(file)
 }
 
-private fun listed(folder: Path): List<String> =
+internal fun listed(folder: Path): List<String> =
     if (!Files.isDirectory(folder, LinkOption.NOFOLLOW_LINKS)) {
         emptyList()
     } else {

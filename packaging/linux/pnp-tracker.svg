@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- PnP Üretim Takipçisi: a printed card and a printed cube. No text, no fonts. -->
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="#2E6B5E"/>
+  <g transform="rotate(-10 92 128)">
+    <rect x="44" y="60" width="96" height="136" rx="12" fill="#F4F1E8"/>
+    <rect x="58" y="76" width="68" height="46" rx="6" fill="#E3A33B"/>
+    <rect x="58" y="134" width="68" height="8" rx="4" fill="#9DB8B0"/>
+    <rect x="58" y="150" width="48" height="8" rx="4" fill="#9DB8B0"/>
+  </g>
+  <g stroke="#1E4A41" stroke-width="4" stroke-linejoin="round">
+    <polygon points="172,104 212,126 172,148 132,126" fill="#F7D07A"/>
+    <polygon points="132,126 172,148 172,196 132,174" fill="#E3A33B"/>
+    <polygon points="212,126 172,148 172,196 212,174" fill="#C27F1E"/>
+  </g>
+</svg>

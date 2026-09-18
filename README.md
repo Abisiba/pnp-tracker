@@ -15,3 +15,17 @@ tamamen yerel ve çevrimdışı çalışan Linux masaüstü uygulaması.
 ./gradlew run
 ./gradlew clean check
 ```
+
+## Linux paketi
+
+Sürüm tek yerde, `app/build.gradle.kts` içindeki `version` değerindedir; paket,
+arşiv ve uygulama sürümü oradan türetilir.
+
+```bash
+./gradlew :app:packageLinuxArchive   # app/build/linux/dist/pnp-tracker-<sürüm>-linux-<mimari>.tar.gz
+./gradlew :app:verifyLinuxPackage    # arşivi denetler ve depo dışından çalıştırır (ekran gerekir)
+```
+
+Arşiv, Java kurulumu gerektirmeyen kendi başına bir uygulama dizinidir
+(`pnp-tracker-<sürüm>/bin/pnp-tracker`); içinde yalnız gereken modülleri taşıyan
+bir Java çalışma ortamı bulunur.
