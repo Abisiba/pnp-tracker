@@ -9,6 +9,7 @@ import dev.pnptracker.platform.desktop.awaitWindow
 import dev.pnptracker.platform.desktop.isInProcessTree
 import dev.pnptracker.platform.desktop.listed
 import dev.pnptracker.platform.desktop.stopIfStillRunning
+import dev.pnptracker.platform.desktop.windowClassOf
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
@@ -512,9 +513,7 @@ class PackageCheck {
             }
             report("window ${found.window.id} of process ${found.window.pid}, title exactly \"$MAIN_WINDOW_TITLE\"")
             started += application0.descendants().toList()
-            val wmClass = ProcessBuilder("xprop", "-id", found.window.id, "WM_CLASS").redirectErrorStream(true).start()
-            report("window ${wmClass.inputStream.bufferedReader().readText().trim()}")
-            wmClass.waitFor()
+            report("window ${windowClassOf(found.window)}")
             checkTheRunningJvm(run, launcher, application)
             when (val outcome = closer.close(MAIN_WINDOW_TITLE)) {
                 is CloseOutcome.Refused -> {

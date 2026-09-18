@@ -86,6 +86,20 @@ private val LISTED_WINDOW = Regex("^(0x[0-9a-fA-F]{1,8})\\s+(-?\\d+)\\s+(\\d+)\\
 private val NET_WM_PID = Regex("^_NET_WM_PID\\(CARDINAL\\) = (\\d+)$")
 
 /**
+ * The WM_CLASS the window manager holds for [window], read and nothing else:
+ * the package check reports it for the desktop entry's StartupWMClass. Nothing
+ * is sent to the window, and an id that does not look like one is not asked about.
+ */
+fun windowClassOf(
+    window: DesktopWindow,
+    commands: Commands = SystemCommands,
+): String? {
+    if (!WINDOW_ID.matches(window.id)) return null
+    val result = commands.run(listOf("xprop", "-id", window.id, "WM_CLASS"))
+    return if (result.exitCode == 0) result.output.trim() else null
+}
+
+/**
  * Reads `wmctrl -l -p`.
  *
  * Returns null when any line does not read as one window. A title may hold a
