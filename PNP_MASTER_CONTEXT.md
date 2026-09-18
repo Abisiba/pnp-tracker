@@ -7,7 +7,17 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** Faz 3 / **İş 10 / Dilim 3** —
+> **Son güncelleme:** İş 10 / Dilim 3 sonrası **stabilizasyon turu** —
+> `test(desktop): make process and window checks deterministic`. Üretim kodu
+> değişmedi. Tanılama testleri artık makinenin 500 ms'de kaç satır yazabildiğini
+> ölçmüyor: işçi olayla (diske inen satır, kapıda tutulan yazma, alınan/reddedilen
+> kilit) koordine ediliyor ve tam koşu prize bağlı değil (§25.4 "Stabilizasyon
+> turu"). Masaüstü smoke'ta pencere yalnız `SafeWindowCloser` ile kapatılıyor:
+> tam başlık + başlatılan süreç ağacı + kapatmadan hemen önce yeniden doğrulama
+> (§30). Üç okuma yolunun `IllegalArgumentException` ve `Error` sınırları da ayrı
+> testlerle çivilendi. Sıradaki bağlayıcı kod dilimi yine **İş 10 / Dilim 4**.
+>
+> Daha önce: Faz 3 / **İş 10 / Dilim 3** —
 > `fix(errors): report storage and directory failures safely`.
 > Dilim 2'nin **ölçtüğü** beş tipsiz kaçış tipli Türkçe sonuçlara çevrildi:
 > taslak kaydı, oyun tablosu okuması, renk kataloğu okuması, havuz okuması ve
@@ -82,66 +92,63 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-HEAD (bu commit öncesi): e8081047cae195083167ad6ee97281aed4d69e4e
-önceki commit         : feat(diagnostics): record failures at their typed boundaries
-bu commit             : fix(errors): report storage and directory failures safely
+HEAD (bu commit öncesi): 62e36a090e899af78c40b67fb5b5a2ad93f29ed1
+önceki commit         : fix(errors): report storage and directory failures safely
+bu commit             : test(desktop): make process and window checks deterministic
 working tree          : başlangıçta temiz
+üretim kodu           : DEĞİŞMEDİ (commonMain/desktopMain'de tek satır yok)
 Room şema sürümü      : 8   (bu commit'te DEĞİŞMEDİ)
 şema dosyaları        : 1.json … 8.json  hepsi bayt bayt aynı
 test durumu           : ./gradlew clean check --rerun-tasks (bellek sınırlı, §30) → BUILD SUCCESSFUL
-                        3660 test / 0 failure / 0 error / 0 skipped (265 sınıf), 6 dk 57 sn;
-                        bellek öldürmesi yok (en düşük boş bellek ~1,7 GiB)
-                        [e808104: 3634 / 261 → +29 / −3 test, +5 / −1 sınıf:
-                         DraftSaveRefusalTest 5, UnreadableReadingsTest 12,
-                         StartupFolderRefusalTest 5, ReadingRefusalSurfaceTest 3,
-                         ui/UnreadableScreensTest 4; KALDIRILAN UntypedFailureMeasurementTest 3
-                         (ölçtüğü üç vaka artık tipli ve davranışla çivili);
-                         UnexpectedFailureRecordsTest 5 ve ImportDraftStoreTest (sayılar aynı; havuz
-                         kusuru testi ve ham SQLiteException bekleyen taslak testi bilinçli
-                         olarak çevrildi)]
-tam koşu geçmişi      : (1) 3660/1 — ImportDraftStoreTest ham SQLiteException bekliyordu → bilinçli
-                        çevrildi; (2) bellek yetersizliğiyle durduruldu, makine yeniden başladı;
-                        (3) 3660/1 — Dilim 1'in DiagnosticLogProcessTest'i ("unexpected 932
-                        lines"): dizüstü PİLDE, CPU powersave; aynı test DEĞİŞİKLİKSİZ HEAD'de
-                        (ayrı worktree) de düştü (1615), prize takılınca üçü de geçti — test
-                        close()'un 500 ms'lik boşaltma süresine güveniyor (§25.4 açık sınırlar);
-                        (4) prizde 3660/0 — yukarıdaki satır
-smoke                 : XDG_DATA_HOME yazılamaz bir dizinin altında (chmod 500; hesap kipi
-                        gerçekten uyguluyor), XDG_CONFIG_HOME ve XDG_STATE_HOME yazılabilir geçici
-                        dizinler; ./gradlew --no-daemon run: "PNP açılamadı" penceresi açıldı,
-                        wmctrl -i -c ile normal kapatıldı, çıkış 0; veri dizininde 0 girdi (DB
-                        hiç oluşmadı/açılmadı), config'te 0 girdi; state/pnp-tracker/logs/
-                        pnp-tanilama.jsonl'de TEK satır —
-                        {"v":1,"seq":1,"at":"…","level":"ERROR","event":"startup.refused",
-                         "app":"0.1.0","schema":8,"reason":"FOLDERS_NOT_CREATED",
-                         "exception":"java.io.IOException",
-                         "cause":"java.nio.file.AccessDeniedException"} — yol, kullanıcı adı,
-                        SQL veya mesaj YOK; çalıştırma logunda exception yok; arkada süreç
-                        kalmadı; gerçek pnp.db / .lck / backups / config / ~/.local/state aynı
-değişen dosyalar      : üretim — yeni commonMain/domain/diagnostics/ObservedReadings.kt;
-                        ImportFailure(+COULD_NOT_SAVE), ImportDraftStore, ImportScreenState(+NotSaved),
-                        ImportController, ImportScreen, ImportTexts, GameTableScreenState(+Failed),
-                        GameTableController, GameTableScreen, ColorCatalogueState(+Failed),
-                        ColorCatalogueController, ColorCatalogueScreen, PoolController, PoolScreen,
-                        MigrationSnapshotSet(+FOLDERS_NOT_CREATED), StartupErrorScreen,
-                        AppDirectoryInitializer, Main.kt, Strings.kt, strings.xml
-                        test — değişen ImportDraftStoreTest (ham SQLiteException yerine tipli ret);
-                        yeni DraftSaveRefusalTest, UnreadableReadingsTest,
-                        StartupFolderRefusalTest, ReadingRefusalSurfaceTest, RefusingSources,
-                        ui/UnreadableScreensTest; değişen DiagnosticOwnershipTest,
-                        DiagnosticSurfaceTest, UnexpectedFailureRecordsTest (havuz kusuru testi
-                        bilinçli olarak çevrildi), StartupErrorScreenTest;
-                        KALDIRILAN UntypedFailureMeasurementTest
+                        3675 test / 0 failure / 0 error / 0 skipped (266 sınıf), 8 dk 3 sn;
+                        bellek öldürmesi yok (en düşük boş bellek ~1,6 GiB); cihaz o sırada
+                        prizdeydi — başarı koşulu DEĞİL, aşağıdaki kota koşusu bunu gösterir
+                        [62e36a0: 3660 / 265 → +15 test, +1 sınıf: SafeWindowCloserTest 13,
+                         UnreadableReadingsTest +2 (IllegalArgumentException, Error);
+                         QueuedDiagnosticsTest 8 ve DiagnosticLogProcessTest 3 sayıca aynı,
+                         olay tabanlı hâle getirildi (iki kapanış testi daha güçlü iki testle
+                         değiştirildi, eski iddiaların hepsi duruyor)]
+tam koşu geçmişi      : (1) 3675/0, 7 dk 5 sn; (2) SafeWindowCloserTest'in test verisindeki makine adı
+                        ve masaüstünden alınmış pencere kimlikleri nötr değerlerle değiştirildikten
+                        sonra: testler 3675/0 ama ktlint bir satırı 140 karakter üstünde buldu →
+                        satır bölündü; (3) yukarıdaki satır
+kota koşusu           : (1)'deki ağaçla, yani yalnız test verisi sabitleri farklıyken: bütün test paketi (./gradlew desktopTest --rerun) yalnız kendi Gradle
+                        sürecine systemd-run CPUQuota=%100 (tek çekirdek) verilerek → BUILD
+                        SUCCESSFUL, 3675 / 0 / 0 / 0 (266 sınıf), 5 dk; sistem güç ayarına
+                        dokunulmadı
+dar koşular           : QueuedDiagnosticsTest + DiagnosticLogProcessTest + DiagnosticLogSinkTest +
+                        UnreadableReadingsTest + SafeWindowCloserTest = 55 test; normal ×3,
+                        CPUQuota %100, %50, %25 → her seferinde 55/55 (%25'te süreç testi 65 sn).
+                        Kontrol: değişikliksiz 62e36a0 aynı %50 kotada 3 test düşürdü
+                        ("unexpected 0 lines", 201 yerine 200 EXPORT, 16.000 yerine 8.043)
+smoke                 : ./gradlew desktopWindowSmoke — geçici XDG_DATA/CONFIG/STATE_HOME ve
+                        java.io.tmpdir; uygulama süreç 18492; pencere 0x00400007 (süreç 18492,
+                        başlık tam "PnP Üretim Takipçisi") SafeWindowCloser ile seçildi ve
+                        YALNIZ ona kapatma isteği gitti; çıkış 0; geçici veri dizini
+                        [backups, pnp-baslangic.lock, pnp.db, pnp.db.lck], -wal/-shm yok;
+                        state boş; çıktıda exception 0; arkada süreç 0; geçici dizin silindi;
+                        kullanıcının pencere listesi (id + süreç) öncesi/sonrası birebir aynı;
+                        gerçek pnp.db / .lck / backups / config / ~/.local/state aynı
+değişen dosyalar      : test — DiagnosticLogTestSupport (FaultyLogFileSystem olayları),
+                        QueuedDiagnosticsTest, DiagnosticLogProcessTest, DiagnosticLogWriterProcess,
+                        UnreadableReadingsTest; yeni platform/desktop/DesktopWindows.kt,
+                        SafeWindowCloserTest, DesktopWindowSmoke.kt
+                        build — app/build.gradle.kts: desktopWindowSmoke görevi (check'e bağlı
+                        değil; bağımlılık DEĞİŞMEDİ)
                         PNP_MASTER_CONTEXT.md
 PLAN.md               : bu commit'te DEĞİŞMEDİ (180ff640…)
 ```
 
-**Bu commit Faz 3 / İş 10'un üçüncü dilimidir.** Sözleşme PLAN `14.7.6`;
-kapsam Dilim 2'nin ölçtüğü beş tipsiz kaçıştır ve yalnız odur. Beş yolun önceki
-ve yeni davranışı, Türkçe cümleleri, kayıt sahipliği ve toparlanma modeli §25.4
-"İş 10 / Dilim 3'te uygulanan hâli"dedir. Yeni olay kodu eklenmedi; kullanıcı
-artık asılı kalan bir ekran, sahte bir boş liste ya da maskelenmiş bir kusur
-görmüyor.
+**Bu commit bir stabilizasyon turudur, dilim değildir.** İş 10 / Dilim 3'ün
+doğrulama altyapısındaki iki kararsızlık kapandı — CPU hızına bağlı tanılama süreç
+testi ve pencereyi kısmi başlıkla seçen smoke — ve üç okuma yolunun
+`IllegalArgumentException`/`Error` sınırları testle çivilendi. Ayrıntı §25.4
+"Stabilizasyon turu". Sıradaki bağlayıcı kod dilimi hâlâ İş 10 / Dilim 4'tür.
+
+**Bir önceki commit (`62e36a0`) İş 10 / Dilim 3'tü:** Dilim 2'nin ölçtüğü beş
+tipsiz kaçış tipli Türkçe sonuçlara çevrildi (§25.4 "İş 10 / Dilim 3'te uygulanan
+hâli"). O günkü tam koşu 3660 / 0 / 0 / 0 (265 sınıf) ancak prizde alınabilmişti;
+pildeki kırmızı koşu bu turun konusudur.
 
 **Bir önceki commit (`e808104`) İş 10 / Dilim 2'ydi:** PLAN `14.7.2`'nin olay
 matrisi üretime bağlandı ve tipsiz kaçışlar ölçüldü (§25.4).
@@ -1100,7 +1107,8 @@ Açılış hata ekranı         StartupErrorScreen (2×, sızıntı, çıkış e
 Programatik masaüstü smoke: `XDG_DATA_HOME`/`XDG_CONFIG_HOME` geçici bir dizine
 yönlendirilerek `./gradlew --no-daemon run`; pencere açıldı, DB ve kilit geçici
 dizinde oluştu, `wmctrl -i -c` ile kapatıldı, çıkış 0, `-wal`/`-shm` kalmadı,
-log'da exception yok; dizin silindi. Gerçek pencerede el ile klavye turu
+log'da exception yok; dizin silindi. *(Bugün pencere yalnız `SafeWindowCloser` /
+`./gradlew desktopWindowSmoke` ile kapatılır; §30.)* Gerçek pencerede el ile klavye turu
 yapılmadı (kullanıcı başında değildi; ekran görüntüsü alınmadı).
 
 # 18. KİMLİK VE OFFLINE-FIRST
@@ -4207,6 +4215,11 @@ SIGKILL            tutan süreç öldürülür → OS kilidi bırakır → test 
                    yazar; öldürülenin satırı ve yenisi ayrıştırılır; kilit dosyası durur
 ```
 
+*(Tarihsel: "201 + 500" ve "3.000'er" satır beklentileri kapanışın 500 ms'sinde o
+kadar satırın diske inmesine güveniyordu ve yavaş CPU'da düşüyordu. Stabilizasyon
+turunda olay tabanlı protokole çevrildi; bugünkü hâli aşağıda "Stabilizasyon
+turu"ndadır.)*
+
 ### Testler
 
 ```text
@@ -4224,6 +4237,8 @@ QueuedDiagnosticsTest                            8  sıra, 8 iş parçacığı �
                                                     kapanır ve worker ölür, hatalı disk döngü
                                                     kurmaz, bozuk saat, kullanılmayan yazıcı
                                                     dizin açmaz; her testten sonra worker yok
+                                                    (stabilizasyon turunda olay tabanlı hâle
+                                                    getirildi; "Stabilizasyon turu")
 DiagnosticSurfaceTest                            4  API tipleri, kayıt Throwable tutmaz,
                                                     message/stack taraması, üretimde yalnız
                                                     Main kullanır ve record ÇAĞIRMAZ
@@ -4523,8 +4538,12 @@ editör listesi    tablo/havuz kataloğu reddedilirse ELİNDEKİ renkler kalır;
 ```text
 SQLiteException        tipli sonuç + TEK kayıt
 IllegalStateException  AYNEN yükselir, kaydedilmez  (üç akışta da testli)
-IllegalArgumentException / NullPointerException   aynı
-Error                  yakalanmaz
+IllegalArgumentException  AYNEN yükselir, Failed OLMAZ, kaydedilmez (üç akış + seam'in
+                       kendisi; stabilizasyon turunda ayrı testle çivilendi)
+NullPointerException   aynı (katalog akışında testli)
+Error                  yakalanmaz, dönüştürülmez, kaydedilmez: testin kendi Error alt
+                       türü AYNI nesne olarak yükselir, üç ekran Loading'de kalır ve
+                       seam'in `refused` cevabı hiç çağrılmaz (stabilizasyon turu)
 CancellationException  AYNEN yükselir, kaydedilmez — ekranı kapatmak hata değildir
 ```
 
@@ -4593,6 +4612,161 @@ transaction veya atomiklik değişikliği           YOK (taslak kaydı hâlâ te
 R12, R13, R14                                    Dilim 4–8
 ```
 
+## Stabilizasyon turu  *(İş 10 / Dilim 3 sonrası — `test(desktop): make process and window checks deterministic`)*
+
+Dilim değil; Dilim 4'ten önce doğrulama altyapısındaki iki kararsızlık kapatıldı
+ve iki eksik hata sınırı testi eklendi. **Üretim kodu değişmedi**; Room şeması,
+migration, PLAN, fixture ve bağımlılıklar aynı.
+
+### Hız bağımsız hâle getirilen invariant
+
+Eski testler sözleşmeyi değil makineyi ölçüyordu: "close() dönünce 3.000 (ya da
+201 + 500, ya da 16.000) satır diskte olmalı". PLAN `14.7.1`'in söylediği ise
+kuyruğun kapanışta **en fazla 500 ms** bekleneceğidir; o sürede kaç satırın
+yazılacağı donanıma, güç ayarına ve yüke bağlıdır. Geçerli invariant:
+
+```text
+1  diske inen her satır BÜTÜN ve tek başına ayrıştırılabilir; dosya \n ile biter
+2  bir sürecin satırları seq 1, 2, 3 … BOŞLUKSUZ bir önektir: kapanışın yetişemediği
+   kayıtlar SONDAN eksiktir, ortadan asla (ortadaki boşluk = düşürülmüş kayıt)
+3  dosyadaki satırlar, yazan sürecin kendi disk çağrılarıyla yazdığını söylediği
+   satırların TAM kendisidir (ne eksik ne fazla)
+4  kilidi alamayan süreç 0 satır yazar; kilidi tutan varken ikinci süreç yazamaz
+5  close() tanımlı üst sınırda döner (iki × 500 ms; test 1.500 ms ile bakar),
+   işçi iş parçacığı biter, dosya ve kilit bırakılır; sonraki süreç/sink aynı
+   kilidi alıp yazar
+6  süre dolduğu için bırakılan kayıtlar DÜŞÜRME SAYACINA GİRMEZ ve
+   diagnostics.records_dropped yazılmaz: rapor "yer açıldığında" yazılır, kapanışta
+   o an yoktur; kayıp dosyanın SONUNDAKİ eksiktir (PLAN 14.7.1'in 500 ms ve süreç
+   öldürme hükümleriyle aynı sınıf). Bu, ölçülmüş mevcut davranıştır; değişmedi
+7  normal (hızlı disk) kapanışta kuyrukta bekleyen küçük ve belirli bir küme
+   eksiksiz yazılır
+```
+
+### 3.000 satır varsayımının yerine geçen mekanizma
+
+```text
+FaultyLogFileSystem       awaitLines(n) — sonraki n satır diske inene kadar bekler
+(test çifti, üretimde     awaitLineWith(metin) — o metni taşıyan satıra kadar bekler
+ kanca YOK)               appendsBeforeGate + appendGate — ilk k yazma geçer, (k+1).
+                            yazma kapıda TUTULUR; awaitHeldAtGate() işçinin orada
+                            olduğunu bildirir
+                          awaitFirstLineOrRefusal() — ilk satır diskte (true) ya da
+                            kilit başka süreçte (false); linesWritten sayacı
+                          bekleme sınırları (300 sn) ölçüm DEĞİL: hiç gelmeyen olay
+                            testi asmak yerine düşürsün diye
+QueuedDiagnosticsTest     sıra / 8 × 2.000 / saat / dolu kuyruk testleri close()'u
+                          ancak satırlar diske İNDİKTEN sonra çağırır → kapanışın
+                          flush kapasitesi ölçülmez
+                          normal kapanış: işçi 1. yazmada kapıda, 9 kayıt kuyrukta;
+                          close() ayrı iş parçacığında başlar (join'de TIMED_WAITING
+                          görülür), kapı açılır → 10 satır seq 1…10, close ≤ 1.500 ms,
+                          işçi yok, sonraki sink kilidi alır
+                          süre dolan kapanış: 3 satır geçer, 4. yazma sonsuza kadar
+                          tutulur → close ≤ 1.500 ms, işçi biter, dosyada yalnız seq
+                          1,2,3 bütün satırlar, records_dropped YOK, dosya \n ile biter,
+                          sonraki sink kilidi alır
+DiagnosticLogWriterProcess her adımı olduktan SONRA söyler: HELD/REFUSED, WROTE/REFUSED
+(ikinci süreç protokolü)   (ilk kayıt diskte ya da kilit reddedildi), stdin'de "go"
+                          bekler, sonra patlama + close, en sonda DONE <kendi disk
+                          çağrılarıyla yazdığı satır sayısı>
+DiagnosticLogProcessTest  iki süreç de CANLIYKEN kilidi dener → tam biri WROTE, öbürü
+                          REFUSED (kesin); ikisi aynı anda patlar; reddedilen 0 satır,
+                          yazanın DONE sayısı = dosyadaki satırlar = seq 1…n; sonra
+                          üçüncü süreç aynı kilidi alıp yazar. Tutan+ikinci testinde
+                          beklenen "201 + 500" yerine tutanın ve üçüncünün kendi
+                          sayıları (tutanın elle yazdığı ilk satır seq 0, kuyruğu 1'den)
+```
+
+Kalan tek zaman bağımlılığı sözleşmenin kendi üst sınırıdır (close ≤ 1.500 ms) ve
+normal kapanış testinde kapı açıldıktan sonra 10 küçük satırın bu sınır içinde
+yazılmasıdır — sabit ve küçük bir iş, makinenin kapasitesi değil. `RecordingCostTest`
+(8), `DiagnosticsSmokeTest` (2) ve `StartupFolderRefusalTest` (1) da kapanışla
+küçük sabit kümeler yazar; aynı sınıftadır ve değişmedi.
+
+**Ölçüm (bu turda):** cgroup CPU kotası YALNIZ kendi Gradle sürecine verildi
+(`systemd-run --user --scope -p CPUQuota=…`; sistem güç ayarına dokunulmadı).
+Dar küme (QueuedDiagnosticsTest 8, DiagnosticLogProcessTest 3, DiagnosticLogSinkTest
+17, UnreadableReadingsTest 14, SafeWindowCloserTest 13 = 55 test) normal ×3,
+%100, %50 ve %25 kotada 55/55 geçti (%25'te süreç testi 65 sn sürdü). Kontrol:
+DEĞİŞİKLİKSİZ HEAD (`62e36a0`, geçici worktree) aynı %50 kotada üç test
+düşürdü — "unexpected 0 lines", 201 yerine 200 EXPORT satırı ve 16.000 yerine
+8.043 satır. Yani kota eski kusuru yeniden üretiyor, yeni mekanizma üretmiyor.
+
+**Üretimde değişiklik yok:** sözleşmeye aykırı ölçülmüş bir hata bulunmadı. Kod
+okumasıyla görülen dar bir kapanış yarışı "Açık sınırlar"a yazıldı.
+
+### Güvenli pencere seçimi
+
+Dilim 3 smoke'unun betiği pencereyi `wmctrl -l | grep -i PNP` ile arıyordu ve
+kullanıcının başlığında "PnP" geçen BAŞKA bir programın penceresine bir kez
+kapatma isteği gönderdi (pencere kapanmadı). Tarama: repoda pencere aracı kullanan
+**hiçbir** betik/kod yoktu; o betik oturumun geçici dizinindeydi ve bu turda
+kullanılmadı. Kalıcı yol artık tek yardımcıdır:
+
+```text
+desktopTest/…/platform/desktop/DesktopWindows.kt
+  SafeWindowCloser(commands, belongsToRun)
+    find(title)   wmctrl -l -p → WindowChoice: One / None / Several / Untrustworthy
+    close(title)  1 seç   TAM başlık (kısmi, büyük/küçük harf farkı, baştaki boşluk
+                          YOK) + _NET_WM_PID başlatılan sürecin AĞACINDA
+                          (isInProcessTree: ProcessHandle ebeveyn zinciri)
+                  2 hemen önce  yeni listeden AYNI One + xprop -id <id> _NET_WM_PID
+                          aynı süreç
+                  3 gönder  wmctrl -i -c <id> — yalnız bu
+    listeye güvenilmez  bir satır pencere olarak okunmuyorsa (başlıktaki satır sonu
+                  sahte satır üretir) ya da bir id iki kez geçiyorsa HİÇBİR ŞEY yapılmaz
+    komut         SystemCommands: ProcessBuilder(argv), kabuk YOK; argv yalnız sabitler
+                  ve 0x[0-9a-f]{1,8} biçimli doğrulanmış id; başlık hiçbir komuta girmez
+    ret mesajı    yalnız id, süreç kimliği ve sayılar — başka programın başlığı YOK
+desktopTest/…/platform/desktop/DesktopWindowSmoke.kt  (./gradlew desktopWindowSmoke)
+  uygulamayı bu derlemeden DOĞRUDAN kendi süreci olarak başlatır (java -cp … MainKt),
+  XDG_DATA/CONFIG/STATE_HOME ve java.io.tmpdir geçici; "PnP Üretim Takipçisi"
+  penceresini yukarıdaki yardımcıyla kapatır; çıkış 0, geçici veri dizininde pnp.db,
+  -wal/-shm yok, state boş, çıktıda exception yok, gerçek dosyalar aynı, arkada süreç
+  yok, kendi geçici dizinini (yalnız tam o yolu) siler. Pencere güvenle seçilemezse
+  hiçbir pencereye istek gitmez; uygulama KENDİ süreci olarak durdurulur ve smoke düşer
+app/build.gradle.kts  desktopWindowSmoke: JavaExec, desktopTest çıktısı + çalışma
+  zamanı sınıf yolu; `check`'e BAĞLI DEĞİL (ekran ister, pencere açar)
+```
+
+AWT'nin `_NET_WM_PID`'i gerçekten kendi süreç kimliğiyle yazdığı bu makinede
+ölçüldü (kendi kendini kapatan deneme penceresi; başka pencereye eylem yok).
+
+`SafeWindowCloserTest` (13): kısmi başlıklı ilgisiz pencere (o olayın başlığı
+biçiminde uydurma bir başlık dâhil; gerçek başlık repoya yazılmadı) ve aynı sürecin başka başlıklı penceresi seçilmez · doğru
+süreç + tam başlıklı tek pencere seçilir ve yalnız o kapatılır · aynı başlıklı başka
+süreç (kullanıcının açık kopyası) seçilmez · sıfır ve birden fazla aday reddedilir,
+hiçbir istek gitmez · seçimle kapatma arasında el değiştiren/kaybolan pencere ve
+kendi süreç kimliği tutmayan pencere kapatılmaz · başlıktaki `"; wmctrl -c …`,
+`$(…)`, ters tırnak, `&&`, `|`, tırnak komuta dönüşmez, komutlara yalnız sabitler ve
+doğrulanmış id girer · satır sonuyla sahte satır üreten başlık (yeni id / gerçek id
+tekrarı / okunmayan satır) güvenilmez sayılır · biçimsiz id/pid listeyi okunmaz
+yapar · ret mesajı başka programın başlığını taşımaz · süreç ağacı ilişkisi gerçek
+ProcessHandle ile · smoke'un aradığı başlık `strings.xml`'deki gerçek başlıktır ·
+**kaynak taraması:** repodaki bütün .kt/.kts/.sh/.py/.java/.gradle dosyalarında
+wmctrl/xdotool/xprop/xkill/_NET_WM geçen tek dosyalar yardımcının kendisi ve testidir;
+yardımcıda tek kapatma isteği vardır ve id iledir (`-F`, `-a`, `-r`, `:ACTIVE:`,
+xdotool, kabuk YOK).
+
+**Bu turun gerçek masaüstü smoke'u** (`./gradlew desktopWindowSmoke`, geçici XDG):
+uygulama süreç 18492 olarak açıldı; `0x00400007` penceresi (süreç 18492, başlık tam
+"PnP Üretim Takipçisi") seçildi, kapatma isteği yalnız ona gitti; çıkış kodu 0;
+geçici veri dizini `[backups, pnp-baslangic.lock, pnp.db, pnp.db.lck]` (-wal/-shm
+yok); state boş; çıktıda exception 0; arkada süreç 0; geçici dizin silindi.
+Kullanıcının dört penceresinin id + süreç listesi öncesi/sonrası birebir aynı;
+gerçek pnp.db / .lck / backups / config / ~/.local/state aynı.
+
+### Eklenen hata sınırı testleri
+
+`UnreadableReadingsTest` +2 (12 → 14): üç okuma yolunda (oyun tablosu, renk
+kataloğu, havuz) ve ortak seam'in (`answeringStorageRefusal`) kendisinde
+`IllegalArgumentException` AYNI nesne olarak yükselir, ekranlar `Loading`'de kalır
+(tipli "okunamadı" OLMAZ), seam'in `refused` cevabı çağrılmaz ve kayıt 0; testin
+kendi `Error` alt türü (`ReaderBroke`) için de aynısı — yakalanmaz, dönüştürülmez,
+kaydedilmez. Mevcut `IllegalStateException`, `NullPointerException` ve
+`CancellationException` testleri korundu. Üretimde `Throwable`/`Error` yakalayan
+kod eklenmedi.
 
 ## Açık sınırlar ve karar bekleyenler
 
@@ -4605,12 +4779,17 @@ R14 D6/D7, C*, RB* canlı çözüm    uygulama içinden yok; zararsız tutulur
 R15 tek kopya politikası          ayrı ürün kararı; İş 10 değiştirmez
 beklenmeyen hata davranışı        ölçülmedi; Dilim 2 ölçer ve korur; değiştirmek ayrı karar
 Compose pencere hata handler'ı    1.11.1'de kullanılabilirliği Dilim 2'de doğrulanır
-DiagnosticLogProcessTest zamanlaması  "iki süreç aynı anda" testi 3000 satırın close()'un 500 ms'lik
-                                  boşaltma süresinde bitmesine güveniyor; pilde/powersave'de
-                                  bitmiyor ve test düşüyor (Dilim 3'te ölçüldü: HEAD'de de aynı).
-                                  Kod davranışı sözleşmeye uygun; testin varsayımı ayrı bir
-                                  düzeltme ister. Tam koşu prizde koşulmalıdır
+DiagnosticLogSink kapanış yarışı  KOD OKUMASI, ölçülmedi, düzeltilmedi: süre dolan close() sink'i
+                                  işçinin ALTINDAN kapatırken işçi tam o anda isDisabled denetimini
+                                  geçmişse bir satırı yeniden açılmış bir kanala, kilit bırakılmış
+                                  olarak yazabilir (satır yine bütündür; dosya/kilit son sink.close()
+                                  ile bırakılır). Pencere birkaç komut genişliğinde; ancak kapanış
+                                  süresi dolduğunda açılır. Kanıtlanmış bir hata olmadığı için üretim
+                                  değişmedi; ayrı karar
 ```
+
+(`DiagnosticLogProcessTest` zamanlaması artık açık sınır değildir: stabilizasyon
+turunda kapandı, aşağıda.)
 
 ---
 
@@ -4786,9 +4965,22 @@ LogHome (desktopTest)                   geçici state evi + gerçek XDG konumlar
                                         açılmadan öncesi/sonrası karşılaştırması
 FaultyLogFileSystem (desktopTest)       log dosya sistemi arayüzünün önüne konan,
                                         seçilen işlemi IOException / bozuk kod ile
-                                        düşüren veya eklemeyi bekleten çift
+                                        düşüren veya eklemeyi bekleten çift; ayrıca
+                                        diske inen satırları bildirir (awaitLines,
+                                        awaitLineWith), ilk k yazmadan sonrasını
+                                        kapıda tutar (appendsBeforeGate,
+                                        awaitHeldAtGate) ve ilk satırı / kilit reddini
+                                        haber verir — işçiyle HIZ DEĞİL OLAY üzerinden
+                                        konuşmanın tek yolu
 DiagnosticLogWriterProcess (desktopTest) GERÇEK ikinci süreç: log kilidini tutar,
-                                        bekler, öldürülür ya da kayıt patlatır
+                                        bekler, öldürülür ya da kayıt patlatır; her
+                                        adımı olduktan sonra söyler (HELD/REFUSED,
+                                        WROTE/REFUSED, "go" bekler, DONE <n>)
+SafeWindowCloser (desktopTest)          masaüstünde yalnız bu çalıştırmanın penceresini
+                                        kapatan tek yol: tam başlık + süreç ağacı +
+                                        hemen önce yeniden doğrulama; kabuk yok (§25.4)
+DesktopWindowSmoke (desktopTest)        ./gradlew desktopWindowSmoke — geçici XDG ile
+                                        gerçek pencere aç/kapat; check'e bağlı değil
 ```
 
 Beş smoke turu (`BackupSmokeTest`, `BackupRestoreSmokeTest`, `RestoreSmokeTest`,
@@ -4864,7 +5056,18 @@ Gözlenen okuma reddi     oyun tablosu, renk kataloğu ve havuz akışlarında Y
                          başlatır; gelen ilk başarılı okuma hata durumunu temizler; reddedilen
                          okuma ASLA boş liste/boş tablo olarak çizilmez (görünüm ve süzgeç
                          değişimi dâhil). Üç controller'da `.catch {` ve geniş
-                         `catch (Throwable|Exception)` YOK (yapısal test)
+                         `catch (Throwable|Exception)` YOK (yapısal test).
+                         IllegalArgument ve Error için ayrı testler (stabilizasyon turu):
+                         aynı nesne yükselir, ekran Loading kalır, seam cevap vermez
+Tanılama kapanışı        diske inen her satır bütün; sürecin satırları seq 1…n boşluksuz
+                         önek (kayıp yalnız SONDA); dosyadaki satırlar = yazanın kendi
+                         disk çağrılarıyla yazdıkları; kilidi alamayan 0 satır; close()
+                         ≤ 1.500 ms, işçi biter, kilit/dosya bırakılır; süre dolan kayıt
+                         sayılmaz ve rapor satırı yazılmaz. Testler makinenin 500 ms'de
+                         kaç satır yazdığını ÖLÇMEZ (olay tabanlı; %25 CPU kotasında geçer)
+Masaüstü pencere         smoke yalnız SafeWindowCloser ile kapatır: kısmi başlık, başka
+                         süreç, sıfır/çok aday, güvenilmez liste → HİÇBİR istek; repoda
+                         başka pencere aracı kullanımı YOK (kaynak taraması)
 Açılış dizinleri         data/backups/config oluşturulamazsa StartupRefused
                          (FOLDERS_NOT_CREATED): DB ve StartupGate HİÇ açılmaz, kullanıcı
                          alanında dosya oluşmaz, uygulamanın yazdığı hiçbir cümlede MUTLAK
@@ -5063,11 +5266,23 @@ dokunmadan seri ve sınırlı koşulur:
   -Dorg.gradle.jvmargs="-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8"
 ```
 
-Dizüstü **prizde** olmalıdır: pilde (CPU `powersave`) `DiagnosticLogProcessTest`'in
-"iki süreç aynı anda" testi zamanlama yüzünden düşer (İş 10 / Dilim 3'te ölçüldü,
-değişiklik öncesi HEAD'de de aynı; §25.4 açık sınırlar).
+Tam koşunun başarısı prize, pile veya CPU governor'ına **bağlı değildir**: Dilim
+3'te pilde düşen tanılama süreç testi stabilizasyon turunda olay tabanlı yapıldı
+(§25.4 "Stabilizasyon turu"). Yavaş makineyi taklit etmek için sistem güç ayarı
+DEĞİŞTİRİLMEZ; yalnız kendi Gradle süreci kısıtlanır:
 
-Manuel tur:
+```bash
+systemd-run --user --scope -p CPUQuota=25% --quiet -- ./gradlew desktopTest --rerun \
+  --no-daemon --no-parallel --max-workers=1 --tests '<sınıf>' …
+```
+
+Masaüstü smoke (gerçek pencere, geçici XDG, yalnız kendi penceresini kapatır):
+
+```bash
+./gradlew desktopWindowSmoke --no-daemon
+```
+
+Farklı bir senaryo için elle tur (örneğin yazılamaz bir veri dizini):
 
 ```bash
 XDG_DATA_HOME=/tmp/<gecici>/data XDG_CONFIG_HOME=/tmp/<gecici>/config \
@@ -5077,9 +5292,16 @@ XDG_STATE_HOME=/tmp/<gecici>/state ./gradlew --no-daemon run
 UI smoke listesi: açılış, gezinme, tema, klavye, dar pencere, normal kapanış,
 arkada process kalmaması.
 
-Manuel turda pencere kapatmak için `wmctrl -i -c` veya gerçek pencere düğmesi
-kullanılır; `xdotool windowclose` kullanılmaz. Ekran kilitliyken otomasyon
-başlatılmaz; masaüstü veya kilit ekranı yakalanmaz; parola alanına tuş gönderilmez.
+**Pencere kapatma kuralı:** pencere başlığının bir parçasıyla (`grep PNP`, `-c
+<başlık>`, `-a`, `:ACTIVE:`) hiçbir pencereye istek GÖNDERİLMEZ — Dilim 3'te böyle
+bir arama kullanıcının başka bir penceresine kapatma isteği gönderdi. Tek yol
+`SafeWindowCloser`'dır (desktopTest): tam başlık + `_NET_WM_PID` başlatılan sürecin
+ağacında + kapatmadan hemen önce yeni liste ve `xprop -id` ile yeniden doğrulama +
+`wmctrl -i -c <doğrulanmış id>`; sıfır/çok aday ya da güvenilmez listede istek
+gitmez ve smoke düşer. Elle turda da pencere ya gerçek pencere düğmesiyle ya bu
+yardımcıyla kapatılır; `xdotool windowclose` kullanılmaz. Ekran kilitliyken
+otomasyon başlatılmaz; masaüstü veya kilit ekranı yakalanmaz; parola alanına tuş
+gönderilmez.
 
 ---
 
@@ -5171,7 +5393,10 @@ PLAN `18.` — Faz 3 işler listesi.
                                               8 dilimden 3'ü: kayıt dosyası + yazıcı,
                                               tipli sınırların kayda bağlanması,
                                               tipsiz kaçan depolama/dizin hatalarının
-                                              tipli Türkçe sonuçlara çevrilmesi)
+                                              tipli Türkçe sonuçlara çevrilmesi;
+                                              ardından bir stabilizasyon turu:
+                                              olay tabanlı tanılama testleri +
+                                              güvenli pencere kapatma)
 11  Self-contained Linux dağıtımı ....................... YAPILMADI
 12  Garuda/Arch paketi .................................. YAPILMADI
 13  Temiz Garuda ortamında kurulum testi ................ YAPILMADI
@@ -5240,6 +5465,12 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
 > şartının korunması; `batchesWithFingerprint` ve `allBatches` sırasına `id`
 > eklenmesi; rotation'ın az önce yazılanı fazlalık saymaması (`14.4.11`).
 > Zaman damgası DÜZELTİLMEZ, epoch aynen taşınır.
+>
+> Stabilizasyon turu bitti (`test(desktop): make process and window checks
+> deterministic`, üretim kodu değişmedi): tanılama testleri olay tabanlı, tam koşu
+> prize bağlı değil; masaüstü smoke yalnız `SafeWindowCloser` ile kendi penceresini
+> kapatıyor; üç okuma yolunun IllegalArgument ve Error sınırları testli (§25.4
+> "Stabilizasyon turu"). Dilim 4'e bu turda geçilmedi.
 >
 > Dilim 3 bitti: Dilim 2'nin ölçtüğü beş tipsiz kaçışın beşi de tipli Türkçe
 > sonuca çevrildi (§25.4 "İş 10 / Dilim 3'te uygulanan hâli"). Yeni olay kodu
@@ -5889,6 +6120,16 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   İŞ 9 TAMAMLANDI: kabul makineden bağımsızdır (doğru sonuç, 42/1.000+ aynı ifade
   yapısı, N+1 yok, arama/süzgeç 0 ifade, tekrarda aynı sonuç); süre/bellek EŞİK
   EKLEME, yalnız ortamla kayıt; aynı yöntemde 2 kat kötüleşmeyi raporla.
+- İŞ 10 STABİLİZASYON TURU BİTTİ (Dilim 3 ile 4 arası; üretim kodu değişmedi):
+  tanılama testinde "close() dönünce N satır diskte" GİBİ HIZ VARSAYIMI YAZMA —
+  işçiyle FaultyLogFileSystem'in olaylarıyla konuş (awaitLines, awaitLineWith,
+  appendsBeforeGate/awaitHeldAtGate, awaitFirstLineOrRefusal); süreç testleri
+  yalnız süreç/kilit/JSONL bütünlüğünü ölçer. Kapanış sınırını (500 ms) testi
+  geçirmek için BÜYÜTME. Masaüstünde pencereye kısmi başlıkla (grep, -c <başlık>,
+  :ACTIVE:) ASLA istek gönderme; tek yol SafeWindowCloser / ./gradlew
+  desktopWindowSmoke. Yavaş makine için sistem güç ayarını DEĞİŞTİRME, kendi
+  Gradle sürecine systemd-run CPUQuota ver. Kullanıcının masaüstünden alınan
+  pencere başlıkları repoya YAZILMAZ.
 - İŞ 10 / DİLİM 3 BİTTİ: Dilim 2'nin ÖLÇTÜĞÜ beş tipsiz kaçış tiplendi (taslak
   kaydı, oyun tablosu okuması, renk kataloğu okuması, havuz okuması, açılış
   dizinleri). Kuralı bozma: gözlenen bir okumada YALNIZ SQLiteException cevaplanır
@@ -6122,6 +6363,7 @@ Her dilim sonunda:
 [ ] UI regresyonu yok; gezinme ve tema çalışıyor
 [ ] Dar pencerede taşma yok
 [ ] Normal kapanış; arkada process kalmadı (./gradlew --stop)
+[ ] Pencere yalnız SafeWindowCloser ile kapatıldı; kullanıcının pencere listesi aynı
 [ ] Gerçek DB hash + boyut + mtime önce/sonra aynı
 [ ] Gerçek $XDG_STATE_HOME/pnp-tracker (logs) önce/sonra aynı (İş 10 sonrası)
 [ ] Üretilen kayıt satırlarında kullanıcı metni, dosya adı, yol, UUID, SQL, mesaj yok
@@ -6214,6 +6456,10 @@ oyun tablosu, renk kataloğu ve havuz okunamadığında kullanıcı boş bir lis
 oluşturamazsa veritabanına hiç dokunmadan, hiçbir yol göstermeden Türkçe bir
 açılış ekranı açıyor. Aynı dilimde havuzun her `Throwable`'ı yutan yakalaması
 kaldırıldı: bir programlama hatası artık depolama sorunu gibi görünmüyor.
+Ardından gelen stabilizasyon turu doğrulamanın kendisini sağlamlaştırdı: tanılama
+testleri artık makinenin hızını değil sözleşmeyi ölçüyor, tam koşu prizde olmayı
+gerektirmiyor, ve masaüstü smoke'u yalnız kendi başlattığı sürecin, tam başlıklı
+ve kapatmadan hemen önce yeniden doğrulanmış penceresini kapatıyor.
 Sıradaki bağlayıcı kod dilimi İş 10 / Dilim 4'tür.
 
 Bunların ilki — **sürümlü JSON yedek ve geri yükleme** — dört atomik dilimde

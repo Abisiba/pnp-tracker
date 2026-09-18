@@ -21,6 +21,7 @@ import dev.pnptracker.data.repository.TaskProgressStore
 import dev.pnptracker.domain.diagnostics.DiagnosticArea
 import dev.pnptracker.domain.diagnostics.DiagnosticEvent
 import dev.pnptracker.domain.diagnostics.Diagnostics
+import dev.pnptracker.domain.diagnostics.answeringStorageRefusal
 import dev.pnptracker.domain.games.GameTableView
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.ui.feature.colors.ColorCatalogueController
@@ -32,6 +33,8 @@ import dev.pnptracker.ui.feature.pools.PoolController
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -42,7 +45,9 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
@@ -322,6 +327,63 @@ class UnreadableReadingsTest {
 
             assertEquals(emptyList(), diagnostics.records.map { it.event.code })
         }
+
+    @Test
+    fun `an illegal argument in any of the three rises unmasked, is not called unreadable and is not recorded`() =
+        runBlocking {
+            val defect = IllegalArgumentException("a quantity of -3 reached the reader")
+            val table = tableController(table = RefusingTable(defect))
+            val catalogue = ColorCatalogueController(RefusingCatalogue(defect), diagnostics)
+            val pool = poolController(pools = RefusingPool(defect))
+
+            assertSame(defect, assertFailsWith<IllegalArgumentException> { table.observeTable() })
+            assertSame(defect, assertFailsWith<IllegalArgumentException> { catalogue.observeColors() })
+            assertSame(defect, assertFailsWith<IllegalArgumentException> { pool.observePool() })
+            var refused = false
+            assertSame(
+                defect,
+                assertFailsWith<IllegalArgumentException> {
+                    flow<Unit> { throw defect }.answeringStorageRefusal(DiagnosticArea.POOLS, diagnostics) { refused = true }.collect()
+                },
+            )
+
+            // A defect is not a database that would not answer: no screen says so,
+            // and nothing is filed as one.
+            assertEquals(GameTableRowsState.Loading, table.state.rows)
+            assertEquals(ColorCatalogueState.Loading, catalogue.state.catalogue)
+            assertEquals(PoolContentState.Loading, pool.state.content)
+            assertFalse(refused, "the shared helper answered a defect as a refusal")
+            assertEquals(emptyList(), diagnostics.records.map { it.event.code }, "a defect was filed as a storage problem")
+        }
+
+    @Test
+    fun `an Error in any of the three is not caught, not turned into anything and not recorded`() =
+        runBlocking {
+            val broken = ReaderBroke()
+            val table = tableController(table = RefusingTable(broken))
+            val catalogue = ColorCatalogueController(RefusingCatalogue(broken), diagnostics)
+            val pool = poolController(pools = RefusingPool(broken))
+
+            assertSame(broken, assertFailsWith<ReaderBroke> { table.observeTable() })
+            assertSame(broken, assertFailsWith<ReaderBroke> { catalogue.observeColors() })
+            assertSame(broken, assertFailsWith<ReaderBroke> { pool.observePool() })
+            var refused = false
+            assertSame(
+                broken,
+                assertFailsWith<ReaderBroke> {
+                    flow<Unit> { throw broken }.answeringStorageRefusal(DiagnosticArea.COLORS, diagnostics) { refused = true }.collect()
+                },
+            )
+
+            assertEquals(GameTableRowsState.Loading, table.state.rows)
+            assertEquals(ColorCatalogueState.Loading, catalogue.state.catalogue)
+            assertEquals(PoolContentState.Loading, pool.state.content)
+            assertFalse(refused, "the shared helper answered an Error as a refusal")
+            assertEquals(emptyList(), diagnostics.records.map { it.event.code }, "an Error was filed as a storage problem")
+        }
+
+    /** An `Error` of the test's own: whatever rises is this very object, or something caught it. */
+    private class ReaderBroke : Error("the reader is broken beyond a database refusing")
 
     @Test
     fun `a cancellation rises and is never recorded`() =

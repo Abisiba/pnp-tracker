@@ -9,6 +9,7 @@ import kotlinx.serialization.json.long
 import java.nio.file.Files
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CyclicBarrier
+import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -22,6 +23,12 @@ import kotlin.time.Instant
  * The queue half of PLAN 14.7.1: a caller that never waits for a disk, one
  * worker that owns the file, sequence numbers that say what was lost, and a
  * shutdown that writes what it can and lets go of everything.
+ *
+ * None of these asks how many lines this machine can write in 500 ms. Where a
+ * test needs the worker to have written something it waits for the lines to
+ * reach the disk ([FaultyLogFileSystem.awaitLines]); where it needs the worker
+ * held still it holds it at a gate. The only clock left is the shutdown bound
+ * itself, and that is checked from above — close may never take longer.
  */
 class QueuedDiagnosticsTest {
     private val home = LogHome()
@@ -45,8 +52,10 @@ class QueuedDiagnosticsTest {
 
     @Test
     fun `records reach the file in order, numbered from one, with the build's version and schema`() {
-        val diagnostics = QueuedDiagnostics(home.sink(), testApp, StoppedClock)
+        val disk = FaultyLogFileSystem(home.fileSystem())
+        val diagnostics = QueuedDiagnostics(home.sink(disk), testApp, StoppedClock)
         repeat(10) { diagnostics.record(anError()) }
+        disk.awaitLines(10)
         diagnostics.close()
 
         val written = lines()
@@ -63,7 +72,8 @@ class QueuedDiagnosticsTest {
     fun `many threads at once never interleave a line and never lose a number`() {
         val threads = 8
         val each = 2_000
-        val diagnostics = QueuedDiagnostics(home.sink(), testApp, capacity = threads * each)
+        val disk = FaultyLogFileSystem(home.fileSystem())
+        val diagnostics = QueuedDiagnostics(home.sink(disk), testApp, capacity = threads * each)
         val start = CyclicBarrier(threads)
 
         (0 until threads)
@@ -73,6 +83,9 @@ class QueuedDiagnosticsTest {
                     repeat(each) { diagnostics.record(anError(DiagnosticArea.entries[index])) }
                 }
             }.forEach { it.join() }
+        // This is about order under load, not about how much a shutdown can
+        // flush: every line is on disk before close is asked for anything.
+        disk.awaitLines(threads * each)
         diagnostics.close()
 
         // Sixteen thousand lines are more than one file holds, so this also
@@ -109,6 +122,9 @@ class QueuedDiagnosticsTest {
         assertTrue(tookMillis < 5_000, "recording waited for the disk: $tookMillis ms")
 
         gate.countDown()
+        // The report is written once the queue is empty again; wait for it to
+        // reach the disk rather than for a shutdown to squeeze it out.
+        faulty.awaitLineWith("diagnostics.records_dropped")
         diagnostics.close()
 
         val written = lines()
@@ -124,16 +140,28 @@ class QueuedDiagnosticsTest {
     }
 
     @Test
-    fun `closing writes what is queued, then lets go of the thread, the file and the lock`() {
-        val diagnostics = QueuedDiagnostics(home.sink(), testApp)
-        repeat(100) { diagnostics.record(anError()) }
-        diagnostics.close()
+    fun `a normal shutdown writes the small set still queued, then lets go of the thread, the file and the lock`() {
+        val disk = FaultyLogFileSystem(home.fileSystem())
+        val gate = CountDownLatch(1)
+        disk.appendGate = gate
+        val diagnostics = QueuedDiagnostics(home.sink(disk), testApp)
+        repeat(10) { diagnostics.record(anError()) }
+        // The worker is inside its first write and cannot move, so the other
+        // nine are still in the queue: whatever reaches the disk from here on,
+        // the shutdown put there.
+        disk.awaitHeldAtGate()
 
-        assertEquals(100, lines().size)
+        val closer = thread { diagnostics.close() }
+        awaitWaitingIn(closer)
+        gate.countDown()
+        closer.join(SHUTDOWN_BOUND_MILLIS)
+
+        assertFalse(closer.isAlive, "close outlived its bound")
+        assertEquals((1L..10L).toList(), lines().map { it.long("seq") }, "a normal shutdown left queued records behind")
         assertTrue(workers().isEmpty(), "the worker outlived close")
         diagnostics.record(anError())
         diagnostics.close()
-        assertEquals(100, lines().size, "a record after close was written")
+        assertEquals(10, lines().size, "a record after close was written")
 
         val next = home.sink()
         assertTrue(next.write(paddedLine("next", 64)), "the lock was still held after close")
@@ -141,18 +169,35 @@ class QueuedDiagnosticsTest {
     }
 
     @Test
-    fun `a disk that never answers holds shutdown for about a second at most and still frees the worker`() {
-        val faulty = FaultyLogFileSystem(home.fileSystem())
-        faulty.appendGate = CountDownLatch(1) // never released
-        val diagnostics = QueuedDiagnostics(home.sink(faulty), testApp)
+    fun `a shutdown that runs out of time returns within its bound, loses only the tail, and still frees the worker and the lock`() {
+        val disk = FaultyLogFileSystem(home.fileSystem())
+        disk.appendsBeforeGate = 3
+        disk.appendGate = CountDownLatch(1) // never released: the fourth write never finishes
+        val diagnostics = QueuedDiagnostics(home.sink(disk), testApp)
         repeat(10) { diagnostics.record(anError()) }
+        disk.awaitLines(3)
+        disk.awaitHeldAtGate()
 
         val startedAt = System.nanoTime()
         diagnostics.close()
         val tookMillis = (System.nanoTime() - startedAt) / 1_000_000
 
-        assertTrue(tookMillis < 3 * DIAGNOSTIC_FLUSH_MILLIS, "close waited $tookMillis ms")
+        // One wait for the worker, one more after the sink is closed under it.
+        assertTrue(tookMillis < SHUTDOWN_BOUND_MILLIS, "close waited $tookMillis ms")
         assertTrue(workers().isEmpty(), "the stuck worker was not freed")
+        // What reached the disk is whole and numbered 1, 2, 3 without a gap: the
+        // loss is the tail the shutdown had no time for, never a line in the
+        // middle, and no report claims a count nobody was left to write
+        // (PLAN 14.7.1: a gap is a dropped record; the queue is waited for at most
+        // the flush bound).
+        val written = lines()
+        assertEquals(listOf(1L, 2L, 3L), written.map { it.long("seq") })
+        assertTrue(written.none { it.text("event") == "diagnostics.records_dropped" })
+        assertEquals('\n'.code.toByte(), Files.readAllBytes(home.file(ACTIVE_LOG_NAME)).last(), "the file ends in half a line")
+
+        val next = home.sink()
+        assertTrue(next.write(paddedLine("next", 64)), "the lock was still held after a shutdown that ran out of time")
+        next.close()
     }
 
     @Test
@@ -173,9 +218,10 @@ class QueuedDiagnosticsTest {
 
     @Test
     fun `a clock that throws costs the record and nothing else`() {
+        val disk = FaultyLogFileSystem(home.fileSystem())
         val diagnostics =
             QueuedDiagnostics(
-                home.sink(),
+                home.sink(disk),
                 testApp,
                 object : Clock {
                     var calls = 0
@@ -189,6 +235,7 @@ class QueuedDiagnosticsTest {
             )
         diagnostics.record(anError())
         diagnostics.record(anError())
+        disk.awaitLineWith("diagnostics.records_dropped")
         diagnostics.close()
 
         val written = lines()
@@ -204,7 +251,26 @@ class QueuedDiagnosticsTest {
         assertFalse(Files.exists(home.stateDirectory), "an unused log made its folder")
     }
 
+    /**
+     * Waits until [closer] is parked in close's wait for the worker — the only
+     * timed wait on its way — so the shutdown has begun and takes no new record.
+     */
+    private fun awaitWaitingIn(closer: Thread) {
+        val giveUpAt = System.nanoTime() + TimeUnit.SECONDS.toNanos(HANG_GUARD_SECONDS)
+        while (closer.state != Thread.State.TIMED_WAITING) {
+            check(closer.isAlive && System.nanoTime() < giveUpAt) { "close never started waiting for the worker" }
+            Thread.onSpinWait()
+        }
+    }
+
     private object StoppedClock : Clock {
         override fun now(): Instant = Instant.fromEpochMilliseconds(1_757_924_464_512)
+    }
+
+    private companion object {
+        /** Close's own ceiling: two waits of the flush bound, with room for the machine. */
+        const val SHUTDOWN_BOUND_MILLIS = 3 * DIAGNOSTIC_FLUSH_MILLIS
+
+        const val HANG_GUARD_SECONDS = 300L
     }
 }

@@ -12,7 +12,10 @@ import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.nio.file.attribute.PosixFilePermissions
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertEquals
 
 /**
@@ -130,13 +133,71 @@ class FaultyLogFileSystem(
     @Volatile
     var brokenCode: Set<Operation> = emptySet()
 
-    /** When set, every append waits until it is counted down or the channel is closed. */
+    /**
+     * When set, appends wait until it is counted down or the channel is closed —
+     * every append after the first [appendsBeforeGate], which go straight through.
+     */
     @Volatile
     var appendGate: CountDownLatch? = null
 
     @Volatile
+    var appendsBeforeGate: Int = 0
+
+    @Volatile
     var calls: Int = 0
         private set
+
+    private val appendsStarted = AtomicInteger()
+
+    /** Every line that reached the disk, in the order it did. */
+    private val appended = LinkedBlockingQueue<String>()
+
+    private val written = AtomicInteger()
+
+    /** Opened by the first line on disk, or by the lock being refused, whichever comes first. */
+    private val firstOutcome = CountDownLatch(1)
+
+    /** How many lines reached the disk through this file system so far. */
+    val linesWritten: Int
+        get() = written.get()
+
+    /**
+     * Waits until the first line is on disk (true) or another process was found
+     * holding the lock (false). The bound only turns a hang into a failure.
+     */
+    fun awaitFirstLineOrRefusal(): Boolean {
+        check(firstOutcome.await(HANG_GUARD_SECONDS, TimeUnit.SECONDS)) { "neither a line nor a refusal ever came" }
+        return written.get() > 0
+    }
+
+    /** One permit for every append that is being held at [appendGate]. */
+    private val held = Semaphore(0)
+
+    /**
+     * Waits until the next [count] lines have reached the disk, and returns them.
+     *
+     * This is how a test knows the worker has written something without asking
+     * how fast this machine writes. The bound is not a measurement: it is there
+     * so that a writer that never gets there fails the test instead of hanging it.
+     */
+    fun awaitLines(count: Int): List<String> =
+        List(count) { index ->
+            checkNotNull(appended.poll(HANG_GUARD_SECONDS, TimeUnit.SECONDS)) { "only $index of $count lines ever reached the disk" }
+        }
+
+    /** Waits for lines until one contains [text]; returns every line up to and including it. */
+    fun awaitLineWith(text: String): List<String> {
+        val seen = mutableListOf<String>()
+        while (seen.lastOrNull()?.contains(text) != true) {
+            seen += checkNotNull(appended.poll(HANG_GUARD_SECONDS, TimeUnit.SECONDS)) { "no line with $text ever reached the disk" }
+        }
+        return seen
+    }
+
+    /** Waits until an append is being held at the gate: the worker is inside a write and cannot move. */
+    fun awaitHeldAtGate() {
+        check(held.tryAcquire(HANG_GUARD_SECONDS, TimeUnit.SECONDS)) { "no append ever reached the gate" }
+    }
 
     private fun visit(operation: Operation) {
         synchronized(this) { calls++ }
@@ -151,7 +212,7 @@ class FaultyLogFileSystem(
 
     override fun tryLock(): AutoCloseable? {
         visit(Operation.LOCK)
-        return real.tryLock()
+        return real.tryLock().also { if (it == null) firstOutcome.countDown() }
     }
 
     override fun kindOf(name: String): LogEntryKind {
@@ -175,12 +236,17 @@ class FaultyLogFileSystem(
 
             override fun append(bytes: ByteArray) {
                 visit(Operation.APPEND)
-                appendGate?.let { gate ->
+                val gate = appendGate
+                if (gate != null && appendsStarted.getAndIncrement() >= appendsBeforeGate) {
+                    held.release()
                     while (!gate.await(10, TimeUnit.MILLISECONDS)) {
                         if (closed) throw IOException("closed while waiting")
                     }
                 }
                 channel.append(bytes)
+                written.incrementAndGet()
+                appended.put(bytes.decodeToString())
+                firstOutcome.countDown()
             }
 
             override fun close() {
@@ -201,5 +267,9 @@ class FaultyLogFileSystem(
     ) {
         visit(Operation.MOVE)
         real.moveWithoutReplacing(from, to)
+    }
+
+    private companion object {
+        const val HANG_GUARD_SECONDS = 300L
     }
 }

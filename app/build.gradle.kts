@@ -60,6 +60,17 @@ compose.desktop {
     }
 }
 
+// A real window on this desktop: the application is started with temporary XDG
+// folders and its one main window is closed by the test sources' verified closer.
+// It needs a display and opens a window, so it is never part of `check`.
+tasks.register<JavaExec>("desktopWindowSmoke") {
+    group = "verification"
+    description = "Opens the application with temporary folders and closes its own window, and only that one."
+    val desktopTest = kotlin.jvm("desktop").compilations.getByName("test")
+    classpath = files(desktopTest.output.allOutputs, desktopTest.runtimeDependencyFiles)
+    mainClass = "dev.pnptracker.platform.desktop.DesktopWindowSmokeKt"
+}
+
 ktlint {
     filter {
         // Generated sources (Compose resources, Room and KSP output) are not ours to format.
