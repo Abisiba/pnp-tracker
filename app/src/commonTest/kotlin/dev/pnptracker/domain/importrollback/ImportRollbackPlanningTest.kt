@@ -48,7 +48,13 @@ class ImportRollbackPlanningTest {
         deletedAt = deletedAt,
         hasProgressEvent = hasProgressEvent,
         hasHistoryEvent = hasHistoryEvent,
+        sourceRawImportBlockId = blockOf(id),
     )
+
+    /** Each task's raw cell, the same every time it is asked for. */
+    private val blocks = mutableMapOf<EntityId, EntityId>()
+
+    private fun blockOf(taskId: EntityId): EntityId = blocks.getOrPut(taskId) { IdGenerator.Random.newId() }
 
     private var nextOrder = 0
 
@@ -98,6 +104,9 @@ class ImportRollbackPlanningTest {
         status = status,
         draftCount = draftCount,
         materializedDraftCount = materializedDraftCount,
+        // The records a confirmation writes, all agreeing (PLAN 14.7.5 C2–C4).
+        createdTaskCount = draftCount,
+        drafts = tasks.map { RollbackDraftFacts(blockOf(it.taskId), anchors[it.taskId] ?: cellId, it.taskId) },
         tasks = tasks,
         anchors = anchors,
         cells = cells,
@@ -186,6 +195,63 @@ class ImportRollbackPlanningTest {
 
         val missingTask = untouched().let { it.copy(tasks = it.tasks.dropLast(1)) }
         assertEquals(ImportRollbackFailure.PROVENANCE_BROKEN, planImportRollback(missingTask).failure)
+    }
+
+    @Test
+    fun `records that disagree about what the batch made and where are a broken trail`() {
+        // PLAN 14.7.5 C2, C3 and C4, each alone; measured in Dilim 5 to reach a
+        // live database through a restore.
+        val base = untouched()
+        val miscounted = base.copy(createdTaskCount = base.createdTaskCount + 1)
+        val notFromIt = base.copy(tasks = base.tasks.map { if (it.taskId == firstTaskId) it.copy(sourceRawImportBlockId = null) else it })
+        val fromAnother =
+            base.copy(
+                tasks =
+                    base.tasks.map {
+                        if (it.taskId ==
+                            firstTaskId
+                        ) {
+                            it.copy(sourceRawImportBlockId = blockOf(secondTaskId))
+                        } else {
+                            it
+                        }
+                    },
+            )
+        val extraCell = base.copy(cells = base.cells + base.cells.single().copy(cellId = IdGenerator.Random.newId()))
+        val noTarget = base.copy(drafts = base.drafts.mapIndexed { at, draft -> if (at == 0) draft.copy(targetCellId = null) else draft })
+        val otherTarget =
+            base.copy(
+                drafts =
+                    base.drafts.mapIndexed { at, draft ->
+                        if (at ==
+                            0
+                        ) {
+                            draft.copy(targetCellId = IdGenerator.Random.newId())
+                        } else {
+                            draft
+                        }
+                    },
+            )
+
+        listOf(miscounted, notFromIt, fromAnother, extraCell, noTarget, otherTarget).forEachIndexed { at, facts ->
+            val plan = planImportRollback(facts)
+            assertEquals(ImportRollbackFailure.PROVENANCE_BROKEN, plan.failure, "case $at")
+            assertEquals(emptyList(), plan.taskIds, "case $at")
+            assertEquals(emptyList(), plan.cells, "case $at")
+        }
+        // The agreeing records still go through.
+        assertEquals(null, planImportRollback(base).failure)
+    }
+
+    @Test
+    fun `an import confirmed before schema 8 keeps its own reason even when its counts disagree`() {
+        nextOrder = 0
+        val old =
+            facts(
+                tasks = listOf(task(firstTaskId, "Kırmızı ev")),
+                cells = listOf(cell(null, text("Not"), text(" "), taskPiece(firstTaskId, "Kırmızı ev"))),
+            )
+        assertEquals(ImportRollbackFailure.NO_CELL_SNAPSHOT, planImportRollback(old.copy(createdTaskCount = 5)).failure)
     }
 
     // --------------------------------------------------------- one task is enough

@@ -21,6 +21,15 @@ data class RollbackTaskFacts(
     val deletedAt: Instant?,
     val hasProgressEvent: Boolean,
     val hasHistoryEvent: Boolean,
+    /** The raw cell the task's own record says it came from; null for a task a person wrote. */
+    val sourceRawImportBlockId: EntityId?,
+)
+
+/** One draft of the batch, as far as its ties to a task and a cell go (PLAN 14.7.5). */
+data class RollbackDraftFacts(
+    val rawImportBlockId: EntityId,
+    val targetCellId: EntityId?,
+    val materializedTaskId: EntityId?,
 )
 
 /** One piece of a target cell, as it stands today. */
@@ -61,6 +70,9 @@ data class ImportRollbackFacts(
     val draftCount: Int,
     /** How many of those drafts record the task they produced. */
     val materializedDraftCount: Int,
+    /** What the batch says it created when it was confirmed. */
+    val createdTaskCount: Int,
+    val drafts: List<RollbackDraftFacts>,
     val tasks: List<RollbackTaskFacts>,
     /** Where each task of this batch is written: task identity to cell identity. */
     val anchors: Map<EntityId, EntityId>,
@@ -145,6 +157,15 @@ fun planImportRollback(facts: ImportRollbackFacts): ImportRollbackPlan {
         return refusal(facts.batchId, ImportRollbackFailure.NO_CELL_SNAPSHOT)
     }
 
+    // The batch's own records have to agree about what it made and where
+    // (PLAN 14.7.5, C2–C4). Measured in Dilim 5: a restored backup can carry a
+    // batch whose draft points at a task not recorded as coming from it, or
+    // whose recorded cells are not its drafts' targets — and a rollback trusting
+    // that would tombstone a task the import did not make or rewrite a cell it
+    // never wrote into. Asked only after the cell record exists, so an import
+    // confirmed before schema 8 keeps its old reason.
+    if (!recordsAgree(facts)) return refusal(facts.batchId, ImportRollbackFailure.PROVENANCE_BROKEN)
+
     val batchTaskIds = facts.tasks.mapTo(LinkedHashSet()) { it.taskId }
     val recordedCellIds = facts.cells.mapTo(mutableSetOf()) { it.cellId }
     val blockedTasks =
@@ -212,6 +233,26 @@ fun planImportRollback(facts: ImportRollbackFacts): ImportRollbackPlan {
         blockedCells = blockedCells,
         failure = null,
     )
+}
+
+/**
+ * C2, C3 and C4 of PLAN 14.7.5, from facts already read — no statement of its own.
+ *
+ * C2  the batch counted exactly its drafts;
+ * C3  every task a draft produced says it came from that draft's raw cell;
+ * C4  the recorded cells are exactly the drafts' targets, and every draft has one.
+ */
+private fun recordsAgree(facts: ImportRollbackFacts): Boolean {
+    if (facts.createdTaskCount != facts.draftCount) return false
+    val sourceOf = facts.tasks.associate { it.taskId to it.sourceRawImportBlockId }
+    val madeWhereItSays =
+        facts.drafts.all { draft ->
+            val made = draft.materializedTaskId ?: return@all true
+            sourceOf.containsKey(made) && sourceOf[made] == draft.rawImportBlockId
+        }
+    if (!madeWhereItSays) return false
+    val targets = facts.drafts.map { it.targetCellId }
+    return targets.none { it == null } && targets.toSet() == facts.cells.mapTo(mutableSetOf<EntityId?>()) { it.cellId }
 }
 
 /**

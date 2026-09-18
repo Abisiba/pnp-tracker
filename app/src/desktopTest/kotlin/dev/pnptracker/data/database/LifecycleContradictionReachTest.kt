@@ -55,7 +55,7 @@ private val WRITTEN_AT = Instant.fromEpochMilliseconds(1_757_320_364_031)
  * rejection), whether the live database took it value for value, which
  * candidates the live database then breaks, and what today's rollback does with
  * the confirmed batch. The last column is the harm observation: recorded, and
- * pinned here only so that Dilim 6 has to change it on purpose.
+ * pinned so that Dilim 6 changed it on purpose.
  */
 class LifecycleContradictionReachTest {
     private lateinit var directory: TemporaryDatabaseDirectory
@@ -418,22 +418,16 @@ class LifecycleContradictionReachTest {
                 assertEquals(expected, breaks, "$candidate")
             }
 
-            // What today's rollback does with the confirmed batch (measured; the
-            // harm Dilim 6 closes). C1 is already refused by the trail check.
+            // What rollback does with the confirmed batch. Measured in Dilim 5:
+            // C2 went through unnoticed, C3 tombstoned a task whose own record did
+            // not say the import made it ("tombstoned-not-sourced-from-it=1"), and
+            // C4 rewrote a cell the import never wrote into ("cells=3"). Since
+            // Dilim 6 all three — like C1 before them — are refused, and a refusal
+            // writes nothing anywhere (checked inside rollbackOutcome).
             val rollback = observed.mapValues { it.value.third }
-            assertEquals("refused: preview=PROVENANCE_BROKEN, rollback=PROVENANCE_BROKEN", rollback[LifecycleCandidate.C1])
-            // C2: the count is wrong and nothing stops the rollback.
-            assertEquals(HARMLESS_ROLLBACK, rollback[LifecycleCandidate.C2])
-            // C3: a task whose own record does not say the import made it is tombstoned.
-            assertEquals(
-                "done: preview=null, tasks=2, cells=2, tombstoned-not-sourced-from-it=1, cells-rewritten=2",
-                rollback[LifecycleCandidate.C3],
-            )
-            // C4: a cell the import never wrote into is "restored" too.
-            assertEquals(
-                "done: preview=null, tasks=2, cells=3, tombstoned-not-sourced-from-it=0, cells-rewritten=3",
-                rollback[LifecycleCandidate.C4],
-            )
+            listOf(LifecycleCandidate.C1, LifecycleCandidate.C2, LifecycleCandidate.C3, LifecycleCandidate.C4).forEach {
+                assertEquals("refused: preview=PROVENANCE_BROKEN, rollback=PROVENANCE_BROKEN", rollback[it], "$it")
+            }
             // C5 and U1–U3 change nothing about what a rollback touches.
             listOf(LifecycleCandidate.C5, LifecycleCandidate.U1, LifecycleCandidate.U2, LifecycleCandidate.U3).forEach {
                 assertEquals(HARMLESS_ROLLBACK, rollback[it], "$it")

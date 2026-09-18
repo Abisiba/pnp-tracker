@@ -52,6 +52,7 @@ import dev.pnptracker.domain.importrollback.ImportRollbackPlan
 import dev.pnptracker.domain.importrollback.ImportRollbackPreview
 import dev.pnptracker.domain.importrollback.ImportRollbackResult
 import dev.pnptracker.domain.importrollback.RollbackCellFacts
+import dev.pnptracker.domain.importrollback.RollbackDraftFacts
 import dev.pnptracker.domain.importrollback.RollbackSegmentFacts
 import dev.pnptracker.domain.importrollback.RollbackTaskFacts
 import dev.pnptracker.domain.importrollback.planImportRollback
@@ -1802,6 +1803,8 @@ abstract class ImportDao {
             status = batch?.status,
             draftCount = drafts.size,
             materializedDraftCount = drafts.count { it.materializedTaskId != null },
+            createdTaskCount = batch?.createdTaskCount ?: 0,
+            drafts = drafts.map { RollbackDraftFacts(it.rawImportBlockId, it.targetCellId, it.materializedTaskId) },
             tasks =
                 tasks.map { task ->
                     RollbackTaskFacts(
@@ -1812,6 +1815,7 @@ abstract class ImportDao {
                         deletedAt = task.deletedAt,
                         hasProgressEvent = task.id in withProgress,
                         hasHistoryEvent = task.id in withHistory,
+                        sourceRawImportBlockId = task.sourceRawImportBlockId,
                     )
                 },
             anchors = anchors,
