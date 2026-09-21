@@ -7,7 +7,20 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** Faz 3 / **İş 15 TAMAMLANDI; İş 16 HAZIR ama uzak depo ve
+> **Son güncelleme:** Faz 3 / **İş 16 TAMAMLANDI** — `docs: record the first
+> verified GitHub release`. Kaynak **https://github.com/Abisiba/pnp-tracker**
+> adresinde; `main` push edildi, CI gerçekten koştu ve **v0.1.1** etiketiyle ilk
+> GitHub Release yayımlandı:
+> https://github.com/Abisiba/pnp-tracker/releases/tag/v0.1.1 — iki paket,
+> `SHA256SUMS`, `LICENSE`, bildirimler ve iki kılavuz. Varlıklar depodan bağımsız
+> indirilip doğrulandı. CI sırasında beş düzeltme yapıldı (konteynerde pencere
+> yöneticisi, izolasyonun eksik `XDG_CACHE_HOME`'u, yazılım çizimi, bir test
+> kararsızlığı ve Arch `depends` eksiği); hiçbir testin kapsamı daraltılmadı.
+> Room 8 ve PLAN değişmedi. Tam koşu 3741 / 0 / 0 / 0 (273 sınıf), hem burada
+> hem runner'da. Ayrıntı §25.8. **Kalan tek bağlayıcı iş: İş 13'ün temiz Garuda
+> koşusu.**
+>
+> Daha önce: Faz 3 / **İş 15 TAMAMLANDI; İş 16 HAZIR ama uzak depo ve
 > gerçek GitHub koşusu BEKLİYOR** — `docs: record licensing and release
 > automation readiness`. Proje MIT lisanslıdır
 > (`Copyright (c) 2026 PNP Tracker contributors`); `LICENSE` iki paketin de
@@ -141,34 +154,35 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-başlangıç HEAD        : e6d1641 (docs: correct the Faz 3 counter and closing summary)
-HEAD (bu commit öncesi): 70e5262 — fix(packaging): keep our own jar out of the third-party notices check
-bu commit             : docs: record licensing and release automation readiness
-bu turun commit'leri  : 4addbf4 docs: license PNP Tracker under MIT                    İş 15
-                        bf701f4 ci: verify changes and build tagged Linux releases     İş 16 (yerel kısım)
-                        70e5262 fix(packaging): keep our own jar out of the            paket denetimi
-                                third-party notices check
+başlangıç HEAD        : d1a8381 (docs: record licensing and release automation readiness)
+HEAD (bu commit öncesi): 5f942df — fix(arch): declare the libraries the runtime links
+bu commit             : docs: record the first verified GitHub release
+bu turun commit'leri  : 83e413e fix(ci): give the package checks a window manager       CI düzeltmesi
+                        8684086 fix(ci): finish the run's isolation …                   CI düzeltmesi
+                        2c0c715 build: raise the version to 0.1.1                       sürüm
+                        b5e5e27 test(ui): stop racing the effects …                     test kararsızlığı
+                        5f942df fix(arch): declare the libraries …                      paket bağımlılığı
+uzak depo             : https://github.com/Abisiba/pnp-tracker (public)
+                        origin = git@github.com:Abisiba/pnp-tracker.git (SSH; §25.8)
+yayın                 : v0.1.1 → b5e5e27
+                        https://github.com/Abisiba/pnp-tracker/releases/tag/v0.1.1
+                        v0.1.0 etiketi duruyor ama hiç yayımlanmadı (§25.8)
 üretim kodu           : DEĞİŞMEDİ (commonMain/desktopMain'de tek satır yok)
-build                 : app/build.gradle.kts değişti — LICENSE staging'e girdi,
-                        writeThirdPartyNotices, sha256Of, checkReleaseTag, packageRelease
+build                 : app/build.gradle.kts yalnız version 0.1.0 → 0.1.1
 Room şema sürümü      : 8   (DEĞİŞMEDİ)
-PLAN.md               : DEĞİŞMEDİ (180ff640…) — 15. ve 16. maddeler bu turda yapılanı kapsıyor
+PLAN.md               : DEĞİŞMEDİ (180ff640…)
 şema dosyaları        : 1.json … 8.json ve sample-import.xlsx bayt bayt aynı
-test durumu           : tam koşu 3741 / 0 / 0 / 0 (273 sınıf); ktlintCheck temiz; git diff --check temiz
-                        dar koşular: LicenseTest 6/6, WorkflowsTest 13/13,
-                        DocumentationTest 9/9, GarudaVerificationScriptsTest 12/12
-paket smoke'ları      : verifyLinuxPackage PASSED, verifyArchPackage PASSED — gerçek
-                        başlatıcı, üç geçici XDG, pencere yalnız SafeWindowCloser ile
-gerçek sistem         : pacman kurulumu yok, sudo kullanılmadı, /opt ve /usr'a hiçbir şey
-                        kurulmadı; gerçek kullanıcı verisi (db, lock, backups, config, state)
-                        başlangıçtakiyle birebir aynı
-uzak                  : remote YOK, push YOK, tag YOK, GitHub Release YOK
+test durumu           : tam koşu 3741 / 0 / 0 / 0 (273 sınıf) — hem bu makinede hem
+                        runner'da; ktlintCheck temiz; git diff --check temiz
+paket smoke'ları      : verifyLinuxPackage ve verifyArchPackage hem burada hem
+                        release konteynerinde PASSED
+gerçek sistem         : pacman kurulumu yok, sudo kullanılmadı; gerçek kullanıcı verisi
+                        (db, lock, backups, config, state) başlangıçtakiyle birebir aynı
 ```
 
-**Bu commit İş 15'i kapatan ve İş 16'nın yerel hazırlığını kaydeden belge turudur.**
-İş 16 **TAMAMLANMADI**: workflow'lar yazıldı ve yerelde denetlendi, ama uzak depo
-yok ve GitHub'da bir kez bile koşmadılar. İş 13 de hâlâ temiz Garuda VM koşusunu
-bekliyor (§33 R6). Kalan iki dış adım bunlardır.
+**Bu commit İş 16'yı kapatan belge turudur.** İş 13 **TAMAMLANMADI**: doğrulama
+paketi hazır, temiz bir Garuda sanal makinesinde koşulmadı (§25.6, §33 R6).
+Projenin kalan tek bağlayıcı işi odur.
 
 **Önceki belge commit'i (`3b1524d` + düzeltmesi `e6d1641`) İş 14'ü kapatıyor ve
 İş 13'ün hazır olduğunu kaydediyordu.** İş 13 hâlâ **TAMAMLANMADI**: doğrulama
@@ -5476,6 +5490,170 @@ yeniden üretildi — iki üretimin SHA-256'ları yukarıdaki değerlerle birebi
 
 ---
 
+# 25.8 GERÇEK GITHUB DOĞRULAMASI  *(Faz 3 / İş 16 — TAMAM)*
+
+Depo: **https://github.com/Abisiba/pnp-tracker** (public). İlk push `d1a8381`.
+
+Remote **SSH** olarak eklendi (`git@github.com:Abisiba/pnp-tracker.git`).
+Talimattaki HTTPS adresi denendi ve GitHub reddetti: hesabın token'ında
+`workflow` kapsamı yok, `.github/workflows/` taşıyan bir push bu kapsam olmadan
+kabul edilmiyor. Depo o anda boş kaldı; kullanıcı token kapsamını genişletmek
+yerine SSH'ı seçti. Aynı depo, aynı commit'ler.
+
+## Koşular
+
+```text
+35593644907  verify   push main    d1a8381  BAŞARILI   ilk gerçek CI
+35594494532  release  tag v0.1.0   d1a8381  DÜŞTÜ      packages: wmctrl yok
+35595571947  verify   push main    83e413e  BAŞARILI
+35595616982  release  dispatch     83e413e  DÜŞTÜ      packages: HOME/.cache + GL
+35597011693  verify   push main    8684086  BAŞARILI
+35597031344  release  dispatch     8684086  BAŞARILI   publish atlandı (tasarım)
+35602570249  verify   push main    2c0c715  DÜŞTÜ      StaleSurfacesTest kararsızlığı
+35605124919  verify   push main    b5e5e27  BAŞARILI
+35605864071  release  tag v0.1.1   b5e5e27  BAŞARILI   → yayın oluştu
+```
+
+Bir commit için ikinci bir koşu başlatılmadı; `workflow_dispatch` koşuları yayın
+yapamadığı için düzeltmeleri etiket harcamadan denemekte kullanıldı.
+
+## İlk gerçek CI — 35593644907
+
+```text
+url            https://github.com/Abisiba/pnp-tracker/actions/runs/35593644907
+commit         d1a8381
+süre           7 dk 50 sn (11:21:45 → 11:29:35 UTC), Gradle 7 dk 17 sn
+runner         ubuntu-24.04
+JDK            Temurin 21.0.12+1 (tool-cache)
+iş / adım      check: 11 adımın hepsi BAŞARILI, atlanan zorunlu adım yok
+testler        3741 / 0 / 0 / 0, 273 sınıf, atlanan 0 — yereldekiyle aynı
+artifact       test-reports, 1.347.447 bayt, 14 gün
+GUI            xvfb-run altında gerçekten koştu: AwtImportFilePickerTest 9 test,
+               SafeWindowCloserTest 13 test, ikisi de 0 atlama
+şema/fixture   git diff --exit-code -- app/schemas app/src/desktopTest/resources PLAN.md temiz
+kaynaklar      çıplak git diff --exit-code temiz
+gerçek ev      $HOME/.local/share|.config|.local/state/pnp-tracker oluşmadı
+XDG            dördü de $GITHUB_WORKSPACE/.ci-xdg/ altında
+```
+
+## Yayın — 35605864071
+
+```text
+url            https://github.com/Abisiba/pnp-tracker/actions/runs/35605864071
+etiket         v0.1.1 → b5e5e272a8d901141e28011bd4d7258155525587
+süre           14 dk 33 sn (13:28:41 → 13:43:14 UTC)
+tag and tests  etiket kapısı BAŞARILI, tam paket BAŞARILI (ubuntu-24.04, Temurin 21.0.12+1)
+packages       archlinux:base-devel konteyneri, yetkisiz `builder`, Xvfb :99 + Openbox
+               verifyLinuxPackage PASSED, verifyArchPackage PASSED,
+               sha256sum -c BAŞARILI  (JDK: Arch jdk21-openjdk 21.0.12.1)
+github release BAŞARILI — yayın oluşturuldu
+atlanan        yalnız "Elle çalıştırma yayın yapmaz" (push'ta doğru davranış)
+yayın          https://github.com/Abisiba/pnp-tracker/releases/tag/v0.1.1
+```
+
+### Yayımlanan dosyalar
+
+```text
+pnp-tracker-0.1.1-linux-x86_64.tar.gz     94.041.527 bayt
+  sha256 1f153834b12c5b0cd489cddc7a4745dbb2838af462cd4809691b32ea51288bd9
+pnp-tracker-0.1.1-1-x86_64.pkg.tar.zst    92.212.856 bayt
+  sha256 79394104633b21a06f758003b1d83179dbf11bfaeca1611c833e34045cb48e87
+SHA256SUMS                  209 bayt      (yalnız yukarıdaki iki paketi sayar)
+LICENSE                   1.081 bayt
+THIRD_PARTY_NOTICES.md    4.919 bayt
+kullanim-kilavuzu.md     14.684 bayt
+ornek-ice-aktarma.md      6.636 bayt
+ornek-ice-aktarma.csv       448 bayt
+```
+
+Varlıklar depodan bağımsız geçici bir dizine indirilip doğrulandı:
+`sha256sum -c` geçti; boş dosya yok; iki arşivde de yol kaçışı yok; `tar.gz` tek
+üst dizine (`pnp-tracker-0.1.1/`) açılıyor; `VERSION` 0.1.1, `.PKGINFO`
+`pkgver = 0.1.1-1` ve `license = MIT`; `depend` listesinde java/jre/jdk yok;
+LICENSE + THIRD_PARTY_NOTICES iki pakette de yerinde
+(`/usr/share/licenses/pnp-tracker/` dâhil); belgelerde, paket metadata'sında ve
+arşiv girdi adlarında kişisel yol veya kullanıcı adı yok; `packager` sabit
+(`pnp-tracker local build <build@pnp-tracker.invalid>`), `builddate = 0`.
+
+## Yerel üretim ile CI üretimi arasındaki fark
+
+Hash'ler **aynı değil** ve nedeni tamamen açıklanmıştır: iki ortam farklı JDK
+kullanıyor.
+
+```text
+yerel  Temurin 21.0.12      tar.gz f5d8ae47…  94.324.877 bayt  257 girdi
+CI     Arch jdk21 21.0.12.1 tar.gz 1f153834…  94.041.527 bayt  249 girdi
+```
+
+Fark eden **sekiz dosyanın hepsi** `lib/runtime/` altında: Temurin freetype,
+libpng, giflib, harfbuzz, jpeg ve lcms'i imajın içine koyar (ve legal metinlerini
+taşır), Arch'ın JDK'sı sistemdekilere bağlanır. Bunun dışında:
+
+```text
+jar'ların hepsi          BİREBİR AYNI
+libskiko-linux-x64.so    BİREBİR AYNI
+uygulamanın kendi dosyaları, LICENSE, third-party/  BİREBİR AYNI
+farklı olan yalnız       bin/pnp-tracker (jpackage'ın kendi başlatıcısı),
+                         lib/app/.jpackage.xml ve THIRD_PARTY_NOTICES.md —
+                         üçü de yalnız JDK sürüm numarasını taşıdığı için
+```
+
+Belirlenimcilik sözleşmesi bozulmadı: **aynı** ortamda arka arkaya iki üretim
+hâlâ bayt bayt aynı dosyayı veriyor. Ortamlar arası aynılık hiçbir zaman
+iddia edilmemişti ve gömülü bir JRE ile mümkün de değildir.
+
+### Bu karşılaştırmanın bulduğu kusur
+
+Arch paketinin `depends` listesi bu makinedeki (Temurin) üretimden türetilmişti
+ve o üretim bu kütüphanelerin hiçbirine ihtiyaç duymuyor. Konteynerdeki üretim
+duyuyor, ve dördü listede yoktu: `harfbuzz`, `libjpeg-turbo`, `lcms2`, `giflib`
+(freetype2, libpng ve zlib zaten `fontconfig` ile geliyor). `5f942df` ile
+düzeltildi; liste artık iki üretimin de ihtiyacını kapsıyor.
+
+**Yayımlanmış v0.1.1 paketi bu düzeltmeden önce üretildi:** bu dört kütüphanenin
+kurulu olmadığı bir makinede `pacman` onları kendiliğinden çekmez. Sıradan bir
+masaüstünde dördü de vardır. Düzeltilmiş paketin yayımlanması yeni bir sürüm
+kararı gerektirir; o karar kullanıcınındır.
+
+Bunu yakalayacak denetim **yok**: Arch denetimi çalışan uygulamanın haritaladığı
+kütüphanelerin hangi paketlere ait olduğunu *raporluyor* ama `depends` ile
+karşılaştırmıyor. Doğru denetim, paketin içindeki ELF dosyalarının `NEEDED`
+girdilerinin bildirilen bağımlılıkların geçişli kapanışında bulunmasıdır
+(çalışma anında haritalanan her kütüphane değil: GL sürücüleri `dlopen` ile
+gelir ve Arch kuralına göre bildirilmez).
+
+## CI sırasında yapılan düzeltmeler
+
+```text
+83e413e  fix(ci): give the package checks a window manager, not just a display
+         wmctrl konteynerde yoktu; ayrıca wmctrl pencere listesini
+         _NET_CLIENT_LIST'ten okur ve onu yalnız bir pencere yöneticisi yazar,
+         yani çıplak Xvfb yetmezdi. Xvfb :99 + Openbox, xorg-xprop.
+8684086  fix(ci): finish the run's isolation and let a GPU-less container draw
+         izolasyon XDG_CACHE_HOME'u tanımlamıyordu, sürücü $HOME/.cache'e yazdı;
+         ve Xvfb'de GL context yok, Skia RenderException basıyordu. Cache dizini
+         izolasyona eklendi, konteyner SKIKO_RENDER_API=SOFTWARE istiyor.
+2c0c715  build: raise the version to 0.1.1
+b5e5e27  test(ui): stop racing the effects a rendered frame launches
+         runner'da bir kez düşen tek test. Üretim kodu doğruydu; testin
+         hatası, Unconfined'ın runBlocking içinde kuyruğa alınmasıydı.
+         ComposeSceneHarness.renderAndSettle (render + yield).
+5f942df  fix(arch): declare the libraries the runtime links when Arch's JDK builds it
+```
+
+Hiçbirinde test atlanmadı, `continue-on-error` eklenmedi, izin genişletilmedi ve
+kabul ölçütü gevşetilmedi.
+
+## v0.1.0 etiketi
+
+`v0.1.0` depoda duruyor ve `d1a8381`'i gösteriyor. O commit'teki release
+workflow'u konteynerde paketleri üretemiyordu; etiket push'u her zaman **kendi
+ref'indeki** workflow dosyasıyla koşar, dolayısıyla o etiketten yayın çıkamazdı.
+Etiket taşınmadı, silinmedi, zorlanmadı. Altında hiçbir yayın, hiçbir varlık yok.
+İlk yayımlanan sürüm bu yüzden **0.1.1**'dir.
+
+---
+
 # 26. DB / ŞEMA KORUMA
 
 ```text
@@ -6077,7 +6255,7 @@ yardımcı işler
       yapılandırılmış görev CSV dışa aktarma
 ```
 
-## Faz 3 — BAŞLADI, 16 İŞTEN 14'Ü BİTTİ (İş 13 temiz VM, İş 16 gerçek GitHub koşusunu bekliyor)
+## Faz 3 — 16 İŞTEN 15'İ BİTTİ (yalnız İş 13, temiz Garuda VM koşusunu bekliyor)
 
 PLAN `18.` — Faz 3 işler listesi.
 
@@ -6114,10 +6292,9 @@ PLAN `18.` — Faz 3 işler listesi.
 15  Açık kaynak lisansı + LICENSE ....................... TAMAM (§25.7; MIT, iki
                                               pakette + /usr/share/licenses,
                                               THIRD_PARTY_NOTICES.md)
-16  GitHub Actions ...................................... HAZIR — REMOTE VE GERÇEK
-                                              GITHUB KOŞUSU BEKLİYOR (§25.7;
-                                              verify + release akışları, yerelde
-                                              WorkflowsTest ile denetlendi)
+16  GitHub Actions ...................................... TAMAM (§25.8; depo
+                                              Abisiba/pnp-tracker, CI gerçekten
+                                              koştu, v0.1.1 yayımlandı)
 ```
 
 ### İş 1'in durumu — iki dilim, ikisi de bitti
@@ -6498,7 +6675,8 @@ kaldırma testi" ayrı bir temiz ortam gerektirir.
 `nativeDistributions` tanımlı; `createDistributable`, `packageLinuxArchive`,
 `packageArch` ve iki doğrulama görevi var (§25.5). `targetFormats` bilinçli
 olarak boş: deb/rpm/AppImage bu projenin çıktısı değildir. `LICENSE` (İş 15) ve
-`.github/workflows/` (İş 16) artık var; ikisi de §25.7'dedir.
+`.github/workflows/` (İş 16) artık var; ikisi de §25.7'dedir ve gerçek GitHub
+koşusu §25.8'dedir.
 
 ---
 
@@ -6868,7 +7046,16 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   İŞ 9 TAMAMLANDI: kabul makineden bağımsızdır (doğru sonuç, 42/1.000+ aynı ifade
   yapısı, N+1 yok, arama/süzgeç 0 ifade, tekrarda aynı sonuç); süre/bellek EŞİK
   EKLEME, yalnız ortamla kayıt; aynı yöntemde 2 kat kötüleşmeyi raporla.
-- İŞ 15 TAMAM, İŞ 16 HAZIR AMA GITHUB'DA KOŞULMADI (§25.7). Kuralı bozma: LICENSE
+- İŞ 16 TAMAM (§25.8): depo https://github.com/Abisiba/pnp-tracker, origin SSH,
+  v0.1.1 yayımlandı. Kuralı bozma: etiketi taşıma/silme, force push yapma, mevcut
+  bir yayını ezme; yayın yalnız `v<Gradle sürümü>` etiketiyle çıkar ve sürüm
+  yükseltmek kullanıcının kararıdır. CI'da bir şey düşerse testi atlatma,
+  `continue-on-error` ekleme, izin genişletme — kök nedeni bul. Paket içeriği
+  hangi JDK'nın derlediğine bağlıdır (Temurin gömer, Arch'ınki sisteme bağlanır);
+  `depends` ikisini de kapsamalı. AÇIK KALAN: paketteki ELF'lerin NEEDED
+  girdilerinin bildirilen bağımlılıkların geçişli kapanışında olduğunu denetleyen
+  test yok.
+- İŞ 15 TAMAM, İŞ 16'NIN YEREL HAZIRLIĞI (§25.7). Kuralı bozma: LICENSE
   standart MIT metnidir, düzenleme; kaynak dosyalara lisans başlığı EKLEME;
   üçüncü taraf lisans adı UYDURMA (bildirim dosyası paketin kendi içeriğinden
   üretilir). Eylemleri mutable etikete bağlama, tam commit SHA + sürüm yorumu
