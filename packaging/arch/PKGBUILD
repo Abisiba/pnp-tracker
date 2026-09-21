@@ -26,8 +26,14 @@ license=('MIT')
 # places — on a developer's machine and in the release container — so it
 # declares what either build can need. freetype2, libpng and zlib already
 # arrive with fontconfig; these four do not.
+#
+# alsa-lib is here because the runtime ships lib/runtime/lib/libjsound.so and
+# that file links libasound, whatever the application does with it. It was left
+# out before on the grounds that this application never plays a sound, which is
+# true and beside the point: `depends` is about what the files in the package
+# link, not about which of them get loaded.
 depends=('glibc' 'libstdc++' 'libglvnd' 'libx11' 'libxext' 'libxi' 'libxrender' 'libxtst' 'fontconfig'
-         'harfbuzz' 'libjpeg-turbo' 'lcms2' 'giflib')
+         'harfbuzz' 'libjpeg-turbo' 'lcms2' 'giflib' 'alsa-lib')
 # The embedded Java runtime and Skia must not be stripped or split.
 options=('!strip' '!debug')
 source=("@ARCHIVE@" 'pnp-tracker.desktop')

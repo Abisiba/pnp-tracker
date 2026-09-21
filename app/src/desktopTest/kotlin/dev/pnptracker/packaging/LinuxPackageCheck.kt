@@ -227,6 +227,7 @@ class PackageCheck {
         )
         val application = installed.resolve("opt/pnp-tracker")
         checkApplicationDirectory(application, arguments.version, arguments.repository)
+        checkDeclaredDependencies(installed, pkginfo)
         checkDesktopEntry(installed.resolve("usr/share/applications/pnp-tracker.desktop"))
         expect(
             Files
@@ -276,6 +277,61 @@ class PackageCheck {
             "removing the package touched the user's data, config or state"
         }
         report("removal: package files gone; data, config and state untouched; home ${listed(home)}")
+    }
+
+    /**
+     * Everything the package's own files link against is declared (Faz 3, after
+     * the 0.1.1 defect: four libraries the Arch JDK links and Temurin bundles
+     * were missing from `depends`, and every machine involved happened to have
+     * them).
+     *
+     * A library is answered for only by the package itself or by a package the
+     * recipe declares, directly or through Arch's own dependency metadata.
+     * Being installed on the machine running this proves nothing — that is
+     * exactly how the defect survived — so an owner outside the declared
+     * closure is a failure, and so is a library nothing owns.
+     */
+    private fun checkDeclaredDependencies(
+        installed: Path,
+        pkginfo: String,
+    ) {
+        val pacman = Files.isExecutable(Path.of("/usr/bin/pacman"))
+        val readelf = SystemCommands.run(listOf("readelf", "--version")).exitCode == 0
+        if (!pacman || !readelf) {
+            // Not verifiable here is not the same as verified: the Arch package
+            // is only ever built on Arch, so the tools are expected to be there.
+            problems += "the declared dependencies could not be checked: pacman=$pacman readelf=$readelf"
+            return
+        }
+
+        val elfFiles = elfFilesUnder(installed)
+        val bundled = bundledSonames(installed, elfFiles)
+        val needed =
+            elfFiles.flatMap { file ->
+                neededLibrariesOf(file).map { NeededLibrary(elf = installed.relativize(file).toString(), soname = it) }
+            }
+        credibilityProblem(elfFiles.size, needed)?.let {
+            problems += "the dependency check cannot be believed: $it"
+            return
+        }
+        val declared = declaredDependsOf(pkginfo)
+        val closure = transitiveDependencies(declared)
+        val report = resolveDependencies(needed, bundled, declared.toSet(), closure, ::ownerOfSoname)
+
+        report("dependencies: ${elfFiles.size} ELF files, ${needed.map { it.soname }.distinct().size} distinct libraries")
+        report("dependencies: declared ${declared.sorted().joinToString(" ")}")
+        report("dependencies: declared closure ${closure.size} packages")
+        report.lines().filterNot { "pakette:" in it }.forEach { report("  $it") }
+        expect(report.undeclared.isEmpty()) {
+            "the package links libraries it does not declare: " +
+                report.undeclared
+                    .groupBy { it.needed.soname }
+                    .toSortedMap()
+                    .map { (soname, uses) ->
+                        val owner = (uses.first().provider as Provider.Undeclared).owner ?: "hiçbir pakette yok"
+                        "$soname ($owner), wanted by ${uses.map { it.needed.elf }.distinct().sorted().joinToString(", ")}"
+                    }.joinToString("; ")
+        }
     }
 
     // ---------------------------------------------------------------- shared
