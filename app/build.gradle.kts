@@ -159,6 +159,8 @@ val stageLinuxApplication by tasks.registering(Sync::class) {
     val arch = linuxArch
     from(layout.buildDirectory.dir("compose/binaries/main/app/pnp-tracker"))
     from(rootProject.file("packaging/linux/README.txt"))
+    // The application's own license travels with the application (Faz 3 / İş 15).
+    from(rootProject.file("LICENSE"))
     into(layout.buildDirectory.dir("linux/stage/$linuxPackageName"))
     // jlink leaves the runtime's legal notices read-only; a second staging must
     // still be able to replace them.
@@ -169,6 +171,7 @@ val stageLinuxApplication by tasks.registering(Sync::class) {
         val root = destinationDir
         root.resolve("VERSION").writeText("name=pnp-tracker\nversion=$version\narch=$arch\n")
         normaliseRepackedJars(root.resolve("lib/app"))
+        writeThirdPartyNotices(root)
     }
 }
 
@@ -217,6 +220,116 @@ fun normaliseRepackedJars(appDirectory: File) {
             "normalising ${jar.name} changed what it holds"
         }
     }
+}
+
+/**
+ * The notices for everything the package carries beside our own code, taken from
+ * the package itself (Faz 3 / İş 15): the embedded runtime's `release` file and
+ * its `legal/` tree, and every jar under `lib/app`, with the licence and notice
+ * files those jars really carry copied out beside this document. Nothing is
+ * guessed — an artifact that says nothing about its licence is written down as
+ * saying nothing, and no licence of a third party is presented as ours.
+ */
+fun writeThirdPartyNotices(application: File) {
+    val ownJar = "app-desktop-${project.version}"
+    val release =
+        application
+            .resolve("lib/runtime/release")
+            .readLines()
+            .mapNotNull { line -> line.split('=', limit = 2).takeIf { it.size == 2 } }
+            .associate { (key, value) -> key to value.trim('"') }
+    val modules = application.resolve("lib/runtime/legal").listFiles()!!.map { it.name }.sorted()
+
+    val texts = application.resolve("third-party")
+    texts.deleteRecursively()
+    val licenceEntry = Regex("^META-INF/(LICENSE|LICENCE|NOTICE|COPYING)([-._].*)?$", RegexOption.IGNORE_CASE)
+    val digestSuffix = Regex("-[0-9a-f]{16,40}$")
+
+    val rows =
+        application
+            .resolve("lib/app")
+            .listFiles { file -> file.name.endsWith(".jar") }!!
+            .map { jar ->
+                val stem = digestSuffix.replace(jar.name.removeSuffix(".jar"), "")
+                val name = stem.substringBeforeLast('-')
+                val version = stem.substringAfterLast('-')
+                Triple(name, version, jar)
+            }.filterNot { (name, version, _) -> "$name-$version" == ownJar }
+            .sortedBy { (name, version, _) -> "$name $version" }
+            .map { (name, version, jar) ->
+                var declared = "—"
+                var carried = "—"
+                ZipFile(jar).use { zip ->
+                    zip.getEntry("META-INF/MANIFEST.MF")?.let { entry ->
+                        val manifest =
+                            zip
+                                .getInputStream(entry)
+                                .readBytes()
+                                .decodeToString()
+                                .replace("\r\n", "\n")
+                                .replace("\n ", "")
+                        manifest
+                            .lineSequence()
+                            .firstOrNull { it.startsWith("Bundle-License:") }
+                            ?.let { declared = it.removePrefix("Bundle-License:").trim().replace("|", "/") }
+                    }
+                    val files = zip.entries().toList().filter { !it.isDirectory && licenceEntry.matches(it.name) }
+                    if (files.isNotEmpty()) {
+                        val directory = texts.resolve("$name-$version").apply { mkdirs() }
+                        files.sortedBy { it.name }.forEach { entry ->
+                            directory.resolve(entry.name.substringAfterLast('/')).writeBytes(zip.getInputStream(entry).readBytes())
+                        }
+                        carried = "`third-party/$name-$version/`"
+                    }
+                }
+                "| $name | $version | $declared | $carried |"
+            }
+
+    application.resolve("THIRD_PARTY_NOTICES.md").writeText(
+        buildString {
+            appendLine("# Üçüncü taraf bildirimleri — PnP Üretim Takipçisi")
+            appendLine()
+            appendLine("Bu dosya paketin kendi içeriğinden üretilir (`:app:stageLinuxApplication`).")
+            appendLine("Uygulamanın kendi kaynak kodu MIT lisanslıdır; yanındaki `LICENSE` dosyasına")
+            appendLine("bakın. Aşağıdakiler uygulamayla birlikte dağıtılan **başka** projelerdir ve")
+            appendLine("kendi lisanslarıyla gelirler; MIT lisansı onları kapsamaz.")
+            appendLine()
+            appendLine("## Java çalışma ortamı")
+            appendLine()
+            appendLine("```text")
+            listOf("IMPLEMENTOR", "IMPLEMENTOR_VERSION", "JAVA_VERSION", "JAVA_VERSION_DATE", "OS_ARCH").forEach { key ->
+                release[key]?.let { appendLine("$key=$it") }
+            }
+            appendLine("```")
+            appendLine()
+            val base = application.resolve("lib/runtime/legal/java.base")
+            base.resolve("LICENSE").takeIf { it.isFile }?.let { licence ->
+                appendLine("Çalışma ortamının kendi lisansı, paketteki `lib/runtime/legal/java.base/LICENSE`")
+                appendLine("dosyasının ilk satırıyla: **${licence.readLines().first { it.isNotBlank() }.trim()}**.")
+                if (base.resolve("ASSEMBLY_EXCEPTION").isFile) {
+                    appendLine("Yanında `ASSEMBLY_EXCEPTION` dosyası da dağıtılır (Classpath istisnası).")
+                }
+                appendLine()
+            }
+            appendLine("Çalışma ortamı `jlink` ile ${modules.size} modüle indirilmiştir. Bu modüllerin")
+            appendLine("kendi lisans ve bildirim metinleri paketin içinde, `lib/runtime/legal/<modül>/`")
+            appendLine("altında dağıtılır:")
+            appendLine()
+            appendLine("```text")
+            modules.forEach { appendLine(it) }
+            appendLine("```")
+            appendLine()
+            appendLine("## Kütüphaneler")
+            appendLine()
+            appendLine("| Bileşen | Sürüm | Artefaktın bildirdiği lisans | Pakete giren lisans metni |")
+            appendLine("| --- | --- | --- | --- |")
+            rows.forEach { appendLine(it) }
+            appendLine()
+            appendLine("Tablodaki bazı artefaktlar kendi içinde ne lisans adı ne de lisans metni taşır;")
+            appendLine("bu dosya onların lisansını **tahmin etmez**. Bu bileşenlerin lisansı kendi proje")
+            appendLine("sayfalarında ve Maven POM dosyalarında yayımlanır.")
+        },
+    )
 }
 
 // `pnp-tracker-<version>-linux-<arch>.tar.gz`: one top directory, permissions as

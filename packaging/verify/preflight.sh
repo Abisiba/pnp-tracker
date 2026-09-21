@@ -139,7 +139,7 @@ else
   record "paket içeriği okunabildi" PASS "$(wc -l <<<"$LISTING") girdi"
   for entry in "opt/pnp-tracker/bin/pnp-tracker" "usr/bin/pnp-tracker" \
     "usr/share/applications/pnp-tracker.desktop" "usr/share/icons/hicolor/256x256/apps/pnp-tracker.png" \
-    "opt/pnp-tracker/lib/runtime/release"; do
+    "usr/share/licenses/pnp-tracker/LICENSE" "opt/pnp-tracker/lib/runtime/release"; do
     if grep -qx "$entry" <<<"$LISTING"; then
       record "pakette: $entry" PASS "var"
     else

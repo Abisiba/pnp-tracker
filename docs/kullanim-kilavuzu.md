@@ -312,4 +312,15 @@ Veriyi de silmek isterseniz bu **ayrı ve elle** yapılan bir iştir:
   çalışamaz. İkinci kopya açılmaz ve bunu söyler.
 - Senkronizasyon, bulut ve çoklu cihaz yoktur; veri taşımanın yolu yedektir.
 - Uygulama arayüzü Türkçedir.
-- Bu sürüm için henüz bir açık kaynak lisansı seçilmemiştir.
+
+## Lisans
+
+Uygulamanın kendi kaynak kodu MIT lisanslıdır; metin deponun kökündeki
+[`LICENSE`](../LICENSE) dosyasındadır. Kurulu pakette aynı metin
+`/usr/share/licenses/pnp-tracker/LICENSE` ve `/opt/pnp-tracker/LICENSE`
+yollarında durur.
+
+Uygulamayla birlikte gelen Java çalışma ortamı ve üçüncü taraf kütüphaneler
+kendi lisanslarıyla dağıtılır; MIT lisansı onları kapsamaz. Hangi bileşenin
+geldiği ve lisans metinlerinin nerede durduğu paketin içindeki
+`THIRD_PARTY_NOTICES.md` dosyasında yazar.

@@ -140,6 +140,8 @@ class PackageCheck {
             "VERSION does not say pnp-tracker ${arguments.version} ${arguments.arch}"
         }
         expect(Files.exists(application.resolve("README.txt"))) { "no README.txt" }
+        expect(Files.exists(application.resolve("LICENSE"))) { "no LICENSE at the top of the archive" }
+        expect(Files.exists(application.resolve("THIRD_PARTY_NOTICES.md"))) { "no THIRD_PARTY_NOTICES.md at the top of the archive" }
         checkApplicationDirectory(application, arguments.version, arguments.repository)
 
         val launcher = application.resolve("bin/pnp-tracker")
@@ -168,6 +170,9 @@ class PackageCheck {
             "usr/bin/pnp-tracker",
             "usr/share/applications/pnp-tracker.desktop",
             "usr/share/icons/hicolor/256x256/apps/pnp-tracker.png",
+            // Where Arch keeps a package's licence (Faz 3 / İş 15).
+            "usr/share/licenses/pnp-tracker/LICENSE",
+            "usr/share/licenses/pnp-tracker/THIRD_PARTY_NOTICES.md",
         ).forEach { expect(it in names) { "$it is not in the package" } }
         val outside = names.filterNot { it in metadata || it.startsWith("opt") || it.startsWith("usr") }
         expect(outside.isEmpty()) { "the package installs outside /opt and /usr: $outside" }
@@ -194,6 +199,7 @@ class PackageCheck {
         )
         expect("pkgname = pnp-tracker\n" in pkginfo) { ".PKGINFO does not name pnp-tracker" }
         expect("pkgver = ${arguments.version}-1\n" in pkginfo) { ".PKGINFO does not say ${arguments.version}-1" }
+        expect("license = MIT\n" in pkginfo) { ".PKGINFO does not say the licence is MIT" }
         expect(pkginfo.lines().none { it.startsWith("depend = java") || it.startsWith("depend = jre") || it.startsWith("depend = jdk") }) {
             "the package depends on a system Java"
         }
@@ -227,6 +233,13 @@ class PackageCheck {
                 .readAllBytes(installed.resolve("usr/share/icons/hicolor/256x256/apps/pnp-tracker.png"))
                 .contentEquals(Files.readAllBytes(application.resolve("lib/pnp-tracker.png"))),
         ) { "the hicolor icon is not the application's icon" }
+        listOf("LICENSE", "THIRD_PARTY_NOTICES.md").forEach { file ->
+            expect(
+                Files
+                    .readAllBytes(installed.resolve("usr/share/licenses/pnp-tracker/$file"))
+                    .contentEquals(Files.readAllBytes(application.resolve(file))),
+            ) { "/usr/share/licenses/pnp-tracker/$file is not the file under /opt" }
+        }
 
         // The real entry point, /usr/bin/pnp-tracker, resolved inside the temporary root.
         val launcher = installed.resolve("usr/bin/pnp-tracker")
@@ -293,6 +306,53 @@ class PackageCheck {
         report("entries: one top directory, owners 0/0, no path escapes, $links symbolic link(s)")
     }
 
+    /**
+     * The application's own licence and the notices for everything else it
+     * carries (Faz 3 / İş 15). The LICENSE in the package is the repository's
+     * LICENSE, byte for byte, and the notices are the ones the staging task
+     * derived from this very package — the runtime's modules and the jars whose
+     * own licence files were copied out beside it.
+     */
+    private fun checkLicence(
+        application: Path,
+        repository: Path,
+    ) {
+        val licence = application.resolve("LICENSE")
+        expect(Files.isRegularFile(licence)) { "the package carries no LICENSE" }
+        if (!Files.isRegularFile(licence)) return
+        expect(Files.readAllBytes(licence).contentEquals(Files.readAllBytes(repository.resolve("LICENSE")))) {
+            "the LICENSE in the package is not the repository's LICENSE"
+        }
+        val text = Files.readString(licence)
+        expect(text.startsWith("MIT License\n")) { "the LICENSE is not the MIT licence" }
+        expect("Copyright (c) 2026 PNP Tracker contributors" in text) { "the LICENSE carries another copyright line" }
+
+        val notices = application.resolve("THIRD_PARTY_NOTICES.md")
+        expect(Files.isRegularFile(notices)) { "the package carries no THIRD_PARTY_NOTICES.md" }
+        if (!Files.isRegularFile(notices)) return
+        val noticeText = Files.readString(notices)
+        // Every runtime module the package ships is named, and so is every jar.
+        val modules = listed(application.resolve("lib/runtime/legal"))
+        expect(modules.isNotEmpty() && modules.all { it in noticeText }) { "the notices do not name every runtime module" }
+        val jars =
+            listed(application.resolve("lib/app"))
+                .filter { it.endsWith(".jar") }
+                .map { it.removeSuffix(".jar").replace(Regex("-[0-9a-f]{16,40}$"), "") }
+        val missing = jars.filterNot { jar -> jar.substringBeforeLast('-') in noticeText }
+        expect(missing.isEmpty()) { "the notices do not name $missing" }
+        expect("MIT" in noticeText && "lisansını **tahmin etmez**" in noticeText) {
+            "the notices do not separate our licence from the others'"
+        }
+        // The licence files the jars really carry are in the package next to the notices.
+        val copied = listed(application.resolve("third-party"))
+        expect(copied.isNotEmpty()) { "no third-party licence text was copied into the package" }
+        copied.forEach { directory ->
+            expect("`third-party/$directory/`" in noticeText) { "third-party/$directory is not in the notices" }
+            expect(listed(application.resolve("third-party/$directory")).isNotEmpty()) { "third-party/$directory is empty" }
+        }
+        report("licence: MIT, ${copied.size} third-party licence texts, ${modules.size} runtime legal directories")
+    }
+
     private fun checkApplicationDirectory(
         application: Path,
         version: String,
@@ -340,6 +400,8 @@ class PackageCheck {
         expect("<app-version>$version</app-version>" in Files.readString(application.resolve("lib/app/.jpackage.xml"))) {
             "jpackage's own record is not version $version"
         }
+
+        checkLicence(application, repository)
 
         val release = Files.readAllLines(application.resolve("lib/runtime/release"))
         val modules =

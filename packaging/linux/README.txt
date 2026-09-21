@@ -28,4 +28,11 @@ tutulur:
 
 Bu dizini silmek verilerinize dokunmaz.
 
-Lisans: bu sürüm için henüz bir açık kaynak lisansı seçilmemiştir.
+Lisans
+------
+
+Uygulamanın kendi kaynak kodu MIT lisanslıdır; metin bu dizindeki LICENSE
+dosyasındadır. Uygulamayla gelen Java çalışma ortamı ve üçüncü taraf
+kütüphaneler kendi lisanslarıyla dağıtılır; bunlar THIRD_PARTY_NOTICES.md
+dosyasında, lisans metinleri ise third-party/ ve lib/runtime/legal/ altında
+bulunur.
