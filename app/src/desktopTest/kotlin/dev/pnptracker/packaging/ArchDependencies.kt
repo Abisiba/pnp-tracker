@@ -231,7 +231,16 @@ internal fun dependsOf(description: String): List<String> {
         .filter { it.isNotEmpty() }
 }
 
-/** The package that owns [soname] on this machine, asked only to name a library that is not declared. */
+/**
+ * The Arch package that provides [soname].
+ *
+ * Asked of the installed files first, because that is the cheap answer, and then
+ * of pacman's files database, which knows packages that are *not* installed
+ * here. The second question is the one that matters: a dependency this machine
+ * happens not to have is still declared, and a release container installs only
+ * what it needs in order to build. Neither answer passes anything on its own —
+ * the caller still requires the package to be one the recipe declares.
+ */
 fun ownerOfSoname(
     soname: String,
     commands: Commands = SystemCommands,
@@ -248,8 +257,27 @@ fun ownerOfSoname(
             if (!owner.isNullOrEmpty()) return owner
         }
     }
-    return null
+    return packageFromFilesDatabase(commands.run(listOf("pacman", "-Fq", "/usr/lib/$soname")).output)
 }
+
+/**
+ * The package name in a `pacman -F` answer, which is `repo/name` with or without
+ * a version depending on the switches, and nothing usable at all when the files
+ * database has never been synchronised.
+ */
+internal fun packageFromFilesDatabase(output: String): String? =
+    output
+        .lines()
+        .map { it.trim() }
+        .firstOrNull { line ->
+            line.isNotEmpty() &&
+                !line.startsWith("warning") &&
+                !line.startsWith("uyarı") &&
+                !line.startsWith("error") &&
+                '/' in line.substringBefore(' ')
+        }?.substringBefore(' ')
+        ?.substringAfter('/')
+        ?.takeIf { it.isNotEmpty() }
 
 /** The `depend` entries of a package's `.PKGINFO`. */
 fun declaredDependsOf(pkginfo: String): List<String> =

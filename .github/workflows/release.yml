@@ -124,6 +124,9 @@ jobs:
             xorg-server-xvfb xorg-xdpyinfo xorg-xprop wmctrl openbox \
             desktop-file-utils ttf-dejavu \
             glibc libstdc++ libglvnd libx11 libxext libxi libxrender libxtst fontconfig
+          # The dependency check asks which package provides a library, and the
+          # answer must not depend on what this container happens to install.
+          pacman -Fy --noconfirm
 
       - name: Kaynağı al
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
