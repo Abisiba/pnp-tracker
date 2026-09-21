@@ -7,7 +7,17 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** Faz 3 / **İş 11 ve İş 12 TAMAMLANDI** —
+> **Son güncelleme:** Faz 3 / **İş 14 TAMAMLANDI; İş 13 HAZIR ama temiz Garuda
+> ortamında KOŞULMADI** — `docs: record Garuda verification readiness`.
+> `packaging/verify/` altında temiz bir VM'e kopyalanıp tek komutla çalışan
+> doğrulama paketi var (yetkisiz ön kontrol + onay isteyen kurulum/güncelleme/
+> kaldırma turu); bu makinede yalnız statik ve sahte-komut testleriyle sınandı,
+> gerçek `pacman` çalıştırılmadı. Kullanıcı kılavuzu ve örnek içe aktarma belgesi
+> `docs/` altında ve gerçek ayrıştırıcıyla test ediliyor. Üretim kodu, build,
+> PLAN ve Room 8 değişmedi. Ayrıntı §25.6. **Sıradaki gerçek engel: İş 13'ün
+> temiz Garuda VM koşusu.**
+>
+> Daha önce: Faz 3 / **İş 11 ve İş 12 TAMAMLANDI** —
 > `docs: record Linux packaging decisions and results`. Uygulama artık sistemde
 > Java gerektirmeyen, belirlenimci bir `pnp-tracker-0.1.0-linux-x86_64.tar.gz`
 > arşivi (jpackage uygulama imajı + 13 modüllük jlink runtime) ve bu arşivi
@@ -115,41 +125,32 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-başlangıç HEAD        : a6db6c7883241b18364f90f753feade345c39876
-                        (docs: record completed diagnostics and integrity work)
-HEAD (bu commit öncesi): a0d1aa6 — fix(packaging): read the window class only through the window helpers
-bu commit             : docs: record Linux packaging decisions and results
-bu turun commit'leri  : a942683 build(linux): package a self-contained application archive   İş 11
-                        44b329d build(arch): package the application for Garuda and Arch Linux İş 12
-                        a0d1aa6 fix(packaging): read the window class only through the       tam koşunun
-                                window helpers                                               bulduğu hata
-working tree          : her commit'te temiz
-Room şema sürümü      : 8   (DEĞİŞMEDİ; migration yok, yeni üçüncü taraf bağımlılık yok)
-şema dosyaları        : 1.json … 8.json  hepsi bayt bayt aynı
-PLAN.md               : DEĞİŞMEDİ (180ff640…) — İş 11/12 maddeleri seçilen paket türlerini
-                        zaten kapsıyor; kararlar burada (§25.5) kayıtlı
-fixture               : sample-import.xlsx DEĞİŞMEDİ (314780a4…)
-test durumu           : ./gradlew clean check --rerun-tasks (bellek sınırlı, §30; ayrılmış süreçle)
-                        → BUILD SUCCESSFUL, 3701 / 0 / 0 / 0 (269 sınıf), 7 dk 32 sn
-                        (paket denetimleri test sınıfı değil, ayrı Gradle görevleridir)
-tam koşu geçmişi      : (1) 44b329d'de 3701 test, 1 başarısız: SafeWindowCloserTest'in yüzey testi
-                        paket denetiminin doğrudan xprop çağırdığını yakaladı → a0d1aa6;
-                        (2) a0d1aa6'da yukarıdaki satır
-dar koşular           : AppInfoTest dahil sürümü kullanan sınıflar → 3 sınıf / 29 test;
-                        SafeWindowCloserTest 13/13; desktopWindowSmoke PASSED; ktlint temiz
-paket smoke'ları      : ./gradlew :app:verifyLinuxPackage → PACKAGE: PASSED (§25.5)
-(tam koşudan sonra)     ./gradlew :app:verifyArchPackage  → PACKAGE: PASSED (§25.5)
-çıktılar              : pnp-tracker-0.1.0-linux-x86_64.tar.gz   94.309.676 bayt
-                          SHA-256 a66bbb88dea52969889b6e5555e55b679827cb151fae48d0094e8c43cd958716
-                        pnp-tracker-0.1.0-1-x86_64.pkg.tar.zst  92.537.371 bayt (kurulu 181.025.904)
-                          SHA-256 eb296a35f43f352ba1da02ff25abfd5985f56c84afd1af14e3c805f0abe870ea
-                        (ikisi de ardışık üretimlerde bayt bayt aynı; bu makinede, bu araçlarla)
-gerçek kullanıcı alanı: başlangıç ve bitişte yalnız hash/metadata — pnp.db, pnp.db.lck, backups,
-                        config, ~/.local/state birebir aynı; /opt ve /usr/bin'e hiçbir şey
-                        kurulmadı, sudo kullanılmadı
+başlangıç HEAD        : 8cc47e03e256583ff1a02516e38772b341054581
+                        (docs: record Linux packaging decisions and results)
+HEAD (bu commit öncesi): fb252bc — docs: write the user and import guides
+bu commit             : docs: record Garuda verification readiness
+bu turun commit'leri  : e851158 test(packaging): prepare clean Garuda installation verification  İş 13 hazırlığı
+                        fb252bc docs: write the user and import guides                           İş 14
+üretim kodu           : DEĞİŞMEDİ (commonMain/desktopMain'de tek satır yok)
+build                 : DEĞİŞMEDİ (app/build.gradle.kts'e dokunulmadı)
+Room şema sürümü      : 8   (DEĞİŞMEDİ)
+PLAN.md               : DEĞİŞMEDİ (180ff640…) — İş 13/14 maddeleri bu turda yapılanı kapsıyor
+şema dosyaları        : 1.json … 8.json ve sample-import.xlsx bayt bayt aynı
+test durumu           : tam koşu ÇALIŞTIRILMADI (bu tur yalnız script, test ve belge değiştirdi).
+                        Koşanlar: GarudaVerificationScriptsTest 12/12, DocumentationTest 9/9,
+                        TurkishTextCatalogTest + AppInfoTest ile birlikte 4 sınıf / 33 test, 0 hata;
+                        ktlintCheck temiz; git diff --check temiz
+gerçek sistem         : pacman çalıştırılmadı, sudo kullanılmadı, /opt ve /usr'a hiçbir şey
+                        kurulmadı; gerçek kullanıcı verisi (db, lock, backups, config, state)
+                        hash/metadata ile başlangıçtakiyle birebir aynı
 ```
 
-**Bu commit İş 11 ve İş 12'yi kapatan belge turudur.** Paket türleri, sürüm
+**Bu commit İş 14'ü kapatan ve İş 13'ün hazır olduğunu kaydeden belge turudur.**
+İş 13 **TAMAMLANMADI**: doğrulama paketi yazıldı ve sınandı, ama temiz bir Garuda
+sanal makinesinde koşulmadı (§33 R6). Sıradaki gerçek engel odur.
+
+**Önceki belge commit'i (`8cc47e0`) İş 11 ve İş 12'yi kapatıyordu.**
+ Paket türleri, sürüm
 kaynağı, runtime, belirlenimcilik, doğrulama ve bilinen sınırlar §25.5'tedir.
 Sıradaki bağlayıcı iş **Faz 3 / İş 13**'tür (temiz Garuda ortamında kurulum,
 açılış, veri dizini, güncelleme ve kaldırma testi — §33 R6: ayrı bir temiz
@@ -5141,6 +5142,94 @@ temiz ortam     gerçek pacman -U kurulumu, güncelleme ve kaldırma İş 13'tü
 
 ---
 
+# 25.6 TEMİZ ORTAM DOĞRULAMASI VE KULLANICI BELGELERİ  *(Faz 3 / İş 13 hazır, İş 14 TAMAM)*
+
+## İş 13 — HAZIR, TEMİZ GARUDA ORTAMINDA KOŞULMADI  *(`e851158`)*
+
+Bu geliştirme makinesi temiz ortam sayılmaz; gerçek `pacman -U`, kurulum ve
+kaldırma burada **çalıştırılmadı**. Yazılan şey, temiz bir VM'e kopyalanıp orada
+koşulacak doğrulama paketidir.
+
+```text
+packaging/verify/lib.sh       sonuç matrisi (PASS/FAIL/SKIPPED/MANUAL/INFO), paket adı ve
+                              sürüm kuralları, TEK silme koruması (yalnız $TMPDIR altındaki
+                              pnp-verify-* dizini), uygulamayı geçici XDG ile açıp bekleme,
+                              "EVET" yazmadan geçilmeyen onay
+packaging/verify/preflight.sh YETKİSİZ, hiçbir şeyi değiştirmez: Garuda/Arch, x86_64, glibc,
+                              grafik oturumu, araçlar, paketin kurulu OLMADIĞI, dört kurulum
+                              yerinin boş olduğu, dosya adı/sürüm/SHA-256, .PKGINFO, bağımlılıklar
+                              (java/jre/jdk olmamalı), içerik yalnız /opt ve /usr
+packaging/verify/verify-clean-install.sh
+                              onay → ön kontrol → kurulum → yerleşim/izin/pacman -Qkk →
+                              java'sız PATH ve JAVA_HOME'suz ilk açılış → yönlendirilmiş kullanım
+                              turu (içe aktarma, onay, CSV, yedek, geri yükleme, reddedilen dosya)
+                              → yeniden kurulum → güncelleme (eski paket verilmezse SKIPPED ve
+                              nedeni) → kaldırma → veri duruyor mu → yeniden kurup açma →
+                              gerçek ev dizini değişmedi mi → temizlik → menüden açılış (en sonda,
+                              çünkü tek kendi XDG'nizi kullanan adım o)
+packaging/verify/README.md    VM'e ne kopyalanır, tek komut, kurallar, otomatik/manuel ayrımı
+```
+
+Güvenlik kuralları koda gömülü: root olarak çalışmayı reddeder; `sudo` yalnız tek
+bir fonksiyonda ve yalnız `pacman` ile geçer; hiçbir pencere kapatılmaz (kullanıcı
+kapatır); silinen tek şey kendi geçici dizinidir ve yolu önce doğrulanır; kullanıcı
+verisi hiçbir adımda silinmez, temizlik ayrı ve elle yapılan bir adım olarak
+anlatılır; hata yutulmaz, durulan aşama yazılır.
+
+Tek komut (temiz VM'de):
+
+```bash
+bash packaging/verify/verify-clean-install.sh ./pnp-tracker-<sürüm>-1-x86_64.pkg.tar.zst
+```
+
+`GarudaVerificationScriptsTest` (12 test) bu makinede ne kanıtlar: katı kip ve
+`bash -n`, bu makinenin yolu/kullanıcı adı yok, yetki yalnız pacman satırlarında,
+root reddi yetkili komuttan önce, silme koruması iki yönde (kendi dizinini siler,
+başkasınınkini reddeder), dosya adı kuralları, ve **sahte** `pacman`/`sudo` ile:
+paket kuruluysa ön kontrol FAIL verir ve matrisi yazar; onay verilmeden hiçbir
+pacman çağrılmaz; ön kontrol düşerse kuruluma geçilmez.
+
+Otomatik kanıtlanamayanlar (VM'de gözle): pencerenin açılması ve başlığı, ekran
+metinlerinin anlaşılırlığı, yeniden açılışta verinin yerinde olması, kaldırıp
+yeniden kurduktan sonra verinin açılması, menüden açılış.
+
+## İş 14 — kullanıcı kılavuzu ve örnek içe aktarma  *(`fb252bc`)*
+
+```text
+docs/kullanim-kilavuzu.md   Türkçe, görev odaklı: uygulama nedir, veri nerede, oyun/hücre/görev,
+                            XLSX+CSV içe aktarma, taslak inceleme/onay/kaldırma, geri alma ve red
+                            koşulları, ilerleme ve metne dönüştürme, arama/filtre, CSV dışa aktarma,
+                            manuel yedek, geri yükleme + güvenlik yedeği, otomatik yedek sayısı,
+                            beklenmeyen kapanış, "hasarlı veritabanı" ekranında ne yapılacağı,
+                            tanılama kayıtları, klavye/erişilebilirlik, taşınabilir arşiv,
+                            Arch paketi kurma/güncelleme/kaldırma, verinin neden durduğu, sınırlar
+docs/ornek-ice-aktarma.md   biçimler okuyucudan türetildi: zorunlu üç sütun, yedi source_type ve
+                            Türkçe Excel başlıkları, ** işareti ve baştaki adet ipucu, renk adları,
+                            Türkçe harf/boş hücre/formül görünümlü hücre, hatalı satır tablosu,
+                            formül enjeksiyonu korumasının kullanıcı tarafı, XLSX düzeni
+docs/ornek-ice-aktarma.csv  gerçekten içe aktarılabilen örnek (CRLF; .gitattributes ile muaf)
+```
+
+Belgede sürüm numarası sabitlenmez (`<sürüm>` yazılır), mutlak ev dizini yolu ve
+silme komutu verilmez; veri temizliği "önce yedek al, yolu gör, sonra sil" diye
+anlatılır. `sample-import.xlsx` değiştirilmedi.
+
+`DocumentationTest` (9 test): örnek CSV **uygulamanın kendi okuyucusundan**
+geçirilir (iki oyun, Türkçe harfler, `**`, `=1+1` düz metin) ve belgedeki blokla
+karşılaştırılır; dışa aktarma başlığı `TASK_EXPORT_HEADER`'dan, `source_type`
+değerleri `SourceColumnType`'tan, Excel başlıkları `sourceColumnTypeOf`'tan
+doğrulanır; ekran adları `strings.xml`'de aranır; bağlantılar ve Gradle görev
+adları gerçek dosyalarla eşleşir; sürüm/yol/kullanıcı adı ve silme komutu taraması.
+
+## Bu turda bilinçli olarak yapılmayanlar
+
+- İş 13 tamamlanmadı: temiz VM koşusu yapılmadı, gerçek sisteme kurulum yok.
+- İş 15 (lisans) ve İş 16 (CI/remote) başlatılmadı.
+- README'nin katkı yönergeleri (İş 14'ün kalan parçası) lisans kararına bağlı
+  olduğu için yazılmadı.
+
+---
+
 # 26. DB / ŞEMA KORUMA
 
 ```text
@@ -5761,8 +5850,12 @@ PLAN `18.` — Faz 3 işler listesi.
                                               jlink runtime, verifyLinuxPackage)
 12  Garuda/Arch paketi .................................. TAMAM (§25.5; .pkg.tar.zst,
                                               /opt + /usr/bin, verifyArchPackage)
-13  Temiz Garuda ortamında kurulum testi ................ YAPILMADI
-14  README, kullanıcı kılavuzu, katkı yönergeleri ....... YAPILMADI
+13  Temiz Garuda ortamında kurulum testi ................ HAZIR — TEMİZ GARUDA
+                                              ORTAMINDA KOŞULMADI (§25.6; paket
+                                              packaging/verify/, bu makinede yalnız
+                                              statik ve sahte-komut testleri)
+14  README, kullanıcı kılavuzu, örnek içe aktarma ....... TAMAM (§25.6; katkı
+                                              yönergeleri lisans kararını bekler)
 15  Açık kaynak lisansı + LICENSE ....................... YAPILMADI
 16  GitHub Actions ...................................... YAPILMADI
 ```
@@ -5817,9 +5910,17 @@ görünürler, çünkü metinleri ve eşlemeleri hazır.
 
 ## Sıradaki bağlayıcı iş
 
-> **Sıradaki bağlayıcı iş: Faz 3 / İş 13 — temiz Garuda ortamında kurulum,
-> açılış, veri dizini, güncelleme ve kaldırma testi** (PLAN `18.`; §33 R6: bu
-> makinede yapılamaz, ayrı temiz ortam gerekir). İş 13'e bu turda geçilmedi.
+> **Sıradaki gerçek engel: Faz 3 / İş 13'ün temiz Garuda VM koşusu.** Doğrulama
+> paketi hazır (§25.6, `packaging/verify/`); eksik olan tek şey temiz bir sanal
+> makinede tek komutu çalıştırıp matrisi almaktır. Bu makinede yapılamaz (§33 R6).
+>
+> **İş 14 TAMAMLANDI** (§25.6): Türkçe kullanıcı kılavuzu ve örnek içe aktarma
+> belgesi `docs/` altında, gerçek ayrıştırıcıyla test ediliyor. Katkı yönergeleri
+> İş 15'in lisans kararını bekler.
+>
+> **Kullanıcı kararı bekleyenler:** İş 15 — hangi açık kaynak lisansı (paket
+> şimdilik `LicenseRef-unknown`, `LICENSE` dosyası yok); İş 16 — git remote var mı,
+> nereye yayınlanacak ve sürüm artefaktı politikası.
 >
 > **İş 11 ve İş 12 TAMAMLANDI** (§25.5): Java'sız, belirlenimci
 > `pnp-tracker-0.1.0-linux-x86_64.tar.gz` ve onu paketleyen
@@ -6507,6 +6608,11 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   İŞ 9 TAMAMLANDI: kabul makineden bağımsızdır (doğru sonuç, 42/1.000+ aynı ifade
   yapısı, N+1 yok, arama/süzgeç 0 ifade, tekrarda aynı sonuç); süre/bellek EŞİK
   EKLEME, yalnız ortamla kayıt; aynı yöntemde 2 kat kötüleşmeyi raporla.
+- İŞ 13 HAZIR AMA KOŞULMADI, İŞ 14 TAMAM (§25.6). Kuralı bozma: bu makinede
+  pacman çalıştırma, sudo kullanma, gerçek sisteme kurma; doğrulama scriptlerini
+  yalnız statik ve sahte komutlarla sına. Belgelerde sürüm numarası sabitleme
+  (`<sürüm>` yaz), mutlak ev yolu ve silme komutu verme. Örnek CSV değişirse
+  DocumentationTest onu gerçek okuyucudan geçirir.
 - İŞ 11 VE İŞ 12 TAMAMLANDI (§25.5). Kuralı bozma: sürüm yalnız app/build.gradle.kts
   `version`; AppInfo'ya veya pakete elle sürüm YAZMA. İş 12 arşivi paketler, ikinci
   derleme hattı KURMA. Paket denetimlerinde pencere araçlarını yalnız DesktopWindows.kt
