@@ -315,6 +315,7 @@ class PackageCheck {
      */
     private fun checkLicence(
         application: Path,
+        version: String,
         repository: Path,
     ) {
         val licence = application.resolve("LICENSE")
@@ -334,10 +335,13 @@ class PackageCheck {
         // Every runtime module the package ships is named, and so is every jar.
         val modules = listed(application.resolve("lib/runtime/legal"))
         expect(modules.isNotEmpty() && modules.all { it in noticeText }) { "the notices do not name every runtime module" }
+        // Our own jar is not a third party; it is the MIT-licensed application itself.
         val jars =
             listed(application.resolve("lib/app"))
                 .filter { it.endsWith(".jar") }
                 .map { it.removeSuffix(".jar").replace(Regex("-[0-9a-f]{16,40}$"), "") }
+                .filterNot { it == "app-desktop-$version" }
+        expect("app-desktop" !in noticeText) { "the notices list our own jar as a third party" }
         val missing = jars.filterNot { jar -> jar.substringBeforeLast('-') in noticeText }
         expect(missing.isEmpty()) { "the notices do not name $missing" }
         expect("MIT" in noticeText && "lisansını **tahmin etmez**" in noticeText) {
@@ -401,7 +405,7 @@ class PackageCheck {
             "jpackage's own record is not version $version"
         }
 
-        checkLicence(application, repository)
+        checkLicence(application, version, repository)
 
         val release = Files.readAllLines(application.resolve("lib/runtime/release"))
         val modules =
