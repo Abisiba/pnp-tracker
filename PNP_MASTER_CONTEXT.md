@@ -5822,7 +5822,7 @@ yardımcı işler
       yapılandırılmış görev CSV dışa aktarma
 ```
 
-## Faz 3 — BAŞLADI, 16 İŞTEN 12'Sİ BİTTİ
+## Faz 3 — BAŞLADI, 16 İŞTEN 13'Ü BİTTİ (İş 13 temiz VM koşusunu bekliyor)
 
 PLAN `18.` — Faz 3 işler listesi.
 
@@ -6974,7 +6974,10 @@ hiçbir dosyaya dokunulmadan, Türkçe bir açılış ekranıyla reddediliyor.
 **İş 10 TAMAMLANDI.** Ardından İş 11 ve İş 12 uygulamayı Java'sız, belirlenimci
 bir Linux arşivine ve Garuda/Arch paketine dönüştürdü; ikisi de gerçek
 başlatıcılarıyla depo dışından çalıştırılıp güvenle kapatıldı.
-**Sıradaki bağlayıcı iş Faz 3 / İş 13'tür.**
+İş 14 de bitti: kullanıcı kılavuzu ve örnek içe aktarma belgesi yazıldı ve
+uygulamanın kendi okuyucusuyla test ediliyor. İş 13'ün doğrulama paketi hazır;
+**sıradaki gerçek engel onu temiz bir Garuda sanal makinesinde koşmaktır.**
+İş 15 lisans, İş 16 remote/yayın kararı bekler.
 
 Bunların ilki — **sürümlü JSON yedek ve geri yükleme** — dört atomik dilimde
 **tamamlanmıştır**. Biçim, kapsam, doğrulama hattı, restore mimarisi (A′),
