@@ -117,7 +117,8 @@ jobs:
         run: |
           set -euo pipefail
           pacman -Syu --noconfirm --needed git jdk21-openjdk libarchive zstd \
-            xorg-server-xvfb desktop-file-utils ttf-dejavu \
+            xorg-server-xvfb xorg-xdpyinfo xorg-xprop wmctrl openbox \
+            desktop-file-utils ttf-dejavu \
             glibc libstdc++ libglvnd libx11 libxext libxi libxrender libxtst fontconfig
 
       - name: Kaynağı al
@@ -133,14 +134,29 @@ jobs:
           mkdir -p "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME"
           chown -R builder:builder "$GITHUB_WORKSPACE"
 
+      - name: Sanal ekran ve pencere yöneticisi
+        # The package checks open the real window and close it with
+        # SafeWindowCloser, which asks wmctrl for the window list. wmctrl reads
+        # _NET_CLIENT_LIST, and only a window manager sets it — a bare Xvfb is
+        # not enough, so openbox runs on the same display.
+        run: |
+          set -euo pipefail
+          Xvfb :99 -screen 0 1280x1024x24 -nolisten tcp -ac &
+          for _ in $(seq 1 30); do xdpyinfo -display :99 >/dev/null 2>&1 && break; sleep 1; done
+          xdpyinfo -display :99 >/dev/null
+          runuser -u builder -- env DISPLAY=:99 HOME=/home/builder openbox --sm-disable &
+          for _ in $(seq 1 30); do DISPLAY=:99 wmctrl -m >/dev/null 2>&1 && break; sleep 1; done
+          DISPLAY=:99 wmctrl -m
+
       - name: Paketleri üret ve doğrula
         run: |
           set -euo pipefail
           runuser -u builder -- env \
+            DISPLAY=:99 \
             JAVA_HOME="$JAVA_HOME" \
             XDG_DATA_HOME="$XDG_DATA_HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
             XDG_STATE_HOME="$XDG_STATE_HOME" XDG_CACHE_HOME="$XDG_CACHE_HOME" \
-            xvfb-run -a ./gradlew :app:verifyLinuxPackage :app:verifyArchPackage :app:packageRelease \
+            ./gradlew :app:verifyLinuxPackage :app:verifyArchPackage :app:packageRelease \
               --no-daemon --no-parallel --max-workers=1 \
               -Dorg.gradle.jvmargs="-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8"
 
