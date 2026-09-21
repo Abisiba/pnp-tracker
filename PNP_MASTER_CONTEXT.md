@@ -7,7 +7,23 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** Faz 3 / **İş 14 TAMAMLANDI; İş 13 HAZIR ama temiz Garuda
+> **Son güncelleme:** Faz 3 / **İş 15 TAMAMLANDI; İş 16 HAZIR ama uzak depo ve
+> gerçek GitHub koşusu BEKLİYOR** — `docs: record licensing and release
+> automation readiness`. Proje MIT lisanslıdır
+> (`Copyright (c) 2026 PNP Tracker contributors`); `LICENSE` iki paketin de
+> içindedir (arşivde en üstte, Arch paketinde ayrıca
+> `/usr/share/licenses/pnp-tracker/LICENSE`, `.PKGINFO` `license = MIT`) ve
+> paketin kendi içeriğinden üretilen `THIRD_PARTY_NOTICES.md` gömülü JRE ile
+> kütüphaneleri ayrı tutar. `.github/workflows/` altında iki akış var: `verify`
+> (her PR ve main push'u, salt okunur izin, geçici XDG, bellek sınırlı
+> `clean check`) ve `release` (yalnız `v<sürüm>` etiketi, testten sonra iki paket
+> + `SHA256SUMS`, yayın izni yalnız son işte). Eylemler tam commit SHA'ya
+> sabitlendi; her şey yerelde `WorkflowsTest` ile denetlendi, **GitHub'da
+> çalıştırılmadı**. Room 8, PLAN ve bağımlılıklar değişmedi. Tam koşu 3741 / 0 / 0 / 0 (273 sınıf).
+> Ayrıntı §25.7. **Kalan iki dış adım: İş 13'ün temiz Garuda koşusu ve İş 16'nın
+> gerçek GitHub koşusu.**
+>
+> Daha önce: Faz 3 / **İş 14 TAMAMLANDI; İş 13 HAZIR ama temiz Garuda
 > ortamında KOŞULMADI** — `docs: record Garuda verification readiness`.
 > `packaging/verify/` altında temiz bir VM'e kopyalanıp tek komutla çalışan
 > doğrulama paketi var (yetkisiz ön kontrol + onay isteyen kurulum/güncelleme/
@@ -125,31 +141,41 @@ doğrulanmıştır.
 
 ```text
 branch                : main
-başlangıç HEAD        : 8cc47e03e256583ff1a02516e38772b341054581
-                        (docs: record Linux packaging decisions and results)
-HEAD (bu commit öncesi): fb252bc — docs: write the user and import guides
-bu commit             : docs: record Garuda verification readiness
-bu turun commit'leri  : e851158 test(packaging): prepare clean Garuda installation verification  İş 13 hazırlığı
-                        fb252bc docs: write the user and import guides                           İş 14
+başlangıç HEAD        : e6d1641 (docs: correct the Faz 3 counter and closing summary)
+HEAD (bu commit öncesi): 70e5262 — fix(packaging): keep our own jar out of the third-party notices check
+bu commit             : docs: record licensing and release automation readiness
+bu turun commit'leri  : 4addbf4 docs: license PNP Tracker under MIT                    İş 15
+                        bf701f4 ci: verify changes and build tagged Linux releases     İş 16 (yerel kısım)
+                        70e5262 fix(packaging): keep our own jar out of the            paket denetimi
+                                third-party notices check
 üretim kodu           : DEĞİŞMEDİ (commonMain/desktopMain'de tek satır yok)
-build                 : DEĞİŞMEDİ (app/build.gradle.kts'e dokunulmadı)
+build                 : app/build.gradle.kts değişti — LICENSE staging'e girdi,
+                        writeThirdPartyNotices, sha256Of, checkReleaseTag, packageRelease
 Room şema sürümü      : 8   (DEĞİŞMEDİ)
-PLAN.md               : DEĞİŞMEDİ (180ff640…) — İş 13/14 maddeleri bu turda yapılanı kapsıyor
+PLAN.md               : DEĞİŞMEDİ (180ff640…) — 15. ve 16. maddeler bu turda yapılanı kapsıyor
 şema dosyaları        : 1.json … 8.json ve sample-import.xlsx bayt bayt aynı
-test durumu           : tam koşu ÇALIŞTIRILMADI (bu tur yalnız script, test ve belge değiştirdi).
-                        Koşanlar: GarudaVerificationScriptsTest 12/12, DocumentationTest 9/9,
-                        TurkishTextCatalogTest + AppInfoTest ile birlikte 4 sınıf / 33 test, 0 hata;
-                        ktlintCheck temiz; git diff --check temiz
-gerçek sistem         : pacman çalıştırılmadı, sudo kullanılmadı, /opt ve /usr'a hiçbir şey
+test durumu           : tam koşu 3741 / 0 / 0 / 0 (273 sınıf); ktlintCheck temiz; git diff --check temiz
+                        dar koşular: LicenseTest 6/6, WorkflowsTest 13/13,
+                        DocumentationTest 9/9, GarudaVerificationScriptsTest 12/12
+paket smoke'ları      : verifyLinuxPackage PASSED, verifyArchPackage PASSED — gerçek
+                        başlatıcı, üç geçici XDG, pencere yalnız SafeWindowCloser ile
+gerçek sistem         : pacman kurulumu yok, sudo kullanılmadı, /opt ve /usr'a hiçbir şey
                         kurulmadı; gerçek kullanıcı verisi (db, lock, backups, config, state)
-                        hash/metadata ile başlangıçtakiyle birebir aynı
+                        başlangıçtakiyle birebir aynı
+uzak                  : remote YOK, push YOK, tag YOK, GitHub Release YOK
 ```
 
-**Bu commit İş 14'ü kapatan ve İş 13'ün hazır olduğunu kaydeden belge turudur.**
-İş 13 **TAMAMLANMADI**: doğrulama paketi yazıldı ve sınandı, ama temiz bir Garuda
-sanal makinesinde koşulmadı (§33 R6). Sıradaki gerçek engel odur.
+**Bu commit İş 15'i kapatan ve İş 16'nın yerel hazırlığını kaydeden belge turudur.**
+İş 16 **TAMAMLANMADI**: workflow'lar yazıldı ve yerelde denetlendi, ama uzak depo
+yok ve GitHub'da bir kez bile koşmadılar. İş 13 de hâlâ temiz Garuda VM koşusunu
+bekliyor (§33 R6). Kalan iki dış adım bunlardır.
 
-**Önceki belge commit'i (`8cc47e0`) İş 11 ve İş 12'yi kapatıyordu.**
+**Önceki belge commit'i (`3b1524d` + düzeltmesi `e6d1641`) İş 14'ü kapatıyor ve
+İş 13'ün hazır olduğunu kaydediyordu.** İş 13 hâlâ **TAMAMLANMADI**: doğrulama
+paketi yazıldı ve sınandı, ama temiz bir Garuda sanal makinesinde koşulmadı
+(§25.6, §33 R6).
+
+**Ondan önceki belge commit'i (`8cc47e0`) İş 11 ve İş 12'yi kapatıyordu.**
  Paket türleri, sürüm
 kaynağı, runtime, belirlenimcilik, doğrulama ve bilinen sınırlar §25.5'tedir.
 Sıradaki bağlayıcı iş **Faz 3 / İş 13**'tür (temiz Garuda ortamında kurulum,
@@ -5230,6 +5256,226 @@ adları gerçek dosyalarla eşleşir; sürüm/yol/kullanıcı adı ve silme komu
 
 ---
 
+# 25.7 LİSANS VE YAYIN OTOMASYONU  *(Faz 3 / İş 15 TAMAM, İş 16 HAZIR)*
+
+Bağlayıcı metin PLAN `18.` Faz 3, madde 15 ve 16. İş 15 bu turda kapandı; İş 16
+yerelde yapılabilen her şeyiyle hazır ama **uzak depo ve gerçek GitHub koşusu
+olmadan tamamlanmış sayılmaz**.
+
+## İş 15 — MIT
+
+```text
+lisans          MIT, Open Source Initiative metniyle birebir
+telif satırı    Copyright (c) 2026 PNP Tracker contributors
+                (depoda kanonik bir telif sahibi adı yok; kişisel ad tahmin edilmedi)
+dosya           kökte LICENSE (1.081 bayt)
+```
+
+Lisansın paketlerdeki yeri:
+
+```text
+tar.gz          pnp-tracker-<sürüm>/LICENSE
+                pnp-tracker-<sürüm>/THIRD_PARTY_NOTICES.md
+                pnp-tracker-<sürüm>/third-party/<bileşen>/LICENSE|NOTICE
+.pkg.tar.zst    /usr/share/licenses/pnp-tracker/LICENSE          ← Arch'ın yeri
+                /usr/share/licenses/pnp-tracker/THIRD_PARTY_NOTICES.md
+                /opt/pnp-tracker/LICENSE (+ notices, third-party/)  ← arşivle geldiği için
+.PKGINFO        license = MIT
+```
+
+Daha önce lisans olmadığı için `packaging/linux/README.txt` "henüz bir lisans
+seçilmemiştir" diyordu ve PKGBUILD `license=('LicenseRef-unknown')` taşıyordu.
+İkisi de değişti; paket açıklaması (`pkgdesc`), dizin anlatımı ve XDG bölümü
+olduğu gibi duruyor.
+
+### Üçüncü taraf bildirimleri — nereden türetildi
+
+`stageLinuxApplication` içindeki `writeThirdPartyNotices` **paketin kendi
+içeriğinden** üretir, tahmin etmez:
+
+```text
+çalışma ortamı  lib/runtime/release → JAVA_VERSION
+                lib/runtime/legal/java.base/LICENSE'ın ilk satırı (GPL) ve
+                yanındaki ASSEMBLY_EXCEPTION (Classpath istisnası)
+                13 modülün legal/ dizini adlarıyla listelenir
+kütüphaneler    lib/app/*.jar → ad + sürüm (Compose'un eklediği digest atılır),
+                jar'ın MANIFEST'indeki Bundle-License,
+                jar'ın taşıdığı META-INF/LICENSE|NOTICE dosyaları
+                third-party/<ad>-<sürüm>/ altına çıkarılır
+kendi jar'ımız  app-desktop-<sürüm> listeye girmez; o MIT'tir
+```
+
+**Bilinçli sınır:** artefaktların çoğu (Compose, kotlinx, androidx, skiko) kendi
+içinde ne lisans adı ne lisans metni taşır; Gradle bu modüller için POM değil
+`.module` indirdiğinden yerelde okunacak bir lisans bildirimi de yoktur.
+Bildirim dosyası bu bileşenler için "artefakt bir şey söylemiyor" yazar ve
+**lisans adı uydurmaz**. Paketleme adımını ağa bağlamamak için POM indirme
+yoluna gidilmedi. 11 bileşenin gerçek lisans metni pakete girer (Apache Commons
+6, POI 3, log4j-api ve xmlbeans; LICENSE ve NOTICE dosyalarıyla).
+
+`LicenseTest` (6 test): LICENSE'ın MIT metniyle birebirliği, telif satırında ad/
+e-posta/yol olmaması, PKGBUILD'in `license=('MIT')` ve `/usr/share/licenses`
+kurulumu, build'in LICENSE'ı ve bildirimleri pakete koyması, arşiv README'si ve
+belgelerin aynı şeyi söylemesi, ve **hiçbir kaynak dosyanın lisans başlığı
+taşımaması** (lisans tek dosyada durur). `LinuxPackageCheck` her iki pakette
+LICENSE'ın depodakiyle bayt bayt aynı olduğunu, bildirimlerin her runtime
+modülünü ve her jar'ı andığını ve `third-party/` metinlerinin yerinde olduğunu
+denetler.
+
+## İş 16 — GitHub Actions  *(HAZIR — REMOTE VE GERÇEK GITHUB KOŞUSU BEKLİYOR)*
+
+```text
+.github/workflows/ci.yml       name: verify
+                               pull_request, push→main, workflow_dispatch
+                               iş: check (ubuntu-24.04)
+.github/workflows/release.yml  name: release
+                               push v* etiketi, workflow_dispatch (yayın YAPMAZ)
+                               işler: verify → package → publish
+```
+
+İzinler: iki dosyada da üst düzey `permissions: contents: read`. `publish` dışında
+her iş `contents: read`; `publish` yalnız `contents: write` (başka hiçbir kapsam
+yok). Doğrulama akışında `secrets.` geçmez — fork'tan gelen pull request de
+koşabilir. Yayın akışı yalnız GitHub'ın kendi `github.token` değerini kullanır.
+
+Sabitlenen eylemler (hepsi resmî; tam commit SHA + okunabilir sürüm yorumu):
+
+```text
+actions/checkout                    3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+actions/setup-java                  de7274f081f381c8f8158605e0321c36c376e2e6  # v6.0.1
+gradle/actions/wrapper-validation   9c971963bec38e04b3d30dcc455b5382be2fdbfb  # v6.3.0
+gradle/actions/setup-gradle         9c971963bec38e04b3d30dcc455b5382be2fdbfb  # v6.3.0
+actions/upload-artifact             043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+actions/download-artifact           3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+```
+
+Yayın için üçüncü taraf bir "release" eylemi **kullanılmadı**; runner'da hazır
+gelen `gh` kullanılır.
+
+### Doğrulama akışı
+
+JDK 21 (temurin), wrapper doğrulaması, Gradle önbelleği (`main` dışında salt
+okunur), ve bu projenin bellek sınırlı komutu:
+
+```text
+xvfb-run -a ./gradlew clean check --rerun-tasks \
+  --no-daemon --no-parallel --max-workers=1 \
+  -Pkotlin.compiler.execution.strategy=in-process \
+  -Dorg.gradle.jvmargs="-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8"
+```
+
+`xvfb-run` çünkü `AwtImportFilePickerTest` AWT toolkit'inin olay kuyruğunu
+ister; GUI testi **atlanmaz**, ekran verilir. XDG'nin dördü de
+`${{ github.workspace }}/.ci-xdg/…` altındadır; koşudan sonra runner'ın
+`$HOME/.local/share|.config|.local/state/pnp-tracker` yollarının **oluşmadığı**
+denetlenir. Testten sonra `git diff --exit-code -- app/schemas
+app/src/desktopTest/resources PLAN.md` ve ardından çıplak `git diff --exit-code`:
+bir koşu okuduğu şemayı veya fixture'ı yeniden yazamaz. Test raporları
+`always()` ile, 14 gün saklanacak şekilde yüklenir.
+
+### Yayın akışı
+
+```text
+verify   etiket kapısı (yalnız push): ./gradlew :app:checkReleaseTag -PreleaseTag=$GITHUB_REF_NAME
+         → sonra tam test paketi. Etiket yanlışsa paket üretilmeden düşer.
+package  needs: verify. ubuntu-24.04 + archlinux:base-devel konteyneri
+         (makepkg yalnız Arch'ta var), yetkisiz `builder` kullanıcısı,
+         :app:verifyLinuxPackage :app:verifyArchPackage :app:packageRelease
+         → sha256sum -c SHA256SUMS → artifact (7 gün)
+publish  needs: package. Yalnız `push` + `refs/tags/v…`. contents: write.
+         özetleri yeniden doğrular → `gh release view` ile mevcut yayını arar,
+         varsa DURUR (sessizce ezmez) → notları SHA256SUMS'tan yazar →
+         gh release create --verify-tag ile iki paket, SHA256SUMS, LICENSE,
+         iki kılavuz ve örnek CSV yüklenir.
+```
+
+Etiket kuralı: yalnız `v<project.version>`. Sürüm tek kaynaktan (`R5`) gelir, bu
+yüzden kapı da oradan türer.
+
+**İmza yok.** Anahtar olmadığı için sahte imza üretilmez; yayın notları paketlerin
+imzasız olduğunu söyler ve `sha256sum -c SHA256SUMS` doğrulamasını zorunlu kılar.
+Notlar yalnız özet dosyasından yazılır: build log'u, runner yolu veya kullanıcı
+içeriği yayın metnine giremez.
+
+### Yeni Gradle görevleri
+
+```text
+:app:checkReleaseTag   -PreleaseTag=v<sürüm> değilse düşer; yayın yolunun ilk kapısı
+:app:packageRelease    iki paketi app/build/release/ altında toplar, SHA256SUMS yazar
+                       ve LICENSE, THIRD_PARTY_NOTICES.md, kullanım kılavuzu,
+                       içe aktarma kılavuzu ve örnek CSV'yi yanına koyar
+```
+
+Workflow'lar kabuk içinde ikinci bir derleme hattı yazmaz; yalnız bu görevleri
+çağırır.
+
+### Yerelde doğrulanan  *(GitHub çalıştırılmadan)*
+
+`WorkflowsTest` (13 test) iki YAML'ı kendi küçük okuyucusuyla ayrıştırır ve
+denetler: dosyaların ayrıştığı ve iş listesi, tetikleyiciler, izinlerin dar
+olduğu (`publish` dışında yazma yok, `write-all` yok, doğrulama akışında
+`gh release` yok), PR'ın secret istemediği, her eylemin 40 haneli commit SHA +
+sürüm yorumuyla sabitlendiği ve aynı eylemin her yerde aynı commit'e bağlandığı,
+her artifact yüklemesinin saklama süresi verdiği ve raporların `always()` ile
+yüklendiği, her `./gradlew` komutunun **var olan** bir göreve karşılık geldiği,
+bellek sınırlı bayrakların ve `xvfb-run`'ın bulunduğu ve testin dışlanmadığı,
+XDG'nin geçici olduğu, `needs` zincirinin testsiz yayına izin vermediği, etiket
+kapısının derlemeden önce geldiği, yayının iki paketi + SHA256SUMS + belgeleri
+taşıdığı, aynı etiketin ikinci koşusunun durduğu ve başka bir hedefe
+gönderim/imza olmadığı.
+
+Etiket/sürüm eşleştirmesi ayrıca **gerçek görevle** denenmiştir:
+
+```text
+v0.1.0        → KABUL ("release tag v0.1.0 matches the project version")
+0.1.0         → RET
+v0.1          → RET
+v1.0.0        → RET
+v0.1.0-rc1    → RET
+(etiket yok)  → RET ("no tag was given")
+```
+
+### Yerelde doğrulanamayan  *(gerçek koşuyu bekler)*
+
+- Runner'ın gerçek belleği, süresi ve `xvfb` altında `check`'in davranışı.
+- `archlinux:base-devel` konteynerinde `actions/checkout`, JDK 21 ve makepkg'in
+  birlikte çalışması; paket doğrulama görevlerinin konteynerde pencere açması.
+- `gh release create` çıktısı ve `--verify-tag` davranışı.
+- Gradle önbelleğinin gerçek davranışı.
+
+Bunlar için **hiçbir yerel sonuç uydurulmadı**; İş 16 bu yüzden `HAZIR` durumunda
+kalır.
+
+## Bu turun ölçümleri
+
+```text
+tam koşu        3741 / 0 / 0 / 0 (273 sınıf)
+paket smoke'ları verifyLinuxPackage PASSED, verifyArchPackage PASSED
+                (gerçek başlatıcı, üç geçici XDG, SafeWindowCloser)
+arşiv           pnp-tracker-<sürüm>-linux-x86_64.tar.gz
+                94.324.850 bayt
+                sha256 9bd4b8ef9f24bd6e6cc48e14c8a1c561e9c4c528eb8644d6fbb0e5905d466851
+Arch paketi     pnp-tracker-<sürüm>-1-x86_64.pkg.tar.zst
+                92.546.728 bayt
+                sha256 b25fb1085307f1f091faa1e7f62d78a150ecf7566ce831aabc6be4a428983a4d
+```
+
+İki paket de LICENSE ve THIRD_PARTY_NOTICES.md eklendikten sonra yeniden
+üretildi; hash'ler İş 11/12'deki değerlerden bu yüzden farklıdır. Belirlenimcilik
+sözleşmesi korunuyor ve bu turda **ölçüldü**: paketler önce üretildi, sonra
+`clean check --rerun-tasks` bütün `app/build` ağacını sildi, sonra sıfırdan
+yeniden üretildi — iki üretimin SHA-256'ları yukarıdaki değerlerle birebir aynı
+çıktı (§25.5'teki yöntem değişmedi).
+
+## Bu turda bilinçli olarak yapılmayanlar
+
+- Uzak depo oluşturulmadı, `git remote add` yapılmadı, push/tag/release yok.
+- Gerçek sisteme paket kurulmadı, `sudo` kullanılmadı.
+- İş 13 hâlâ temiz Garuda VM koşusunu bekliyor (§25.6, §33 R6).
+- Sürüm yükseltilmedi; `0.1.0` duruyor.
+
+---
+
 # 26. DB / ŞEMA KORUMA
 
 ```text
@@ -5723,6 +5969,15 @@ Linux paketleri (§25.5; doğrulamalar ekran ister, `check`'e bağlı değil):
 ./gradlew :app:verifyArchPackage     # paket sözleşmesi + geçici kökte yoklama + pencere + kaldırma
 ```
 
+Yayın (§25.7; uzak hedefe hiçbir şey göndermez):
+
+```bash
+./gradlew :app:checkReleaseTag -PreleaseTag=v<sürüm>   # yalnız v<Gradle sürümü> geçer
+./gradlew :app:packageRelease                          # app/build/release/: iki paket,
+                                                       # SHA256SUMS, LICENSE, bildirimler, kılavuzlar
+(cd app/build/release && sha256sum -c SHA256SUMS)
+```
+
 Masaüstü smoke (gerçek pencere, geçici XDG, yalnız kendi penceresini kapatır):
 
 ```bash
@@ -5822,7 +6077,7 @@ yardımcı işler
       yapılandırılmış görev CSV dışa aktarma
 ```
 
-## Faz 3 — BAŞLADI, 16 İŞTEN 13'Ü BİTTİ (İş 13 temiz VM koşusunu bekliyor)
+## Faz 3 — BAŞLADI, 16 İŞTEN 14'Ü BİTTİ (İş 13 temiz VM, İş 16 gerçek GitHub koşusunu bekliyor)
 
 PLAN `18.` — Faz 3 işler listesi.
 
@@ -5856,8 +6111,13 @@ PLAN `18.` — Faz 3 işler listesi.
                                               statik ve sahte-komut testleri)
 14  README, kullanıcı kılavuzu, örnek içe aktarma ....... TAMAM (§25.6; katkı
                                               yönergeleri lisans kararını bekler)
-15  Açık kaynak lisansı + LICENSE ....................... YAPILMADI
-16  GitHub Actions ...................................... YAPILMADI
+15  Açık kaynak lisansı + LICENSE ....................... TAMAM (§25.7; MIT, iki
+                                              pakette + /usr/share/licenses,
+                                              THIRD_PARTY_NOTICES.md)
+16  GitHub Actions ...................................... HAZIR — REMOTE VE GERÇEK
+                                              GITHUB KOŞUSU BEKLİYOR (§25.7;
+                                              verify + release akışları, yerelde
+                                              WorkflowsTest ile denetlendi)
 ```
 
 ### İş 1'in durumu — iki dilim, ikisi de bitti
@@ -6237,8 +6497,8 @@ kaldırma testi" ayrı bir temiz ortam gerektirir.
 
 `nativeDistributions` tanımlı; `createDistributable`, `packageLinuxArchive`,
 `packageArch` ve iki doğrulama görevi var (§25.5). `targetFormats` bilinçli
-olarak boş: deb/rpm/AppImage bu projenin çıktısı değildir. `LICENSE` dosyası
-(İş 15) ve `.github/` dizini (İş 16) hâlâ yok.
+olarak boş: deb/rpm/AppImage bu projenin çıktısı değildir. `LICENSE` (İş 15) ve
+`.github/workflows/` (İş 16) artık var; ikisi de §25.7'dedir.
 
 ---
 
@@ -6608,6 +6868,13 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   İŞ 9 TAMAMLANDI: kabul makineden bağımsızdır (doğru sonuç, 42/1.000+ aynı ifade
   yapısı, N+1 yok, arama/süzgeç 0 ifade, tekrarda aynı sonuç); süre/bellek EŞİK
   EKLEME, yalnız ortamla kayıt; aynı yöntemde 2 kat kötüleşmeyi raporla.
+- İŞ 15 TAMAM, İŞ 16 HAZIR AMA GITHUB'DA KOŞULMADI (§25.7). Kuralı bozma: LICENSE
+  standart MIT metnidir, düzenleme; kaynak dosyalara lisans başlığı EKLEME;
+  üçüncü taraf lisans adı UYDURMA (bildirim dosyası paketin kendi içeriğinden
+  üretilir). Eylemleri mutable etikete bağlama, tam commit SHA + sürüm yorumu
+  kullan; yayın iznini `publish` işinden başka yere verme; yayın etiketi yalnız
+  `v<Gradle sürümü>`. Uzak depo/remote/push/tag bu turlarda YAPILMADI; kullanıcı
+  söylemeden yapma. Yerel doğrulama: WorkflowsTest + `:app:checkReleaseTag`.
 - İŞ 13 HAZIR AMA KOŞULMADI, İŞ 14 TAMAM (§25.6). Kuralı bozma: bu makinede
   pacman çalıştırma, sudo kullanma, gerçek sisteme kurma; doğrulama scriptlerini
   yalnız statik ve sahte komutlarla sına. Belgelerde sürüm numarası sabitleme

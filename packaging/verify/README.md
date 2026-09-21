@@ -54,6 +54,7 @@ bash packaging/verify/preflight.sh ./pnp-tracker-<sürüm>-1-x86_64.pkg.tar.zst
 - Paketin kurulu olmadığı ve kurulum yerlerinin boş olduğu.
 - Paket dosyasının adı, sürümü, SHA-256'sı, `.PKGINFO` alanları, bağımlılıkları
   (sistem Java'sı olmamalı) ve içeriğinin yalnız `/opt` ile `/usr` altında olduğu.
+- Lisansın Arch'ın yerinde olduğu: `/usr/share/licenses/pnp-tracker/LICENSE`.
 - Kurulum sonrası dört yer, sahiplik ve izinler, `/usr/bin` bağlantısının `/opt`
   altına çözülmesi, gömülü runtime'ın varlığı, `pacman -Qkk` bütünlüğü,
   masaüstü girdisinin geçerliliği.
