@@ -17,8 +17,17 @@ arch=('@ARCH@')
 license=('MIT')
 # What the application's own native code loads every time it starts: Skia
 # (libGL, libX11, fontconfig, libstdc++) and AWT's X11 toolkit. The Java runtime
-# is inside the package; freetype and zlib come with it.
-depends=('glibc' 'libstdc++' 'libglvnd' 'libx11' 'libxext' 'libxi' 'libxrender' 'libxtst' 'fontconfig')
+# is inside the package.
+#
+# The second line is the runtime's own: which of these it needs depends on the
+# JDK the package was built with. Temurin bundles freetype, libpng, harfbuzz,
+# libjpeg, lcms and giflib inside the image and needs none of them; Arch's
+# jdk21-openjdk links the system ones instead. The package is built in both
+# places — on a developer's machine and in the release container — so it
+# declares what either build can need. freetype2, libpng and zlib already
+# arrive with fontconfig; these four do not.
+depends=('glibc' 'libstdc++' 'libglvnd' 'libx11' 'libxext' 'libxi' 'libxrender' 'libxtst' 'fontconfig'
+         'harfbuzz' 'libjpeg-turbo' 'lcms2' 'giflib')
 # The embedded Java runtime and Skia must not be stripped or split.
 options=('!strip' '!debug')
 source=("@ARCHIVE@" 'pnp-tracker.desktop')
