@@ -16,6 +16,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.unit.Density
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.yield
 
 /**
  * A real Compose composition, off screen, that real key strokes can be sent to.
@@ -65,6 +66,23 @@ class ComposeSceneHarness(
     fun render() {
         clock += FRAME_NANOSECONDS
         scene.render(clock).close()
+    }
+
+    /**
+     * Advances a frame and lets the effects that frame launched actually run.
+     *
+     * [Dispatchers.Unconfined] runs a launch on the launching thread, but only
+     * when that thread is not already inside an event loop. Under `runBlocking`
+     * it is: the launch is queued on the loop instead, and it gets its turn the
+     * next time the calling coroutine yields. A test that renders and asserts in
+     * the same breath is therefore racing its own `LaunchedEffect`, and wins or
+     * loses depending on how the machine happened to schedule it.
+     *
+     * So anything that asserts on what an effect did renders through here.
+     */
+    suspend fun renderAndSettle() {
+        render()
+        yield()
     }
 
     /**
