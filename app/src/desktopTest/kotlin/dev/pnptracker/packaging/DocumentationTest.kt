@@ -15,6 +15,9 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
+/** Tasks the Kotlin, Compose and ktlint plugins bring; every other name must be in the build script. */
+internal val PLUGIN_TASKS = listOf("run", "check", "clean", "desktopTest", "ktlintCheck", "ktlintFormat")
+
 /**
  * The guides (Faz 3 / İş 14), held to the application they describe.
  *
@@ -39,7 +42,14 @@ class DocumentationTest {
     private val exampleCsv: Path get() = repository().resolve("docs/ornek-ice-aktarma.csv")
 
     private val documents: List<Path>
-        get() = listOf(guide, importGuide, repository().resolve("README.md"), repository().resolve("packaging/verify/README.md"))
+        get() =
+            listOf(
+                guide,
+                importGuide,
+                repository().resolve("README.md"),
+                repository().resolve("CONTRIBUTING.md"),
+                repository().resolve("packaging/verify/README.md"),
+            )
 
     @Test
     fun `every guide is there and says what it is`() {
@@ -203,10 +213,11 @@ class DocumentationTest {
     fun `the commands in the guides are commands this repository really has`() {
         val text =
             Files.readString(guide) + Files.readString(repository().resolve("README.md")) +
+                Files.readString(repository().resolve("CONTRIBUTING.md")) +
                 Files.readString(repository().resolve("packaging/verify/README.md"))
         val build = Files.readString(repository().resolve("app/build.gradle.kts"))
         Regex("\\./gradlew (:app:)?([A-Za-z]+)").findAll(text).map { it.groupValues[2] }.distinct().forEach { task ->
-            val known = task in listOf("run", "check", "clean") || "\"$task\"" in build || "val $task by" in build
+            val known = task in PLUGIN_TASKS || "\"$task\"" in build || "val $task by" in build
             assertTrue(known, "kılavuzdaki Gradle görevi yok: $task")
         }
         listOf("packaging/verify/preflight.sh", "packaging/verify/verify-clean-install.sh").forEach { script ->

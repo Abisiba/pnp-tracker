@@ -35,6 +35,8 @@ imzasız dağıtılır; doğrulanmaları yayımlanan SHA-256 özetiyledir.
   örnek dosya ve hatalı satır örnekleri.
 - [Temiz Garuda doğrulaması](packaging/verify/README.md) — paketin temiz bir sanal
   makinede kurulum, güncelleme ve kaldırma turu.
+- [Katkı yönergeleri](CONTRIBUTING.md) — geliştirme ortamı, test komutları,
+  geçici XDG kuralı ve commit beklentileri.
 
 ## Gereksinimler
 
@@ -83,11 +85,20 @@ yeniden derlenmez. Uygulama `/opt/pnp-tracker` altına, başlatıcı
 `/usr/bin/pnp-tracker`, masaüstü girdisi ve simge freedesktop konumlarına kurulur.
 Sistemde Java gerekmez; veriler yine kullanıcının XDG dizinlerindedir.
 
+## Sürekli tümleştirme
+
+Her pull request ve `main`'e her push, `.github/workflows/ci.yml` ile yukarıdaki
+bellek sınırlı `check` komutunu koşar; izinler salt okunurdur ve testler geçici
+XDG dizinleriyle çalışır. `v<sürüm>` biçimindeki bir etiket
+`.github/workflows/release.yml` ile önce bütün testleri, sonra iki paketi ve
+`SHA256SUMS` dosyasını üretir. Paketler imzasız yayımlanır; doğrulama
+`sha256sum -c SHA256SUMS` ile yapılır.
+
 ## Geliştirme durumu
 
 Uygulama kullanılabilir durumdadır: veri modeli, içe aktarma, görev takibi, yedekleme/geri yükleme ve paketleme tamamdır. Temiz bir
-Garuda ortamındaki kurulum turu (`packaging/verify/`) ve depo/CI kurulumu henüz
-koşulmamıştır. Sıradaki işler `PLAN.md` `18.` bölümündedir.
+Garuda ortamındaki kurulum turu (`packaging/verify/`) henüz koşulmamıştır ve
+sürekli tümleştirme yapılandırması gerçek bir depoda henüz çalıştırılmamıştır. Sıradaki işler `PLAN.md` `18.` bölümündedir.
 
 ## Lisans
 

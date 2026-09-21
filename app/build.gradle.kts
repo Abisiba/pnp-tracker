@@ -385,6 +385,13 @@ tasks.register<JavaExec>("verifyLinuxPackage") {
     )
 }
 
+/** The digest the PKGBUILD, the checksum file and the release notes all quote. */
+fun sha256Of(file: File): String =
+    MessageDigest
+        .getInstance("SHA-256")
+        .digest(file.readBytes())
+        .joinToString("") { "%02x".format(it) }
+
 // ---------------------------------------------------------------- Arch package
 
 // `pnp-tracker-<version>-1-<arch>.pkg.tar.zst` (Faz 3 / İş 12): makepkg over the
@@ -408,7 +415,6 @@ val packageArch by tasks.registering {
     inputs.property("version", version)
     outputs.dir(output)
     doLast {
-        fun sha256(file: File) = MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) }
         val archiveFile = archive.get().asFile
         val pkgbuild =
             template
@@ -416,8 +422,8 @@ val packageArch by tasks.registering {
                 .replace("@PKGVER@", version)
                 .replace("@ARCH@", arch)
                 .replace("@ARCHIVE@", archiveFile.name)
-                .replace("@ARCHIVE_SHA256@", sha256(archiveFile))
-                .replace("@DESKTOP_SHA256@", sha256(desktop))
+                .replace("@ARCHIVE_SHA256@", sha256Of(archiveFile))
+                .replace("@DESKTOP_SHA256@", sha256Of(desktop))
         check(!Regex("@[A-Z0-9_]+@").containsMatchIn(pkgbuild)) { "the PKGBUILD template has a value nobody filled in" }
 
         val work = File(System.getProperty("java.io.tmpdir"), "pnp-tracker-makepkg")
@@ -501,4 +507,63 @@ tasks.register<JavaExec>("verifyArchPackage") {
             )
         },
     )
+}
+
+// ---------------------------------------------------------------- release
+
+// Faz 3 / İş 16: what a tagged release is made of. The release workflow calls
+// these two tasks and nothing else, so the rules live here, in the build, and
+// not in a second copy written in shell.
+
+// A tag may only publish the version the build says it is. `project.version` is
+// the one version source (master §33 R5), so `v<version>` is the one tag that
+// may go on: anything else stops here, before a package is made or a release is
+// created.
+tasks.register("checkReleaseTag") {
+    group = "distribution"
+    description = "Fails unless -PreleaseTag is exactly v<project.version>."
+    val expected = "v${project.version}"
+    val given = providers.gradleProperty("releaseTag")
+    doLast {
+        val tag = given.orNull
+        check(!tag.isNullOrBlank()) { "no tag was given: pass -PreleaseTag=$expected" }
+        check(tag == expected) {
+            "the tag $tag does not match the version this build makes; the only tag that may publish it is $expected"
+        }
+        logger.lifecycle("release tag $tag matches the project version")
+    }
+}
+
+// The files a release is made of, in one directory: the two packages, one
+// SHA256SUMS over them both (`sha256sum -c SHA256SUMS` in that directory), the
+// licence, the notices and the user documents. Nothing is signed — there is no
+// key — so the checksums are what a download is checked against.
+val packageRelease by tasks.registering {
+    group = "distribution"
+    description = "Collects the release artifacts and writes SHA256SUMS over the two packages."
+    dependsOn(packageLinuxArchive, packageArch)
+    val archive = packageLinuxArchive.flatMap { it.archiveFile }
+    val archPackage = layout.buildDirectory.file("arch/dist/pnp-tracker-${project.version}-1-$linuxArch.pkg.tar.zst")
+    val notices = layout.buildDirectory.file("linux/stage/$linuxPackageName/THIRD_PARTY_NOTICES.md")
+    val documents =
+        listOf(
+            rootProject.file("LICENSE"),
+            rootProject.file("docs/kullanim-kilavuzu.md"),
+            rootProject.file("docs/ornek-ice-aktarma.md"),
+            rootProject.file("docs/ornek-ice-aktarma.csv"),
+        )
+    val output = layout.buildDirectory.dir("release")
+    inputs.files(archive, archPackage, notices)
+    inputs.files(documents)
+    outputs.dir(output)
+    doLast {
+        val destination = output.get().asFile
+        destination.deleteRecursively()
+        destination.mkdirs()
+        val packages = listOf(archive.get().asFile, archPackage.get().asFile).sortedBy { it.name }
+        packages.forEach { it.copyTo(destination.resolve(it.name)) }
+        (documents + notices.get().asFile).forEach { it.copyTo(destination.resolve(it.name)) }
+        destination.resolve("SHA256SUMS").writeText(packages.joinToString("") { "${sha256Of(it)}  ${it.name}\n" })
+        destination.listFiles()!!.sortedBy { it.name }.forEach { logger.lifecycle("release: ${it.name} (${it.length()} bytes)") }
+    }
 }

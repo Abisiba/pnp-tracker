@@ -1,0 +1,232 @@
+# Faz 3 / İş 16 — a tagged release. The tag decides: only `v<project.version>`
+# may publish, and the version lives in app/build.gradle.kts alone. Nothing is
+# built until the whole test suite has passed, nothing is published until both
+# packages have been built and checked, and the packages are unsigned — there is
+# no signing key, so SHA256SUMS is what a download is verified against.
+#
+# Running this by hand (workflow_dispatch) verifies the release path without
+# publishing anything: the publish job only runs for a pushed tag.
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: tag and tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      XDG_DATA_HOME: ${{ github.workspace }}/.ci-xdg/data
+      XDG_CONFIG_HOME: ${{ github.workspace }}/.ci-xdg/config
+      XDG_STATE_HOME: ${{ github.workspace }}/.ci-xdg/state
+      XDG_CACHE_HOME: ${{ github.workspace }}/.ci-xdg/cache
+    steps:
+      - name: Kaynağı al
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: JDK 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Gradle wrapper'ını doğrula
+        uses: gradle/actions/wrapper-validation@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Gradle önbelleği
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+
+      - name: Etiket sürümle aynı mı
+        # Before anything is built: a tag that is not v<project.version> stops
+        # the run here, so no package and no release can come from it.
+        if: ${{ github.event_name == 'push' }}
+        run: |
+          set -euo pipefail
+          ./gradlew :app:checkReleaseTag -PreleaseTag="${GITHUB_REF_NAME}" \
+            --no-daemon --no-parallel --max-workers=1
+
+      - name: Elle çalıştırma yayın yapmaz
+        if: ${{ github.event_name != 'push' }}
+        run: echo "Bu koşu yalnız doğrulama içindir; yayın yalnız v<sürüm> etiketiyle yapılır."
+
+      - name: Ekran sunucusu
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y xvfb
+
+      - name: clean check
+        run: |
+          set -euo pipefail
+          mkdir -p "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME"
+          xvfb-run -a ./gradlew clean check --rerun-tasks \
+            --no-daemon --no-parallel --max-workers=1 \
+            -Pkotlin.compiler.execution.strategy=in-process \
+            -Dorg.gradle.jvmargs="-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8"
+
+      - name: Test raporları
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-test-reports
+          path: |
+            app/build/reports/tests/
+            app/build/test-results/
+          retention-days: 14
+          if-no-files-found: warn
+
+  package:
+    name: packages
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    # The Arch package is built with makepkg, which only exists on Arch, so the
+    # official Ubuntu runner runs an Arch container for this job. The same
+    # Gradle tasks a person runs at home make both packages; there is no second
+    # build pipeline here.
+    container:
+      image: archlinux:base-devel
+      options: --user root
+    env:
+      JAVA_HOME: /usr/lib/jvm/java-21-openjdk
+      XDG_DATA_HOME: ${{ github.workspace }}/.ci-xdg/data
+      XDG_CONFIG_HOME: ${{ github.workspace }}/.ci-xdg/config
+      XDG_STATE_HOME: ${{ github.workspace }}/.ci-xdg/state
+      XDG_CACHE_HOME: ${{ github.workspace }}/.ci-xdg/cache
+    steps:
+      - name: Arch araçları
+        run: |
+          set -euo pipefail
+          pacman -Syu --noconfirm --needed git jdk21-openjdk libarchive zstd \
+            xorg-server-xvfb desktop-file-utils ttf-dejavu \
+            glibc libstdc++ libglvnd libx11 libxext libxi libxrender libxtst fontconfig
+
+      - name: Kaynağı al
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Yetkisiz derleme kullanıcısı
+        # makepkg refuses to run as root, and nothing here needs root.
+        run: |
+          set -euo pipefail
+          useradd --create-home builder
+          mkdir -p "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME"
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+
+      - name: Paketleri üret ve doğrula
+        run: |
+          set -euo pipefail
+          runuser -u builder -- env \
+            JAVA_HOME="$JAVA_HOME" \
+            XDG_DATA_HOME="$XDG_DATA_HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
+            XDG_STATE_HOME="$XDG_STATE_HOME" XDG_CACHE_HOME="$XDG_CACHE_HOME" \
+            xvfb-run -a ./gradlew :app:verifyLinuxPackage :app:verifyArchPackage :app:packageRelease \
+              --no-daemon --no-parallel --max-workers=1 \
+              -Dorg.gradle.jvmargs="-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8"
+
+      - name: Özetler kendi dosyalarına uyuyor
+        run: |
+          set -euo pipefail
+          cd app/build/release
+          sha256sum -c SHA256SUMS
+          ls -l
+
+      - name: Yayın dosyaları
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-artifacts
+          path: app/build/release/
+          retention-days: 7
+          if-no-files-found: error
+
+  publish:
+    name: github release
+    needs: package
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # The only place in this repository that may write, and it may write nothing
+    # but releases.
+    permissions:
+      contents: write
+    steps:
+      - name: Yayın dosyalarını al
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-artifacts
+          path: release
+
+      - name: Özetleri yeniden doğrula
+        run: |
+          set -euo pipefail
+          cd release
+          sha256sum -c SHA256SUMS
+
+      - name: Bu etiketin yayını zaten var mı
+        # A second run for the same tag stops here instead of overwriting a
+        # release people may already have downloaded.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "$GITHUB_REF_NAME için yayın zaten var; üzerine yazılmıyor." >&2
+            echo "Yeniden yayımlamak gerekiyorsa mevcut yayını elle kaldırın." >&2
+            exit 1
+          fi
+
+      - name: Yayın notları
+        # Written here from the checksum file alone: no build log, no path of
+        # the runner, no user content.
+        run: |
+          set -euo pipefail
+          {
+            printf '## %s\n\n' "$GITHUB_REF_NAME"
+            printf 'Linux, x86_64. Java kurulumu gerekmez; çalışma ortamı paketin içindedir.\n\n'
+            printf '| Dosya | Kime |\n| --- | --- |\n'
+            printf '| `%s` | her dağıtım; açıp `bin/pnp-tracker` ile çalıştırın |\n' \
+              "$(awk '/\.tar\.gz$/ {print $2}' release/SHA256SUMS)"
+            printf '| `%s` | Garuda ve Arch; `pacman -U` |\n\n' \
+              "$(awk '/\.pkg\.tar\.zst$/ {print $2}' release/SHA256SUMS)"
+            printf 'Paketler **imzasız** dağıtılır. İndirdikten sonra doğrulayın:\n\n'
+            printf '```bash\nsha256sum -c SHA256SUMS\n```\n\n'
+            printf '```text\n'
+            cat release/SHA256SUMS
+            printf '```\n\n'
+            printf 'Kurulum, kullanım ve içe aktarma: `kullanim-kilavuzu.md` ve `ornek-ice-aktarma.md`.\n'
+            printf 'Lisans: MIT (`LICENSE`). Gömülü çalışma ortamı ve kütüphaneler kendi\n'
+            printf 'lisanslarıyla gelir (`THIRD_PARTY_NOTICES.md`).\n'
+          } > notes.md
+          cat notes.md
+
+      - name: Yayını oluştur
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "PnP Üretim Takipçisi $GITHUB_REF_NAME" \
+            --notes-file notes.md \
+            --verify-tag \
+            release/*
