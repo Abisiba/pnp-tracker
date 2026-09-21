@@ -279,7 +279,38 @@ class ArchDependenciesTest {
     }
 
     @Test
+    fun `a package that is declared but not installed here is still found`() {
+        // The release container installs only what it needs to build, so the
+        // package providing a declared library is often not installed there.
+        // pacman's files database answers for those; the installed-file lookup
+        // cannot, and a check that trusted it alone failed a correct package.
+        val installedLookupFails = "error: No package owns /usr/lib/libasound.so.2"
+        val filesDatabase = "extra/alsa-lib 1.2.14-2\n    usr/lib/libasound.so.2\n"
+        val commands =
+            Commands { argv ->
+                when {
+                    argv.contains("-Qoq") -> CommandResult(1, installedLookupFails)
+                    argv.contains("-Fq") -> CommandResult(0, filesDatabase)
+                    else -> CommandResult(1, "")
+                }
+            }
+        assertEquals("alsa-lib", ownerOfSoname("libasound.so.2", commands))
+    }
+
+    @Test
+    fun `the files database is read in either shape, and silence is not an answer`() {
+        assertEquals("alsa-lib", packageFromFilesDatabase("extra/alsa-lib 1.2.14-2\n    usr/lib/libasound.so.2\n"))
+        assertEquals("alsa-lib", packageFromFilesDatabase("extra/alsa-lib\n"))
+        // A database that was never synchronised says only that, and says it on stderr or as a warning.
+        assertNull(packageFromFilesDatabase("uyarı: database file for 'core' does not exist (use '-Fy' to download)\n"))
+        assertNull(packageFromFilesDatabase("warning: database file for 'extra' does not exist\n"))
+        assertNull(packageFromFilesDatabase(""))
+        assertNull(packageFromFilesDatabase("error: No package owns this\n"))
+    }
+
+    @Test
     fun `a package nobody owns is not invented`() {
+        // Neither the installed files nor the files database know it.
         val commands = Commands { CommandResult(1, "error: No package owns /usr/lib/libnowhere.so.1") }
         assertNull(ownerOfSoname("libnowhere.so.1", commands))
     }
