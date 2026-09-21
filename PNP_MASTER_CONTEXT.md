@@ -7,7 +7,21 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** Faz 3 / **İş 16 TAMAMLANDI** — `docs: record the first
+> **Son güncelleme:** Faz 3 / **İş 16 doğrulanmış son durumu** — `docs: record
+> the corrected 0.1.2 release`. `v0.1.1` Arch paketinin dört runtime
+> bağımlılığını (`harfbuzz`, `libjpeg-turbo`, `lcms2`, `giflib`) eksik bildirdiği
+> bulundu; bildirim düzeltildi, **aynı kusuru yakalayan otomatik ELF/Arch
+> bağımlılık denetimi** `verifyArchPackage`'a eklendi ve denetim hemen beşinci
+> bir eksiği (`alsa-lib`) buldu. Düzeltilmiş sürüm **v0.1.3** yayımlandı:
+> https://github.com/Abisiba/pnp-tracker/releases/tag/v0.1.3 — varlıklar
+> indirilip doğrulandı, yeni denetim yayımlanan paketin kendisinde de geçti.
+> `v0.1.1` yayınına uyarı eklendi (etiket ve asset'ler değiştirilmedi);
+> `v0.1.2` etiketi yayımlanmadan kaldı. Üç değişiklik de korumalı `main`'e
+> PR → `check` → rebase merge yolundan girdi. Room 8 ve PLAN değişmedi. Tam koşu
+> 3757 / 0 / 0 / 0 (274 sınıf). Ayrıntı §25.9. **Kalan tek bağlayıcı iş: İş 13'ün
+> temiz Garuda koşusu — `v0.1.3` paketiyle.**
+>
+> Daha önce: Faz 3 / **İş 16 TAMAMLANDI** — `docs: record the first
 > verified GitHub release`. Kaynak **https://github.com/Abisiba/pnp-tracker**
 > adresinde; `main` push edildi, CI gerçekten koştu ve **v0.1.1** etiketiyle ilk
 > GitHub Release yayımlandı:
@@ -153,36 +167,36 @@ Aşağıdaki değerler bu dosya commit edilmeden hemen önce repo üzerinde
 doğrulanmıştır.
 
 ```text
-branch                : main
-başlangıç HEAD        : d1a8381 (docs: record licensing and release automation readiness)
-HEAD (bu commit öncesi): 5f942df — fix(arch): declare the libraries the runtime links
-bu commit             : docs: record the first verified GitHub release
-bu turun commit'leri  : 83e413e fix(ci): give the package checks a window manager       CI düzeltmesi
-                        8684086 fix(ci): finish the run's isolation …                   CI düzeltmesi
-                        2c0c715 build: raise the version to 0.1.1                       sürüm
-                        b5e5e27 test(ui): stop racing the effects …                     test kararsızlığı
-                        5f942df fix(arch): declare the libraries …                      paket bağımlılığı
-uzak depo             : https://github.com/Abisiba/pnp-tracker (public)
-                        origin = git@github.com:Abisiba/pnp-tracker.git (SSH; §25.8)
-yayın                 : v0.1.1 → b5e5e27
-                        https://github.com/Abisiba/pnp-tracker/releases/tag/v0.1.1
-                        v0.1.0 etiketi duruyor ama hiç yayımlanmadı (§25.8)
+branch                : main (korumalı: doğrudan push yok, PR + check zorunlu)
+başlangıç HEAD        : 764e57b (docs: record the first verified GitHub release)
+HEAD (bu commit öncesi): 1a27690 — build: raise the version to 0.1.3
+bu commit             : docs: record the corrected 0.1.2 release
+bu turun commit'leri  : 4fe04aa test(packaging): verify every Arch runtime …   PR #1
+                        b3f89e2 build: raise the version to 0.1.2              PR #1
+                        8203601 fix(packaging): ask the files database …       PR #2
+                        1a27690 build: raise the version to 0.1.3              PR #3
+sürüm                 : 0.1.3   (tek kaynak app/build.gradle.kts)
+yayınlar              : v0.1.3 → 1a27690  YAYIMLANDI, latest
+                        v0.1.1 → b5e5e27  YAYIMLANDI + eksik bağımlılık uyarısı
+                        v0.1.2 → b3f89e2  yayımlanmadı
+                        v0.1.0 → d1a8381  yayımlanmadı
 üretim kodu           : DEĞİŞMEDİ (commonMain/desktopMain'de tek satır yok)
-build                 : app/build.gradle.kts yalnız version 0.1.0 → 0.1.1
+build                 : app/build.gradle.kts yalnız version 0.1.1 → 0.1.3
+paketleme             : packaging/arch/PKGBUILD depends + 5 kütüphane
 Room şema sürümü      : 8   (DEĞİŞMEDİ)
 PLAN.md               : DEĞİŞMEDİ (180ff640…)
 şema dosyaları        : 1.json … 8.json ve sample-import.xlsx bayt bayt aynı
-test durumu           : tam koşu 3741 / 0 / 0 / 0 (273 sınıf) — hem bu makinede hem
-                        runner'da; ktlintCheck temiz; git diff --check temiz
+test durumu           : tam koşu 3757 / 0 / 0 / 0 (274 sınıf); ktlintCheck temiz;
+                        git diff --check temiz
 paket smoke'ları      : verifyLinuxPackage ve verifyArchPackage hem burada hem
                         release konteynerinde PASSED
 gerçek sistem         : pacman kurulumu yok, sudo kullanılmadı; gerçek kullanıcı verisi
                         (db, lock, backups, config, state) başlangıçtakiyle birebir aynı
 ```
 
-**Bu commit İş 16'yı kapatan belge turudur.** İş 13 **TAMAMLANMADI**: doğrulama
-paketi hazır, temiz bir Garuda sanal makinesinde koşulmadı (§25.6, §33 R6).
-Projenin kalan tek bağlayıcı işi odur.
+**Bu commit bağımlılık kusurunu, denetimini ve düzeltilmiş yayını kaydeder.**
+İş 13 **TAMAMLANMADI**: temiz Garuda turu **`v0.1.3`** paketiyle yapılacaktır
+(§25.9, §33 R6). Projenin kalan tek bağlayıcı işi odur.
 
 **Önceki belge commit'i (`3b1524d` + düzeltmesi `e6d1641`) İş 14'ü kapatıyor ve
 İş 13'ün hazır olduğunu kaydediyordu.** İş 13 hâlâ **TAMAMLANMADI**: doğrulama
@@ -5654,6 +5668,154 @@ Etiket taşınmadı, silinmedi, zorlanmadı. Altında hiçbir yayın, hiçbir va
 
 ---
 
+# 25.9 BAĞIMLILIK KUSURU VE DÜZELTİLMİŞ YAYIN  *(Faz 3 / İş 16 — doğrulanmış son durum)*
+
+## Kusur
+
+`v0.1.1` Arch paketi, dosyalarının bağlandığı dört kütüphaneyi `depends`
+listesinde bildirmiyordu:
+
+```text
+harfbuzz  libjpeg-turbo  lcms2  giflib
+```
+
+Neden: liste bu makinedeki üretimden türetilmişti. Temurin bu kütüphaneleri
+runtime imajının içine gömer, Arch'ın `jdk21-openjdk`'sı sistemdekilere bağlanır
+— ve yayımlanan paketi konteynerde Arch'ın JDK'sı üretti. Kimse fark etmedi,
+çünkü paketi üreten ve denetleyen her makinede dördü de kuruluydu.
+
+Bildirim `5f942df` ile düzeltildi. Asıl eksik, aynı kusuru bir daha yakalayacak
+denetimdi.
+
+## Denetim  *(`ArchDependencies.kt`, `verifyArchPackage` içinde)*
+
+```text
+1  paket geçici bir köke açılır
+2  ELF dosyaları uzantıyla değil sihirli baytla (\x7fELF) bulunur
+3  her dosyanın DT_NEEDED girdileri readelf ile okunur
+4  her kütüphane şu dört kovadan birine girer:
+     pakette          paketin kendi taşıdığı .so
+     temel sistem     glibc / yükleyici — ve yalnız glibc bildirilmişse
+     bildirilen       sahibi, bildirilen bağımlılıkların Arch metadata'sındaki
+                      geçişli kapanışında olan paket (doğrudan ya da geçişli)
+     BİLDİRİLMEMİŞ    başka her şey
+5  tek bir BİLDİRİLMEMİŞ kütüphane denetimi düşürür
+```
+
+**Makinede kurulu olmak cevap değildir.** Sahibi bildirilen kapanışın dışındaysa
+denetim düşer; kusurun hayatta kalma yolu tam olarak buydu. Allowlist yoktur.
+
+Yalnız `DT_NEEDED` denetlenir, çünkü `depends` bunun içindir. `dlopen` ile gelen
+şeyler (libglvnd'nin arkasındaki GL sürücüsü, GTK dosya seçici) bağlanmaz ve
+bildirilmez; onları gerçek uygulamayı çalıştıran paket smoke'ları kapsar.
+
+Kütüphanenin hangi pakete ait olduğu iki kaynaktan sorulur: önce kurulu
+dosyalardan (`pacman -Qoq`), sonra pacman'in **files database**'inden
+(`pacman -Fq`). İkincisi şarttır: release konteyneri yalnız derlemek için
+gerekenleri kurar, `alsa-lib` orada kurulu değildir ama bildirilmiştir. Konteyner
+bu yüzden `pacman -Fy` de çalıştırır.
+
+### Yazarken çıkan iki şey
+
+**Düşemeyen denetim.** İlk okuyucu `readelf` çıktısını yalnız İngilizce
+eşliyordu. Bu makinede `readelf` Türkçe konuşuyor ("Paylaşımlı kitaplık"), okuyucu
+hiçbir şey bulamadı ve paketi temiz raporladı: *30 ELF dosyası, 0 kütüphane*.
+Artık her dilde aynı olan etiketi ve köşeli parantezleri eşliyor, ve
+`credibilityProblem` hiçbir dosyanın C kütüphanesi istemediği bir okumayı
+reddediyor.
+
+**Beşinci eksik.** Çalışan denetim hemen bir tane daha buldu:
+`lib/runtime/lib/libjsound.so` → `libasound.so.2`. `alsa-lib` İş 12'de "bu
+uygulama ses çalmaz" gerekçesiyle bilerek dışarıda bırakılmıştı; doğru ama konu
+dışı — paket dosyayı taşıyor ve dosya kütüphaneye bağlanıyor. Artık bildiriliyor.
+
+`ArchDependenciesTest` (18 test) mantığı izole tutar: dört kütüphanenin gerçekten
+eşlendiği, **mutation** olarak dördünden biri listeden çıkarıldığında denetimin
+kırmızıya döndüğü, kurulu ama bildirilmemiş bir kütüphanenin geçmediği, hiçbir
+paketin sahiplenmediği bir kütüphanenin uydurulmadığı, çevrilmiş `readelf`
+çıktısının okunduğu ve senkronlanmamış bir files database'in cevap sayılmadığı.
+
+## Sürüm yolu
+
+```text
+v0.1.1  b5e5e27  YAYIMLANDI — dört bağımlılık eksik bildirilmiş (uyarı eklendi)
+v0.1.2  b3f89e2  yayımlanmadı — denetim konteynerde kurulu olmayan alsa-lib'i
+                 bulamayıp DOĞRU paketi reddetti; etiket push'u kendi ref'indeki
+                 workflow'u koşturduğu için o etiketten yayın çıkamazdı
+v0.1.3  1a27690  YAYIMLANDI — düzeltilmiş sürüm
+```
+
+`v0.1.0` ve `v0.1.2` etiketleri duruyor; ikisinin de altında release ve asset
+yok. Hiçbir etiket taşınmadı, silinmedi, zorlanmadı.
+
+## Pull request'ler ve koşular
+
+```text
+PR #1  https://github.com/Abisiba/pnp-tracker/pull/1
+       Fix Arch runtime dependency verification for 0.1.2
+       check 35613044005 BAŞARILI → rebase merge → main 4fe04aa + b3f89e2
+       main 35613719357 BAŞARILI
+PR #2  https://github.com/Abisiba/pnp-tracker/pull/2
+       Resolve declared dependencies that are not installed in the build container
+       check 35616552437 BAŞARILI → rebase merge → main 8203601
+PR #3  https://github.com/Abisiba/pnp-tracker/pull/3
+       Raise the version to 0.1.3 for the corrected release
+       check 35617442530 BAŞARILI → rebase merge → main 1a27690
+       main 35618204141 BAŞARILI
+yayın  35614540922  v0.1.2  DÜŞTÜ (packages: kurulu olmayan alsa-lib)
+       35618997221  v0.1.3  BAŞARILI — üç iş de, atlanan zorunlu adım yok
+```
+
+`main` korumalı kaldı: doğrudan push denenmedi, bypass kullanılmadı, her
+değişiklik PR → `check` → rebase merge yolundan geçti (doğrusal geçmiş kuralı
+merge commit'e izin vermiyor).
+
+## Yayımlanan sürüm
+
+```text
+yayın   https://github.com/Abisiba/pnp-tracker/releases/tag/v0.1.3
+etiket  v0.1.3 → 1a2769056e3284af2ba291f0503e2b44559b8a3f
+koşu    https://github.com/Abisiba/pnp-tracker/actions/runs/35618997221
+        12 dk 47 sn (15:26:54 → 15:39:41 UTC)
+
+pnp-tracker-0.1.3-linux-x86_64.tar.gz     94.041.582 bayt
+  sha256 ff677a13f86f1f0157f9e572ba46ac644576d11e9fc8c07e0f7e9ac6d0ff885e
+pnp-tracker-0.1.3-1-x86_64.pkg.tar.zst    92.212.005 bayt
+  sha256 794053b5f51b8d341eadf87fc757611436349905b19547d6331939aae375be81
+SHA256SUMS 209 · LICENSE 1.081 · THIRD_PARTY_NOTICES.md 4.919
+kullanim-kilavuzu.md 14.684 · ornek-ice-aktarma.md 6.636 · ornek-ice-aktarma.csv 448
+
+.PKGINFO depends
+  glibc libstdc++ libglvnd libx11 libxext libxi libxrender libxtst fontconfig
+  harfbuzz libjpeg-turbo lcms2 giflib alsa-lib
+```
+
+Konteynerde denetim 29 ELF dosyasında 26 kütüphane çözdü; `libasound.so.2`
+files database üzerinden `alsa-lib`'e eşlendi (orada kurulu değil).
+
+Varlıklar depodan bağımsız geçici bir dizine indirilip doğrulandı: `sha256sum -c`
+geçti, özet dosyası yalnız iki paketi sayıyor, boş dosya yok, yol kaçışı yok,
+`VERSION` 0.1.3, `.PKGINFO` `pkgver = 0.1.3-1` ve `license = MIT`, java/jre/jdk
+bağımlılığı yok, LICENSE ve bildirimler iki pakette de yerinde, kişisel yol veya
+kullanıcı adı yok. **Yeni ELF denetimi yayımlanan paketin kendisine karşı da
+çalıştırıldı: bildirilmemiş kütüphane yok.**
+
+## v0.1.1 uyarısı
+
+`v0.1.1` yayın açıklamasının başına, dört bağımlılığın eksik bildirildiğini,
+çoğu masaüstünde zaten kurulu olduklarını ama temiz bir sistemde kurulumun
+garanti edilmediğini, `v0.1.3` veya daha yenisinin kullanılması gerektiğini ve
+dosyalarının tarihsel doğruluk için değiştirilmediğini söyleyen bir uyarı
+eklendi. Etiket, asset'ler ve özetler değiştirilmedi; `latest` artık `v0.1.3`.
+
+## Temiz Garuda turunda kullanılacak paket
+
+İş 13, **`v0.1.3`** paketiyle yapılacaktır:
+`pnp-tracker-0.1.3-1-x86_64.pkg.tar.zst`, sha256 `794053b5…`. Daha eski
+paketlerle yapılan bir tur, kurulum bağımlılıklarını doğru ölçmez.
+
+---
+
 # 26. DB / ŞEMA KORUMA
 
 ```text
@@ -6292,9 +6454,10 @@ PLAN `18.` — Faz 3 işler listesi.
 15  Açık kaynak lisansı + LICENSE ....................... TAMAM (§25.7; MIT, iki
                                               pakette + /usr/share/licenses,
                                               THIRD_PARTY_NOTICES.md)
-16  GitHub Actions ...................................... TAMAM (§25.8; depo
+16  GitHub Actions ...................................... TAMAM (§25.8, §25.9; depo
                                               Abisiba/pnp-tracker, CI gerçekten
-                                              koştu, v0.1.1 yayımlandı)
+                                              koştu, düzeltilmiş v0.1.3 yayımlandı,
+                                              main korumalı, PR akışı işliyor)
 ```
 
 ### İş 1'in durumu — iki dilim, ikisi de bitti
@@ -7046,15 +7209,18 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   İŞ 9 TAMAMLANDI: kabul makineden bağımsızdır (doğru sonuç, 42/1.000+ aynı ifade
   yapısı, N+1 yok, arama/süzgeç 0 ifade, tekrarda aynı sonuç); süre/bellek EŞİK
   EKLEME, yalnız ortamla kayıt; aynı yöntemde 2 kat kötüleşmeyi raporla.
-- İŞ 16 TAMAM (§25.8): depo https://github.com/Abisiba/pnp-tracker, origin SSH,
-  v0.1.1 yayımlandı. Kuralı bozma: etiketi taşıma/silme, force push yapma, mevcut
+- İŞ 16 TAMAM (§25.8, §25.9): depo https://github.com/Abisiba/pnp-tracker, origin
+  SSH, düzeltilmiş **v0.1.3** yayımlandı ve `main` korumalı. `main`'e DOĞRUDAN
+  PUSH ETME: PR → `check` → **rebase** merge (doğrusal geçmiş merge commit'e izin
+  vermez). Paketin bağlandığı her kütüphane `depends`'te olmalı; denetim
+  `verifyArchPackage` içindedir ve kurulu olmayı cevap saymaz. Etiketleri taşıma
+  veya silme: v0.1.0 ve v0.1.2 yayımlanmamış etiketler olarak duruyor.
+  İŞ 13 TURU **v0.1.3** PAKETİYLE YAPILIR. Kuralı bozma: etiketi taşıma/silme, force push yapma, mevcut
   bir yayını ezme; yayın yalnız `v<Gradle sürümü>` etiketiyle çıkar ve sürüm
   yükseltmek kullanıcının kararıdır. CI'da bir şey düşerse testi atlatma,
   `continue-on-error` ekleme, izin genişletme — kök nedeni bul. Paket içeriği
   hangi JDK'nın derlediğine bağlıdır (Temurin gömer, Arch'ınki sisteme bağlanır);
-  `depends` ikisini de kapsamalı. AÇIK KALAN: paketteki ELF'lerin NEEDED
-  girdilerinin bildirilen bağımlılıkların geçişli kapanışında olduğunu denetleyen
-  test yok.
+  `depends` ikisini de kapsamalı. (Bu açık madde §25.9 ile KAPANDI.)
 - İŞ 15 TAMAM, İŞ 16'NIN YEREL HAZIRLIĞI (§25.7). Kuralı bozma: LICENSE
   standart MIT metnidir, düzenleme; kaynak dosyalara lisans başlığı EKLEME;
   üçüncü taraf lisans adı UYDURMA (bildirim dosyası paketin kendi içeriğinden
