@@ -5,6 +5,14 @@ tamamen yerel ve çevrimdışı çalışan Linux masaüstü uygulaması.
 
 Ürün kapsamı, veri modeli ve geliştirme fazları için `PLAN.md` dosyasına bakın.
 
+## Belgeler
+
+- [Kullanım kılavuzu](docs/kullanim-kilavuzu.md) — uygulamayı ilk kez kullananlar için.
+- [Örnek içe aktarma belgesi](docs/ornek-ice-aktarma.md) — XLSX ve CSV biçimleri,
+  örnek dosya ve hatalı satır örnekleri.
+- [Temiz Garuda doğrulaması](packaging/verify/README.md) — paketin temiz bir sanal
+  makinede kurulum, güncelleme ve kaldırma turu.
+
 ## Gereksinimler
 
 - JDK 21

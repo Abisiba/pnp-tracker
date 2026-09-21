@@ -1,0 +1,4 @@
+# The example import file is a real CSV: RFC 4180 ends every record with CRLF and
+# the application's own export writes it that way, so the line endings are part of
+# the fixture rather than stray whitespace.
+docs/ornek-ice-aktarma.csv -text -whitespace
