@@ -680,7 +680,9 @@ class PackageCheck {
     /** No PATH, no JAVA_HOME, no JDK options; a HOME, three XDG folders and a working directory of its own. */
     private fun isolatedEnvironment(area: Path): MutableMap<String, String> {
         val environment = mutableMapOf<String, String>()
-        listOf("DISPLAY", "XAUTHORITY", "LANG", "LC_ALL", "XDG_RUNTIME_DIR").forEach { name ->
+        // The display this run may use, and — where there is no GL, as in a
+        // container — the renderer the machine running the check chose.
+        listOf("DISPLAY", "XAUTHORITY", "LANG", "LC_ALL", "XDG_RUNTIME_DIR", "SKIKO_RENDER_API").forEach { name ->
             System.getenv(name)?.let { environment[name] = it }
         }
         environment["PATH"] = Files.createDirectories(area.resolve("empty-path")).toString()
@@ -688,6 +690,10 @@ class PackageCheck {
         environment["XDG_DATA_HOME"] = Files.createDirectories(area.resolve("data")).toString()
         environment["XDG_CONFIG_HOME"] = Files.createDirectories(area.resolve("config")).toString()
         environment["XDG_STATE_HOME"] = Files.createDirectories(area.resolve("state")).toString()
+        // Not the application's own folder: graphics drivers keep a shader cache
+        // here, and without it they fall back to $HOME/.cache, which this check
+        // reads as the application writing into HOME.
+        environment["XDG_CACHE_HOME"] = Files.createDirectories(area.resolve("cache")).toString()
         environment["TMP"] = Files.createDirectories(area.resolve("tmp")).toString()
         Files.createDirectories(area.resolve("cwd"))
         return environment

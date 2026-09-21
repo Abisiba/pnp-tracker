@@ -108,6 +108,10 @@ jobs:
       options: --user root
     env:
       JAVA_HOME: /usr/lib/jvm/java-21-openjdk
+      # The container has no GPU and Xvfb offers no usable GL context, so Skia
+      # draws in software. Without this the application starts anyway but prints
+      # a RenderException, and the package check refuses a run that printed one.
+      SKIKO_RENDER_API: SOFTWARE
       XDG_DATA_HOME: ${{ github.workspace }}/.ci-xdg/data
       XDG_CONFIG_HOME: ${{ github.workspace }}/.ci-xdg/config
       XDG_STATE_HOME: ${{ github.workspace }}/.ci-xdg/state
@@ -152,7 +156,7 @@ jobs:
         run: |
           set -euo pipefail
           runuser -u builder -- env \
-            DISPLAY=:99 \
+            DISPLAY=:99 SKIKO_RENDER_API="$SKIKO_RENDER_API" \
             JAVA_HOME="$JAVA_HOME" \
             XDG_DATA_HOME="$XDG_DATA_HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
             XDG_STATE_HOME="$XDG_STATE_HOME" XDG_CACHE_HOME="$XDG_CACHE_HOME" \
