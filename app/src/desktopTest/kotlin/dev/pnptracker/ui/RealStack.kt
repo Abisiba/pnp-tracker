@@ -8,6 +8,7 @@ import dev.pnptracker.data.repository.ColorCatalogueStore
 import dev.pnptracker.data.repository.GameSetupStore
 import dev.pnptracker.data.repository.GameTableStore
 import dev.pnptracker.data.repository.PoolStore
+import dev.pnptracker.data.repository.TaskCreationFromText
 import dev.pnptracker.data.repository.TaskEditStore
 import dev.pnptracker.data.repository.TaskFromTextStore
 import dev.pnptracker.data.repository.TaskProgressStore
@@ -44,13 +45,18 @@ class RealStack : AutoCloseable {
     val taskProgress = TaskProgressStore(database.taskProgressDao())
     private val overrides = mutableMapOf<PoolType, PoolController>()
 
-    val table =
+    val taskCreation = TaskFromTextStore(database.taskFromTextDao())
+
+    val table = tableControllerWith(taskCreation)
+
+    /** A table controller over the real stores, with [creation] making the tasks. */
+    fun tableControllerWith(creation: TaskCreationFromText): GameTableController =
         GameTableController(
             table = GameTableStore(database.gameDao(), database.gameCellDao(), database.gameTableDao()),
             setup = GameSetupStore(database.gameDao(), database.gameCellDao()),
             cells = CellTextStore(database.cellSegmentDao()),
             colors = colorCatalogue,
-            taskCreation = TaskFromTextStore(database.taskFromTextDao()),
+            taskCreation = creation,
             taskEditing = TaskEditStore(database.taskEditDao()),
             taskProgress = taskProgress,
         )

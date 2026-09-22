@@ -419,6 +419,8 @@ class GameTableController(
             return
         }
         val cell = rowOf(gameId)?.cell(columnType) ?: return
+        // Starting something new supersedes the news about the last save.
+        state = state.copy(createdTask = null)
         val text = cell.editableText
         state =
             state.copy(
@@ -501,6 +503,18 @@ class GameTableController(
                     work = (state.work as? CellWork.WritingText)?.copy(isSaving = false, failure = failure.failure),
                 )
         }
+    }
+
+    /** Opens the task the last save made, and takes the notice down. */
+    fun showCreatedTask() {
+        val made = state.createdTask ?: return
+        state = state.copy(createdTask = null)
+        openTaskMenu(made.gameId, made.columnType, made.taskId)
+    }
+
+    /** Takes the notice down without going anywhere. */
+    fun dismissCreatedTask() {
+        state = state.copy(createdTask = null)
     }
 
     /** Clears the note saying an action was refused while a cell was open. */
@@ -1072,11 +1086,29 @@ class GameTableController(
                     ),
             )
         try {
-            taskCreation.createTasks(selection = composer.selection, drafts = drafts)
+            val made = taskCreation.createTasks(selection = composer.selection, drafts = drafts)
             // The cell has changed underneath the editor, so it closes rather
             // than going on with offsets into a document that has moved. The
             // user opens it again to write more, or picks the next word.
-            state = state.copy(work = null, blockedByEditor = false)
+            //
+            // Closing on its own told them nothing, which is how a save that
+            // landed and one that did not looked alike (PLAN 12.6). What was
+            // made and where it went is said instead, and can be opened from
+            // there — the table may be filtered to somewhere it is not shown.
+            state =
+                state.copy(
+                    work = null,
+                    blockedByEditor = false,
+                    createdTask =
+                        made.firstOrNull()?.let { taskId ->
+                            CreatedTask(
+                                gameId = making.gameId,
+                                gameName = rowOf(making.gameId)?.gameName.orEmpty(),
+                                columnType = making.columnType,
+                                taskId = taskId,
+                            )
+                        },
+                )
         } catch (refusal: TaskFromTextException) {
             state =
                 state.copy(

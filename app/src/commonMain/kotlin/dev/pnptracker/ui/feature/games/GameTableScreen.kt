@@ -53,11 +53,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -72,6 +75,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -80,6 +84,7 @@ import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -275,6 +280,7 @@ fun GameTableScreen(
 
                 TableControls(controller = controller, state = state, exportAction = exportAction)
                 FailureLine(state.failure)
+                CreatedTaskLine(state.createdTask, controller)
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
@@ -1647,6 +1653,25 @@ private fun CellEditorSlot(
         remember(editor.gameId, editor.columnType) {
             mutableStateOf(TextFieldValue(editor.draft, TextRange(editor.draft.length)))
         }
+    // The stretch the user selected, kept apart from the field's own selection.
+    // A press on `Görev oluştur` takes focus off the field, and a field that
+    // loses focus drops its selection — so an offer drawn from the live
+    // selection left the screen between the press and the release, and the
+    // release landed on nothing (found in real use, PLAN 12.6). The offer is
+    // made against this instead. Typing forgets it, and so does the user
+    // dropping the selection themselves while the field has the keyboard.
+    val focusManager = LocalFocusManager.current
+    var chosen by remember(editor.gameId, editor.columnType) { mutableStateOf<TextRange?>(null) }
+    var fieldFocused by remember { mutableStateOf(false) }
+    // Compose drops the selection before it reports the focus change, so a
+    // collapse seen while the field still has the keyboard is decided a frame
+    // later: gone by then means focus left and took the selection with it.
+    var collapseToDecide by remember { mutableStateOf(0) }
+    LaunchedEffect(collapseToDecide) {
+        if (collapseToDecide == 0) return@LaunchedEffect
+        withFrameNanos { }
+        if (fieldFocused) chosen = null
+    }
     // A refused keystroke never reaches the draft, so the field is put back to
     // what the draft still says rather than being left showing a change that
     // was not taken.
@@ -1694,7 +1719,15 @@ private fun CellEditorSlot(
         BasicTextField(
             value = field,
             onValueChange = {
+                val typed = it.text != field.text
                 field = it
+                when {
+                    typed -> chosen = null
+                    !it.selection.collapsed -> chosen = it.selection
+                    // Either the user dropped the selection, or focus is leaving
+                    // and took it along; which one is known a frame from now.
+                    fieldFocused && chosen != null -> collapseToDecide += 1
+                }
                 controller.editCellText(it.text)
             },
             enabled = !editor.isSaving,
@@ -1721,11 +1754,21 @@ private fun CellEditorSlot(
                     .border(1.dp, MaterialTheme.colorScheme.outline, ComposerShape)
                     .padding(horizontal = 6.dp, vertical = 4.dp)
                     .focusRequester(focus)
+                    .onFocusChanged { fieldFocused = it.isFocused }
                     .drawBehind {
                         layout?.let { drawTaskEdges(it, drawn.tasks, edgeCorner, edgeStroke) }
                     }.onPreviewKeyEvent { event ->
                         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                         when {
+                            // Tab leaves the cell, as it does everywhere else in the
+                            // application, rather than typing a tab character over
+                            // whatever is selected — which also made `Görev oluştur`
+                            // unreachable from the keyboard.
+                            event.key == Key.Tab -> {
+                                focusManager.moveFocus(if (event.isShiftPressed) FocusDirection.Previous else FocusDirection.Next)
+                                true
+                            }
+
                             event.key == Key.Escape -> {
                                 // One layer at a time: the picker, then the task
                                 // panel, then the cell. Giving up on a colour is
@@ -1771,7 +1814,7 @@ private fun CellEditorSlot(
                     onSave = { saveTask() },
                 )
 
-            else -> CellEditorActions(editor = editor, field = field, controller = controller, onSave = { save() })
+            else -> CellEditorActions(editor = editor, chosen = chosen, controller = controller, onSave = { save() })
         }
     }
 }
@@ -1808,11 +1851,11 @@ private class TaskPainting(
 @Composable
 private fun CellEditorActions(
     editor: CellWork.WritingText,
-    field: TextFieldValue,
+    chosen: TextRange?,
     controller: GameTableController,
     onSave: () -> Unit,
 ) {
-    val hasSelection = !field.selection.collapsed
+    val hasSelection = chosen != null && !chosen.collapsed
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
         val saveLabel = stringResource(Strings.Cell.save)
         val discardLabel = stringResource(Strings.Cell.discard)
@@ -1835,7 +1878,7 @@ private fun CellEditorActions(
     if (hasSelection && !editor.isSaving) {
         val createLabel = stringResource(Strings.CellTask.create)
         TextButton(
-            onClick = { controller.beginTaskComposer(field.selection.min, field.selection.max) },
+            onClick = { chosen?.let { controller.beginTaskComposer(it.min, it.max) } },
             enabled = !editor.hasUnsavedChanges,
             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
             modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = createLabel },
@@ -3144,6 +3187,48 @@ private fun UnreadableTable(onReadAgain: () -> Unit) {
         )
         TextButton(onClick = onReadAgain, modifier = Modifier.focusOutline(ComposerShape)) {
             Text(text = stringResource(Strings.Reading.readAgain), style = MaterialTheme.typography.labelMedium)
+        }
+    }
+}
+
+/**
+ * What the last save made, and the way to it.
+ *
+ * PLAN 12.6: a task that was written is said out loud. It names the game
+ * because the table can be filtered to somewhere the new task is not drawn, and
+ * the offer opens the task itself rather than merely scrolling to it.
+ */
+@Composable
+private fun CreatedTaskLine(
+    made: CreatedTask?,
+    controller: GameTableController,
+) {
+    if (made == null) return
+    val show = stringResource(Strings.CellTask.showCreated)
+    val dismiss = stringResource(Strings.CellTask.dismissCreated)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(top = 8.dp),
+    ) {
+        Text(
+            text = stringResource(Strings.CellTask.created, made.gameName),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        TextButton(
+            onClick = controller::showCreatedTask,
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+            modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = show },
+        ) {
+            Text(text = show, style = MaterialTheme.typography.labelMedium)
+        }
+        TextButton(
+            onClick = controller::dismissCreatedTask,
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+            modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = dismiss },
+        ) {
+            Text(text = dismiss, style = MaterialTheme.typography.labelMedium)
         }
     }
 }
