@@ -582,4 +582,45 @@ class AppKeyboardAndScalingTest {
             }
         }
     }
+
+    /**
+     * The way back for a task finished by one tap, found in real use (PLAN 12.10).
+     *
+     * Asked from the pool's `Tamamlandı` list, in every window size and text
+     * size: the question starts on the way out, so an Enter pressed out of habit
+     * leaves the task finished, and the question closes back to the menu. Where
+     * it is drawn is not asserted, as for the other pool questions: a menu
+     * opened here from code sits on a card that may be below the fold, and the
+     * pool does not yet scroll a card into view when its menu opens.
+     */
+    @Test
+    fun `making a finished task active again asks with the keyboard on the way out, and Enter keeps it finished`() {
+        val task = taskOf.getValue(PoolType.CARD)
+        viewports.forEach { viewport ->
+            val wiring = wiring(Screen.Pool(PoolType.CARD))
+            onApp(wiring, viewport) { harness ->
+                runBlocking { TaskProgressStore(database.taskProgressDao()).completeTask(task, IdGenerator.Random.newId()) }
+                val pool = wiring.poolControllers.of(PoolType.CARD)
+                pool.showState(dev.pnptracker.domain.search.TaskStateFilter.COMPLETED)
+                settle(harness)
+                pool.openTaskMenu(PoolCardKey(task))
+                settle(harness)
+                pool.beginReopen()
+                settle(harness)
+                assertIs<PoolWork.ConfirmingReopen>(pool.state.work, "${viewport.name}: the finished list did not ask")
+                assertEquals(
+                    listOf(textOf(Strings.TaskReopen.cancel)),
+                    harness.focusedSays().distinct(),
+                    "${viewport.name}: the question did not start on the way out",
+                )
+                harness.press(Key.Enter)
+                settle(harness)
+                assertTrue(
+                    runBlocking { database.taskDao().activeTaskById(task) }!!.isCompleted,
+                    "${viewport.name}: Enter made the task active",
+                )
+                assertIs<PoolWork.Menu>(pool.state.work, "${viewport.name}: Enter did not close the question")
+            }
+        }
+    }
 }

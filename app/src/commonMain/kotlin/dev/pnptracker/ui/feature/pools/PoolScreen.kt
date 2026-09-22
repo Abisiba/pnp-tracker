@@ -1210,6 +1210,8 @@ private fun TaskPopover(controller: PoolController) {
             is PoolWork.Editing -> if (work.editor.canSave) scope.launch { controller.saveTaskEdit() } else Unit
             is PoolWork.ConfirmingConvert ->
                 if (!work.isSaving) scope.launch { controller.confirmConvertToText() } else Unit
+            is PoolWork.ConfirmingReopen ->
+                if (!work.isSaving) scope.launch { controller.confirmReopen() } else Unit
 
             else -> Unit
         }
@@ -1266,6 +1268,7 @@ private fun TaskPopover(controller: PoolController) {
                         )
 
                     is PoolWork.ConfirmingConvert -> ConvertConfirmation(work, controller)
+                    is PoolWork.ConfirmingReopen -> ReopenConfirmation(work, controller)
                     // Drawn in the card rather than over it; the popover is
                     // never opened on it.
                     is PoolWork.EditingStages -> Unit
@@ -1306,7 +1309,65 @@ private fun TaskMenuActions(
     ) {
         Text(text = convert, style = MaterialTheme.typography.labelMedium)
     }
+    // The way back for a task finished by mistake (PLAN 12.10). Only on a
+    // finished task, and only as a question: it opens a confirmation.
+    if (work.task.isCompleted) {
+        val markUnfinished = stringResource(Strings.TaskMenu.markUnfinished)
+        TextButton(
+            onClick = { controller.beginReopen() },
+            modifier = Modifier.fillMaxWidth().focusOutline(CardShape).semantics { contentDescription = markUnfinished },
+        ) {
+            Text(text = markUnfinished, style = MaterialTheme.typography.labelMedium)
+        }
+    }
     NoteLine(text = stringResource(Strings.TaskMenu.hint), isProblem = false)
+}
+
+/**
+ * Asking whether a finished task should be active again.
+ *
+ * The keyboard starts on `Vazgeç`, as on every question here that changes a
+ * task: the list this is asked from is also where finished work is looked at,
+ * and an Enter pressed out of habit must not undo it. A refusal is said in
+ * words and leaves both buttons, so the answer can simply be given again.
+ */
+@Composable
+private fun ReopenConfirmation(
+    work: PoolWork.ConfirmingReopen,
+    controller: PoolController,
+) {
+    val scope = rememberCoroutineScope()
+    val keep = remember { FocusRequester() }
+    LaunchedEffect(work.task.taskId) {
+        withFrameNanos { }
+        runCatching { keep.requestFocus() }
+    }
+    Text(text = stringResource(Strings.TaskReopen.title), style = MaterialTheme.typography.labelLarge)
+    Text(
+        text = stringResource(Strings.TaskReopen.body, work.task.name),
+        style = MaterialTheme.typography.bodySmall,
+    )
+    when {
+        work.isSaving -> NoteLine(text = stringResource(Strings.TaskReopen.saving), isProblem = false)
+        work.failure != null -> NoteLine(text = stringResource(Strings.TaskReopen.error), isProblem = true)
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        val go = stringResource(Strings.TaskReopen.accept)
+        val stop = stringResource(Strings.TaskReopen.cancel)
+        TextButton(
+            onClick = { if (!work.isSaving) scope.launch { controller.confirmReopen() } },
+            enabled = !work.isSaving,
+            modifier = Modifier.focusOutline(CardShape).semantics { contentDescription = go },
+        ) {
+            Text(text = go, style = MaterialTheme.typography.labelMedium)
+        }
+        TextButton(
+            onClick = controller::closeInnermost,
+            modifier = Modifier.focusRequester(keep).focusOutline(CardShape).semantics { contentDescription = stop },
+        ) {
+            Text(text = stop, style = MaterialTheme.typography.labelMedium)
+        }
+    }
 }
 
 /** Asking whether a task really should go back to being words. */

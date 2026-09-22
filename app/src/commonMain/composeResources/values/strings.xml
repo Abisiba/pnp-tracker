@@ -385,6 +385,13 @@
     <string name="task_edit_error_could_not_save">Görev kaydedilemedi. Girdikleriniz duruyor; yeniden deneyebilirsiniz.</string>
 
     <!-- Game table: turning a task back into text -->
+    <string name="task_menu_mark_unfinished">Tamamlanmadı olarak işaretle</string>
+    <string name="task_reopen_title">Görev yeniden aktif olsun mu?</string>
+    <string name="task_reopen_body">%1$s aktif listeye dönecek. Adı, renkleri, adedi ve aşamaları değişmez.</string>
+    <string name="task_reopen_accept">Tamamlanmadı olarak işaretle</string>
+    <string name="task_reopen_cancel">Vazgeç</string>
+    <string name="task_reopen_saving">Kaydediliyor…</string>
+    <string name="task_reopen_error">Görev yeniden açılamadı; tamamlanmış olarak duruyor. Yeniden deneyebilirsiniz.</string>
     <string name="task_convert_title">Görevi metne dönüştür</string>
     <string name="task_convert_body">%1$s kelimesi hücrede düz metin olarak kalacak; rengi, adedi ve aşamaları artık görev olarak izlenmeyecek.</string>
     <string name="task_convert_history_warning">Bu görevin kaydedilmiş üretim geçmişi var; geçmiş kaydı silinmez, görev listelerden çıkar.</string>
