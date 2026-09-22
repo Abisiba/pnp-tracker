@@ -421,6 +421,9 @@
 
     <!-- Game table: a task standing in a cell -->
     <string name="cell_task_quantity_mark">×%1$d</string>
+    <string name="cell_task_created">Görev %1$s oyununa eklendi.</string>
+    <string name="cell_task_created_show">Görevi görüntüle</string>
+    <string name="cell_task_created_dismiss">Kapat</string>
     <string name="cell_task_description">%1$s, %2$d adet, %3$s</string>
     <string name="cell_task_description_unknown_quantity">%1$s, adet bilinmiyor, %2$s</string>
     <string name="cell_task_no_color">renk seçilecek</string>

@@ -845,6 +845,8 @@ data class GameTableScreenState(
     val colors: List<ColorSummary> = emptyList(),
     /** True when something was refused because a cell is still being worked in. */
     val blockedByEditor: Boolean = false,
+    /** The task the last save made, until the user has been told about it. */
+    val createdTask: CreatedTask? = null,
     /**
      * Bumped every time the keyboard has to be handed back to the open surface.
      *
@@ -977,3 +979,18 @@ data class GameTableScreenState(
             else -> emptyList()
         }
 }
+
+/**
+ * A task that has just been written, and where it went.
+ *
+ * PLAN 12.6: a save that lands is said out loud — until this was here, the cell
+ * simply closed and the user was left looking for what they had made. The game
+ * is named because the table can be filtered to somewhere the new task is not
+ * shown, and the task is carried so it can be opened from the notice itself.
+ */
+data class CreatedTask(
+    val gameId: EntityId,
+    val gameName: String,
+    val columnType: CellColumnType,
+    val taskId: EntityId,
+)

@@ -147,6 +147,24 @@ class ComposeSceneHarness(
         render()
     }
 
+    /**
+     * Presses and releases the mouse at one place, the way a person clicks.
+     *
+     * Not the same thing as [click], and the difference is the point. [click]
+     * invokes a node's action directly, so it can never see what the press
+     * itself does to the screen before the release arrives — and a press moves
+     * focus, which can change what is drawn under the pointer. A control that
+     * disappears between the two halves of a click is only caught this way.
+     */
+    fun mouseClick(at: Offset) {
+        scene.sendPointerEvent(PointerEventType.Move, at)
+        render()
+        scene.sendPointerEvent(PointerEventType.Press, at)
+        render()
+        scene.sendPointerEvent(PointerEventType.Release, at)
+        render()
+    }
+
     /** Where a node a reader would name is drawn, or null when it is not there. */
     fun boundsOf(description: String): Rect? = spokenNodes().firstOrNull { description in it.contentDescriptions() }?.boundsInRoot
 

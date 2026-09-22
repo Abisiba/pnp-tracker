@@ -69,6 +69,9 @@ import dev.pnptracker.resources.cell_task_color_slot
 import dev.pnptracker.resources.cell_task_color_unknown
 import dev.pnptracker.resources.cell_task_completed
 import dev.pnptracker.resources.cell_task_create
+import dev.pnptracker.resources.cell_task_created
+import dev.pnptracker.resources.cell_task_created_dismiss
+import dev.pnptracker.resources.cell_task_created_show
 import dev.pnptracker.resources.cell_task_description
 import dev.pnptracker.resources.cell_task_description_unknown_quantity
 import dev.pnptracker.resources.cell_task_discard
@@ -1430,6 +1433,11 @@ object Strings {
      */
     object CellTask {
         val create = Res.string.cell_task_create
+
+        /** Takes the game's name. */
+        val created = Res.string.cell_task_created
+        val showCreated = Res.string.cell_task_created_show
+        val dismissCreated = Res.string.cell_task_created_dismiss
         val selectHint = Res.string.cell_task_select_hint
         val saveTextFirst = Res.string.cell_task_save_text_first
 
