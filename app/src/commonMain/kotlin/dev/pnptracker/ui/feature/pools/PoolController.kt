@@ -318,6 +318,7 @@ class PoolController(
             // rewrite a draft.
             is PoolWork.Editing -> copy(from = from.copy(task = task))
             is PoolWork.ConfirmingConvert -> copy(from = from.copy(task = task))
+            is PoolWork.ConfirmingReopen -> copy(from = from.copy(task = task))
             // The facts follow the task; the draft, the counts it was opened on
             // and whether it is being sent do not. What the user typed is theirs,
             // and the counts it was opened on are the proof the save is checked
@@ -656,11 +657,52 @@ class PoolController(
             is PoolWork.Menu -> open
             is PoolWork.Editing -> open.from
             is PoolWork.ConfirmingConvert -> open.from
+            is PoolWork.ConfirmingReopen -> open.from
             // The pipeline panel is its own control on the card, opened without
             // a menu ever being shown, so there is none behind it.
             is PoolWork.EditingStages -> null
             null -> null
         }
+
+    /**
+     * Asks whether a finished task should be counted as not finished again.
+     *
+     * Only offered for a task that is finished: there is nothing to take back
+     * from one that is not, and asking would be a question with no meaning.
+     */
+    fun beginReopen() {
+        val menu = state.menu() ?: return
+        if (!menu.task.isCompleted) return
+        state = state.copy(work = PoolWork.ConfirmingReopen(from = menu), focusRecall = state.focusRecall + 1)
+    }
+
+    /**
+     * Takes the finished mark back, through the same transaction the table's tick uses.
+     *
+     * One press is one reopening: a second arriving while the first is being
+     * written finds it already in flight and does nothing, and one arriving after
+     * it landed finds the task active and changes nothing either. Only the mark
+     * goes — PLAN 12.10 keeps the name, the colours, the quantity, the stages and
+     * every counter exactly as they were. A refusal leaves the task finished and
+     * the question standing, saying so in words, so it can be asked again.
+     */
+    suspend fun confirmReopen() {
+        val confirming = state.work as? PoolWork.ConfirmingReopen ?: return
+        if (confirming.isSaving) return
+        state = state.copy(work = confirming.copy(isSaving = true, failure = null))
+        when (val outcome = taskProgress.reopenTask(confirming.task.taskId)) {
+            is TaskProgressOutcome.Refused -> {
+                val standing = state.work as? PoolWork.ConfirmingReopen
+                if (standing != null) {
+                    state =
+                        state.copy(work = standing.copy(isSaving = false, failure = outcome.failure), focusRecall = state.focusRecall + 1)
+                }
+            }
+            // Done, or already so: either way the task is active, and it has left
+            // the list this question was asked from.
+            else -> state = state.copy(work = null, focusRecall = state.focusRecall + 1)
+        }
+    }
 
     /** Asks whether the task really should go back to being words. */
     fun beginConvertToText() {

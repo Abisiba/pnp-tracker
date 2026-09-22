@@ -98,6 +98,25 @@ sealed interface PoolWork {
     }
 
     /**
+     * Asking whether a finished task should be counted as not finished again.
+     *
+     * PLAN 12.10: a task finished by one tap on the table's tick has to have a
+     * way back from the pool's `Tamamlandı` list, and it is asked rather than
+     * done, because the list is also where finished work is looked at. A refusal
+     * stays here, with the task still finished, so the answer can be retried.
+     */
+    data class ConfirmingReopen(
+        val from: Menu,
+        val isSaving: Boolean = false,
+        val failure: TaskProgressFailure? = null,
+    ) : PoolWork {
+        override val card: PoolCardKey get() = from.card
+        override val task: PoolTask get() = from.task
+        override val parent: PoolWork get() = from
+        override val hasUnsavedChanges: Boolean get() = false
+    }
+
+    /**
      * The pipeline of one card or board task, open to be changed (PLAN 7.3).
      *
      * The whole pipeline rather than one step, because that is how PLAN 7.3 puts
@@ -235,6 +254,7 @@ data class PoolScreenState(
             when (val open = work) {
                 is PoolWork.Editing -> open.editor.isSaving
                 is PoolWork.ConfirmingConvert -> open.isSaving
+                is PoolWork.ConfirmingReopen -> open.isSaving
                 is PoolWork.EditingStages -> open.isSaving
                 else -> false
             }

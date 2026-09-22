@@ -841,11 +841,18 @@ import dev.pnptracker.resources.task_menu_complete
 import dev.pnptracker.resources.task_menu_convert
 import dev.pnptracker.resources.task_menu_edit
 import dev.pnptracker.resources.task_menu_hint
+import dev.pnptracker.resources.task_menu_mark_unfinished
 import dev.pnptracker.resources.task_menu_open
 import dev.pnptracker.resources.task_menu_reopen
 import dev.pnptracker.resources.task_menu_report_shortage
 import dev.pnptracker.resources.task_menu_resolve_shortage
 import dev.pnptracker.resources.task_progress_missing
+import dev.pnptracker.resources.task_reopen_accept
+import dev.pnptracker.resources.task_reopen_body
+import dev.pnptracker.resources.task_reopen_cancel
+import dev.pnptracker.resources.task_reopen_error
+import dev.pnptracker.resources.task_reopen_saving
+import dev.pnptracker.resources.task_reopen_title
 import dev.pnptracker.resources.task_state_completed
 import dev.pnptracker.resources.task_state_open
 import dev.pnptracker.resources.task_tick_complete
@@ -1523,6 +1530,7 @@ object Strings {
         val open = Res.string.task_menu_open
         val edit = Res.string.task_menu_edit
         val convertToText = Res.string.task_menu_convert
+        val markUnfinished = Res.string.task_menu_mark_unfinished
         val hint = Res.string.task_menu_hint
         val complete = Res.string.task_menu_complete
         val reopen = Res.string.task_menu_reopen
@@ -1592,6 +1600,17 @@ object Strings {
     }
 
     /** Turning a task back into the words it was made from. */
+    object TaskReopen {
+        val title = Res.string.task_reopen_title
+
+        /** Takes the task's name. */
+        val body = Res.string.task_reopen_body
+        val accept = Res.string.task_reopen_accept
+        val cancel = Res.string.task_reopen_cancel
+        val saving = Res.string.task_reopen_saving
+        val error = Res.string.task_reopen_error
+    }
+
     object TaskConvert {
         val title = Res.string.task_convert_title
 
