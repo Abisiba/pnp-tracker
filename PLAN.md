@@ -1286,6 +1286,19 @@ Akış:
 
 Tam ekran modal veya bütün ekranı kaplayan panel **kullanılmaz**.
 
+Teklif ve sonuç (gerçek kullanımda bulunan kusurdan sonra, v0.1.4):
+
+- `Görev oluştur` teklifi, kullanıcının seçtiği ifadeye bağlıdır; odağın metin
+  alanından ayrılması seçimi düşürse bile teklif kaybolmaz. Fareyle basmak ve
+  klavyeyle Tab + Enter aynı sonucu verir.
+- Kayıt başarılıysa tam olarak bir görev yazılır ve kullanıcıya hangi oyuna
+  eklendiği söylenir (`Görev Harmonies oyununa eklendi`); `Görevi görüntüle`
+  görevin menüsünü açar. İfade artık görevdir, aynı ifadeden ikinci görev
+  oluşturulamaz.
+- Kayıt reddedilirse veya depolama yazmazsa panel yerinde kalır, seçimler
+  korunur ve güvenli bir Türkçe hata ile yeniden deneme sunulur. Hiçbir durum
+  sessiz geçmez.
+
 Görev oluşturma panelinin üstünde üç mod arasında geçiş yapılır. Modlar yalnızca
 form kolaylıklarıdır ve kaydedilmez (`5.10`, `12.7`).
 
@@ -1434,6 +1447,26 @@ Görev satırı:
 
 Bir tek öge çok renk görevi seçtiği her renk grubunda görünür; hepsi aynı `Task`
 kimliğine işaret eder ve biri tamamlanınca hepsinden birden çıkar.
+
+#### Tamamlanmış görevi yeniden açma  *(v0.1.4)*
+
+Oyun tablosundaki tik tek dokunuşla tamamlar; yanlışlıkla tamamlanan bir görevin
+geri dönüş yolu olmalıdır. Bu kural bütün havuzlar (`12.10`–`12.13`) için
+geçerlidir:
+
+- Havuzun `Tamamlandı` durum filtresinde gösterilen görevin menüsü
+  `Tamamlanmadı olarak işaretle` eylemini sunar.
+- Eylem bir onay sorar; odak `Vazgeç` üzerinde başlar. Onaylanmadan hiçbir şey
+  yazılmaz.
+- Yeniden açma yalnız tamamlanma işaretini ve `completedAt` alanını kaldırır.
+  Görevin adı, oyunu, renkleri, gerekli adedi, aşama sayaçları, ana baskı
+  bilgisi, mevcut eksik adedi ve hata toplamı **değişmez**; hiçbir ilerleme
+  olayı yazılmaz. Geçmişe tek bir `TASK_REOPENED` satırı yazılır — tablodaki
+  tikin geri alınmasıyla aynı transaction ve aynı olay.
+- Oyunun tamamlanma işareti değişmez (`5.3`).
+- Tek transaction; aynı görev için ikinci istek etkisizdir. Hata olursa görev
+  tamamlanmış kalır, onay yerinde durur ve güvenli bir Türkçe hata ile yeniden
+  deneme sunulur.
 
 ### 12.11 Kart Havuzu
 
