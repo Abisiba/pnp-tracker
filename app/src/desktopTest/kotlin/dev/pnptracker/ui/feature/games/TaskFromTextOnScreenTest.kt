@@ -1,15 +1,15 @@
 package dev.pnptracker.ui.feature.games
 
 import androidx.compose.ui.input.key.Key
+import dev.pnptracker.data.repository.TaskCreationFromText
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
-import dev.pnptracker.ui.ComposeSceneHarness
-import dev.pnptracker.ui.RealStack
-import dev.pnptracker.data.repository.TaskCreationFromText
 import dev.pnptracker.domain.tasks.CellTextSelection
 import dev.pnptracker.domain.tasks.TaskDraft
 import dev.pnptracker.domain.tasks.TaskFromTextException
 import dev.pnptracker.domain.tasks.TaskFromTextFailure
+import dev.pnptracker.ui.ComposeSceneHarness
+import dev.pnptracker.ui.RealStack
 import dev.pnptracker.ui.contentDescriptions
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -122,8 +122,16 @@ class TaskFromTextOnScreenTest {
 
     /** Fills in the panel and saves, as the user does. */
     private fun ComposeSceneHarness.fillAndSave(stack: RealStack) {
-        settle("the colours are read") { stack.table.state.colors.isNotEmpty() }
-        stack.table.chooseTaskColor(0, stack.table.state.colors.first().id)
+        settle("the colours are read") {
+            stack.table.state.colors
+                .isNotEmpty()
+        }
+        stack.table.chooseTaskColor(
+            0,
+            stack.table.state.colors
+                .first()
+                .id,
+        )
         stack.table.editTaskQuantity(0, "3")
         runBlocking { stack.table.saveTask() }
         render()
@@ -192,7 +200,12 @@ class TaskFromTextOnScreenTest {
                 val gameId = screen.harmoniesWithAWord(stack, controller)
                 controller.beginTaskComposer(0, "Figür".length)
                 screen.settle("the colours are read") { controller.state.colors.isNotEmpty() }
-                controller.chooseTaskColor(0, controller.state.colors.first().id)
+                controller.chooseTaskColor(
+                    0,
+                    controller.state.colors
+                        .first()
+                        .id,
+                )
                 controller.editTaskQuantity(0, "3")
                 runBlocking { controller.saveTask() }
                 screen.render()
@@ -226,7 +239,12 @@ class TaskFromTextOnScreenTest {
                 screen.harmoniesWithAWord(stack, controller)
                 controller.beginTaskComposer(0, "Figür".length)
                 screen.settle("the colours are read") { controller.state.colors.isNotEmpty() }
-                controller.chooseTaskColor(0, controller.state.colors.first().id)
+                controller.chooseTaskColor(
+                    0,
+                    controller.state.colors
+                        .first()
+                        .id,
+                )
                 controller.editTaskQuantity(0, "3")
                 assertFailsWith<IllegalStateException> { runBlocking { controller.saveTask() } }
             }

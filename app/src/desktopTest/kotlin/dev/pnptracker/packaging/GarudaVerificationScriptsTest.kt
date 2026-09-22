@@ -312,8 +312,12 @@ class GarudaVerificationScriptsTest {
 
         // The fake package is not a real one, so the metadata checks fail — which
         // is the point: the preflight says so instead of passing quietly.
-        assertTrue("[PASS] paket kurulu değil" in output, output)
-        assertTrue("[PASS] kurulum yeri boş: /opt/pnp-tracker" in output, output)
+        // What the preflight is asked here is whether it *says* what it found,
+        // not what this machine happens to hold: a developer may well have the
+        // application installed — that is how it gets used — and the verdict is
+        // then FAIL, which is the preflight working rather than failing.
+        assertTrue(Regex("\\[(PASS|FAIL)] paket kurulu değil").containsMatchIn(output), output)
+        assertTrue(Regex("\\[(PASS|FAIL)] kurulum yeri boş: /opt/pnp-tracker").containsMatchIn(output), output)
         assertTrue("[INFO] paket SHA-256" in output, output)
         assertTrue("SONUÇ MATRİSİ" in output, output)
         assertEquals(1, code, "bozuk bir paket dosyası başarısız olmalıydı")
