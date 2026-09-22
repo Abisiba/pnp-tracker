@@ -379,10 +379,14 @@ class GameTableLayoutTest {
         // PLAN 12.6 has the user pick a word and then convert it, so an action
         // standing there with nothing chosen could not do what it says.
         val actions = source.substringAfter("private fun CellEditorActions(").substringBefore("private fun TaskComposerPanel(")
-        assertTrue("field.selection.collapsed" in actions, "the offer does not ask whether anything is selected")
+        // The selection is the one the user made, kept beside the field's own:
+        // a press on the offer takes focus off the field and a field that loses
+        // focus drops its selection, which used to take the offer off the screen
+        // between the press and the release (found in real use, PLAN 12.6).
+        assertTrue("chosen != null && !chosen.collapsed" in actions, "the offer does not ask whether anything is selected")
         assertTrue("Strings.CellTask.create" in actions, "there is no offer to make a task")
         assertTrue("controller.beginTaskComposer(" in actions, "the offer does nothing")
-        assertTrue("field.selection.min" in actions && "field.selection.max" in actions, "the offsets are not the field's own")
+        assertTrue("it.min" in actions && "it.max" in actions, "the offsets are not the selected stretch's own")
     }
 
     @Test
