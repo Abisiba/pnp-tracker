@@ -7,7 +7,21 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** Faz 3 / **İş 16 doğrulanmış son durumu** — `docs: record
+> **Son güncelleme:** **v0.1.4 — gerçek kullanımda bulunan iki üretim hatası
+> düzeltildi.** (1) Tablodaki tik tek dokunuşla tamamlıyor, ama havuzun
+> `Tamamlandı` listesinden geri dönüş yoktu: o liste yalnız `Düzenle` ve
+> `Görevi metne dönüştür` sunuyordu. Artık onay kapılı
+> `Tamamlanmadı olarak işaretle` var; mağazadaki atomik `reopenTask` ve tek
+> `TASK_REOPENED` geçmiş satırı kullanılıyor, şema değişmedi. (2) `Görev oluştur`
+> düğmesi basma ile bırakma arasında ekrandan siliniyordu: basış odağı metin
+> alanından alıyor, odağı kaybeden alan seçimi düşürüyor, düğme de canlı seçime
+> bakıyordu — hiçbir görev yazılmıyor, hiçbir şey söylenmiyordu. Teklif artık
+> kullanıcının seçtiği aralığı izliyor; Tab da çok satırlı alanda sekme
+> karakteri yazmak yerine odağı taşıyor. Başarıda hangi oyuna eklendiği
+> söyleniyor ve `Görevi görüntüle` sunuluyor. PLAN'a iki küçük kural eklendi
+> (`12.6`, `12.10`). Tam koşu 3771 / 0 / 0 / 0. Ayrıntı §25.10.
+>
+> Daha önce: Faz 3 / **İş 16 doğrulanmış son durumu** — `docs: record
 > the corrected 0.1.2 release`. `v0.1.1` Arch paketinin dört runtime
 > bağımlılığını (`harfbuzz`, `libjpeg-turbo`, `lcms2`, `giflib`) eksik bildirdiği
 > bulundu; bildirim düzeltildi, **aynı kusuru yakalayan otomatik ELF/Arch
@@ -5813,6 +5827,68 @@ eklendi. Etiket, asset'ler ve özetler değiştirilmedi; `latest` artık `v0.1.3
 İş 13, **`v0.1.3`** paketiyle yapılacaktır:
 `pnp-tracker-0.1.3-1-x86_64.pkg.tar.zst`, sha256 `794053b5…`. Daha eski
 paketlerle yapılan bir tur, kurulum bağımlılıklarını doğru ölçmez.
+
+---
+
+# 25.10 GERÇEK KULLANIMDA BULUNAN İKİ HATA  *(v0.1.4)*
+
+## 1. Tamamlanan görev geri alınamıyordu
+
+```text
+bulgu     tablodaki tik tek dokunuşla tamamladı (onay yok); görev havuzun
+          Tamamlandı listesine gitti ve oradan geri getirilemedi
+kök neden o listenin menüsü yalnız Düzenle + Görevi metne dönüştür sunuyordu;
+          TaskProgressing.reopenTask vardı ama yalnız tablodaki tik onu çağırıyordu
+eskiden   havuzda geri dönüş yok
+şimdi     menüde `Tamamlanmadı olarak işaretle`; onay sorar, odak Vazgeç'te
+          başlar, onaylanmadan hiçbir şey yazılmaz
+yazılan   yalnız isCompleted + completedAt; ad, oyun, renk, adet, aşama, ana
+          baskı, eksik adet ve hata toplamı korunur; tek TASK_REOPENED satırı
+          (tablodaki tikle aynı transaction), şema değişmedi
+hata      görev tamamlanmış kalır, soru ayakta durur, Türkçe hata + yeniden deneme;
+          ekrana kimlik/enum/SQL çıkmaz
+çift basış tek etkili (isSaving kapısı + AlreadySo)
+```
+
+## 2. `Görev oluştur` görev yazmıyordu
+
+```text
+bulgu     Harmonies → 3D hücresine kelime → seç → Görev oluştur: yazı/işaret
+          kayboldu, görev oluşmadı, hata da başarı bildirimi de yok
+kök neden basış odağı metin alanından alır; odağı kaybeden alan seçimini düşürür;
+          teklif canlı seçime bakıyordu → düğme basma ile bırakma arasında
+          kompozisyondan çıktı, bırakma hiçbir şeye denk geldi
+          klavye de ulaşamıyordu: çok satırlı alanda Tab sekme karakteri yazıyor
+          (seçili kelimenin üzerine), odağı taşımıyordu
+şimdi     teklif kullanıcının seçtiği aralığı (`chosen`) izler; alanın kendi
+          seçimi ayrıdır. Yazmak unutturur; kullanıcının kendi seçimi düşürmesi
+          odak kaybından bir kare sonra ayırt edilir (Compose seçimi odak
+          olayından önce düşürüyor). Tab/Shift+Tab hücreden çıkar.
+başarı    "Görev Harmonies oyununa eklendi." + `Görevi görüntüle` (görevin
+          menüsünü açar) + `Kapat`
+hata      panel, renk/adet/not ve `Görevi kaydet` yerinde kalır; depolama reddi
+          tipli (COULD_NOT_SAVE), programlama hatası ve iptal maskelenmez
+tekrar    aynı kelimeden ikinci görev oluşmaz (aralık artık görevdir)
+```
+
+## Testler
+
+```text
+TaskFromTextOnScreenTest   6  gerçek yığın + gerçek fare/klavye; ComposeSceneHarness'a
+                              mouseClick eklendi (semantik click basış/bırakma arasını göremez)
+ReopenFinishedTaskTest     5  gerçek yığın; veri birebir korunur, tek geçmiş satırı,
+                              çift basış tek etki, ret → değişiklik yok
+AppKeyboardAndScalingTest  +1 dört görünüm boyutunda soru + odak Vazgeç'te + Enter
+                              görevi tamamlanmış bırakır
+```
+
+## Açık kalan
+
+- Havuzda menü koda göre açıldığında kart görünür alana kaydırılmıyor; büyük
+  metinde (1100×720, ×1.5) soru ekranın dışında kalabiliyor. Mevcut havuz
+  sorularının hepsi için geçerli; bu turda ele alınmadı.
+- Bu geliştirme makinesinde `pnp-tracker` **kurulu** (gerçek kullanım). Preflight
+  testi artık makinenin durumunu değil script'in ne söylediğini ölçüyor.
 
 ---
 
