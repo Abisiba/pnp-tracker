@@ -310,11 +310,19 @@ class GameTableLayoutTest {
     }
 
     @Test
-    fun `a finished task is struck through where it stands`() {
-        // PLAN 5.6 leaves a finished task in its cell rather than removing it.
+    fun `a finished task keeps its place and says it is finished`() {
+        // PLAN 5.6 leaves a finished task in its cell rather than removing it,
+        // and PLAN 12.5 draws it on a ground of its own with a mark and a word
+        // instead of striking it through — a line over the name, the count and
+        // the colours is a line over everything worth reading afterwards.
         val drawn = source.substringAfter("private fun drawnDocumentOf(").substringBefore("private fun spokenContentOf(")
         assertTrue("segment.isCompletedTask" in drawn, "a finished task looks exactly like an unfinished one")
-        assertTrue("TextDecoration.LineThrough" in drawn, "a finished task is not struck through")
+        assertTrue("TextDecoration.LineThrough" !in drawn, "a finished task is still struck through")
+        assertTrue("PnpStatus.colors.completedContainer" in drawn, "a finished task has no ground of its own")
+        assertTrue("Strings.CellTask.completedBadge" in drawn, "a finished task does not say so in words")
+        // Still to do first, finished after — and only where the cell is read.
+        assertTrue("filterNot { it.isCompletedTask }" in drawn, "finished work is not put after the work still to do")
+        assertTrue("if (withCounts) {" in drawn, "the order was changed in the string the editor lines up with")
     }
 
     @Test
@@ -454,7 +462,7 @@ class GameTableLayoutTest {
         // Their names and counts would otherwise touch. The gap goes between two
         // things that are drawn, never between two pieces of the document.
         val drawn = source.substringAfter("private fun drawnDocumentOf(").substringBefore("private fun spokenContentOf(")
-        assertTrue("cell.segments.getOrNull(index - 1)?.isTask" in drawn, "two tasks are drawn touching one another")
+        assertTrue("pieces.getOrNull(index - 1)?.isTask" in drawn, "two tasks are drawn touching one another")
     }
 
     @Test
@@ -511,12 +519,16 @@ class GameTableLayoutTest {
                 .substringAfter(
                     "private fun drawnDocumentOf(",
                 ).substringBefore("private fun AnnotatedString.Builder.paintedName(")
-        assertTrue("layout.markerSlots.forEach" in document, "a colour the name does not reach is drawn nowhere")
+        assertTrue("layout.markerSlots" in document, "a colour the name does not reach is drawn nowhere")
         assertTrue("MARKER_MARK" in document, "the swatch has nothing to paint")
+        // A finished task is not drawn in its colours at all, so every one of
+        // them becomes a swatch rather than only the ones with no share of the
+        // name (PLAN 12.5).
+        assertTrue("if (finished) segment.colors.indices.toList()" in document, "a finished task loses the colours it is made in")
         // Before the count, which stays last, and inside the task's own run, so
         // it is part of the same thing to press.
         assertTrue(
-            document.indexOf("layout.markerSlots.forEach") < document.indexOf("marks[index]"),
+            document.indexOf("swatches.forEach") < document.indexOf("marks[index]"),
             "the swatches are drawn after the count rather than before it",
         )
         assertTrue(

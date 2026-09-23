@@ -431,6 +431,7 @@
     <string name="cell_task_description_unknown_quantity">%1$s, adet bilinmiyor, %2$s</string>
     <string name="cell_task_no_color">renk seçilecek</string>
     <string name="cell_task_completed">tamamlandı</string>
+    <string name="cell_task_completed_badge">✓ Tamamlandı</string>
 
     <!-- Game table: why selected words did not become a task -->
     <string name="cell_task_mode_label">Oluşturma biçimi</string>
