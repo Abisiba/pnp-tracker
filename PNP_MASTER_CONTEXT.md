@@ -7,7 +7,21 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** **v0.1.4 — gerçek kullanımda bulunan iki üretim hatası
+> **Son güncelleme:** **Dört kullanılabilirlik değişikliği (sürüm yükseltilmedi,
+> yayın yapılmadı).** (1) Görev oluşturma paneli hücrenin içinden çıkarıldı:
+> artık ekranın ortasında `900 × 720 dp` bir pencere; solda ne yapıldığı, sağda
+> yalnız 3D'de renk, altta sabit `Vazgeç` / `Görevi kaydet`. (2) Oyun adı, adın
+> yazdığı hücreye gerçek çift tıklamayla düzenlenebiliyor; `Enter` kaydeder,
+> `Escape` vazgeçer, aynı ad hiç yazılmaz. (3) Renk yalnız 3D baskı işinin
+> özelliği: kart, mukavva ve özel görevlerde renk alanı yok ve iki yazma
+> transaction'ı bu havuzlara **yeni** renk atamasını programlama hatası olarak
+> reddediyor; var olan kayıtların rengine dokunulmuyor. (4) Tamamlanan görev
+> artık üstü çizili değil: kendi arka planı, `✓ Tamamlandı` etiketi ve renkleri
+> okunur; hücrede devam edenler önce, tamamlananlar sonra çiziliyor (belge sırası
+> değişmiyor). PLAN'a dört kural bloğu eklendi (`5.6`, `5.10`, `12.3`, `12.5`,
+> `12.6`, `12.7`, `12.14`). Tam koşu 3799 / 0 / 0 / 0 (280 sınıf). Ayrıntı §25.11.
+>
+> Daha önce: **v0.1.4 — gerçek kullanımda bulunan iki üretim hatası
 > düzeltildi.** (1) Tablodaki tik tek dokunuşla tamamlıyor, ama havuzun
 > `Tamamlandı` listesinden geri dönüş yoktu: o liste yalnız `Düzenle` ve
 > `Görevi metne dönüştür` sunuyordu. Artık onay kapılı
@@ -181,31 +195,28 @@ Aşağıdaki değerler bu dosya commit edilmeden hemen önce repo üzerinde
 doğrulanmıştır.
 
 ```text
-branch                : main (korumalı: doğrudan push yok, PR + check zorunlu)
-başlangıç HEAD        : 764e57b (docs: record the first verified GitHub release)
-HEAD (bu commit öncesi): 1a27690 — build: raise the version to 0.1.3
-bu commit             : docs: record the corrected 0.1.2 release
-bu turun commit'leri  : 4fe04aa test(packaging): verify every Arch runtime …   PR #1
-                        b3f89e2 build: raise the version to 0.1.2              PR #1
-                        8203601 fix(packaging): ask the files database …       PR #2
-                        1a27690 build: raise the version to 0.1.3              PR #3
-sürüm                 : 0.1.3   (tek kaynak app/build.gradle.kts)
-yayınlar              : v0.1.3 → 1a27690  YAYIMLANDI, latest
-                        v0.1.1 → b5e5e27  YAYIMLANDI + eksik bağımlılık uyarısı
-                        v0.1.2 → b3f89e2  yayımlanmadı
-                        v0.1.0 → d1a8381  yayımlanmadı
-üretim kodu           : DEĞİŞMEDİ (commonMain/desktopMain'de tek satır yok)
-build                 : app/build.gradle.kts yalnız version 0.1.1 → 0.1.3
-paketleme             : packaging/arch/PKGBUILD depends + 5 kütüphane
+branch                : fix/game-table-usability → main (korumalı: PR + check zorunlu)
+başlangıç HEAD        : 7ae6287 (docs: record the two defects found in real use)
+bu turun commit'leri  : 93df4f4 docs(plan): write down the four usability rules …
+                        2263021 feat(games): describe a task in a window of its own
+                        b14f36d feat(games): let a game be given another name …
+                        fc24ccc feat(tasks): keep colour to the work that is printed in one
+                        fe3a4ae feat(games): show a finished task rather than crossing it out
+                        a61319d test(games): measure the task window at the size …
+                        (+ bu belge commit'i)
+sürüm                 : 0.1.4   YÜKSELTİLMEDİ (tek kaynak app/build.gradle.kts)
+yayınlar              : v0.1.4 → 7ae6287  YAYIMLANDI, latest — bu turda yeni yayın yok
 Room şema sürümü      : 8   (DEĞİŞMEDİ)
-PLAN.md               : DEĞİŞMEDİ (180ff640…)
 şema dosyaları        : 1.json … 8.json ve sample-import.xlsx bayt bayt aynı
-test durumu           : tam koşu 3757 / 0 / 0 / 0 (274 sınıf); ktlintCheck temiz;
+PLAN.md               : DEĞİŞTİ — dört onaylanmış kural (ff443809… → 8331407d…)
+test durumu           : tam koşu 3799 / 0 / 0 / 0 (280 sınıf); ktlintCheck temiz;
                         git diff --check temiz
-paket smoke'ları      : verifyLinuxPackage ve verifyArchPackage hem burada hem
-                        release konteynerinde PASSED
-gerçek sistem         : pacman kurulumu yok, sudo kullanılmadı; gerçek kullanıcı verisi
-                        (db, lock, backups, config, state) başlangıçtakiyle birebir aynı
+smoke                 : desktopWindowSmoke geçici HOME/XDG ile PASSED (tek pencere,
+                        çıkış kodu 0, arkada süreç yok)
+paket smoke'ları      : bu turda koşulmadı — paketleme ve sürüm değişmedi
+gerçek sistem         : kurulum yapılmadı, sudo kullanılmadı; bütün testler geçici
+                        veritabanlarında koştu ve gerçek uygulama dosyasının
+                        dokunulmadığını doğruladı
 ```
 
 **Bu commit bağımlılık kusurunu, denetimini ve düzeltilmiş yayını kaydeder.**
@@ -5889,6 +5900,126 @@ AppKeyboardAndScalingTest  +1 dört görünüm boyutunda soru + odak Vazgeç'te 
   sorularının hepsi için geçerli; bu turda ele alınmadı.
 - Bu geliştirme makinesinde `pnp-tracker` **kurulu** (gerçek kullanım). Preflight
   testi artık makinenin durumunu değil script'in ne söylediğini ölçüyor.
+
+---
+
+
+# 25.11 DÖRT KULLANILABİLİRLİK DEĞİŞİKLİĞİ  *(sürüm yükseltilmedi)*
+
+Dördü de kullanıcı tarafından önceden onaylandı ve koddan önce PLAN'a yazıldı
+(`93df4f4`). Her davranış kendi atomik commit'inde; her birinde önce eski
+davranışı gösteren dar test kırmızıya getirildi.
+
+## 1. Görev oluşturma penceresi  *(`2263021`, PLAN 12.6)*
+
+**Eskiden:** panel, sözcüklerin yazıldığı hücrenin *içinde* çiziliyordu — bir
+tablo sütunu genişliğinde, modlar, renkler, adet ve not alt alta, eylemler en
+altta. Bir görevi tarif etmek başparmak genişliğinde bir formu kaydırmaktı.
+
+**Şimdi:** `Popup` ile ekranın ortasında modal bir pencere. Genişlik
+`min(900 dp, pencere − 48 dp)`, yükseklik `min(720 dp, pencere − 48 dp)`; arkası
+karartılır ve tıklama geçmez. Başlık ve alt eylem çubuğu sabit, ortası kayar.
+Yeterli genişlikte iki sütun: solda mod/adet/izleme/not, sağda renk (yalnız 3D).
+`Escape` vazgeçer, Tab pencerenin içinde döner, odak dışarı çıkmaz.
+
+Ölçülen yerleşim (`TaskComposerWindowTest`, gerçek sahnede):
+
+```text
+1920 × 1080 dp        900 × 720, merkez (960, 540)
+1300 ×  900 dp        900 × 720, merkez (650, 450)
+ 640 ×  460 dp ×2 ×1.3  592 × 412, dört yanda ≥ 24 dp, Vazgeç ve Görevi kaydet içeride
+uzun ad (280 karakter) pencere yine 720 dp; eylemler yerinde
+```
+
+Aynı turda, panelin seçili sözcüğü okuyan erişilebilirlik adı düzeltildi: v0.1.4
+turunda `"${'$'}nameLabel: …"` metni birebir yazılmıştı.
+
+## 2. Oyun adını yeniden adlandırma  *(`b14f36d`, PLAN 12.3)*
+
+Adın yazdığı hücreye **gerçek** çift tıklama (press/release/press/release,
+`ComposeSceneHarness.mouseDoubleClick`) tek bir metin alanı açar. `Enter`
+kaydeder, `Escape` vazgeçer, dışarı tıklamak ne kaydeder ne atar — hücre yazma
+sözleşmesindeki gibi açık kalır.
+
+- `GameDao.rename` tek `UPDATE`; `name <> :name` yüklemin parçası, yani aynı ad
+  satıra hiç dokunmaz. Yazılmadıysa oyunun hâlâ var olup olmadığı ikinci bir
+  **okuma** ile ayrılır: `GameRenameOutcome.UNCHANGED` ya da
+  `GameSetupFailure.GAME_NOT_AVAILABLE`.
+- Geçmişe satır yazılmaz: PLAN 12.15 yeniden adlandırmayı olay olarak saymıyor,
+  yeni bir `HistoryEventKind` uydurulmadı, şema değişmedi.
+- Benzersizlik kuralı yok — oluşturmada ne ise o.
+- Klavye: satırın tikinde `F2`, okuyucu için aynı düğümde özel eylem
+  (`Oyunu yeniden adlandır`). Tamamlanmış satırın tiki hâlâ odak almıyor, yani o
+  satırda yeniden adlandırma yalnız fare ve okuyucu yoluyla erişilebilir —
+  bilinçli açık sınır.
+
+## 3. Renk yalnız 3D baskıda  *(`fc24ccc`, PLAN 5.10, 12.7, 12.14)*
+
+Renk, bir şeyin basıldığı filamenttir. Kart, mukavva ve özel görevler de renk
+soruluyordu ve renk seçilmeden **kaydedilemiyordu**.
+
+- Arayüz: bu üç türde renk sütunu, renk arama, renk listesi, `Yeni renk oluştur`
+  ve `Tek öge çok renk` modu hiç çizilmiyor; `canSave` renk istemiyor.
+- Üretim sınırı: `requireColorsAllowed(poolType, colorIds)`
+  (`domain/rules/TaskColorRules.kt`) — `TaskFromTextDao.createTasksFromSelection`
+  ve `TaskEditDao.editTask` çağırıyor. İhlal `IllegalArgumentException`, tıpkı
+  havuzun izin vermediği izleme kipi gibi: hiçbir ekran teklif etmediği için
+  kullanıcı hatası değil.
+- Düzenlemede yalnız **renk eklemek** reddedilir. Eski bir kayıtta ya da geri
+  yüklenen bir yedekte duran renk olduğu gibi kalır, görev düzenlenebilir ve
+  renk elle çıkarılabilir. Hiçbir yerde sessiz veri temizliği yok.
+- `TaskDraft` artık boş renk listesi kabul ediyor; hangi havuzun renk taşıdığına
+  hücreyi gören transaction karar veriyor.
+- **Ölçüm:** repoda 3D dışı renkli görev taşıyan veri yok — `app/schemas/*.json`
+  veri tutmaz, tek fixture `sample-import.xlsx` ham metindir ve renk ancak
+  kullanıcı inceleme ekranında seçerse yazılır. Dolayısıyla veri dönüştürme
+  kararı **gerekmedi**.
+- **Açık sınır:** içe aktarma inceleme ekranı hâlâ herhangi bir havuzun taslağına
+  renk atayabiliyor (`ImportDao.setDraftColorsUnderReview`, onayda
+  `insertTaskColor`). Bu tur kapsam dışı bırakıldı: hâlihazırda renk taşıyan
+  taslaklara ne olacağı ürün kararı ister ve sessizce silmek yasak.
+
+## 4. Tamamlanan görevin görünümü  *(`fe3a4ae`, PLAN 5.6, 12.5)*
+
+Üstü çizili metin kaldırıldı — çizgi adı, adedi ve renkleri birden okunmaz
+yapıyordu. Yerine tamamlanma arka planı (`PnpStatus.colors.completedContainer`),
+`✓ Tamamlandı` etiketi ve **bütün** renklerin kendi göstergesi geldi; ad ve adet
+okunur kalıyor. Hücrede devam edenler önce, tamamlananlar sonra çiziliyor —
+yalnız okuma yüzeyinde: belgenin `orderIndex` düzeni ve düzenleyicinin gördüğü
+sıra değişmiyor. Görev yeniden açılınca hiçbir iz kalmıyor.
+
+Durum yalnız renkle anlatılmıyor: simge + yazı, açık ve koyu temada, 1300×900,
+1100×720 ×1.5 ve 640×460 ×2 ×1.3 görünümlerinde ölçüldü.
+
+## Testler
+
+```text
+TaskComposerWindowTest        7  pencere boyutu, merkez, iki sütun, uzun ad,
+                                 Tab tuzağı, Escape hiçbir şey yazmaz
+RenameGameTest                6  gerçek çift tıklama, Enter/Escape, boş ad,
+                                 aynı ad hiç yazmaz, depolama reddi
+ColorBelongsToPrintingTest    4  üç havuzda renk yok, renksiz kayıt, 3D hâlâ sorar,
+                                 düzenleme paneli
+FinishedTaskLookTest          4  çizgi yok + simge + yazı (iki tema), sıra,
+                                 yeniden açma, küçük pencere/büyük metin
+GameSetupStoreTest           +4  rename: yazar / yazmaz / yok / boş
+TaskFromTextStoreTest        +2  3D dışı renk reddi, renksiz kayıt
+TaskEditStoreTest            +2  renk ekleme reddi, eski renkli kayıt düzenlenebilir
+```
+
+Güncellenen sözleşme testleri: `GameTableLayoutTest` (panel → pencere, alanların
+bölünmesi, tamamlanan görev), `ColorPickerLayoutTest` (aynı hedef adı),
+`MulticolorTaskTest`, `MulticolorRollbackTest`, `IndependentTasksFromTextTest`,
+`TaskConversionHistoryTest`, `TaskFlagEditTest` — hepsi 3D dışı renkli görev
+kuran eski kuruluma dayanıyordu; hiçbirinin kapsamı daraltılmadı, ölçtükleri
+invariant'lar bu kez rengin gerçekten bulunduğu yerde ölçülüyor.
+
+## Bu turda bilinçli olarak yapılmayanlar
+
+- Sürüm yükseltme, etiket, GitHub Release (kullanıcı açıkça istemedi).
+- İş 13 (temiz Garuda turu) — hâlâ projenin tek kalan bağlayıcı işi.
+- Paket smoke'ları: paketleme ve sürüm değişmedi.
+- İçe aktarma inceleme ekranındaki renk atama (yukarıda).
 
 ---
 
