@@ -105,6 +105,27 @@ class TaskComposerWindowTest {
     }
 
     @Test
+    fun `at the size a full screen window opens at, it is still its own size`() {
+        RealStack().use { stack ->
+            // 1920 by 1080: the window the application is most often really used
+            // in. PLAN 12.6 keeps it 900 by 720 there rather than growing with
+            // the screen.
+            ComposeSceneHarness(width = 1920, height = 1080) { GameTableScreen(stack.table) }.use { screen ->
+                screen.composing(stack)
+
+                val drawn = screen.boundsOf(window) ?: fail("there is no task window on the screen")
+                assertEquals(900f, drawn.width, TOLERANCE, "the window grew with the screen: $drawn")
+                assertEquals(720f, drawn.height, TOLERANCE, "the window grew with the screen: $drawn")
+                assertTrue(abs(drawn.center.x - 960f) < 2f, "the window is not centred across: $drawn")
+                assertTrue(abs(drawn.center.y - 540f) < 2f, "the window is not centred down: $drawn")
+                listOf(save, cancel).forEach { control ->
+                    assertTrue(drawn.holds(screen.boundsOf(control) ?: fail("`$control` is not drawn")), "`$control` is outside")
+                }
+            }
+        }
+    }
+
+    @Test
     fun `the smallest window still holds the whole thing, with room around it`() {
         RealStack().use { stack ->
             // The narrowest window `Main` allows, at twice the density and with
