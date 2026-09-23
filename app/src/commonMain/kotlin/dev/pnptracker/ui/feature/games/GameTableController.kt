@@ -1065,7 +1065,10 @@ class GameTableController(
             } else {
                 composer.usedRows.map { row ->
                     TaskDraft(
-                        colorIds = listOf(row.colorId ?: return),
+                        // A colour where the pool has them, none where it does
+                        // not: PLAN 5.10 gives them to printing alone, and the
+                        // window for anything else never asked.
+                        colorIds = if (composer.holdsColors) listOf(row.colorId ?: return) else emptyList(),
                         requiredQuantity = row.quantity ?: return,
                         trackingMode = row.trackingMode ?: return,
                         // An empty note is no note; anything else is kept as typed.

@@ -22,6 +22,7 @@ import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.model.SegmentKind
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.tasks.CellTextSelection
+import dev.pnptracker.domain.tasks.TaskDraft
 import dev.pnptracker.domain.tasks.TaskFromTextException
 import dev.pnptracker.domain.tasks.TaskFromTextFailure
 import kotlinx.coroutines.runBlocking
@@ -174,6 +175,86 @@ class TaskFromTextStoreTest {
         trackingMode = trackingMode,
         notes = notes,
     )
+
+    /** The same, for work that has no colour to be made in (PLAN 5.10). */
+    private suspend fun createColorless(
+        selection: CellTextSelection,
+        requiredQuantity: Int = 15,
+        trackingMode: TrackingMode = TrackingMode.PIPELINE,
+        notes: String? = null,
+    ) = store
+        .createTasks(
+            selection = selection,
+            drafts =
+                listOf(
+                    TaskDraft(
+                        colorIds = emptyList(),
+                        requiredQuantity = requiredQuantity,
+                        trackingMode = trackingMode,
+                        notes = notes,
+                    ),
+                ),
+        ).single()
+
+    // ------------------------------------------- colour belongs to printing
+
+    @Test
+    fun `only a 3D task can be given a colour`() =
+        runBlocking<Unit> {
+            // PLAN 5.10: colour is a property of three dimensional work. A card,
+            // a board piece or a special task has none, and asking for one is a
+            // programming mistake rather than something to tell the user about —
+            // no screen offers it.
+            listOf(
+                CellColumnType.CARD to TrackingMode.PIPELINE,
+                CellColumnType.BOARD to TrackingMode.PIPELINE,
+                CellColumnType.SPECIAL to TrackingMode.COUNTED,
+            ).forEach { (columnType, trackingMode) ->
+                val game = addGame(name = "Harmonies ${'$'}columnType")
+                val cell = addCell(game.id, columnType)
+                val text = "Basılacak: Knight, kart"
+                val segment = addText(cell.id, text)
+
+                assertFailsWith<IllegalArgumentException>("${'$'}columnType took a colour") {
+                    create(
+                        selection = selectionOf(game, cell, segment, "Knight"),
+                        colorId = addColor().id,
+                        trackingMode = trackingMode,
+                    )
+                }
+
+                assertEquals(listOf(SegmentKind.PLAIN_TEXT), kindsOf(cell.id), "${'$'}columnType wrote a task anyway")
+                assertEquals(text, documentTextOf(cell.id), "the cell was changed by a refused creation")
+            }
+        }
+
+    @Test
+    fun `a task outside the 3D pool is made without a colour`() =
+        runBlocking<Unit> {
+            val game = addGame()
+            val cell = addCell(game.id, CellColumnType.CARD)
+            val text = "Basılacak: Knight, kart"
+            val segment = addText(cell.id, text)
+
+            val taskId =
+                store
+                    .createTasks(
+                        selection = selectionOf(game, cell, segment, "Knight"),
+                        drafts =
+                            listOf(
+                                TaskDraft(
+                                    colorIds = emptyList(),
+                                    requiredQuantity = 15,
+                                    trackingMode = TrackingMode.PIPELINE,
+                                    notes = null,
+                                ),
+                            ),
+                    ).single()
+
+            assertEquals("Knight", database.taskDao().activeTaskById(taskId)?.name)
+            assertEquals(emptyList(), database.taskColorDao().colorsOfTask(taskId), "a card task was given a colour")
+            assertEquals(text, documentTextOf(cell.id))
+        }
 
     // ------------------------------------------------ cutting a word out
 
@@ -394,14 +475,8 @@ class TaskFromTextStoreTest {
             val game = addGame()
             val cell = addCell(game.id, columnType = CellColumnType.CARD)
             val segment = addText(cell.id, "60 kart")
-            val color = addColor()
 
-            val taskId =
-                create(
-                    selectionOf(game, cell, segment, "kart"),
-                    color.id,
-                    trackingMode = TrackingMode.PIPELINE,
-                )
+            val taskId = createColorless(selectionOf(game, cell, segment, "kart"))
 
             val stages = database.taskProgressDao().stagesOfTask(taskId)
             assertEquals(
@@ -425,9 +500,8 @@ class TaskFromTextStoreTest {
             val specialCell = addCell(game.id, columnType = CellColumnType.SPECIAL)
             val special = addText(specialCell.id, "kutu bandı")
             val specialTask =
-                create(
+                createColorless(
                     selectionOf(game, specialCell, special, "bandı"),
-                    color.id,
                     trackingMode = TrackingMode.COUNTED,
                 )
 
@@ -703,12 +777,10 @@ class TaskFromTextStoreTest {
             val cell = addCell(game.id, columnType = CellColumnType.CARD)
             val segment = addText(cell.id, "60 kart")
 
+            // A card task has no colour to lose (PLAN 5.10), so the refusal
+            // this one is made to fail on is its total.
             assertFailsWith<TaskFromTextException> {
-                create(
-                    selectionOf(game, cell, segment, "kart"),
-                    IdGenerator.Random.newId(),
-                    trackingMode = TrackingMode.PIPELINE,
-                )
+                createColorless(selectionOf(game, cell, segment, "kart"), requiredQuantity = 0)
             }
 
             assertTrue(database.taskDao().allTasksIncludingDeleted().isEmpty())

@@ -11,6 +11,7 @@ import dev.pnptracker.data.database.entity.CellSegmentEntity
 import dev.pnptracker.data.database.entity.ColorEntity
 import dev.pnptracker.data.database.entity.GameCellEntity
 import dev.pnptracker.data.database.entity.GameEntity
+import dev.pnptracker.data.database.entity.TaskColorEntity
 import dev.pnptracker.data.database.insertSegmentDirectly
 import dev.pnptracker.data.database.updatedAt
 import dev.pnptracker.domain.model.CellColumnType
@@ -20,6 +21,7 @@ import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.model.SegmentKind
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.tasks.CellTextSelection
+import dev.pnptracker.domain.tasks.TaskDraft
 import dev.pnptracker.domain.tasks.TaskEditException
 import dev.pnptracker.domain.tasks.TaskEditFailure
 import kotlinx.coroutines.runBlocking
@@ -115,20 +117,49 @@ class TaskEditStoreTest {
                     it.text!!.contains(word)
             }
         val text = segment.text!!
+        val selection =
+            CellTextSelection(
+                gameId = game.id,
+                cellId = cell.id,
+                segmentId = segment.id,
+                expectedText = text,
+                startOffset = text.indexOf(word),
+                endOffset = text.indexOf(word) + word.length,
+            )
+        // Only printing has colours (PLAN 5.10); everything else is made without
+        // one, which is what the panels for those pools ask for.
+        if (trackingMode != TrackingMode.THREE_D_BATCH) {
+            return creation
+                .createTasks(selection, listOf(TaskDraft(emptyList(), quantity, trackingMode, null)))
+                .single()
+        }
         return creation.createSingleColorTask(
-            selection =
-                CellTextSelection(
-                    gameId = game.id,
-                    cellId = cell.id,
-                    segmentId = segment.id,
-                    expectedText = text,
-                    startOffset = text.indexOf(word),
-                    endOffset = text.indexOf(word) + word.length,
-                ),
+            selection = selection,
             colorId = colorNamed(color).id,
             requiredQuantity = quantity,
             trackingMode = trackingMode,
             notes = null,
+        )
+    }
+
+    /** The selection that cuts [word] out of the cell's single stretch of text. */
+    private suspend fun selectionOfWord(
+        game: GameEntity,
+        cell: GameCellEntity,
+        word: String,
+    ): CellTextSelection {
+        val segment =
+            database.cellSegmentDao().segmentsOfCell(cell.id).first {
+                it.kind == SegmentKind.PLAIN_TEXT && it.text!!.contains(word)
+            }
+        val text = segment.text!!
+        return CellTextSelection(
+            gameId = game.id,
+            cellId = cell.id,
+            segmentId = segment.id,
+            expectedText = text,
+            startOffset = text.indexOf(word),
+            endOffset = text.indexOf(word) + word.length,
         )
     }
 
@@ -145,6 +176,68 @@ class TaskEditStoreTest {
     private suspend fun kindsOf(cellId: EntityId) = database.cellSegmentDao().segmentsOfCell(cellId).map { it.kind }
 
     private suspend fun textsOf(cellId: EntityId) = database.cellSegmentDao().segmentsOfCell(cellId).map { it.text }
+
+    // ------------------------------------------- colour belongs to printing
+
+    @Test
+    fun `a colour cannot be put on a task outside the 3D pool`() =
+        runBlocking<Unit> {
+            val game = addGame()
+            val cell = addCell(game.id, CellColumnType.CARD)
+            addText(cell.id, "Basılacak: Knight, kart")
+            val taskId =
+                creation
+                    .createTasks(
+                        selection = selectionOfWord(game, cell, "Knight"),
+                        drafts = listOf(TaskDraft(emptyList(), 15, TrackingMode.PIPELINE, null)),
+                    ).single()
+
+            // PLAN 5.10: no screen offers this, so it is a programming mistake
+            // rather than a refusal the user is asked to act on.
+            assertFailsWith<IllegalArgumentException> {
+                store.editTask(taskId, "Knight", colorNamed("Siyah").id, 15, null, TrackingMode.PIPELINE)
+            }
+
+            assertEquals(emptyList(), database.taskColorDao().colorsOfTask(taskId), "a card task ended up with a colour")
+        }
+
+    @Test
+    fun `a card task that already has a colour can still be edited, and can lose it`() =
+        runBlocking<Unit> {
+            // Written straight into the database, the way an older record or a
+            // restored backup can carry one. Nothing here deletes such a colour
+            // on its own; what it must not do is make the task uneditable.
+            val game = addGame()
+            val cell = addCell(game.id, CellColumnType.CARD)
+            addText(cell.id, "Basılacak: Knight, kart")
+            val taskId =
+                creation
+                    .createTasks(
+                        selection = selectionOfWord(game, cell, "Knight"),
+                        drafts = listOf(TaskDraft(emptyList(), 15, TrackingMode.PIPELINE, null)),
+                    ).single()
+            val color = colorNamed("Siyah")
+            database.taskColorDao().insert(TaskColorEntity(taskId = taskId, colorId = color.id, slotIndex = 0))
+
+            assertTrue(
+                store.editTask(taskId, "Şövalye", color.id, 15, null, TrackingMode.PIPELINE),
+                "an old record with a colour could not be edited at all",
+            )
+            assertEquals(listOf(color.id), database.taskColorDao().colorsOfTask(taskId).map { it.colorId })
+
+            assertTrue(
+                store.editTask(
+                    taskId,
+                    "Şövalye",
+                    colorId = null,
+                    requiredQuantity = 15,
+                    notes = null,
+                    trackingMode = TrackingMode.PIPELINE,
+                ),
+                "the colour could not be taken off",
+            )
+            assertEquals(emptyList(), database.taskColorDao().colorsOfTask(taskId))
+        }
 
     // ------------------------------------------------------- changing a task
 
@@ -335,7 +428,14 @@ class TaskEditStoreTest {
 
             val refusal =
                 assertFailsWith<TaskEditException> {
-                    store.editTask(taskId, "kart", colorNamed("Siyah").id, 20, null, TrackingMode.PIPELINE)
+                    store.editTask(
+                        taskId,
+                        "kart",
+                        colorId = null,
+                        requiredQuantity = 20,
+                        notes = null,
+                        trackingMode = TrackingMode.PIPELINE,
+                    )
                 }
 
             assertEquals(TaskEditFailure.QUANTITY_BELOW_PROGRESS, refusal.failure)
@@ -350,7 +450,9 @@ class TaskEditStoreTest {
             addText(cell.id, "60 kart basılacak")
             val taskId = makeTask(game, cell, "kart", quantity = 60, trackingMode = TrackingMode.PIPELINE)
 
-            assertTrue(store.editTask(taskId, "kart", colorNamed("Siyah").id, 80, null, TrackingMode.PIPELINE))
+            assertTrue(
+                store.editTask(taskId, "kart", colorId = null, requiredQuantity = 80, notes = null, trackingMode = TrackingMode.PIPELINE),
+            )
 
             assertEquals(80, assertNotNull(database.taskDao().activeTaskById(taskId)).requiredQuantity)
         }
@@ -373,7 +475,14 @@ class TaskEditStoreTest {
 
             val refusal =
                 assertFailsWith<TaskEditException> {
-                    store.editTask(taskId, "kart", colorNamed("Siyah").id, 80, null, TrackingMode.PIPELINE)
+                    store.editTask(
+                        taskId,
+                        "kart",
+                        colorId = null,
+                        requiredQuantity = 80,
+                        notes = null,
+                        trackingMode = TrackingMode.PIPELINE,
+                    )
                 }
 
             assertEquals(TaskEditFailure.QUANTITY_LOCKED_BY_COMPLETION, refusal.failure)

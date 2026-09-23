@@ -14,6 +14,7 @@ import dev.pnptracker.data.database.entity.stageRowsFor
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.SegmentKind
+import dev.pnptracker.domain.rules.requireColorsAllowed
 import dev.pnptracker.domain.tasks.CellTextSelection
 import dev.pnptracker.domain.tasks.SplitPlainText
 import dev.pnptracker.domain.tasks.TaskDraft
@@ -221,6 +222,9 @@ abstract class TaskFromTextDao {
         // colour, and neither may two slots of one task. Folding either would
         // make less than the user described — one task fewer, or one colour
         // fewer out of a name they meant to see split across it.
+        // A colour outside the printing pool is a programming mistake, like a
+        // tracking mode a pool does not allow: no screen offers one (PLAN 5.10).
+        drafts.forEach { requireColorsAllowed(poolType, it.colorIds) }
         val named = drafts.flatMap { it.colorIds }
         // Which two places say the same thing, not merely that two of them do:
         // the user has a list in front of them and has to be told both ends of

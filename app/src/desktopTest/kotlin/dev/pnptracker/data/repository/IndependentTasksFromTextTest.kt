@@ -144,7 +144,9 @@ class IndependentTasksFromTextTest {
         trackingMode: TrackingMode = TrackingMode.THREE_D_BATCH,
         notes: String? = null,
     ) = TaskDraft(
-        colorIds = listOf(colorNamed(colorName).id),
+        // Only printing is made in a colour (PLAN 5.10); a batch of cards, board
+        // pieces or special work is described without one.
+        colorIds = if (trackingMode == TrackingMode.THREE_D_BATCH) listOf(colorNamed(colorName).id) else emptyList(),
         requiredQuantity = quantity,
         trackingMode = trackingMode,
         notes = notes,

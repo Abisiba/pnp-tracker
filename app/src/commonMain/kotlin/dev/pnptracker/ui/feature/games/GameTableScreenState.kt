@@ -15,6 +15,7 @@ import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.model.hasStages
+import dev.pnptracker.domain.rules.poolHoldsColors
 import dev.pnptracker.domain.search.GameTableFilter
 import dev.pnptracker.domain.tasks.CellTextSelection
 import dev.pnptracker.domain.tasks.TaskEditFailure
@@ -531,8 +532,14 @@ data class TaskDraftRow(
     /** False once there is something in the field that is not a usable quantity. */
     val isQuantityUsable: Boolean get() = quantityText.isEmpty() || quantity != null
 
-    /** True once this row describes a task that could actually be created. */
-    val isComplete: Boolean get() = colorId != null && quantity != null && trackingMode != null
+    /**
+     * True once this row describes a task that could actually be created.
+     *
+     * [withColor] is whether the pool being written to has colours at all. PLAN
+     * 5.10 gives them to printing alone, so a card, a board piece or a special
+     * task is complete without one — it was never asked.
+     */
+    fun isComplete(withColor: Boolean): Boolean = (!withColor || colorId != null) && quantity != null && trackingMode != null
 
     /** True while nothing has been typed or chosen here at all. */
     val isUntouched: Boolean
@@ -662,6 +669,9 @@ data class TaskComposer(
                 TaskCreationMode.SINGLE_ITEM_MULTICOLOR -> emptyList()
             }
 
+    /** Whether the pool this is being written to has colours at all (PLAN 5.10). */
+    val holdsColors: Boolean get() = columnType.poolType?.let { poolHoldsColors(it) } == true
+
     /** Every colour the mode being worked in would actually save. */
     val colorsInPlay: List<EntityId>
         get() =
@@ -714,7 +724,7 @@ data class TaskComposer(
     val firstUnusableRow: Int?
         get() =
             failureRow?.takeIf { it in usedRows.indices }
-                ?: usedRows.indexOfFirst { !it.isComplete }.takeIf { it >= 0 }
+                ?: usedRows.indexOfFirst { !it.isComplete(holdsColors) }.takeIf { it >= 0 }
                 ?: repeatedColorRows.keys.minOrNull()
 
     /** How many tasks this mode will not save fewer than. */
@@ -735,7 +745,7 @@ data class TaskComposer(
                     palette.isComplete
                 } else {
                     usedRows.size >= leastRows &&
-                        usedRows.all { it.isComplete } &&
+                        usedRows.all { it.isComplete(holdsColors) } &&
                         repeatedColorRows.isEmpty()
                 }
 

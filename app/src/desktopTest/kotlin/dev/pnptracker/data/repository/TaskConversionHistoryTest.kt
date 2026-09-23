@@ -154,14 +154,22 @@ class TaskConversionHistoryTest {
         val game = addGame()
         val cell = addCell(game.id, columnType)
         val segment = addText(cell.id, text)
+        // Only printing is made in a colour (PLAN 5.10); everything else is
+        // created without one, as its own window asks.
         val taskId =
-            creation.createSingleColorTask(
-                selection = selectionOf(game, cell, segment, word),
-                colorId = colorNamed(color).id,
-                requiredQuantity = quantity,
-                trackingMode = trackingMode,
-                notes = null,
-            )
+            creation
+                .createTasks(
+                    selection = selectionOf(game, cell, segment, word),
+                    drafts =
+                        listOf(
+                            TaskDraft(
+                                colorIds = if (trackingMode == TrackingMode.THREE_D_BATCH) listOf(colorNamed(color).id) else emptyList(),
+                                requiredQuantity = quantity,
+                                trackingMode = trackingMode,
+                                notes = null,
+                            ),
+                        ),
+                ).single()
         return Triple(game, cell, taskId)
     }
 

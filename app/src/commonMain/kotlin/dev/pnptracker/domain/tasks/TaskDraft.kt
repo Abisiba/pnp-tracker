@@ -25,18 +25,18 @@ import dev.pnptracker.domain.model.TrackingMode
  * colours in one draft is one task, and a colour each in three drafts is three.
  */
 data class TaskDraft(
-    /** The colours the task is made in, in the order the user chose them. */
+    /**
+     * The colours the task is made in, in the order the user chose them.
+     *
+     * Empty for work that has no colour: PLAN 5.10 gives colours to three
+     * dimensional printing alone, so a card, a board piece or a special task is
+     * described without any. Which pools may carry one is not this type's to
+     * know — the transaction that has the cell in front of it decides, and
+     * refuses a colour that does not belong to the pool being written to.
+     */
     val colorIds: List<EntityId>,
     val requiredQuantity: Int,
     val trackingMode: TrackingMode,
     /** The user's own words, kept exactly, or null when they wrote none. */
     val notes: String?,
-) {
-    init {
-        // A task with no colour at all is a real state (PLAN 5.10) but never one
-        // this describes: every way of creating a task asks for its colours, so
-        // an empty list here is a caller that lost them rather than a user who
-        // chose none.
-        require(colorIds.isNotEmpty()) { "A task is described with the colours it is made in." }
-    }
-}
+)

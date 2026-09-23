@@ -16,7 +16,6 @@ import dev.pnptracker.data.database.updatedAt
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
-import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.model.SegmentKind
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.tasks.CellTextSelection
@@ -294,36 +293,33 @@ class MulticolorTaskTest {
         }
 
     @Test
-    fun `a card task in several colours gets one pipeline and not three`() =
+    fun `several colours are only ever asked of printing`() =
         runBlocking<Unit> {
-            val (_, _, taskId) =
-                bat(columnType = CellColumnType.CARD, trackingMode = TrackingMode.PIPELINE)
+            // PLAN 5.10 gives colours to three dimensional work alone, so a card
+            // or a board piece made in several of them is not a thing to write —
+            // and no screen offers it, which makes it a programming mistake.
+            listOf(CellColumnType.CARD, CellColumnType.BOARD).forEach { columnType ->
+                val game = addGame()
+                val cell = addCell(game.id, columnType)
+                val text = "Basılacak: Yarasa, kutu ayrı."
+                val segment = addText(cell.id, text)
 
-            val stages = database.taskProgressDao().stagesOfTask(taskId)
-            assertEquals(
-                listOf(ProductionStage.PRINT, ProductionStage.LAMINATE, ProductionStage.CUT),
-                stages.map { it.stage },
-            )
-        }
+                assertFailsWith<IllegalArgumentException>("$columnType took three colours") {
+                    store.createTasks(
+                        selection = selectionOf(game, cell, segment, "Yarasa", text),
+                        drafts = listOf(draftOf(listOf("Kırmızı", "Sarı", "Siyah"), trackingMode = TrackingMode.PIPELINE)),
+                    )
+                }
 
-    @Test
-    fun `a board task in several colours gets one pipeline and not three`() =
-        runBlocking<Unit> {
-            val (_, _, taskId) =
-                bat(columnType = CellColumnType.BOARD, trackingMode = TrackingMode.PIPELINE)
-
-            val stages = database.taskProgressDao().stagesOfTask(taskId)
-            assertEquals(
-                listOf(ProductionStage.PRINT, ProductionStage.GLUE, ProductionStage.CUT),
-                stages.map { it.stage },
-            )
+                assertEquals(listOf(SegmentKind.PLAIN_TEXT), database.cellSegmentDao().segmentsOfCell(cell.id).map { it.kind })
+            }
         }
 
     @Test
     fun `the tracking mode and the note are stored once for the whole task`() =
         runBlocking<Unit> {
             val game = addGame()
-            val cell = addCell(game.id, CellColumnType.SPECIAL)
+            val cell = addCell(game.id)
             val text = "Yarasa boyanacak"
             val segment = addText(cell.id, text)
 
@@ -335,14 +331,14 @@ class MulticolorTaskTest {
                             listOf(
                                 draftOf(
                                     listOf("Kırmızı", "Sarı", "Siyah"),
-                                    trackingMode = TrackingMode.CHECKLIST,
+                                    trackingMode = TrackingMode.THREE_D_BATCH,
                                     notes = "  iki kat  ",
                                 ),
                             ),
                     ).single()
 
             val task = assertNotNull(database.taskDao().activeTaskById(taskId))
-            assertEquals(TrackingMode.CHECKLIST, task.trackingMode)
+            assertEquals(TrackingMode.THREE_D_BATCH, task.trackingMode)
             assertEquals("  iki kat  ", task.notes, "the note was not stored as it was typed")
         }
 
@@ -574,19 +570,21 @@ class MulticolorTaskTest {
         }
 
     @Test
-    fun `progress and stages do not multiply with the colours`() =
+    fun `progress does not multiply with the colours`() =
         runBlocking<Unit> {
-            val (_, _, taskId) =
-                bat(columnType = CellColumnType.CARD, trackingMode = TrackingMode.PIPELINE)
+            val (_, _, taskId) = bat()
 
-            database.taskProgressDao().setStageQuantity(taskId, ProductionStage.PRINT, 10, StoppedClock(updatedAt))
-
-            assertEquals(3, database.taskProgressDao().stagesOfTask(taskId).size, "a stage was added per colour")
-            assertEquals(
-                1,
-                database.taskProgressDao().stagesOfTask(taskId).count { it.stage == ProductionStage.PRINT },
-                "the print stage exists more than once",
+            database.taskProgressDao().reportFailure(
+                IdGenerator.Random.newId(),
+                taskId,
+                quantity = 2,
+                clock = StoppedClock(updatedAt),
             )
+
+            // One task, one counter, whatever it is printed in (PLAN 12.7).
+            assertEquals(1, database.taskProgressDao().progressEventsOfTask(taskId).size, "an event was written per colour")
+            assertEquals(2, assertNotNull(database.taskDao().activeTaskById(taskId)).currentMissingQuantity)
+            assertTrue(database.taskProgressDao().stagesOfTask(taskId).isEmpty(), "printing was given a pipeline")
         }
 
     // ------------------------------------------------------------- editing
@@ -722,12 +720,16 @@ class MulticolorTaskTest {
     @Test
     fun `a colour deleted while the panel was open takes the whole edit back`() =
         runBlocking<Unit> {
-            val (_, _, taskId) =
-                bat(columnType = CellColumnType.CARD, trackingMode = TrackingMode.PIPELINE)
-            database.taskProgressDao().setStageQuantity(taskId, ProductionStage.PRINT, 4, StoppedClock(updatedAt))
+            val (_, _, taskId) = bat()
+            database.taskProgressDao().reportFailure(
+                IdGenerator.Random.newId(),
+                taskId,
+                quantity = 4,
+                clock = StoppedClock(updatedAt),
+            )
             val colorsBefore = database.taskColorDao().colorsOfTask(taskId)
             val taskBefore = assertNotNull(database.taskDao().activeTaskById(taskId))
-            val stagesBefore = database.taskProgressDao().stagesOfTask(taskId)
+            val eventsBefore = database.taskProgressDao().progressEventsOfTask(taskId)
             val gone = colorNamed("Beyaz")
             database.colorDao().deleteColorRow(gone.id)
 
@@ -739,7 +741,7 @@ class MulticolorTaskTest {
                         colorsBefore.map { it.colorId } + gone.id,
                         20,
                         "iki kat",
-                        TrackingMode.PIPELINE,
+                        TrackingMode.THREE_D_BATCH,
                     )
                 }
 
@@ -747,7 +749,7 @@ class MulticolorTaskTest {
             assertEquals(3, refusal.row, "the refusal does not say which entry went away")
             assertEquals(colorsBefore, database.taskColorDao().colorsOfTask(taskId), "the colour list was disturbed")
             assertEquals(taskBefore, assertNotNull(database.taskDao().activeTaskById(taskId)), "the task was changed")
-            assertEquals(stagesBefore, database.taskProgressDao().stagesOfTask(taskId), "the pipeline was disturbed")
+            assertEquals(eventsBefore, database.taskProgressDao().progressEventsOfTask(taskId), "the history was disturbed")
         }
 
     @Test
@@ -769,10 +771,13 @@ class MulticolorTaskTest {
     @Test
     fun `the history of a several colour task survives its colours being changed`() =
         runBlocking<Unit> {
-            val (_, _, taskId) =
-                bat(columnType = CellColumnType.CARD, trackingMode = TrackingMode.PIPELINE)
-            database.taskProgressDao().setStageQuantity(taskId, ProductionStage.PRINT, 10, StoppedClock(updatedAt))
-            val stagesBefore = database.taskProgressDao().stagesOfTask(taskId)
+            val (_, _, taskId) = bat()
+            database.taskProgressDao().reportFailure(
+                IdGenerator.Random.newId(),
+                taskId,
+                quantity = 3,
+                clock = StoppedClock(updatedAt),
+            )
             val eventsBefore = database.taskProgressDao().progressEventsOfTask(taskId)
 
             editing.editTask(
@@ -781,10 +786,10 @@ class MulticolorTaskTest {
                 listOf(colorNamed("Siyah").id, colorNamed("Sarı").id, colorNamed("Kırmızı").id),
                 10,
                 null,
-                TrackingMode.PIPELINE,
+                TrackingMode.THREE_D_BATCH,
             )
 
-            assertEquals(stagesBefore, database.taskProgressDao().stagesOfTask(taskId))
             assertEquals(eventsBefore, database.taskProgressDao().progressEventsOfTask(taskId))
+            assertEquals(3, assertNotNull(database.taskDao().activeTaskById(taskId)).currentMissingQuantity)
         }
 }
