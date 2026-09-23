@@ -157,19 +157,13 @@ class TaskFlagEditTest {
         }
 
     @Test
-    fun `changing the marks leaves the colours, the pipeline and the history alone`() =
+    fun `changing the marks leaves the pipeline and the history alone`() =
         runBlocking<Unit> {
             val created = aCardTask()
-            // One colour: PLAN 5.10 does not describe carrying a task between
-            // being made in one and being made in several, and this test is
-            // about the marks rather than about that.
-            val colors =
-                database
-                    .colorDao()
-                    .allColors()
-                    .take(1)
-                    .map { it.id }
-            edit(created, colorIds = colors)
+            // No colour: PLAN 5.10 gives one to printing alone, and this is a
+            // card task. What the marks must leave alone here is its pipeline
+            // and everything ever recorded against it.
+            val colors = emptyList<EntityId>()
             database.taskProgressDao().setStageQuantities(
                 taskId = created.id,
                 targets = mapOf(ProductionStage.PRINT to 5),

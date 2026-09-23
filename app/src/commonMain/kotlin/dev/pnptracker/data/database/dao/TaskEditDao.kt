@@ -16,6 +16,7 @@ import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.SegmentKind
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.rules.requireAllowedTrackingMode
+import dev.pnptracker.domain.rules.requireColorsAllowed
 import dev.pnptracker.domain.tasks.TaskEditException
 import dev.pnptracker.domain.tasks.TaskEditFailure
 import dev.pnptracker.domain.tasks.TaskFlags
@@ -273,6 +274,10 @@ abstract class TaskEditDao {
         }
         if ((current.size > 1) != (colorIds.size > 1)) refuse(TaskEditFailure.COLOR_COUNT_NOT_CHANGEABLE)
         val colorChanges = current != colorIds
+        // Only a colour being *put on* a task is refused. One already stored —
+        // an older record, a restored backup — is left exactly where it is, and
+        // taking it off is allowed from any pool (PLAN 5.10).
+        if (colorChanges) requireColorsAllowed(task.poolType, colorIds)
         if (colorChanges && colorIds.isNotEmpty()) {
             // One read for the whole list, compared in memory, and made before
             // anything is written: a task whose second colour had been deleted

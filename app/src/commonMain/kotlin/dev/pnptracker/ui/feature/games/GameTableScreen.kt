@@ -2653,7 +2653,11 @@ private fun TaskComposerWindow(
                         offered = offered,
                         catalogue = catalogue,
                         focusRecall = focusRecall,
-                        wide = width >= TaskWindowTwoColumns,
+                        // Two columns only where there is a second thing to put
+                        // in one: a card, a board piece or a special task has no
+                        // colours (PLAN 5.10), so its window is one column of
+                        // what it really is being asked.
+                        wide = width >= TaskWindowTwoColumns && composer.holdsColors,
                         controller = controller,
                         onSave = { saveTask() },
                     )
@@ -2784,13 +2788,15 @@ private fun TaskComposerBody(
                     verticalArrangement = Arrangement.spacedBy(3.dp),
                 ) {
                     ComposerWorkSide(composer = composer, landing = landing, focus = panelFocus, controller = controller)
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    ComposerColorSide(
-                        composer = composer,
-                        offered = offered,
-                        catalogue = catalogue,
-                        controller = controller,
-                    )
+                    if (composer.holdsColors) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        ComposerColorSide(
+                            composer = composer,
+                            offered = offered,
+                            catalogue = catalogue,
+                            controller = controller,
+                        )
+                    }
                 }
             }
         }
@@ -2968,7 +2974,8 @@ private fun TaskComposerActions(
                         stringResource(Strings.CellTask.errorDuplicateColor, earlier + 1, later + 1)
                     }
                 !catalogue.stillHasEvery(composer.colorsInPlay) -> stringResource(Strings.CellTask.colorGone)
-                composer.usedRows.any { it.colorId == null } -> stringResource(Strings.CellTask.colorRequired)
+                composer.holdsColors && composer.usedRows.any { it.colorId == null } ->
+                    stringResource(Strings.CellTask.colorRequired)
                 else -> stringResource(Strings.CellTask.hint)
             }
         NoteLine(
@@ -3150,10 +3157,13 @@ private fun CreationModeChoice(
         verticalArrangement = Arrangement.spacedBy(2.dp),
         modifier = Modifier.fillMaxWidth().selectableGroup(),
     ) {
-        listOf(
+        listOfNotNull(
             TaskCreationMode.SINGLE_COLOR to Strings.CellTask.modeSingle,
             TaskCreationMode.INDEPENDENT_TASKS to Strings.CellTask.modeMany,
-            TaskCreationMode.SINGLE_ITEM_MULTICOLOR to Strings.CellTask.modeMulticolor,
+            // A mode made entirely of colours is not offered where there are
+            // none to choose (PLAN 5.10): it would be a way of describing
+            // something this kind of work cannot be.
+            (TaskCreationMode.SINGLE_ITEM_MULTICOLOR to Strings.CellTask.modeMulticolor).takeIf { composer.holdsColors },
         ).forEach { (mode, label) ->
             val chosen = composer.mode == mode
             val stateText =

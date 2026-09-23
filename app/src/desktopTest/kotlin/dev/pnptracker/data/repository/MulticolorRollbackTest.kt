@@ -18,7 +18,6 @@ import dev.pnptracker.data.database.updatedAt
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
-import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.tasks.CellTextSelection
 import dev.pnptracker.domain.tasks.TaskDraft
@@ -184,7 +183,9 @@ class MulticolorRollbackTest {
     fun `a piece of the cell that will not go in leaves the task unwritten too`() =
         withRefusedWrite {
             val text = "Kesilecek: Yarasa, kutu ayrı."
-            val selection = database.wordInACell(CellColumnType.CARD, text, "Yarasa")
+            // Printing, because that is where a task in several colours lives
+            // (PLAN 5.10).
+            val selection = database.wordInACell(CellColumnType.THREE_D, text, "Yarasa")
             val colors =
                 database
                     .colorDao()
@@ -193,12 +194,12 @@ class MulticolorRollbackTest {
                     .map { it.id }
             val before = database.snapshotOf(selection.cellId)
 
-            // The task, its three colours and its whole pipeline are written
-            // before this: the refusal lands after all of them.
+            // The task and its three colours are written before this: the
+            // refusal lands after all of them.
             driver.failOn(occurrence = 1, matches = writesTo("cell_segments"))
             val refusal =
                 assertFailsWith<TaskFromTextException> {
-                    creation.createTasks(selection, listOf(TaskDraft(colors, 10, TrackingMode.PIPELINE, null)))
+                    creation.createTasks(selection, listOf(TaskDraft(colors, 10, TrackingMode.THREE_D_BATCH, null)))
                 }
             driver.disarm()
 
@@ -214,15 +215,20 @@ class MulticolorRollbackTest {
     fun `an edit whose colours are half rewritten comes back whole`() =
         withRefusedWrite {
             val text = "Kesilecek: Yarasa, kutu ayrı."
-            val selection = database.wordInACell(CellColumnType.CARD, text, "Yarasa")
+            val selection = database.wordInACell(CellColumnType.THREE_D, text, "Yarasa")
             val catalogue = database.colorDao().allColors()
             val taskId =
                 creation
                     .createTasks(
                         selection,
-                        listOf(TaskDraft(catalogue.take(3).map { it.id }, 10, TrackingMode.PIPELINE, "ilk not")),
+                        listOf(TaskDraft(catalogue.take(3).map { it.id }, 10, TrackingMode.THREE_D_BATCH, "ilk not")),
                     ).single()
-            database.taskProgressDao().setStageQuantity(taskId, ProductionStage.PRINT, 4, StoppedClock(updatedAt))
+            database.taskProgressDao().reportFailure(
+                IdGenerator.Random.newId(),
+                taskId,
+                quantity = 4,
+                clock = StoppedClock(updatedAt),
+            )
             val before = database.snapshotOf(selection.cellId)
 
             // After the old relations are deleted and the first new one is in:
@@ -238,7 +244,7 @@ class MulticolorRollbackTest {
                         catalogue.drop(3).take(3).map { it.id },
                         20,
                         "başka not",
-                        TrackingMode.PIPELINE,
+                        TrackingMode.THREE_D_BATCH,
                     )
                 }
             driver.disarm()
@@ -250,7 +256,7 @@ class MulticolorRollbackTest {
             assertEquals("Yarasa", task.name, "the name was left changed")
             assertEquals(10, task.requiredQuantity, "the total was left changed")
             assertEquals("ilk not", task.notes, "the note was left changed")
-            assertEquals(TrackingMode.PIPELINE, task.trackingMode)
+            assertEquals(TrackingMode.THREE_D_BATCH, task.trackingMode)
             val colors = database.taskColorDao().colorsOfTask(taskId)
             assertEquals(catalogue.take(3).map { it.id }, colors.map { it.colorId }, "the colour list did not come back")
             assertEquals(listOf(0, 1, 2), colors.map { it.slotIndex }, "the numbering did not come back")

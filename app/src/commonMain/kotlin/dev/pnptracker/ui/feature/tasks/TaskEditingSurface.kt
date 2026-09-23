@@ -49,6 +49,7 @@ import dev.pnptracker.domain.colors.ColorSummary
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.rules.poolHoldsColors
 import dev.pnptracker.domain.tasks.TaskEditFailure
 import dev.pnptracker.domain.tasks.trackingModesOf
 import dev.pnptracker.domain.text.graphemeBoundariesOf
@@ -144,6 +145,7 @@ internal fun TaskEditPanel(
     val focus = remember { FocusRequester() }
     LaunchedEffect(editor.taskId) { focus.requestFocus() }
     val colorsAreThere = catalogue.stillHasEvery(editor.colorIds)
+    val holdsColors = poolOf(editor)?.let { poolHoldsColors(it) } == true
     val save = { if (editor.canSave && colorsAreThere) scope.launch { host.saveTaskEdit() } }
 
     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -162,24 +164,30 @@ internal fun TaskEditPanel(
             NoteLine(text = stringResource(Strings.TaskEdit.nameInvalid), isProblem = true)
         }
 
-        OutlinedTextField(
-            value = editor.colorQuery,
-            onValueChange = host::editTaskEditColorQuery,
-            enabled = !editor.isSaving,
-            singleLine = true,
-            textStyle = MaterialTheme.typography.bodySmall,
-            label = { Text(stringResource(Strings.CellTask.colorSearch)) },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        ColorList(
-            colors = colors,
-            chosen = editor.colorIds,
-            enabled = !editor.isSaving,
-            emptyQuery = editor.colorQuery.isBlank(),
-            onChoose = host::chooseTaskEditColor,
-        )
-        newColorAction(!editor.isSaving)
-        if (editor.holdsSeveralColors) {
+        // Only printing is made in a colour (PLAN 5.10). A card, a board piece or
+        // a special task is not asked which one it is — and one that carries a
+        // colour from an older record is not asked either, because what it is
+        // shown here it could also be asked to change.
+        if (holdsColors) {
+            OutlinedTextField(
+                value = editor.colorQuery,
+                onValueChange = host::editTaskEditColorQuery,
+                enabled = !editor.isSaving,
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodySmall,
+                label = { Text(stringResource(Strings.CellTask.colorSearch)) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            ColorList(
+                colors = colors,
+                chosen = editor.colorIds,
+                enabled = !editor.isSaving,
+                emptyQuery = editor.colorQuery.isBlank(),
+                onChoose = host::chooseTaskEditColor,
+            )
+            newColorAction(!editor.isSaving)
+        }
+        if (holdsColors && editor.holdsSeveralColors) {
             // The whole ordered list, editable: PLAN 5.10 numbers these from the
             // user's own order and PLAN 12.7 draws the name split across them in
             // it, so the order is part of what the task is. A task made in
@@ -270,15 +278,20 @@ internal fun TaskEditPanel(
     }
 }
 
+/**
+ * Which pool this task belongs to, read back from the way it is tracked.
+ *
+ * The panel is handed a task rather than a cell, and the tracking mode is what
+ * the two have in common: PLAN 7.2 and 8 fix the modes by pool, so no two pools
+ * share one.
+ */
+@Composable
+internal fun poolOf(editor: TaskEditor): PoolType? =
+    remember(editor.trackingMode) { PoolType.entries.firstOrNull { editor.trackingMode in trackingModesOf(it) } }
+
 /** The tracking modes this task's pool allows, in the order it lists them. */
 @Composable
-internal fun trackingChoicesFor(editor: TaskEditor): List<TrackingMode> =
-    remember(editor.trackingMode) {
-        PoolType.entries
-            .firstOrNull { editor.trackingMode in trackingModesOf(it) }
-            ?.let { trackingModesOf(it) }
-            .orEmpty()
-    }
+internal fun trackingChoicesFor(editor: TaskEditor): List<TrackingMode> = poolOf(editor)?.let { trackingModesOf(it) }.orEmpty()
 
 @Composable
 internal fun TrackingChoice(
