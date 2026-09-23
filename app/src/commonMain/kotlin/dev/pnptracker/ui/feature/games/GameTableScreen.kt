@@ -107,7 +107,6 @@ import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
@@ -1223,9 +1222,24 @@ private fun drawnDocumentOf(
     withCounts: Boolean,
 ): DrawnDocument {
     val metadata = MaterialTheme.colorScheme.onSurfaceVariant
-    val paints = cell.segments.map { if (it.isTask) paintsOf(it) else null }
+    val finishedFill = PnpStatus.colors.completedContainer
+    val finishedInk = PnpStatus.colors.onCompletedContainer
+    val finishedBadge = stringResource(Strings.CellTask.completedBadge)
+    // Finished work last, and only where the cell is being read. PLAN 12.5 puts
+    // what is still to do first; the document itself keeps the order it was
+    // written in, which is what the editor shows and what is stored, because
+    // there the drawn string has to match the cell character for character.
+    val pieces =
+        remember(cell.segments, withCounts) {
+            if (withCounts) {
+                cell.segments.filterNot { it.isCompletedTask } + cell.segments.filter { it.isCompletedTask }
+            } else {
+                cell.segments
+            }
+        }
+    val paints = pieces.map { if (it.isTask) paintsOf(it) else null }
     val marks =
-        cell.segments.map { segment ->
+        pieces.map { segment ->
             segment.requiredQuantity
                 ?.takeIf { segment.isTask && withCounts }
                 ?.let { stringResource(Strings.CellTask.quantityMark, it) }
@@ -1234,15 +1248,15 @@ private fun drawnDocumentOf(
     // where the user's own characters begin is real work, and the answer only
     // changes when a name or a colour list does.
     val layouts =
-        remember(cell.segments) {
-            cell.segments.map { segment ->
+        remember(pieces) {
+            pieces.map { segment ->
                 if (segment.isTask) taskColorLayoutOf(segment.text, segment.colors.size) else null
             }
         }
     val tasks = mutableListOf<DrawnTask>()
     val text =
         buildAnnotatedString {
-            cell.segments.forEachIndexed { index, segment ->
+            pieces.forEachIndexed { index, segment ->
                 if (!segment.isTask) {
                     append(segment.text)
                     return@forEachIndexed
@@ -1252,7 +1266,7 @@ private fun drawnDocumentOf(
                 // are drawn, never between two pieces of the document, so it
                 // says nothing about the text — and it is left out entirely
                 // where the drawn string has to match the document exactly.
-                if (withCounts && cell.segments.getOrNull(index - 1)?.isTask == true) {
+                if (withCounts && pieces.getOrNull(index - 1)?.isTask == true) {
                     withStyle(SpanStyle(color = metadata)) { append(QUANTITY_GAP) }
                 }
                 val taskPaints = requireNotNull(paints[index])
@@ -1270,16 +1284,26 @@ private fun drawnDocumentOf(
                     }
                 }
                 val start = length
-                // The name in the colours it is made in, in slot order. One
-                // colour is one piece covering the whole name, which is every
-                // task in the cell until somebody makes one of several.
-                if (layout.slices.isEmpty()) {
-                    stripes += paintedName(segment, segment.text, taskPaints.first())
-                } else {
-                    layout.slices.forEach { slice ->
-                        val paint = taskPaints[slice.slotIndex]
-                        stripes += paintedName(segment, segment.text.substring(slice.start, slice.end), paint)
-                    }
+                val finished = withCounts && segment.isCompletedTask
+                when {
+                    // Finished, and drawn as finished: one ground of its own
+                    // rather than the colours it is made in (PLAN 12.5). The
+                    // colours are not lost — every one of them is drawn beside
+                    // the name below, as its own swatch.
+                    finished ->
+                        stripes += paintedName(segment.text, TaskPaint(finishedFill, finishedInk, finishedInk))
+
+                    // The name in the colours it is made in, in slot order. One
+                    // colour is one piece covering the whole name, which is every
+                    // task in the cell until somebody makes one of several.
+                    layout.slices.isEmpty() ->
+                        stripes += paintedName(segment.text, taskPaints.first())
+
+                    else ->
+                        layout.slices.forEach { slice ->
+                            val paint = taskPaints[slice.slotIndex]
+                            stripes += paintedName(segment.text.substring(slice.start, slice.end), paint)
+                        }
                 }
                 // A colour the name was too short to reach is drawn as its own
                 // swatch, right after the name and before the count. PLAN 12.7
@@ -1292,7 +1316,12 @@ private fun drawnDocumentOf(
                 // there the name is still painted in every colour that reaches
                 // it, and nothing is added around it.
                 if (withCounts) {
-                    layout.markerSlots.forEach { slot ->
+                    // A finished task is not drawn in its colours any more, so
+                    // every one of them becomes a swatch rather than only those
+                    // the name was too short to reach: PLAN 12.5 keeps the colour
+                    // readable after the work is done.
+                    val swatches = if (finished) segment.colors.indices.toList() else layout.markerSlots
+                    swatches.forEach { slot ->
                         // An ordinary space, so a long row of swatches can wrap
                         // inside the task rather than running off the cell.
                         append(MARKER_GAP)
@@ -1302,13 +1331,25 @@ private fun drawnDocumentOf(
                         stripes += DrawnStripe(start = at, end = length, edge = paint.edge)
                     }
                 }
-                tasks += DrawnTask(segment = segment, start = start, end = length, stripes = stripes)
                 marks[index]?.let { mark ->
                     withStyle(SpanStyle(color = metadata)) {
                         append(QUANTITY_GAP)
                         append(mark)
                     }
                 }
+                // The state in a mark and a word, on the same ground as the name.
+                // PLAN 12.5 and 17 both: what is finished is never said by colour
+                // alone. Inside the pressable run, so it belongs to the task and
+                // opens the same menu.
+                if (finished) {
+                    withStyle(
+                        SpanStyle(background = finishedFill, color = finishedInk, fontWeight = FontWeight.Medium),
+                    ) {
+                        append(MARKER_GAP)
+                        append(finishedBadge)
+                    }
+                }
+                tasks += DrawnTask(segment = segment, start = start, end = length, stripes = stripes)
             }
         }
     return DrawnDocument(text = text, tasks = tasks)
@@ -1316,7 +1357,6 @@ private fun drawnDocumentOf(
 
 /** Writes one piece of a task's name in one colour, and says where it landed. */
 private fun AnnotatedString.Builder.paintedName(
-    segment: CellSegmentPreview,
     part: String,
     paint: TaskPaint,
 ): DrawnStripe {
@@ -1326,8 +1366,6 @@ private fun AnnotatedString.Builder.paintedName(
             background = paint.fill,
             color = paint.ink,
             fontWeight = FontWeight.Medium,
-            // PLAN 5.6 leaves a finished task in its cell, struck through.
-            textDecoration = if (segment.isCompletedTask) TextDecoration.LineThrough else null,
         ),
     ) {
         append(part)
