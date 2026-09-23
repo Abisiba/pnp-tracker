@@ -25,3 +25,18 @@ class GameSetupException(
     val failure: GameSetupFailure,
     cause: Throwable? = null,
 ) : Exception("The game setup change could not be saved: $failure", cause)
+
+/**
+ * What happened to a game asked to change its name.
+ *
+ * A rename that changes nothing is not a failure and not a success either: PLAN
+ * 12.3 has it write nothing at all, and a caller that heard "saved" would be
+ * told a row was touched that was not. So it is its own answer.
+ */
+enum class GameRenameOutcome {
+    /** The game is called something else now. */
+    RENAMED,
+
+    /** It was already called that, so nothing was written. */
+    UNCHANGED,
+}

@@ -782,6 +782,7 @@ private fun GameNameCell(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
+        val renaming = state.renamingOf(row.gameId)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Top) {
             GameCompletionTick(
                 row = row,
@@ -790,16 +791,28 @@ private fun GameNameCell(
                 state = state,
                 controller = controller,
             )
-            Text(
-                text = row.gameName,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                // Said by the tick, which also says how the game stands and what
-                // can be done about it. Drawn here, and heard there.
-                modifier = Modifier.clearAndSetSemantics { },
-            )
+            if (renaming != null) {
+                GameNameEditor(renaming = renaming, controller = controller)
+            } else {
+                Text(
+                    text = row.gameName,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    // Said by the tick, which also says how the game stands and
+                    // what can be done about it. Drawn here, and heard there.
+                    // The double click is on the drawn name, where the user
+                    // points at it (PLAN 12.3); one click still does nothing, so
+                    // passing over a row never opens anything.
+                    modifier =
+                        Modifier
+                            .clearAndSetSemantics { }
+                            .pointerInput(row.gameId) {
+                                detectTapGestures(onDoubleTap = { controller.beginRenaming(row.gameId) })
+                            },
+                )
+            }
         }
         if (row.isCompleted) {
             Text(
@@ -818,6 +831,77 @@ private fun GameNameCell(
         }
     }
 }
+
+/**
+ * A game's name, open for typing in the cell it is written in (PLAN 12.3).
+ *
+ * One field and nothing else: the name is all this changes, and a game's colours,
+ * counts and work are no part of what is being asked. `Enter` saves what is in
+ * it, `Escape` puts the old name back without writing, and clicking elsewhere
+ * does neither — it stays open, as a cell being written in does, so nothing is
+ * lost and nothing nobody asked for is saved.
+ */
+@Composable
+private fun GameNameEditor(
+    renaming: RowWork.RenamingGame,
+    controller: GameTableController,
+) {
+    val scope = rememberCoroutineScope()
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(renaming.gameId) { runCatching { focus.requestFocus() } }
+    val label = stringResource(Strings.Games.nameLabel)
+
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        OutlinedTextField(
+            value = renaming.draft,
+            onValueChange = controller::editGameRename,
+            enabled = !renaming.isSaving,
+            singleLine = true,
+            isError = renaming.draft.isNotEmpty() && renaming.draft.isBlank(),
+            textStyle = MaterialTheme.typography.bodyMedium,
+            label = { Text(label) },
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focus)
+                    .semantics { contentDescription = label }
+                    .onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        when (event.key) {
+                            Key.Enter, Key.NumPadEnter -> {
+                                scope.launch { controller.saveRenaming() }
+                                true
+                            }
+
+                            Key.Escape -> {
+                                controller.cancelRenaming()
+                                true
+                            }
+
+                            else -> false
+                        }
+                    },
+        )
+        val note =
+            when {
+                renaming.isSaving -> Strings.Table.renamingGame
+                renaming.failure != null -> messageOf(renaming.failure)
+                renaming.draft.isBlank() -> Strings.Games.nameRequired
+                else -> Strings.Table.addGameHint
+            }
+        NoteLine(
+            text = stringResource(note),
+            isProblem = renaming.failure != null || renaming.draft.isBlank(),
+        )
+    }
+}
+
+/** What a refused change to a game reads as, with nothing technical in it. */
+private fun messageOf(failure: GameSetupFailure) =
+    when (failure) {
+        GameSetupFailure.COULD_NOT_SAVE -> Strings.Games.errorCouldNotSave
+        GameSetupFailure.GAME_NOT_AVAILABLE -> Strings.Games.errorGameUnavailable
+    }
 
 /** How wide the tick's own square is, so a long name keeps the rest of the column. */
 private val TickSize = 22.dp
@@ -842,6 +926,7 @@ private fun GameCompletionTick(
     val scope = rememberCoroutineScope()
     val confirming = state.confirmingCompletionOf(row.gameId)
     val action = stringResource(Strings.Table.completeGame)
+    val renameAction = stringResource(Strings.Table.renameGame)
     val focus = remember { FocusRequester() }
     var focused by remember { mutableStateOf(false) }
     val interactions = remember { MutableInteractionSource() }
@@ -860,9 +945,19 @@ private fun GameCompletionTick(
                 .size(TickSize)
                 .then(
                     if (row.isCompleted) {
+                        // Finished, the tick is a plain mark rather than a
+                        // button — but the game can still be renamed, so a
+                        // reader is still offered the way to do it.
                         Modifier.semantics {
                             contentDescription = description
                             stateDescription = stateText
+                            customActions =
+                                listOf(
+                                    CustomAccessibilityAction(renameAction) {
+                                        controller.beginRenaming(row.gameId)
+                                        true
+                                    },
+                                )
                         }
                     } else {
                         Modifier
@@ -886,6 +981,14 @@ private fun GameCompletionTick(
                                         true
                                     }
 
+                                    // What the double click on the name does,
+                                    // for the keyboard (PLAN 12.3, 17). F2 is
+                                    // what opens a cell for writing too.
+                                    Key.F2 -> {
+                                        controller.beginRenaming(row.gameId)
+                                        true
+                                    }
+
                                     else -> false
                                 }
                             }.clickable(onClickLabel = action) { scope.launch { controller.completeGame(row.gameId) } }
@@ -900,6 +1003,10 @@ private fun GameCompletionTick(
                                     listOf(
                                         CustomAccessibilityAction(action) {
                                             scope.launch { controller.completeGame(row.gameId) }
+                                            true
+                                        },
+                                        CustomAccessibilityAction(renameAction) {
+                                            controller.beginRenaming(row.gameId)
                                             true
                                         },
                                     )

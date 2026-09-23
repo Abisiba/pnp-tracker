@@ -17,6 +17,7 @@ import dev.pnptracker.domain.games.CellPreview
 import dev.pnptracker.domain.games.CellSegmentPreview
 import dev.pnptracker.domain.games.CellSummary
 import dev.pnptracker.domain.games.GameCompletionSnapshot
+import dev.pnptracker.domain.games.GameRenameOutcome
 import dev.pnptracker.domain.games.GameSummary
 import dev.pnptracker.domain.games.GameTableRow
 import dev.pnptracker.domain.games.TaskColorPreview
@@ -185,6 +186,11 @@ class CellTaskSeparationTest {
             gameId: EntityId,
             columnType: CellColumnType,
         ): EntityId = IdGenerator.Random.newId()
+
+        override suspend fun renameGame(
+            gameId: EntityId,
+            name: String,
+        ): GameRenameOutcome = GameRenameOutcome.RENAMED
 
         override suspend fun setGameCompleted(
             gameId: EntityId,

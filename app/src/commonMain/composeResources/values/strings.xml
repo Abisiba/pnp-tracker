@@ -315,6 +315,8 @@
     <!-- Game table: adding a game -->
     <string name="table_add_game">Oyun ekle</string>
     <string name="table_add_game_hint">Enter ile kaydedin, Esc ile vazgeçin.</string>
+    <string name="table_rename_game">Oyunu yeniden adlandır</string>
+    <string name="table_rename_saving">Yeni ad kaydediliyor…</string>
 
     <!-- Game table: writing in a cell -->
     <string name="cell_edit">Düzenle</string>

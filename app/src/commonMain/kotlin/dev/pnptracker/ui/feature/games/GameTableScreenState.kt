@@ -353,6 +353,28 @@ sealed interface RowWork {
         /** How many tasks the user is being asked to declare finished. */
         val unfinishedCount: Int get() = expected.unfinishedCount
     }
+
+    /**
+     * Giving a game another name, in the cell the name is written in (PLAN 12.3).
+     *
+     * [originalName] is what the game is called now, kept beside the draft rather
+     * than read again when the save comes: it is what `Escape` puts back, what
+     * decides whether anything needs writing at all, and what the row keeps
+     * showing if the storage refuses.
+     */
+    data class RenamingGame(
+        override val gameId: EntityId,
+        val originalName: String,
+        val draft: String,
+        val isSaving: Boolean = false,
+        val failure: GameSetupFailure? = null,
+    ) : RowWork {
+        /** True while closing this would throw away something the user typed. */
+        override val hasUnsavedChanges: Boolean get() = draft.trim() != originalName
+
+        /** False while there is no name in the field to save. */
+        val canSave: Boolean get() = !isSaving && draft.isNotBlank()
+    }
 }
 
 /**
@@ -894,6 +916,9 @@ data class GameTableScreenState(
 
     /** How many choices to show on the filter button, the search included. */
     val chosenFilterCount: Int get() = filter.chosenCount + if (filter.query.isEmpty) 0 else 1
+
+    /** The name of this row being edited, if it is. */
+    fun renamingOf(gameId: EntityId): RowWork.RenamingGame? = (rowWork as? RowWork.RenamingGame)?.takeIf { it.gameId == gameId }
 
     /** The confirmation open on this row, if there is one. */
     fun confirmingCompletionOf(gameId: EntityId): RowWork.ConfirmingGameCompletion? =

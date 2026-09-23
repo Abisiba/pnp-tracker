@@ -118,6 +118,33 @@ interface GameDao {
         updatedAt: Instant,
     ): Int
 
+    /**
+     * Writes a game a new name, and only if it really is a new one.
+     *
+     * The name it already has is part of the predicate rather than something
+     * checked before the statement: PLAN 12.3 will not have a rename that
+     * changes nothing touch the row at all, and a check made in another
+     * statement is a check something could slip between. Nothing but the name
+     * and the moment is written — a game's cells, tasks and completion are not
+     * this call's business.
+     *
+     * @return 1 when the name was written, 0 when the game is gone **or** was
+     *   already called this; the two are told apart by reading the row back,
+     *   which is only ever needed on the path that wrote nothing.
+     */
+    @Query(
+        """
+        UPDATE games
+        SET name = :name, updated_at = :updatedAt
+        WHERE id = :id AND deleted_at IS NULL AND name <> :name
+        """,
+    )
+    suspend fun rename(
+        id: EntityId,
+        name: String,
+        updatedAt: Instant,
+    ): Int
+
     @Query("SELECT COUNT(*) FROM games WHERE deleted_at IS NULL")
     suspend fun activeCount(): Int
 
