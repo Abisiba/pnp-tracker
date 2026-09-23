@@ -256,7 +256,7 @@ Kurallar:
 
 - Görev bir `Item` altında değil, doğrudan bir `TaskSegment` üzerinden bir hücreye bağlıdır.
 - Görevin ilerleme ayrıntıları (3D eksik sayacı, kart/mukavva aşamaları) `TaskStage` ve `ProgressEvent` kayıtlarından türetilir.
-- Tamamlanan görev hücreden **kaldırılmaz**: `TaskSegment` yerinde kalır, tikli ve üstü çizili görünür, yalnızca aktif üretim havuzundan çıkar.
+- Tamamlanan görev hücreden **kaldırılmaz**: `TaskSegment` yerinde kalır, tamamlandığı görünür (`12.5`) ve yalnızca aktif üretim havuzundan çıkar.
 - Görev sıfır veya daha fazla renge sahip olabilir; sıfır renk geçerli bir durumdur (`5.10`).
 - Görev arşivlenmez.
 
@@ -351,10 +351,15 @@ rengidir.
 
 Kurallar:
 
+- Renk ilişkisi yalnız `THREE_D` havuzundaki görevlere aittir. `CARD`, `BOARD` ve
+  `SPECIAL` görevleri renksizdir: bu görevlere yeni renk atanamaz, ne arayüzden ne
+  de üretim sınırından. Renk yazan yollar (metinden görev oluşturma, görev
+  düzenleme) bu görevlerde renk yazma isteğini programlama hatası olarak reddeder;
+  kullanıcıya gösterilecek bir hata değildir, çünkü arayüz bunu hiç teklif etmez.
 - `slotIndex` kullanıcının renk seçim sırasını korur ve görev içinde benzersizdir; `0`'dan başlar ve boşluk bırakmaz.
 - Tek renkli görev: bir `REQUIRED` renk.
 - Tek öge çok renk görevi: birden fazla sıralı `REQUIRED` renk ve **tek** görev sayacı.
-- Renksiz görev: sıfır renk ilişkisi. Bu geçerli bir durumdur; görev silinmez, `Renk seçilecek` bölümünde gösterilir ve renk seçilene kadar renk havuzlarına girmez. Bir görev bu duruma renk silme sonucunda veya içe aktarma sonrasında geçebilir.
+- Renksiz görev: sıfır renk ilişkisi. 3D dışı her görev bu durumdadır ve bu geçerli bir durumdur; görev silinmez, `Renk seçilecek` bölümünde gösterilir ve renk seçilene kadar renk havuzlarına girmez. Bir görev bu duruma renk silme sonucunda veya içe aktarma sonrasında geçebilir.
 - `ALTERNATIVE` ilişkisi ve “alternatiflerden birini sonra seç” davranışı ürün modelinde **yoktur**. Kullanıcı görev oluştururken kesin rengi veya renkleri seçer.
 - Ayrı fiziksel parça modeli yoktur. Kullanıcı bıçak ve kabzayı ayrı takip etmek isterse bunları iki bağımsız görev olarak ekler.
 
@@ -1219,8 +1224,33 @@ Tablo eylemleri:
 - Oyun adına göre arama
 - Hücreye serbest metin yazma
 - Hücredeki metinden görev oluşturma
+- Oyun adını yeniden adlandırma
 - Oyun satırındaki tamamlanma tikine basma
 - Oyun silme
+
+Oyun adını yeniden adlandırma:
+
+- Oyun adı hücresine fareyle çift tıklamak adı düzenleme durumunu açar. Hücrede
+  yalnız mevcut adla doldurulmuş tek bir metin alanı bulunur; renk, adet, görev
+  veya başka bir alan eklenmez ve ayrı bir pencere ya da menü açılmaz.
+- `Enter` geçerli adı kaydeder. `Escape` hiçbir şey yazmadan vazgeçer.
+- Hücrenin dışına tıklamak ne kaydeder ne de yazılanı atar: düzenleme, hücre
+  yazma sözleşmesindeki gibi açık kalır ve başka bir iş açmak istendiğinde bu
+  iş açık diye engellenir. Böylece ne veri kaybolur ne de kimsenin istemediği
+  bir ad kaydedilir.
+- Boş veya yalnız boşluklardan oluşan ad kaydedilemez. Ad iki ucundan kırpılır,
+  içi olduğu gibi kalır — oyun oluşturmadaki kuralın aynısı (`5.3`).
+- Oyun adlarının benzersizliği konusunda yeni bir kural yoktur; oluşturmada ne
+  ise yeniden adlandırmada da odur.
+- Kırpılmış ad mevcut adla aynıysa hiçbir şey yazılmaz: ne `updated_at`, ne bir
+  geçmiş satırı. Yeniden adlandırmanın kendi geçmiş olayı yoktur (`12.15`).
+- Yeniden adlandırma oyunun kimliğini, hücrelerini, görevlerini ve tamamlanma
+  durumunu değiştirmez.
+- Depolama reddederse eski ad korunur, düzenleme alanı kullanıcının yazdığıyla
+  birlikte yerinde kalır ve güvenli bir Türkçe hata ile yeniden deneme sunulur.
+  Programlama hataları ve iptal bu hataya çevrilmez.
+- Satırın mevcut klavye erişimi gerilemez: tik hâlâ klavyeden erişilir ve
+  yeniden adlandırma klavyeyle de bitirilebilir.
 
 Tamamlanmış oyunun satırı tamamen yeşil gösterilir.
 
@@ -1267,8 +1297,23 @@ Tamamlanan görev:
 
 - Hücreden kaybolmaz.
 - Tikli görünür.
-- Metni üstü çizili olur.
 - Aktif üretim havuzundan çıkar.
+- Üstü çizili **gösterilmez**. Üstü çizili metin okunmayı zorlaştırıyordu ve
+  durumu yalnız tek bir işaretle anlatıyordu.
+- Temayla uyumlu, açık seçik farklı bir arka planla çizilir; yanında bir onay
+  simgesi ve dolu bir `Tamamlandı` etiketi bulunur. Durum yalnız renkle
+  anlatılmaz: simge ve yazı da vardır, ikisi de açık ve koyu temada okunur.
+- Görev adı, gerekli adedi ve varsa 3D renkleri okunabilir kalır; renk bilgisi
+  tamamlanma görünümü uğruna kaybolmaz.
+- Aynı hücrede devam eden görevler önce, tamamlanan görevler sonra çizilir.
+  Bu yalnız okuma yüzeyinin sırasıdır: hücrenin belgesi (`5.5`) ve parçaların
+  `orderIndex` düzeni değişmez, hücre düzenlemeye açıldığında kullanıcı yazdığı
+  sırayı olduğu gibi görür.
+- Görev yeniden açıldığında (`12.10`) hiçbir iz kalmadan normal aktif görünümüne
+  döner.
+
+Bu görünüm yalnız sunumdur: tamamlama transaction'ı, geçmiş, yeniden açma ve
+havuz filtreleri bundan etkilenmez.
 
 ### 12.6 Metinden görev oluşturma
 
@@ -1279,12 +1324,36 @@ Akış:
 
 1. Kelimeyi seç.
 2. Seçili kelimenin hemen üstünde açılan küçük popover'dan `Göreve dönüştür` seç.
-3. Kompakt görev oluşturma paneli açılır.
+3. Görev oluşturma penceresi açılır.
 4. Oluşturma modunu, renkleri, adetleri ve gereken özellikleri gir.
 5. Kaydet.
 6. İlgili `PlainTextSegment` bir veya daha fazla `TaskSegment` ile değiştirilir.
 
-Tam ekran modal veya bütün ekranı kaplayan panel **kullanılmaz**.
+Görev oluşturma penceresi (gerçek kullanımda hücre içindeki panel dar ve uzun
+bulunduktan sonra, onaylanmış):
+
+- Pencere hücrenin içinde değil, uygulamanın ortasında açılan bir modal
+  penceredir. Arkasındaki tablo karartılır ve pencere kapanana kadar
+  kullanılamaz.
+- Normal boyutu `900 × 720 dp`'dir. Genişliği `min(900 dp, kullanılabilir pencere
+  genişliği − 48 dp)`, yüksekliği `min(720 dp, kullanılabilir pencere yüksekliği
+  − 48 dp)` kadardır. Küçük pencerede dört yanında yaklaşık 24 dp boşluk bırakıp
+  neredeyse tamamını kaplar; bütün ekranı **kaplamaz** ve hiçbir kontrolü
+  pencerenin dışına taşırmaz.
+- Yeterli genişlikte iki sütun kullanılır: solda seçilen ifade, oluşturma biçimi
+  ve gerekli adet; sağda yalnız 3D görevlerinde renk arama, renk seçenekleri ve
+  yeni renk oluşturma. 3D dışındaki hücrelerde sağ sütun hiç bulunmaz (`5.10`).
+  Dar pencerede sütunlar alt alta gelir.
+- Başlık ve alt eylem çubuğu sabittir; yalnız ortadaki içerik gerektiğinde kayar.
+  `Vazgeç` ve `Görevi kaydet` her zaman görünür durumdadır.
+- Uzun görev adı pencereyi büyütmez; birkaç satırdan sonra kendi alanında kayar.
+- `Escape` vazgeçer, `Tab` ve `Shift+Tab` pencerenin içinde sırayla dolaşır ve
+  odak pencerenin dışına çıkmaz.
+- Vazgeçmek hiçbir şey yazmaz; hücrenin metni ve kullanıcının seçimi olduğu gibi
+  kalır.
+- Oluşturma biçimleri (`12.7`), seçim koruması, başarı bildirimi,
+  `Görevi görüntüle`, hata davranışları ve tek transaction sözleşmesi aynen
+  korunur.
 
 Teklif ve sonuç (gerçek kullanımda bulunan kusurdan sonra, v0.1.4):
 
@@ -1299,8 +1368,12 @@ Teklif ve sonuç (gerçek kullanımda bulunan kusurdan sonra, v0.1.4):
   korunur ve güvenli bir Türkçe hata ile yeniden deneme sunulur. Hiçbir durum
   sessiz geçmez.
 
-Görev oluşturma panelinin üstünde üç mod arasında geçiş yapılır. Modlar yalnızca
-form kolaylıklarıdır ve kaydedilmez (`5.10`, `12.7`).
+Görev oluşturma penceresinin üstünde modlar arasında geçiş yapılır. Modlar
+yalnızca form kolaylıklarıdır ve kaydedilmez (`5.10`, `12.7`).
+
+3D dışındaki hücrelerde renk yoktur (`5.10`), dolayısıyla `Tek öge çok renk`
+modu hiç sunulmaz; `Tek görev` ve `Çoklu görev` modları renk alanı olmadan
+çalışır ve görevi renksiz oluşturur.
 
 ### 12.7 Üç oluşturma modu
 
@@ -1498,6 +1571,10 @@ Renkler bölümü şunları içerir:
 - Ada göre arama
 
 Arşivli renk listesi, arşivleme ve geri açma **bulunmaz**.
+
+Renk kataloğu bütün havuzlar için ortak değildir: renk yalnız 3D baskı
+görevlerinin bir özelliğidir (`5.10`). Kart, mukavva ve özel görevlerin
+oluşturma ve düzenleme akışlarında renk alanı gösterilmez.
 
 ### 12.15 Geçmiş
 
