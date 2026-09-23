@@ -383,8 +383,10 @@ class GameTableController(
         }
         state.rowWork?.let { row ->
             // Nothing is written and nothing is thrown away: PLAN 12.9 has
-            // `Hayır` leave the game exactly as it was.
+            // `Hayır` leave the game exactly as it was, and PLAN 12.3 has
+            // `Escape` leave a name exactly as it was.
             if (row is RowWork.ConfirmingGameCompletion && row.isSaving) return
+            if (row is RowWork.RenamingGame && row.isSaving) return
             state = state.copy(rowWork = row.parent, blockedByEditor = false, focusRecall = state.focusRecall + 1).redrawn()
             return
         }
@@ -1578,6 +1580,76 @@ class GameTableController(
         if (state.view.includes(visible[at].copy(isCompleted = true))) return null
         val next = visible.getOrNull(at + 1) ?: visible.getOrNull(at - 1)
         return next?.let { RowFocusTarget.Game(it.gameId) } ?: RowFocusTarget.ViewFilter
+    }
+
+    // ------------------------------------------------------ renaming a game
+
+    /**
+     * Opens a game's name for editing, in the cell it is written in (PLAN 12.3).
+     *
+     * Only one thing is worked on at a time, as everywhere else in the table:
+     * asking for this while a cell or a question is open changes nothing and
+     * says so, rather than closing what is open behind the user.
+     */
+    fun beginRenaming(gameId: EntityId) {
+        val existing = state.rowWork
+        if (existing is RowWork.RenamingGame && existing.gameId == gameId) return
+        if (state.work != null || existing != null) {
+            state = blockedByOpenWork()
+            return
+        }
+        val row = rowOf(gameId) ?: return
+        state =
+            state.copy(
+                rowWork = RowWork.RenamingGame(gameId = gameId, originalName = row.gameName, draft = row.gameName),
+                createdTask = null,
+                blockedByEditor = false,
+            )
+    }
+
+    /** Takes what the user typed, and forgets the last refusal about it. */
+    fun editGameRename(name: String) {
+        val renaming = state.rowWork as? RowWork.RenamingGame ?: return
+        if (renaming.isSaving) return
+        state = state.copy(rowWork = renaming.copy(draft = name, failure = null))
+    }
+
+    /** Closes the editor and leaves the name exactly as it was. */
+    fun cancelRenaming() {
+        if (state.rowWork !is RowWork.RenamingGame) return
+        state = state.copy(rowWork = null, blockedByEditor = false, focusRecall = state.focusRecall + 1)
+    }
+
+    /**
+     * Writes the name, or leaves the editor standing with the reason it did not.
+     *
+     * A name that says nothing is refused here rather than sent: PLAN 12.3 keeps
+     * the rule the same as creating a game, and a blank name is a state of the
+     * field rather than the outcome of an attempt. A name that is already the
+     * game's own closes the editor without writing anything at all.
+     *
+     * Sent once: a second Enter arriving while the first is in flight finds the
+     * editor already saving and does nothing.
+     */
+    suspend fun saveRenaming() {
+        val renaming = state.rowWork as? RowWork.RenamingGame ?: return
+        if (!renaming.canSave) return
+        val name = renaming.draft.trim()
+        if (name.isEmpty()) return
+        state = state.copy(rowWork = renaming.copy(isSaving = true, failure = null))
+        try {
+            setup.renameGame(renaming.gameId, name)
+        } catch (refusal: GameSetupException) {
+            // The old name stays on the row and the field keeps what was typed,
+            // so the user can read what happened and try the same thing again.
+            state =
+                state.copy(
+                    rowWork = (state.rowWork as? RowWork.RenamingGame)?.copy(isSaving = false, failure = refusal.failure),
+                    focusRecall = state.focusRecall + 1,
+                )
+            return
+        }
+        state = state.copy(rowWork = null, blockedByEditor = false, focusRecall = state.focusRecall + 1)
     }
 
     /** Clears the word saying a game could not be finished. */

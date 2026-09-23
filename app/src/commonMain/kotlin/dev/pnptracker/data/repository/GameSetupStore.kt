@@ -9,6 +9,7 @@ import dev.pnptracker.domain.diagnostics.Diagnostics
 import dev.pnptracker.domain.diagnostics.recordSafely
 import dev.pnptracker.domain.diagnostics.storageWriteFailed
 import dev.pnptracker.domain.games.CellSummary
+import dev.pnptracker.domain.games.GameRenameOutcome
 import dev.pnptracker.domain.games.GameSetupException
 import dev.pnptracker.domain.games.GameSetupFailure
 import dev.pnptracker.domain.games.GameSummary
@@ -56,6 +57,24 @@ interface GameSetup {
         gameId: EntityId,
         columnType: CellColumnType,
     ): EntityId
+
+    /**
+     * Gives a game another name, and nothing else.
+     *
+     * The name is trimmed at both ends and left alone inside, exactly as
+     * [createGame] treats one; a game's name is not unique and this does not
+     * make it so. The game keeps its identity, its cells, its tasks and its
+     * completion — PLAN 12.3 renames the row and touches nothing under it — and
+     * the history is not written to, because a rename is not one of the events
+     * PLAN 12.15 lists.
+     *
+     * @throws IllegalArgumentException if the name says nothing.
+     * @throws GameSetupException if the game is gone, or the name did not save.
+     */
+    suspend fun renameGame(
+        gameId: EntityId,
+        name: String,
+    ): GameRenameOutcome
 
     /**
      * Records that the user considers a game finished, or takes it back.
@@ -127,6 +146,26 @@ class GameSetupStore(
             diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.GAME_SETUP, GameSetupFailure.COULD_NOT_SAVE, cause) }
             throw GameSetupException(GameSetupFailure.COULD_NOT_SAVE, cause)
         }
+    }
+
+    override suspend fun renameGame(
+        gameId: EntityId,
+        name: String,
+    ): GameRenameOutcome {
+        val cleanName = requireUsableName(name, "game")
+        val moment = clock.now()
+        val changed =
+            try {
+                gameDao.rename(id = gameId, name = cleanName, updatedAt = moment)
+            } catch (cause: SQLiteException) {
+                diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.GAME_SETUP, GameSetupFailure.COULD_NOT_SAVE, cause) }
+                throw GameSetupException(GameSetupFailure.COULD_NOT_SAVE, cause)
+            }
+        if (changed > 0) return GameRenameOutcome.RENAMED
+        // Nothing was written, which is either the name it already had or a game
+        // that is not there any more. Only this path pays for the second read.
+        gameDao.activeGameById(gameId) ?: throw GameSetupException(GameSetupFailure.GAME_NOT_AVAILABLE)
+        return GameRenameOutcome.UNCHANGED
     }
 
     override suspend fun setGameCompleted(

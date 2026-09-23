@@ -6,6 +6,7 @@ import dev.pnptracker.data.database.StoppedClock
 import dev.pnptracker.data.database.TemporaryDatabaseDirectory
 import dev.pnptracker.data.database.aCell
 import dev.pnptracker.data.database.aGame
+import dev.pnptracker.domain.games.GameRenameOutcome
 import dev.pnptracker.domain.games.GameSetupException
 import dev.pnptracker.domain.games.GameSetupFailure
 import dev.pnptracker.domain.model.CellColumnType
@@ -93,6 +94,57 @@ class GameSetupStoreTest {
 
             assertEquals(emptyList(), games())
             assertEquals(0, database.gameDao().activeCount())
+        }
+
+    @Test
+    fun `a game can be given another name, and keeps everything else`() =
+        runBlocking {
+            val id = store.createGame("Harmoies")
+            val cellId = store.openCell(id, CellColumnType.THREE_D)
+            val before = assertNotNull(database.gameDao().activeGameById(id))
+
+            val outcome = store.renameGame(id, "  Harmonies  ")
+
+            assertEquals(GameRenameOutcome.RENAMED, outcome)
+            val after = assertNotNull(database.gameDao().activeGameById(id))
+            // Trimmed at the ends, as a name typed into the composer is.
+            assertEquals("Harmonies", after.name)
+            assertEquals(before.copy(name = "Harmonies", updatedAt = after.updatedAt), after, "renaming changed something else")
+            assertEquals(listOf(cellId), cellsOf(id).map { it.id }, "renaming moved the game's cells")
+        }
+
+    @Test
+    fun `the name a game already has is not written again`() =
+        runBlocking {
+            val id = store.createGame("Harmonies")
+            val before = assertNotNull(database.gameDao().activeGameById(id))
+
+            val outcome = store.renameGame(id, "  Harmonies  ")
+
+            assertEquals(GameRenameOutcome.UNCHANGED, outcome)
+            assertEquals(before, assertNotNull(database.gameDao().activeGameById(id)), "a name that did not change was written")
+        }
+
+    @Test
+    fun `renaming a game that is gone says so rather than writing`() =
+        runBlocking {
+            val id = store.createGame("Harmonies")
+            database.gameDao().softDelete(id, moment)
+
+            val refusal = assertFailsWith<GameSetupException> { store.renameGame(id, "Root") }
+
+            assertEquals(GameSetupFailure.GAME_NOT_AVAILABLE, refusal.failure)
+            assertEquals(emptyList(), games())
+        }
+
+    @Test
+    fun `a name that says nothing is refused before anything is written`() =
+        runBlocking {
+            val id = store.createGame("Harmonies")
+
+            assertFailsWith<IllegalArgumentException> { store.renameGame(id, "   ") }
+
+            assertEquals("Harmonies", games().single().name)
         }
 
     @Test

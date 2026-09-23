@@ -20,6 +20,7 @@ import dev.pnptracker.domain.games.CellSummary
 import dev.pnptracker.domain.games.CellTextException
 import dev.pnptracker.domain.games.CellTextFailure
 import dev.pnptracker.domain.games.GameCompletionSnapshot
+import dev.pnptracker.domain.games.GameRenameOutcome
 import dev.pnptracker.domain.games.GameSetupException
 import dev.pnptracker.domain.games.GameSetupFailure
 import dev.pnptracker.domain.games.GameSummary
@@ -88,6 +89,7 @@ class GameTableControllerTest {
         private val failure: GameSetupFailure? = null,
     ) : GameSetup {
         val createdNames = mutableListOf<String>()
+        val renamedTo = mutableListOf<String>()
         val openedCells = mutableListOf<Pair<EntityId, CellColumnType>>()
         var completionChanges: Int = 0
             private set
@@ -108,6 +110,15 @@ class GameTableControllerTest {
         ): EntityId {
             openedCells += gameId to columnType
             return IdGenerator.Random.newId()
+        }
+
+        override suspend fun renameGame(
+            gameId: EntityId,
+            name: String,
+        ): GameRenameOutcome {
+            failure?.let { throw GameSetupException(it) }
+            renamedTo += name
+            return GameRenameOutcome.RENAMED
         }
 
         override suspend fun setGameCompleted(

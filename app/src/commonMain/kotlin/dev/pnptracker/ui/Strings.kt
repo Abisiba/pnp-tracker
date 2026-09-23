@@ -803,6 +803,8 @@ import dev.pnptracker.resources.table_empty_ongoing_hint
 import dev.pnptracker.resources.table_empty_tick
 import dev.pnptracker.resources.table_label
 import dev.pnptracker.resources.table_loading
+import dev.pnptracker.resources.table_rename_game
+import dev.pnptracker.resources.table_rename_saving
 import dev.pnptracker.resources.table_row_completed
 import dev.pnptracker.resources.table_row_description
 import dev.pnptracker.resources.table_row_ongoing
@@ -1403,6 +1405,10 @@ object Strings {
 
         val addGame = Res.string.table_add_game
         val addGameHint = Res.string.table_add_game_hint
+
+        /** What a reader calls the action that opens a game's name for editing. */
+        val renameGame = Res.string.table_rename_game
+        val renamingGame = Res.string.table_rename_saving
     }
 
     /** Writing in one cell of the table. */

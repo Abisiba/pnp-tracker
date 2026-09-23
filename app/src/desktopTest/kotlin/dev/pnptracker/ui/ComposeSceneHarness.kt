@@ -165,6 +165,30 @@ class ComposeSceneHarness(
         render()
     }
 
+    /**
+     * Two clicks close together in one place, the way a person opens something.
+     *
+     * Not two calls to [mouseClick]: Compose ignores a second tap that arrives
+     * sooner than its own minimum, and treats one that arrives later as two
+     * separate taps. So the gap between them is made on purpose — several frames
+     * and a real pause — and both halves of both clicks are sent.
+     */
+    fun mouseDoubleClick(at: Offset) {
+        scene.sendPointerEvent(PointerEventType.Move, at)
+        render()
+        scene.sendPointerEvent(PointerEventType.Press, at)
+        render()
+        scene.sendPointerEvent(PointerEventType.Release, at)
+        render()
+        repeat(4) { render() }
+        Thread.sleep(DOUBLE_CLICK_GAP_MILLISECONDS)
+        scene.sendPointerEvent(PointerEventType.Press, at)
+        render()
+        scene.sendPointerEvent(PointerEventType.Release, at)
+        render()
+        render()
+    }
+
     /** Where a node a reader would name is drawn, or null when it is not there. */
     fun boundsOf(description: String): Rect? = spokenNodes().firstOrNull { description in it.contentDescriptions() }?.boundsInRoot
 
@@ -272,6 +296,9 @@ class ComposeSceneHarness(
 
     private companion object {
         const val FRAME_NANOSECONDS = 16_000_000L
+
+        /** Longer than Compose's own minimum between two taps, shorter than its timeout. */
+        const val DOUBLE_CLICK_GAP_MILLISECONDS = 60L
     }
 }
 

@@ -14,6 +14,7 @@ import dev.pnptracker.domain.colors.ColorSummary
 import dev.pnptracker.domain.colors.ColorUsage
 import dev.pnptracker.domain.games.CellSummary
 import dev.pnptracker.domain.games.GameCompletionSnapshot
+import dev.pnptracker.domain.games.GameRenameOutcome
 import dev.pnptracker.domain.games.GameSummary
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
@@ -136,6 +137,11 @@ class NoSetup : GameSetup {
         gameId: EntityId,
         columnType: CellColumnType,
     ): EntityId = IdGenerator.Random.newId()
+
+    override suspend fun renameGame(
+        gameId: EntityId,
+        name: String,
+    ): GameRenameOutcome = GameRenameOutcome.RENAMED
 
     override suspend fun setGameCompleted(
         gameId: EntityId,
