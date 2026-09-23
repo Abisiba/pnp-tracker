@@ -404,6 +404,7 @@
     <string name="cell_task_select_hint">Bir kelime seçin, sonra Görev oluştur düğmesine basın.</string>
     <string name="cell_task_save_text_first">Görev, kaydedilmiş metinden oluşturulur. Önce değişikliklerinizi kaydedin.</string>
     <string name="cell_task_panel_title">Görev oluştur</string>
+    <string name="cell_task_window">Görev oluşturma penceresi</string>
     <string name="cell_task_name_label">Seçilen görev adı</string>
     <string name="cell_task_color_label">Renk</string>
     <string name="cell_task_color_search">Renk ara</string>
@@ -417,7 +418,7 @@
     <string name="cell_task_save">Görevi kaydet</string>
     <string name="cell_task_discard">Vazgeç</string>
     <string name="cell_task_saving">Görev kaydediliyor…</string>
-    <string name="cell_task_hint">Ctrl+Enter kaydeder, Esc paneli kapatır.</string>
+    <string name="cell_task_hint">Ctrl+Enter kaydeder, Esc pencereyi kapatır.</string>
 
     <!-- Game table: a task standing in a cell -->
     <string name="cell_task_quantity_mark">×%1$d</string>

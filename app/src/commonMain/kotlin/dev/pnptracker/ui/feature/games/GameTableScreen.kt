@@ -46,6 +46,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -110,9 +111,14 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.min
 import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import dev.pnptracker.domain.colors.ColorSetupFailure
 import dev.pnptracker.domain.colors.ColorSummary
@@ -290,6 +296,21 @@ fun GameTableScreen(
                 is GameTableRowsState.Content -> Table(rows.rows, controller, state)
                 GameTableRowsState.Failed -> UnreadableTable(controller::readAgain)
             }
+        }
+
+        // Drawn from the screen rather than from the cell it was opened in. PLAN
+        // 12.6 puts it in the middle of the window, and a window laid out inside
+        // a table cell would be as wide as the column and would scroll away with
+        // the row.
+        state.taskWindow()?.let { open ->
+            TaskComposerWindow(
+                composer = open.composer,
+                creator = state.work as? CellWork.MakingColor,
+                offered = controller.colorsOffered(),
+                catalogue = state.colors,
+                focusRecall = state.focusRecall,
+                controller = controller,
+            )
         }
     }
 }
@@ -721,7 +742,6 @@ private fun TableRow(
                     editor = writing,
                     composer = state.composingIn(row.gameId, columnType)?.composer,
                     creator = state.creatingColorIn(row.gameId, columnType),
-                    colors = controller.colorsOffered(),
                     catalogue = state.colors,
                     focusRecall = state.focusRecall,
                     controller = controller,
@@ -1640,7 +1660,6 @@ private fun CellEditorSlot(
     editor: CellWork.WritingText,
     composer: TaskComposer?,
     creator: CellWork.MakingColor?,
-    colors: List<ColorSummary>,
     catalogue: List<ColorSummary>,
     focusRecall: Int,
     controller: GameTableController,
@@ -1795,26 +1814,11 @@ private fun CellEditorSlot(
                     },
         )
 
-        when {
-            creator != null ->
-                NewColorPanel(
-                    creator = creator,
-                    catalogue = catalogue,
-                    focusRecall = focusRecall,
-                    controller = controller,
-                    onSave = { saveColor() },
-                )
-
-            composer != null ->
-                TaskComposerPanel(
-                    composer = composer,
-                    catalogue = colors,
-                    focusRecall = focusRecall,
-                    controller = controller,
-                    onSave = { saveTask() },
-                )
-
-            else -> CellEditorActions(editor = editor, chosen = chosen, controller = controller, onSave = { save() })
+        // Only what the cell itself does. What is being made out of the words is
+        // asked for in a window of its own (PLAN 12.6), so the cell keeps
+        // showing the text the selection was made in and nothing more.
+        if (composer == null && creator == null) {
+            CellEditorActions(editor = editor, chosen = chosen, controller = controller, onSave = { save() })
         }
     }
 }
@@ -2418,12 +2422,50 @@ private fun spokenTaskOf(segment: CellSegmentPreview): String {
     return said
 }
 
+/** How big the task window is where the screen has room for it (PLAN 12.6). */
+private val TaskWindowWidth = 900.dp
+private val TaskWindowHeight = 720.dp
+
+/** The daylight kept on every side of it in a window too small for that. */
+private val TaskWindowMargin = 24.dp
+
+/** How wide it has to be before the colours are worth a column of their own. */
+private val TaskWindowTwoColumns = 720.dp
+
+/** How much of the window a long name may take before it scrolls in its place. */
+private val TaskNameHeight = 72.dp
+
+/** How dark the table goes behind the window. */
+private const val SCRIM_ALPHA = 0.45f
+
 /**
- * Naming the colour, the count and the note for a task made out of words.
+ * Puts a popup over the whole window rather than beside what opened it.
  *
- * Compact and inside the cell the words are in — PLAN 12.6 rules out a full
- * screen modal or a panel that covers the window, and the row being worked on
- * has to stay visible while it is worked on.
+ * The window is not anchored to anything: PLAN 12.6 puts it in the middle of the
+ * screen, and the cell it was opened from may be anywhere — scrolled half out of
+ * view, or off the side of a table wider than the window. So the content is laid
+ * out at the window's own origin and centres itself inside that.
+ */
+private object OverTheWholeWindow : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize,
+    ): IntOffset = IntOffset.Zero
+}
+
+/**
+ * The window a task is described in.
+ *
+ * PLAN 12.6 gives it a window of its own instead of a strip inside the cell the
+ * words were written in. A cell is one column wide: describing a task in it meant
+ * filling in a form the width of a thumb, scrolling past its own actions to reach
+ * them. Here the work is on one side, the colours on the other, and `Vazgeç` and
+ * `Görevi kaydet` sit on a bar that nothing scrolls away.
+ *
+ * What it makes has not changed at all — the same modes, the same drafts, the
+ * same single transaction at the end, the same refusals in the same words.
  *
  * The colour has to be chosen and cannot be typed as a value: PLAN 5.7 keeps
  * every colour a named record in the global catalogue, and this step creates
@@ -2431,10 +2473,107 @@ private fun spokenTaskOf(segment: CellSegmentPreview): String {
  * are two names.
  */
 @Composable
-private fun TaskComposerPanel(
+private fun TaskComposerWindow(
     composer: TaskComposer,
+    creator: CellWork.MakingColor?,
+    offered: List<ColorSummary>,
     catalogue: List<ColorSummary>,
     focusRecall: Int,
+    controller: GameTableController,
+) {
+    val scope = rememberCoroutineScope()
+    val windowLabel = stringResource(Strings.CellTask.window)
+    val saveTask = {
+        if (composer.canSave && catalogue.stillHasEvery(composer.colorsInPlay)) {
+            scope.launch { controller.saveTask() }
+        } else {
+            Unit
+        }
+    }
+    val saveColor = { if (creator?.composer?.canSave == true && !creator.isSaving) scope.launch { controller.saveNewColor() } else Unit }
+
+    Popup(
+        popupPositionProvider = OverTheWholeWindow,
+        // Focusable, so the keyboard is inside the window while it is open and
+        // Tab walks its own fields rather than the table behind it.
+        properties = PopupProperties(focusable = true),
+    ) {
+        BoxWithConstraints(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = SCRIM_ALPHA))
+                    // Nothing underneath is worked in while this is open. A click
+                    // falling through would open a cell behind a window the user
+                    // is still filling in; a click that closed the window would
+                    // throw away what they had typed without asking.
+                    .pointerInput(Unit) { detectTapGestures { } },
+        ) {
+            val width = min(TaskWindowWidth, maxWidth - TaskWindowMargin * 2)
+            val height = min(TaskWindowHeight, maxHeight - TaskWindowMargin * 2)
+            Surface(
+                shape = ComposerShape,
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier =
+                    Modifier
+                        .align(Alignment.Center)
+                        .size(width = width, height = height)
+                        .semantics { contentDescription = windowLabel },
+            ) {
+                if (creator != null) {
+                    // Over the task rather than beside it, in the same window:
+                    // the draft underneath is untouched and is still there when
+                    // this closes, whether a colour was made or not.
+                    Column(
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(TaskWindowPadding),
+                    ) {
+                        NewColorPanel(
+                            creator = creator,
+                            catalogue = catalogue,
+                            focusRecall = focusRecall,
+                            controller = controller,
+                            onSave = { saveColor() },
+                        )
+                    }
+                } else {
+                    TaskComposerBody(
+                        composer = composer,
+                        offered = offered,
+                        catalogue = catalogue,
+                        focusRecall = focusRecall,
+                        wide = width >= TaskWindowTwoColumns,
+                        controller = controller,
+                        onSave = { saveTask() },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** The padding inside the window, kept the same on all four sides of every part. */
+private val TaskWindowPadding = 16.dp
+
+/**
+ * What the window holds: a title that stays, a body that scrolls, actions that do not.
+ *
+ * The three are laid out rather than written one after another on purpose. PLAN
+ * 12.6 keeps `Vazgeç` and `Görevi kaydet` in sight whatever is being described,
+ * and a form long enough to scroll would otherwise carry its own way out past
+ * the bottom of the window.
+ */
+@Composable
+private fun TaskComposerBody(
+    composer: TaskComposer,
+    offered: List<ColorSummary>,
+    catalogue: List<ColorSummary>,
+    focusRecall: Int,
+    wide: Boolean,
     controller: GameTableController,
     onSave: () -> Unit,
 ) {
@@ -2442,87 +2581,160 @@ private fun TaskComposerPanel(
     LaunchedEffect(focusRecall) { panelFocus.requestFocus() }
     // Where the keyboard goes when a save is refused: the first row that is not
     // ready, so the user is put in front of the thing to fix rather than at the
-    // top of a panel they have to search.
+    // top of a window they have to search.
     val landing = composer.firstUnusableRow ?: 0
+    val nameLabel = stringResource(Strings.CellTask.nameLabel)
 
     Column(
-        verticalArrangement = Arrangement.spacedBy(3.dp),
-        // Caught for the whole panel rather than for one field in it: the user
-        // may be anywhere in here when they finish. A plain Enter still reaches
-        // the field it was typed in, so the note keeps its lines.
         modifier =
-            Modifier.onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                when {
-                    event.key == Key.Escape -> {
-                        controller.cancelTaskComposer()
-                        true
-                    }
+            Modifier
+                .fillMaxSize()
+                // Caught for the whole window rather than for one field in it:
+                // the user may be anywhere in here when they finish. A plain
+                // Enter still reaches the field it was typed in, so a note keeps
+                // its lines.
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when {
+                        event.key == Key.Escape -> {
+                            controller.cancelTaskComposer()
+                            true
+                        }
 
-                    event.isCtrlPressed && (event.key == Key.Enter || event.key == Key.NumPadEnter) -> {
-                        onSave()
-                        true
-                    }
+                        event.isCtrlPressed && (event.key == Key.Enter || event.key == Key.NumPadEnter) -> {
+                            onSave()
+                            true
+                        }
 
-                    else -> false
-                }
-            },
+                        else -> false
+                    }
+                },
     ) {
-        // The title and the words being turned into tasks share a line: the
-        // panel is inside a table cell, and a line spent on a label of its own
-        // is a line the row grows by.
-        val nameLabel = stringResource(Strings.CellTask.nameLabel)
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(TaskWindowPadding),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
                 text = stringResource(Strings.CellTask.panelTitle),
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.titleMedium,
             )
-            Text(
-                text = composer.name,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.semantics { contentDescription = "${'$'}nameLabel: ${'$'}{composer.name}" },
-            )
+            // A name of any length stays in its own place. PLAN 12.6 will not
+            // have the window grow around what was selected, and a title that
+            // pushed the form down would leave a user who selected a sentence
+            // with no form at all.
+            Box(modifier = Modifier.fillMaxWidth().heightIn(max = TaskNameHeight).verticalScroll(rememberScrollState())) {
+                Text(
+                    text = composer.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.semantics { contentDescription = "$nameLabel: ${composer.name}" },
+                )
+            }
+        }
+        HorizontalDivider()
+
+        Box(modifier = Modifier.weight(1f)) {
+            if (wide) {
+                Row(modifier = Modifier.fillMaxSize()) {
+                    Column(
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .verticalScroll(rememberScrollState())
+                                .padding(TaskWindowPadding),
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        ComposerWorkSide(composer = composer, landing = landing, focus = panelFocus, controller = controller)
+                    }
+                    VerticalDivider()
+                    Column(
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .verticalScroll(rememberScrollState())
+                                .padding(TaskWindowPadding),
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        ComposerColorSide(
+                            composer = composer,
+                            offered = offered,
+                            catalogue = catalogue,
+                            controller = controller,
+                        )
+                    }
+                }
+            } else {
+                // Too narrow for two columns, so one: the same parts in the same
+                // order, under one another.
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(TaskWindowPadding),
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    ComposerWorkSide(composer = composer, landing = landing, focus = panelFocus, controller = controller)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    ComposerColorSide(
+                        composer = composer,
+                        offered = offered,
+                        catalogue = catalogue,
+                        controller = controller,
+                    )
+                }
+            }
         }
 
-        CreationModeChoice(composer = composer, controller = controller)
+        HorizontalDivider()
+        TaskComposerActions(composer = composer, catalogue = catalogue, controller = controller, onSave = onSave)
+    }
+}
 
-        if (composer.mode == TaskCreationMode.SINGLE_ITEM_MULTICOLOR) {
-            MulticolorFields(
-                composer = composer,
-                colors = controller.colorsOffered(),
-                catalogue = catalogue,
-                focus = panelFocus,
-                controller = controller,
-            )
-        } else if (composer.mode == TaskCreationMode.SINGLE_COLOR) {
+/**
+ * The side of the window that says what is being made, and how much of it.
+ *
+ * The mode belongs here rather than above both columns: it decides what the rest
+ * of this side asks for, and a choice standing over a divider belongs to neither
+ * of the things it divides.
+ */
+@Composable
+private fun ComposerWorkSide(
+    composer: TaskComposer,
+    landing: Int,
+    focus: FocusRequester,
+    controller: GameTableController,
+) {
+    CreationModeChoice(composer = composer, controller = controller)
+
+    when (composer.mode) {
+        TaskCreationMode.SINGLE_ITEM_MULTICOLOR ->
+            MulticolorWork(composer = composer, controller = controller)
+
+        TaskCreationMode.SINGLE_COLOR ->
             // One task: no numbering, no remove button, nothing about a list.
             // The mode is a form convenience, and a form for one thing should
             // not look like a form for several.
-            TaskRowFields(
+            TaskRowWork(
                 row = 0,
                 draft = composer.single,
                 composer = composer,
-                colors = controller.colorsOffered(0),
-                target = NewColorTarget.SingleDraft,
-                isRepeatedColor = false,
-                focus = panelFocus.takeIf { landing == 0 },
+                focus = focus.takeIf { landing == 0 },
                 controller = controller,
             )
-        } else {
+
+        TaskCreationMode.INDEPENDENT_TASKS -> {
             NoteLine(text = stringResource(Strings.CellTask.modeManyHint), isProblem = false)
             composer.rows.forEachIndexed { index, draft ->
-                BatchTaskRow(
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                BatchRowHeading(row = index, composer = composer, controller = controller)
+                TaskRowWork(
                     row = index,
                     draft = draft,
                     composer = composer,
-                    colors = controller.colorsOffered(index),
-                    focus = panelFocus.takeIf { landing == index },
+                    focus = focus.takeIf { landing == index },
                     controller = controller,
                 )
             }
@@ -2542,7 +2754,77 @@ private fun TaskComposerPanel(
                 NoteLine(text = stringResource(Strings.CellTask.rowFloor), isProblem = false)
             }
         }
+    }
+}
 
+/**
+ * The side of the window the colours are chosen on.
+ *
+ * Its own column so the catalogue has room to be read: a list of named squares
+ * in a strip one cell wide showed three of them and hid the rest behind a
+ * scroll. The rows are headed the same way they are on the other side, so a
+ * batch of several tasks can be read across.
+ */
+@Composable
+private fun ComposerColorSide(
+    composer: TaskComposer,
+    offered: List<ColorSummary>,
+    catalogue: List<ColorSummary>,
+    controller: GameTableController,
+) {
+    when (composer.mode) {
+        TaskCreationMode.SINGLE_ITEM_MULTICOLOR ->
+            MulticolorColors(
+                composer = composer,
+                colors = controller.colorsOffered(),
+                catalogue = catalogue,
+                controller = controller,
+            )
+
+        TaskCreationMode.SINGLE_COLOR ->
+            TaskRowColors(
+                row = 0,
+                draft = composer.single,
+                composer = composer,
+                colors = offered,
+                target = NewColorTarget.SingleDraft,
+                controller = controller,
+            )
+
+        TaskCreationMode.INDEPENDENT_TASKS ->
+            composer.rows.forEachIndexed { row, draft ->
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Text(
+                    text = stringResource(Strings.CellTask.rowTitle, row + 1),
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                TaskRowColors(
+                    row = row,
+                    draft = draft,
+                    composer = composer,
+                    colors = controller.colorsOffered(row),
+                    // This row and no other: a colour made from here belongs to
+                    // the task described on this line, and the batch has several
+                    // of these open at once.
+                    target = NewColorTarget.BatchRow(row),
+                    controller = controller,
+                )
+            }
+    }
+}
+
+/** The two actions, and what the window has to say about the attempt. */
+@Composable
+private fun TaskComposerActions(
+    composer: TaskComposer,
+    catalogue: List<ColorSummary>,
+    controller: GameTableController,
+    onSave: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(TaskWindowPadding),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             val saveLabel =
                 if (composer.taskCount == 1) {
@@ -2780,26 +3062,17 @@ private fun CreationModeChoice(
     }
 }
 
-/**
- * One task of a batch, with its place in the panel and a way to take it away.
- *
- * Numbered because the order is the order the tasks will sit in the cell, and
- * separated by a line rather than boxed in: the panel lives inside a table cell,
- * and a bordered card for every row would spend width the row does not have.
- */
+/** The heading over one task of a batch: which one it is, and the way to drop it. */
 @Composable
-private fun BatchTaskRow(
+private fun BatchRowHeading(
     row: Int,
-    draft: TaskDraftRow,
     composer: TaskComposer,
-    colors: List<ColorSummary>,
-    focus: FocusRequester?,
     controller: GameTableController,
 ) {
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     Row(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth(),
     ) {
         Text(
             text = stringResource(Strings.CellTask.rowTitle, row + 1),
@@ -2816,42 +3089,24 @@ private fun BatchTaskRow(
             Text(text = stringResource(Strings.CellTask.rowRemoveShort), style = MaterialTheme.typography.labelSmall)
         }
     }
-    TaskRowFields(
-        row = row,
-        draft = draft,
-        composer = composer,
-        colors = colors,
-        // This row and no other: a colour made from here belongs to the task
-        // being described here, and the batch has several of these open at once.
-        target = NewColorTarget.BatchRow(row),
-        isRepeatedColor = row in composer.repeatedColorRows,
-        focus = focus,
-        controller = controller,
-    )
 }
 
 /**
- * The colour, count, tracking and note of one task being described.
+ * The colour of one task being described, and the way to make one that is missing.
  *
- * The same fields in both modes, because they describe the same thing: a task
- * made alone and one made beside two others are the same record afterwards.
+ * Its own composable rather than part of the row, because the window draws it in
+ * a column of its own (PLAN 12.6) — and because a colour is a property of 3D work
+ * alone (PLAN 5.10), so there are tasks with no such column at all.
  */
 @Composable
-private fun TaskRowFields(
+private fun TaskRowColors(
     row: Int,
     draft: TaskDraftRow,
     composer: TaskComposer,
     colors: List<ColorSummary>,
     target: NewColorTarget,
-    isRepeatedColor: Boolean,
-    focus: FocusRequester?,
     controller: GameTableController,
 ) {
-    val trackingChoices =
-        composer.columnType.poolType
-            ?.let { trackingModesOf(it) }
-            .orEmpty()
-
     OutlinedTextField(
         value = draft.colorQuery,
         onValueChange = { controller.editTaskColorQuery(row, it) },
@@ -2859,7 +3114,7 @@ private fun TaskRowFields(
         singleLine = true,
         textStyle = MaterialTheme.typography.bodySmall,
         label = { Text(stringResource(Strings.CellTask.colorSearch)) },
-        modifier = Modifier.fillMaxWidth().then(focus?.let { Modifier.focusRequester(it) } ?: Modifier),
+        modifier = Modifier.fillMaxWidth(),
     )
     ColorList(
         colors = colors,
@@ -2871,7 +3126,7 @@ private fun TaskRowFields(
     NewColorButton(target = target, enabled = !composer.isSaving, controller = controller)
     composer.repeatedColorRows[row]?.let { earlier ->
         // Said on the row that repeats rather than only at the foot of the
-        // panel, and naming the row it repeats: with several rows open, neither
+        // window, and naming the row it repeats: with several rows open, neither
         // "somewhere above" nor a message at the bottom says what to change.
         NoteLine(text = stringResource(Strings.CellTask.rowDuplicate, earlier + 1), isProblem = true)
     }
@@ -2884,6 +3139,26 @@ private fun TaskRowFields(
             isProblem = true,
         )
     }
+}
+
+/**
+ * How much of one task is needed, how it is tracked, and anything said about it.
+ *
+ * The same fields in both modes, because they describe the same thing: a task
+ * made alone and one made beside two others are the same record afterwards.
+ */
+@Composable
+private fun TaskRowWork(
+    row: Int,
+    draft: TaskDraftRow,
+    composer: TaskComposer,
+    focus: FocusRequester?,
+    controller: GameTableController,
+) {
+    val trackingChoices =
+        composer.columnType.poolType
+            ?.let { trackingModesOf(it) }
+            .orEmpty()
 
     OutlinedTextField(
         value = draft.quantityText,
@@ -2893,7 +3168,7 @@ private fun TaskRowFields(
         isError = !draft.isQuantityUsable,
         textStyle = MaterialTheme.typography.bodySmall,
         label = { Text(stringResource(Strings.CellTask.quantityLabel)) },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().then(focus?.let { Modifier.focusRequester(it) } ?: Modifier),
     )
     NoteLine(
         text =
@@ -2952,32 +3227,20 @@ private fun TaskRowFields(
 }
 
 /**
- * The one task being described in several colours.
- *
- * One quantity, one note and one tracking mode for the whole task — PLAN 12.7
- * gives it one counter, so a second of any of them would be describing something
- * the product does not have. What there are several of is colours, and they are
- * an ordered list because the order is what the cell draws the name across.
+ * The colours of the one task being described in several of them.
  *
  * Reordering is two plain buttons rather than dragging. PLAN 17 wants every main
  * action reachable from the keyboard, and `Yukarı`/`Aşağı` are that without a
  * gesture nobody can perform with one.
  */
 @Composable
-private fun MulticolorFields(
+private fun MulticolorColors(
     composer: TaskComposer,
     colors: List<ColorSummary>,
     catalogue: List<ColorSummary>,
-    focus: FocusRequester,
     controller: GameTableController,
 ) {
     val palette = composer.palette
-    val trackingChoices =
-        composer.columnType.poolType
-            ?.let { trackingModesOf(it) }
-            .orEmpty()
-
-    NoteLine(text = stringResource(Strings.CellTask.modeMulticolorHint), isProblem = false)
 
     OutlinedTextField(
         value = palette.colorQuery,
@@ -2986,7 +3249,7 @@ private fun MulticolorFields(
         singleLine = true,
         textStyle = MaterialTheme.typography.bodySmall,
         label = { Text(stringResource(Strings.CellTask.colorSearch)) },
-        modifier = Modifier.fillMaxWidth().focusRequester(focus),
+        modifier = Modifier.fillMaxWidth(),
     )
     ColorList(
         colors = colors,
@@ -3016,6 +3279,27 @@ private fun MulticolorFields(
         onMoveDown = controller::moveMulticolorColorDown,
         onDrop = controller::toggleMulticolorColor,
     )
+}
+
+/**
+ * How much of the several-colour task is needed, and what is said about it.
+ *
+ * One quantity, one note and one tracking mode for the whole task — PLAN 12.7
+ * gives it one counter, so a second of any of them would be describing something
+ * the product does not have.
+ */
+@Composable
+private fun MulticolorWork(
+    composer: TaskComposer,
+    controller: GameTableController,
+) {
+    val palette = composer.palette
+    val trackingChoices =
+        composer.columnType.poolType
+            ?.let { trackingModesOf(it) }
+            .orEmpty()
+
+    NoteLine(text = stringResource(Strings.CellTask.modeMulticolorHint), isProblem = false)
 
     OutlinedTextField(
         value = palette.quantityText,
