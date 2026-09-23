@@ -116,6 +116,7 @@ import dev.pnptracker.resources.cell_task_save_text_first
 import dev.pnptracker.resources.cell_task_saving
 import dev.pnptracker.resources.cell_task_saving_many
 import dev.pnptracker.resources.cell_task_select_hint
+import dev.pnptracker.resources.cell_task_window
 import dev.pnptracker.resources.colors_base_label
 import dev.pnptracker.resources.colors_base_none
 import dev.pnptracker.resources.colors_brightness_label
@@ -1442,6 +1443,9 @@ object Strings {
         val saveTextFirst = Res.string.cell_task_save_text_first
 
         val panelTitle = Res.string.cell_task_panel_title
+
+        /** What a reader calls the window a task is described in. */
+        val window = Res.string.cell_task_window
         val nameLabel = Res.string.cell_task_name_label
         val colorLabel = Res.string.cell_task_color_label
         val colorSearch = Res.string.cell_task_color_search

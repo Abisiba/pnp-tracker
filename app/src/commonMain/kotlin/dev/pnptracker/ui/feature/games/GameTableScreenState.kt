@@ -924,6 +924,21 @@ data class GameTableScreenState(
             else -> null
         }
 
+    /**
+     * The task being described in the window, if one is being described.
+     *
+     * Not tied to a cell, because the window is not drawn in one: PLAN 12.6 puts
+     * it in the middle of the screen. The colour picker opens over the window
+     * rather than instead of it, so it is open in that state too — but a picker
+     * opened to change a task that already exists is not a window.
+     */
+    fun taskWindow(): CellWork.MakingTask? =
+        when (val open = work) {
+            is CellWork.MakingTask -> open
+            is CellWork.MakingColor -> open.from as? CellWork.MakingTask
+            else -> null
+        }
+
     /** The colour picker open in this cell, if there is one. */
     fun creatingColorIn(
         gameId: EntityId,

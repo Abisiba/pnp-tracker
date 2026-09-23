@@ -378,7 +378,7 @@ class GameTableLayoutTest {
     fun `the offer to make a task waits for a real selection`() {
         // PLAN 12.6 has the user pick a word and then convert it, so an action
         // standing there with nothing chosen could not do what it says.
-        val actions = source.substringAfter("private fun CellEditorActions(").substringBefore("private fun TaskComposerPanel(")
+        val actions = source.substringAfter("private fun CellEditorActions(").substringBefore("private fun TaskPopover(")
         // The selection is the one the user made, kept beside the field's own:
         // a press on the offer takes focus off the field and a field that loses
         // focus drops its selection, which used to take the offer off the screen
@@ -398,18 +398,31 @@ class GameTableLayoutTest {
 
     @Test
     fun `unsaved words are not offered as a task`() {
-        val actions = source.substringAfter("private fun CellEditorActions(").substringBefore("/**\n * Naming the colour")
+        val actions = source.substringAfter("private fun CellEditorActions(").substringBefore("private fun TaskPopover(")
         assertTrue("enabled = !editor.hasUnsavedChanges" in actions, "a draft can be cut at offsets into stored text")
         assertTrue("Strings.CellTask.saveTextFirst" in actions, "nothing says why the offer is unavailable")
     }
 
     @Test
-    fun `the task panel is drawn in the cell and not over the window`() {
-        // PLAN 12.6 rules out a full screen modal or a panel covering the window.
-        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun sentenceOf(")
-        listOf("Dialog", "AlertDialog", "Popup", "ModalBottomSheet", "fillMaxSize").forEach { overlay ->
-            assertTrue(overlay !in panel, "the task panel opens a $overlay")
-        }
+    fun `the task window is drawn over the screen at the size PLAN gives it`() {
+        // PLAN 12.6, after the panel inside a cell was found too narrow to work
+        // in: a window of its own in the middle of the screen, 900 by 720 dp
+        // where there is room and a margin on every side where there is not.
+        val window = source.substringAfter("private fun TaskComposerWindow(").substringBefore("private fun TaskComposerBody(")
+        assertTrue("Popup(" in window, "the window is drawn inside whatever cell was open")
+        assertTrue("min(TaskWindowWidth, maxWidth - TaskWindowMargin * 2)" in window, "the width is not PLAN's")
+        assertTrue("min(TaskWindowHeight, maxHeight - TaskWindowMargin * 2)" in window, "the height is not PLAN's")
+        assertTrue("align(Alignment.Center)" in window, "the window is not in the middle of the screen")
+        assertTrue("focusable = true" in window, "the keyboard is left outside the window")
+        assertTrue("900.dp" in source && "720.dp" in source, "the size PLAN gives the window is not written down")
+        // The body is laid out rather than written out, so the actions cannot
+        // scroll off the bottom of a long form.
+        val body = source.substringAfter("private fun TaskComposerBody(").substringBefore("private fun ComposerWorkSide(")
+        assertTrue("Modifier.weight(1f)" in body, "the middle of the window does not take what is left")
+        assertTrue("TaskComposerActions(" in body, "the actions are not part of the window's own frame")
+        assertTrue("verticalScroll" in body, "nothing in the window scrolls")
+        assertTrue("heightIn(max = TaskNameHeight)" in body, "a long name grows the window instead of scrolling")
+        // The cell underneath is still the cell.
         val editor = source.substringAfter("private fun CellEditorSlot(").substringBefore("private fun CellEditorActions(")
         assertTrue("width(CellColumnWidth)" in editor, "the cell being worked in is not the width of its own column")
     }
@@ -421,7 +434,7 @@ class GameTableLayoutTest {
         assertTrue("saveTask()" in editor, "Ctrl+Enter does not save the task")
         assertTrue("event.isCtrlPressed" in editor, "there is no Ctrl+Enter at all")
         // The note is a note, so a plain Enter still makes a line in it.
-        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun sentenceOf(")
+        val panel = source.substringAfter("private fun TaskComposerWindow(").substringBefore("private fun sentenceOf(")
         assertTrue("singleLine = false" in panel, "the note is one line, so Enter cannot break a line in it")
     }
 
@@ -429,8 +442,8 @@ class GameTableLayoutTest {
     fun `the panel's own keys work wherever the keyboard is inside it`() {
         // Handling them on one field only left Ctrl+Enter dead as soon as the
         // user was typing a note, which is exactly where they finish.
-        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun sentenceOf(")
-        val onTheColumn = panel.substringAfter("Column(").substringBefore(") {")
+        val panel = source.substringAfter("private fun TaskComposerBody(").substringBefore("private fun ComposerWorkSide(")
+        val onTheColumn = panel.substringAfter("Column(").substringBefore("Text(")
         assertTrue("onPreviewKeyEvent" in onTheColumn, "the panel's keys are caught by one field rather than the panel")
         assertTrue("controller.cancelTaskComposer()" in onTheColumn, "Escape does not close the panel from inside it")
         assertTrue("onSave()" in onTheColumn, "Ctrl+Enter does not save from inside the panel")
@@ -449,14 +462,14 @@ class GameTableLayoutTest {
         val editor = source.substringAfter("private fun CellEditorSlot(").substringBefore("private fun CellEditorActions(")
         assertTrue("focusRecall" in editor, "the cell never takes the keyboard back")
         assertTrue("focus.requestFocus()" in editor, "the cell does not ask for the keyboard")
-        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun sentenceOf(")
+        val panel = source.substringAfter("private fun TaskComposerWindow(").substringBefore("private fun sentenceOf(")
         assertTrue("LaunchedEffect(focusRecall)" in panel, "the panel never takes the keyboard back")
     }
 
     @Test
     fun `a colour is chosen from the catalogue and never typed as a value`() {
         // PLAN 5.7 keeps every colour a named record; this step creates none.
-        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun sentenceOf(")
+        val panel = source.substringAfter("private fun TaskComposerWindow(").substringBefore("private fun sentenceOf(")
         assertTrue("Strings.CellTask.colorSearch" in panel, "the catalogue cannot be searched by name")
         assertTrue("Strings.Colors.hexLabel" !in panel, "the panel asks for a colour value")
         val choices = editingSurface.substringAfter("internal fun ColorList(").substringBefore("/** One line of explanation")
@@ -467,7 +480,7 @@ class GameTableLayoutTest {
 
     @Test
     fun `the panel asks how a task is tracked only where the pool leaves a choice`() {
-        val panel = source.substringAfter("private fun TaskComposerPanel(").substringBefore("private fun sentenceOf(")
+        val panel = source.substringAfter("private fun TaskComposerWindow(").substringBefore("private fun sentenceOf(")
         assertTrue("trackingModesOf(" in panel, "the tracking modes are not taken from the one place that decides them")
         assertTrue("trackingChoices.size > 1" in panel, "the user is asked a question that has only one answer")
     }
@@ -592,7 +605,7 @@ class GameTableLayoutTest {
 
     @Test
     fun `the creation panel offers the three modes it can actually save`() {
-        val panel = source.substringAfter("private fun CreationModeChoice(").substringBefore("private fun BatchTaskRow(")
+        val panel = source.substringAfter("private fun CreationModeChoice(").substringBefore("private fun BatchRowHeading(")
         assertTrue("TaskCreationMode.SINGLE_COLOR" in panel, "one task cannot be made")
         assertTrue("TaskCreationMode.INDEPENDENT_TASKS" in panel, "several tasks cannot be made")
         assertTrue("TaskCreationMode.SINGLE_ITEM_MULTICOLOR" in panel, "one task in several colours cannot be made")
@@ -608,7 +621,7 @@ class GameTableLayoutTest {
         // The panel is one column of the table wide. In a plain row the third
         // mode was pushed past the edge where nothing could reach it, and its
         // label wrapped to one word per line and stretched the row.
-        val panel = source.substringAfter("private fun CreationModeChoice(").substringBefore("private fun BatchTaskRow(")
+        val panel = source.substringAfter("private fun CreationModeChoice(").substringBefore("private fun BatchRowHeading(")
         assertTrue("FlowRow(" in panel, "the modes are laid out in one line however narrow the cell is")
         val tracking = editingSurface.substringAfter("internal fun TrackingChoice(").substringBefore("/**\n * The colours a task")
         assertTrue("FlowRow(" in tracking, "the tracking choices are laid out in one line")
@@ -618,7 +631,7 @@ class GameTableLayoutTest {
     fun `the several colour panel describes one task and not several`() {
         val fields =
             source
-                .substringAfter("private fun MulticolorFields(")
+                .substringAfter("private fun MulticolorWork(")
                 .substringBefore("private fun sentenceOf(")
         // PLAN 12.7 gives such a task one total and one counter, so there is one
         // of each field here and no row to repeat them in.
@@ -630,7 +643,8 @@ class GameTableLayoutTest {
             )
         }
         assertTrue("Strings.CellTask.rowTitle" !in fields, "one task is drawn as a numbered row of several")
-        assertTrue("controller::toggleMulticolorColor" in fields, "the colours cannot be chosen")
+        val colors = source.substringAfter("private fun MulticolorColors(").substringBefore("private fun MulticolorWork(")
+        assertTrue("controller::toggleMulticolorColor" in colors, "the colours cannot be chosen")
     }
 
     @Test
@@ -654,10 +668,12 @@ class GameTableLayoutTest {
 
     @Test
     fun `a batch row is a row of the panel rather than a card of its own`() {
-        // The panel lives inside a table cell. Every border it draws is width
-        // the row does not have, so the rows are separated by a line.
-        val row = source.substringAfter("private fun BatchTaskRow(").substringBefore("private fun TaskRowFields(")
-        assertTrue("HorizontalDivider(" in row, "the rows of a batch run into one another")
+        // A line between the rows rather than a card around each of them: the
+        // window has two columns of rows to read across, and a border on every
+        // one of them is width taken from what is being described.
+        val row = source.substringAfter("private fun BatchRowHeading(").substringBefore("private fun TaskRowColors(")
+        val sides = source.substringAfter("private fun ComposerWorkSide(").substringBefore("private fun TaskComposerActions(")
+        assertTrue("HorizontalDivider(" in sides, "the rows of a batch run into one another")
         assertTrue("Strings.CellTask.rowTitle" in row, "a row does not say which task it is")
         assertTrue("controller.removeTaskRow(row)" in row, "a row cannot be taken away")
         assertTrue("composer.canRemoveRow" in row, "the last rows of a batch can be taken away")
@@ -667,7 +683,7 @@ class GameTableLayoutTest {
     fun `the batch floor is said once rather than under every row`() {
         // It is a fact about the batch, not about a row. Drawn inside the row it
         // appeared once per row, so a two row panel said it twice.
-        val row = source.substringAfter("private fun BatchTaskRow(").substringBefore("private fun TaskRowFields(")
+        val row = source.substringAfter("private fun BatchRowHeading(").substringBefore("private fun TaskRowColors(")
         assertTrue("Strings.CellTask.rowFloor" !in row, "the floor is said once for every row")
         assertEquals(
             1,
@@ -678,14 +694,14 @@ class GameTableLayoutTest {
 
     @Test
     fun `the panel says which row repeats a colour rather than only that one does`() {
-        val fields = source.substringAfter("private fun TaskRowFields(").substringBefore("private fun MulticolorFields(")
-        assertTrue("isRepeatedColor" in fields, "a repeated colour is not marked on its own row")
+        val fields = source.substringAfter("private fun TaskRowColors(").substringBefore("private fun TaskRowWork(")
+        assertTrue("composer.repeatedColorRows[row]" in fields, "a repeated colour is not marked on its own row")
         assertTrue("Strings.CellTask.rowDuplicate" in fields, "a repeated colour is not said in words")
     }
 
     @Test
     fun `a refusal about one row is said on that row`() {
-        val fields = source.substringAfter("private fun TaskRowFields(").substringBefore("private fun MulticolorFields(")
+        val fields = source.substringAfter("private fun TaskRowColors(").substringBefore("private fun TaskRowWork(")
         assertTrue("composer.failureRow == row" in fields, "a refused row is not told which one it was")
     }
 
@@ -694,7 +710,7 @@ class GameTableLayoutTest {
         // The one thing that would quietly ruin a batch: a field wired to the
         // composer rather than to its row, so typing in the third task changed
         // the first. Every call carries the row it came from.
-        val fields = source.substringAfter("private fun TaskRowFields(").substringBefore("private fun MulticolorFields(")
+        val fields = source.substringAfter("private fun TaskRowColors(").substringBefore("private fun MulticolorColors(")
         listOf("editTaskColorQuery", "chooseTaskColor", "editTaskQuantity", "editTaskNotes", "chooseTaskTracking")
             .forEach { call ->
                 assertTrue("controller.$call(row, " in fields, "$call does not say which row it is for")
@@ -940,7 +956,7 @@ class GameTableLayoutTest {
 
     @Test
     fun `a refused keystroke is said in words rather than by nothing happening`() {
-        val actions = source.substringAfter("private fun CellEditorActions(").substringBefore("/**\n * Naming the colour")
+        val actions = source.substringAfter("private fun CellEditorActions(").substringBefore("private fun TaskPopover(")
         assertTrue("editor.refusal" in actions, "a refused change says nothing at all")
     }
 
