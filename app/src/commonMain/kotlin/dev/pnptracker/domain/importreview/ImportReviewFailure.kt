@@ -30,6 +30,16 @@ enum class ImportReviewFailure {
     /** A chosen colour is not in the catalogue any more. */
     COLOR_NOT_AVAILABLE,
 
+    /**
+     * A colour was named for a draft in a pool that has none.
+     *
+     * PLAN 5.10 gives colours to three dimensional printing alone. The review
+     * screen offers none for the other three pools, so this guards the write
+     * rather than asking the user a question — and it never takes a colour off a
+     * draft that already carries one.
+     */
+    COLOR_NOT_ALLOWED_FOR_POOL,
+
     /** This cell is not one a game completion hint can be about. */
     BLOCK_CANNOT_CARRY_GAME_COMPLETION,
 

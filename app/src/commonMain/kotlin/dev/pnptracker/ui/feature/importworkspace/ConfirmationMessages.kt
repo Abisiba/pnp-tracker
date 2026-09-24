@@ -33,6 +33,7 @@ fun messageOf(failure: ImportConfirmationFailure): StringResource =
         ImportConfirmationFailure.POOL_TYPE_MISSING -> Strings.Confirm.errorPoolMissing
         ImportConfirmationFailure.TRACKING_MODE_MISSING -> Strings.Confirm.errorTrackingMissing
         ImportConfirmationFailure.COLOR_NO_LONGER_AVAILABLE -> Strings.Confirm.errorColorUnavailable
+        ImportConfirmationFailure.COLOR_NOT_ALLOWED_FOR_POOL -> Strings.Confirm.errorColorNotForPool
         ImportConfirmationFailure.COMPLETION_HINT_UNDECIDED -> Strings.Confirm.errorCompletionHintUndecided
         ImportConfirmationFailure.GAME_COMPLETION_HINT_UNDECIDED -> Strings.Confirm.errorGameHintUndecided
         ImportConfirmationFailure.SELECTION_NO_LONGER_FITS -> Strings.Confirm.errorSelectionNoLongerFits
@@ -83,6 +84,7 @@ fun reviewMessageOf(failure: ImportReviewFailure): StringResource =
         ImportReviewFailure.BATCH_NOT_A_DRAFT -> Strings.Review.errorBatchNotDraft
         ImportReviewFailure.DUPLICATE_COLOR -> Strings.Review.errorDuplicateColor
         ImportReviewFailure.COLOR_NOT_AVAILABLE -> Strings.Review.errorColorUnavailable
+        ImportReviewFailure.COLOR_NOT_ALLOWED_FOR_POOL -> Strings.Review.errorColorNotForPool
         ImportReviewFailure.BLOCK_CANNOT_CARRY_GAME_COMPLETION -> Strings.Review.errorBlockCannotCarryHint
         ImportReviewFailure.COMPLETION_TARGET_REQUIRED -> Strings.Review.errorCompletionTargetRequired
         ImportReviewFailure.COMPLETION_TARGET_NOT_ALLOWED -> Strings.Review.errorCompletionTargetNotAllowed

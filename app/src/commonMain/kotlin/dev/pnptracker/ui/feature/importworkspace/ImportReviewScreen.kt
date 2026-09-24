@@ -73,6 +73,7 @@ import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.HintDecision
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.rules.poolHoldsColors
 import dev.pnptracker.domain.tasks.isUnusableQuantity
 import dev.pnptracker.domain.tasks.suitsPool
 import dev.pnptracker.domain.tasks.trackingModesOf
@@ -990,6 +991,11 @@ private fun DraftRow(
                 style = MaterialTheme.typography.labelMedium,
             )
             ChosenColorSwatches(colorIds = draft.colorIds, catalogue = controller.colors)
+            if (draft.holdsColorsItsPoolCannotKeep) {
+                // Said here as well as in the form: this is why the draft is not
+                // ready, and the user should not have to open it to find out.
+                NoteLine(text = stringResource(Strings.Review.colorsOnlyPrinting), isProblem = true)
+            }
             DraftFlagLine(draft)
             draft.notes?.takeIf { it.isNotBlank() }?.let {
                 Text(
@@ -1237,12 +1243,20 @@ private fun DraftEditorCard(
 
             FlagChoices(form = form, controller = controller)
             CompletionChoiceInForm(form = form, controller = controller)
-            ColorSection(
-                form = form,
-                isChoosing = isChoosingColor,
-                query = colorQuery,
-                controller = controller,
-            )
+            // Colour belongs to three dimensional printing and to nothing else
+            // (PLAN 5.10), so the whole section is drawn only there. A draft that
+            // carries colours from before it was moved keeps them, and is told
+            // why they cannot stay.
+            if (form.poolType?.let { poolHoldsColors(it) } != false) {
+                ColorSection(
+                    form = form,
+                    isChoosing = isChoosingColor,
+                    query = colorQuery,
+                    controller = controller,
+                )
+            } else if (form.colorIds.isNotEmpty()) {
+                ColorsThatCannotStay(controller = controller)
+            }
 
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 val saveLabel = stringResource(Strings.Review.editSave)
@@ -1481,6 +1495,30 @@ private fun CompletionChoiceInForm(
     }
     if (form.completionHint == HintDecision.PENDING) {
         NoteLine(text = stringResource(Strings.Review.completionUndecided, form.name), isProblem = true)
+    }
+}
+
+/**
+ * What a draft is told when it holds colours the pool it is aimed at has none of.
+ *
+ * Nothing is taken away here. PLAN 5.10 gives colours to printing alone, and a
+ * draft arrives in this state by being given them while it was still printing
+ * and aimed elsewhere afterwards — so it is said plainly, in words, with the one
+ * action that resolves it. Until it is resolved the import will not confirm,
+ * which is the point: neither the colour nor the pool is anybody's to guess.
+ */
+@Composable
+private fun ColorsThatCannotStay(controller: ImportReviewController) {
+    Text(text = stringResource(Strings.Review.colorsTitle), style = MaterialTheme.typography.labelMedium)
+    NoteLine(text = stringResource(Strings.Review.colorsOnlyPrinting), isProblem = true)
+    val label = stringResource(Strings.Review.colorsDropAll)
+    OutlinedButton(
+        onClick = controller::dropAllColors,
+        enabled = !controller.isSaving,
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+        modifier = Modifier.focusOutline(PanelShape).semantics { contentDescription = label },
+    ) {
+        Text(text = label, style = MaterialTheme.typography.labelMedium)
     }
 }
 

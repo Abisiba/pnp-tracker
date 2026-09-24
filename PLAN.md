@@ -699,6 +699,9 @@ Onay, taslakları gerçek görevlere çeviren tek adımdır.
 - Kullanıcı her `DraftTask` için mevcut ve aktif bir hedef `GameCell` seçer.
 - `selectedPoolType` ve `selectedTrackingMode` görev üretiminden önce zorunludur.
 - `requiredQuantity` havuz ve takip kurallarına göre doğrulanır.
+- 3D dışı bir havuza ayarlı taslak renk taşıyamaz (`5.10`). Renkleri kaldırılana
+  kadar o taslaktan görev oluşturulmaz; renk onay sırasında sessizce silinmez ve
+  renksiz bir kart görevi olarak da yazılmaz.
 - Bir taslak eksik veya geçersizse bütün batch onayı engellenir; hiçbir taslak
   sessizce atlanmaz.
 - Hiç oyun yoksa onay yapılamaz; kullanıcı önce oyun satırını oluşturur.

@@ -69,6 +69,7 @@ import dev.pnptracker.domain.model.SourceColumnType
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.model.stagesOf
 import dev.pnptracker.domain.rules.isTrackingModeAllowed
+import dev.pnptracker.domain.rules.poolHoldsColors
 import dev.pnptracker.domain.rules.requireAllowedTrackingMode
 import dev.pnptracker.domain.tasks.CompletionRules
 import dev.pnptracker.domain.text.graphemeBoundariesOf
@@ -578,6 +579,14 @@ abstract class ImportDao {
             return false
         }
 
+        // Colour belongs to three dimensional printing and to nothing else
+        // (PLAN 5.10). Only a list being *put on* a draft is refused: the one
+        // already stored is left exactly where it is, and emptying it is how the
+        // user resolves a draft that was given colours and then moved.
+        if (colorIds.isNotEmpty() && draft.selectedPoolType?.let { poolHoldsColors(it) } == false) {
+            refuseReview(ImportReviewFailure.COLOR_NOT_ALLOWED_FOR_POOL)
+        }
+
         if (colorIds.isNotEmpty()) {
             val catalogue = allColorIds().toSet()
             if (colorIds.any { it !in catalogue }) refuseReview(ImportReviewFailure.COLOR_NOT_AVAILABLE)
@@ -821,6 +830,13 @@ abstract class ImportDao {
         val colorsHold =
             existing.map { it.colorId } == colorIds &&
                 existing.withIndex().all { (at, row) -> row.slotIndex == at }
+        // Against the pool this very edit is writing, not the stored one: the
+        // form carries both, and what has to hold is the shape it is being saved
+        // in (PLAN 5.10). Changing the pool alone is left alone, so a draft that
+        // already carries colours keeps them and can be put right by hand.
+        if (!colorsHold && colorIds.isNotEmpty() && poolType?.let { poolHoldsColors(it) } == false) {
+            refuseReview(ImportReviewFailure.COLOR_NOT_ALLOWED_FOR_POOL)
+        }
         if (!colorsHold && colorIds.isNotEmpty()) {
             val catalogue = allColorIds().toSet()
             if (colorIds.any { it !in catalogue }) refuseReview(ImportReviewFailure.COLOR_NOT_AVAILABLE)
@@ -2158,6 +2174,13 @@ abstract class ImportDao {
                 check(ids.toSet().size == ids.size) { "The draft ${draft.id} names one colour twice." }
                 if (ids.any { it !in catalogue }) {
                     refuse(ImportConfirmationFailure.COLOR_NO_LONGER_AVAILABLE, draft.id)
+                }
+                // A colour on work that has none (PLAN 5.10). Writing the task
+                // without it would throw away what the user chose, and writing it
+                // with the colour would put one where the product has none — so
+                // the whole import waits until the choice is taken off by hand.
+                if (ids.isNotEmpty() && !poolHoldsColors(poolType)) {
+                    refuse(ImportConfirmationFailure.COLOR_NOT_ALLOWED_FOR_POOL, draft.id)
                 }
 
                 // A separator goes in only where a boundary would otherwise be

@@ -6,6 +6,7 @@ import dev.pnptracker.domain.model.ImportBatchStatus
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.SourceColumnType
 import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.rules.poolHoldsColors
 
 /**
  * One source cell as the review screen sees it.
@@ -80,13 +81,25 @@ data class ReviewDraftTask(
     val colorIds: List<EntityId> = emptyList(),
     val materializedTaskId: EntityId? = null,
 ) {
+    /**
+     * True when the draft carries colours the pool it is aimed at cannot hold.
+     *
+     * PLAN 5.10 gives colours to three dimensional printing alone. It happens
+     * when the colours were chosen while the draft was still printing and the
+     * pool was changed afterwards; nothing takes them off on its own, so the
+     * screen says what is wrong and the user decides.
+     */
+    val holdsColorsItsPoolCannotKeep: Boolean
+        get() = colorIds.isNotEmpty() && selectedPoolType?.let { !poolHoldsColors(it) } == true
+
     /** True when the draft has everything a task needs. */
     val isReady: Boolean
         get() =
             targetCellId != null &&
                 selectedPoolType != null &&
                 selectedTrackingMode != null &&
-                completionHint != HintDecision.PENDING
+                completionHint != HintDecision.PENDING &&
+                !holdsColorsItsPoolCannotKeep
 
     /** True when the draft was cut out of the cell rather than typed by hand. */
     val cameFromSelection: Boolean get() = selectionStartIndex != null && selectionEndIndex != null

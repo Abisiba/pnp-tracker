@@ -556,6 +556,7 @@
     <string name="confirm_error_records_contradict">Bu taslağın kayıtları birbiriyle uyuşmadığı için onaylanamıyor. Hiçbir şey yazılmadı ve taslak olduğu gibi duruyor. İnceleme ekranındaki bir düzenleme bunu düzeltemez; İçe Aktarma ekranındaki listeden bu taslağı kaldırmayı deneyebilirsiniz.</string>
     <string name="confirm_error_data_changed">Yedek alındıktan sonra verileriniz değişti, bu yüzden onay hiçbir şey yazmadan durduruldu. İçe aktarma taslak olarak duruyor; tekrar onaylayın.</string>
     <string name="confirm_error_color_unavailable">Bu taslağa seçilmiş bir renk artık katalogda yok; rengi yeniden seçin.</string>
+    <string name="confirm_error_color_not_for_pool">Bir görev, renk taşımayan bir havuza ayarlı ama rengi duruyor. O görevin renklerini kaldırıp yeniden deneyin.</string>
     <string name="confirm_error_selection_no_longer_fits">Bu taslağın seçtiği metin, geldiği hücreye artık uymuyor.</string>
     <string name="confirm_error_completion_target_required">Yeşil oyun hücresi kabul edilmiş fakat hangi oyunu bitirdiği seçilmemiş. Önce oyunu seçin.</string>
     <string name="confirm_error_completion_target_unavailable">Yeşil ipucunun işaret ettiği oyun artık kullanılamıyor.</string>
@@ -893,6 +894,9 @@
     <string name="review_colors_none">Renk seçilmedi. Renksiz görev geçerlidir.</string>
     <string name="review_colors_duplicate">%1$d. ve %2$d. sıradaki renk aynı.</string>
     <string name="review_colors_open">Renk ekle</string>
+    <string name="review_colors_only_printing">Renk yalnız 3D Baskı görevlerinde kullanılır. Bu görev başka bir havuza ayarlı olduğu için seçilen renkler kaldırılmalı.</string>
+    <string name="review_colors_drop_all">Renkleri kaldır</string>
+    <string name="review_error_color_not_for_pool">Renk yalnız 3D Baskı görevlerinde kullanılır; bu görev için renk kaydedilemez.</string>
     <string name="review_colors_close">Renk listesini kapat</string>
 
     <string name="review_completion_title">Tamamlanma ipucu (**)</string>

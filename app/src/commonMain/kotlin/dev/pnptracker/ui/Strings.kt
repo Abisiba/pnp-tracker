@@ -194,6 +194,7 @@ import dev.pnptracker.resources.confirm_done_body
 import dev.pnptracker.resources.confirm_done_title
 import dev.pnptracker.resources.confirm_error_already_confirmed
 import dev.pnptracker.resources.confirm_error_batch_not_found
+import dev.pnptracker.resources.confirm_error_color_not_for_pool
 import dev.pnptracker.resources.confirm_error_color_unavailable
 import dev.pnptracker.resources.confirm_error_completion_hint_undecided
 import dev.pnptracker.resources.confirm_error_completion_target_required
@@ -565,8 +566,10 @@ import dev.pnptracker.resources.review_blocker_goto
 import dev.pnptracker.resources.review_blockers_title
 import dev.pnptracker.resources.review_cell_location
 import dev.pnptracker.resources.review_colors_close
+import dev.pnptracker.resources.review_colors_drop_all
 import dev.pnptracker.resources.review_colors_duplicate
 import dev.pnptracker.resources.review_colors_none
+import dev.pnptracker.resources.review_colors_only_printing
 import dev.pnptracker.resources.review_colors_open
 import dev.pnptracker.resources.review_colors_title
 import dev.pnptracker.resources.review_completion_accept
@@ -615,6 +618,7 @@ import dev.pnptracker.resources.review_empty_title
 import dev.pnptracker.resources.review_error_batch_not_draft
 import dev.pnptracker.resources.review_error_block_cannot_carry_hint
 import dev.pnptracker.resources.review_error_block_gone
+import dev.pnptracker.resources.review_error_color_not_for_pool
 import dev.pnptracker.resources.review_error_color_unavailable
 import dev.pnptracker.resources.review_error_completion_target_not_allowed
 import dev.pnptracker.resources.review_error_completion_target_required
@@ -1852,6 +1856,7 @@ object Strings {
         val errorPoolMissing = Res.string.confirm_error_pool_missing
         val errorTrackingMissing = Res.string.confirm_error_tracking_missing
         val errorColorUnavailable = Res.string.confirm_error_color_unavailable
+        val errorColorNotForPool = Res.string.confirm_error_color_not_for_pool
         val errorSelectionNoLongerFits = Res.string.confirm_error_selection_no_longer_fits
         val errorCompletionHintUndecided = Res.string.confirm_error_completion_hint_undecided
         val errorGameHintUndecided = Res.string.confirm_error_game_hint_undecided
@@ -1998,6 +2003,11 @@ object Strings {
         /** Takes the one based places of the two entries that clash. */
         val colorsDuplicate = Res.string.review_colors_duplicate
         val colorsOpen = Res.string.review_colors_open
+
+        /** Why a draft outside printing may not keep the colours it has. */
+        val colorsOnlyPrinting = Res.string.review_colors_only_printing
+        val colorsDropAll = Res.string.review_colors_drop_all
+        val errorColorNotForPool = Res.string.review_error_color_not_for_pool
         val colorsClose = Res.string.review_colors_close
 
         val completionTitle = Res.string.review_completion_title

@@ -100,6 +100,7 @@ class ImportReviewScreenTest {
         hint: HintDecision = HintDecision.NONE,
         colorIds: List<EntityId> = emptyList(),
         quantity: Int? = 12,
+        poolType: PoolType? = null,
     ) = ReviewDraftTask(
         id = IdGenerator.Random.newId(),
         rawImportBlockId = blockId,
@@ -107,6 +108,7 @@ class ImportReviewScreenTest {
         completionHint = hint,
         requiredQuantity = quantity,
         colorIds = colorIds,
+        selectedPoolType = poolType,
     )
 
     /**
@@ -473,6 +475,57 @@ class ImportReviewScreenTest {
                 focused.contentDescriptions().any { "Mavi" in it },
                 "the colour that moved lost the keyboard: ${focused.contentDescriptions()}",
             )
+        }
+    }
+
+    @Test
+    fun `a draft in a pool that has no colours is never asked which colour it is`() {
+        // PLAN 5.10: colour belongs to three dimensional printing. A card, a
+        // board piece or a special task has none, so the whole section goes.
+        listOf(PoolType.CARD, PoolType.BOARD, PoolType.SPECIAL).forEach { poolType ->
+            val one = block()
+            val draft = draftOf(one.id, poolType = poolType)
+            val review = FakeReview(workspace(listOf(one), listOf(draft)))
+            review.colors.value = listOf(red, blue)
+            onScreen(review) { harness, controller, _ ->
+                controller.select(one.id)
+                controller.openDraft(draft)
+                harness.render()
+
+                val words = harness.writtenText()
+                assertTrue(words.none { it == "Renkler" }, "$poolType is still asked about colours: $words")
+                assertTrue(words.none { it == "Renk ekle" }, "$poolType is still offered a colour to add: $words")
+                assertTrue(words.any { it == "Görev adı" }, "the form lost the fields it should still have: $words")
+            }
+        }
+    }
+
+    @Test
+    fun `a draft that carries a colour its pool cannot hold says so and offers to take it off`() {
+        val one = block()
+        val draft = draftOf(one.id, colorIds = listOf(red.id), poolType = PoolType.CARD)
+        val review = FakeReview(workspace(listOf(one), listOf(draft)))
+        review.colors.value = listOf(red, blue)
+        onScreen(review) { harness, controller, _ ->
+            controller.select(one.id)
+            controller.openDraft(draft)
+            harness.render()
+
+            val words = harness.writtenText()
+            assertTrue(
+                words.any { "3D Baskı" in it && "renk" in it.lowercase() },
+                "nothing explains why the colour cannot stay: $words",
+            )
+            // Nothing technical in the explanation.
+            listOf("SQL", "Exception", "COLOR_NOT_ALLOWED", "THREE_D", "CARD", draft.id.value.toString()).forEach { leak ->
+                assertTrue(words.none { leak in it }, "$leak leaked into the explanation: $words")
+            }
+
+            assertTrue(harness.click("Renkleri kaldır"), "there is no way to take the colour off")
+            harness.render()
+
+            val form = assertNotNull(controller.surface.openForm)
+            assertEquals(emptyList(), form.colorIds, "the colours are still on the form")
         }
     }
 

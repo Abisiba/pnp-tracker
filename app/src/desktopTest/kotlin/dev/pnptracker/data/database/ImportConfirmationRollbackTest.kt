@@ -146,6 +146,7 @@ class ImportConfirmationRollbackTest {
     private var otherGame: EntityId? = null
     private var cell: EntityId? = null
     private var otherCell: EntityId? = null
+    private var printed: EntityId? = null
 
     private val batchId get() = assertNotNull(batch)
     private val gameId get() = assertNotNull(game)
@@ -154,9 +155,16 @@ class ImportConfirmationRollbackTest {
     private val otherCellId get() = assertNotNull(otherCell)
 
     /**
-     * Two games, one cell, four card drafts with colours, an accepted marker and
-     * two accepted green cells — so a single confirmation has something of every
-     * kind to write and every trap below has somewhere to land.
+     * Two games, two cells, four card drafts and one printing draft in colours,
+     * an accepted marker and two accepted green cells — so a single confirmation
+     * has something of every kind to write and every trap below has somewhere to
+     * land.
+     *
+     * The colours are on the printing draft and nowhere else: PLAN 5.10 gives
+     * them to that pool alone, so a card draft in colours is not a state to build
+     * a fixture out of. The cards keep the pipelines, which the printing draft
+     * has none of, and between them every kind of row a confirmation writes is
+     * covered.
      */
     private suspend fun given(drafts: Int = 4): List<EntityId> {
         val game = aGame(name = "Harmonies")
@@ -178,7 +186,7 @@ class ImportConfirmationRollbackTest {
         // One raw cell per draft and the two green game cells below. A count
         // that left those two out would be a draft whose records contradict
         // each other (PLAN 11.4.5, D3), and the store refuses to confirm one.
-        val batch = anImportBatch(rawBlockCount = drafts + 2)
+        val batch = anImportBatch(rawBlockCount = drafts + 3)
         importDao.insertBatch(batch)
         this.batch = batch.id
         val palette = listOf("Gri", "Mavi").map { assertNotNull(database.colorDao().resolve(it)).id }
@@ -201,9 +209,40 @@ class ImportConfirmationRollbackTest {
                     )
                 importDao.addDraftTask(draft)
                 importDao.setDraftTargetUnderReview(draft.id, cell.id, PoolType.CARD, TrackingMode.PIPELINE, updatedAt)
-                importDao.setDraftColorsUnderReview(draft.id, palette, StoppedClock(updatedAt))
                 draft.id
             }
+        // The one draft that is printed, and therefore the one with colours.
+        val printedCell = aCell(gameId = game.id, columnType = CellColumnType.THREE_D)
+        database.gameCellDao().insert(printedCell)
+        this.printed = printedCell.id
+        val printedBlock =
+            aRawImportBlock(
+                batch.id,
+                rowIndex = 400,
+                columnIndex = 1,
+                rawText = "15 GRİ",
+                sourceColumnType = SourceColumnType.THREE_D,
+            )
+        importDao.insertRawBlock(printedBlock)
+        importDao.setRawBlockProcessed(printedBlock.id, true, updatedAt)
+        // Made after the cards, so the confirmation always reaches it last: the
+        // drafts are read in the order they were created, and a fixture that
+        // shuffled them would move every identity the traps below count on.
+        val printedDraft =
+            aDraftTask(printedBlock.id, name = "Gri figür").copy(
+                requiredQuantity = 15,
+                createdAt = updatedAt,
+                updatedAt = updatedAt,
+            )
+        importDao.addDraftTask(printedDraft)
+        importDao.setDraftTargetUnderReview(
+            printedDraft.id,
+            printedCell.id,
+            PoolType.THREE_D,
+            TrackingMode.THREE_D_BATCH,
+            updatedAt,
+        )
+        importDao.setDraftColorsUnderReview(printedDraft.id, palette, StoppedClock(updatedAt))
         listOf(game.id, other.id).forEachIndexed { at, target ->
             val block =
                 aRawImportBlock(
@@ -311,8 +350,10 @@ class ImportConfirmationRollbackTest {
     @Test
     fun `the last colour refuses to go in`() =
         runBlocking {
+            // The second of the two the printed draft is made in; a card draft
+            // has none at all (PLAN 5.10).
             given()
-            refusedLeavesEverything(trapOn(8, "INSERT", "TASK_COLORS"))
+            refusedLeavesEverything(trapOn(2, "INSERT", "TASK_COLORS"))
         }
 
     @Test
@@ -415,7 +456,7 @@ class ImportConfirmationRollbackTest {
             assertEquals(before, everything(), "a collided separator left something behind")
             assertEquals(ImportBatchStatus.DRAFT, assertNotNull(importDao.batchById(batchId)).status)
             assertTrue(importDao.draftTasksOfBatch(batchId).all { it.materializedTaskId == null })
-            assertEquals(drafts.size, importDao.draftTasksOfBatch(batchId).size)
+            assertEquals(drafts.size + 1, importDao.draftTasksOfBatch(batchId).size)
         }
 
     @Test
@@ -493,13 +534,15 @@ class ImportConfirmationRollbackTest {
             assertFailsWith<Throwable> { confirm() }
             failing.disarm()
 
-            assertEquals(drafts.size, confirm())
+            // The card drafts and the printed one.
+            assertEquals(drafts.size + 1, confirm())
 
-            assertEquals(drafts.size, database.taskDao().activeTasks().size)
+            assertEquals(drafts.size + 1, database.taskDao().activeTasks().size)
             // Four tasks and the three spaces between them, written once each.
             assertEquals(drafts.size * 2 - 1, database.cellSegmentDao().segmentCountOfCell(cellId))
             assertEquals(drafts.size - 1, database.cellSegmentDao().segmentsOfCell(cellId).count { it.text == " " })
-            assertEquals(drafts.size * 2, CommittedSchema.countRowsOf(directory.databaseFile, "task_colors"))
+            // Two colours, both on the one task that is printed (PLAN 5.10).
+            assertEquals(2, CommittedSchema.countRowsOf(directory.databaseFile, "task_colors"))
             assertEquals(drafts.size * 3, CommittedSchema.countRowsOf(directory.databaseFile, "task_stages"))
             assertEquals(ImportBatchStatus.CONFIRMED, assertNotNull(importDao.batchById(batchId)).status)
             assertTrue(database.gameDao().allGamesIncludingDeleted().all { it.isManuallyCompleted })
