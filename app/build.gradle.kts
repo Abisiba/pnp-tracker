@@ -18,7 +18,7 @@ plugins {
 // The one version this application has (master §33 R5). Everything that says a
 // version — AppInfo, the backup documents, the launcher, the archive and the Arch
 // package — is derived from it; nothing else writes one down.
-version = "0.1.4"
+version = "0.1.5"
 
 // Jars and archives carry no build moment and no file-system order, so two
 // builds of the same sources produce the same package (Faz 3 / İş 11).
