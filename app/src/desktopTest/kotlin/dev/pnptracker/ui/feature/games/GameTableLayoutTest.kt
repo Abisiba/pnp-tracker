@@ -310,16 +310,19 @@ class GameTableLayoutTest {
     }
 
     @Test
-    fun `a finished task keeps its place and says it is finished`() {
+    fun `a finished task keeps its place and costs it no room`() {
         // PLAN 5.6 leaves a finished task in its cell rather than removing it,
-        // and PLAN 12.5 draws it on a ground of its own with a mark and a word
-        // instead of striking it through — a line over the name, the count and
-        // the colours is a line over everything worth reading afterwards.
+        // and PLAN 12.5 draws it on a compact ground of its own instead of
+        // striking it through — a line over the name, the count and the colours
+        // is a line over everything worth reading afterwards. No word is drawn
+        // beside it: the state is in the box the task already carries and in
+        // what a reader hears, neither of which takes a character of the line.
         val drawn = source.substringAfter("private fun drawnDocumentOf(").substringBefore("private fun spokenContentOf(")
         assertTrue("segment.isCompletedTask" in drawn, "a finished task looks exactly like an unfinished one")
         assertTrue("TextDecoration.LineThrough" !in drawn, "a finished task is still struck through")
         assertTrue("PnpStatus.colors.completedContainer" in drawn, "a finished task has no ground of its own")
-        assertTrue("Strings.CellTask.completedBadge" in drawn, "a finished task does not say so in words")
+        assertTrue("CellTask.completedBadge" !in drawn, "a finished task is labelled in words again")
+        assertTrue("CellTask.completedBadge" !in source, "the label lives on somewhere else in the screen")
         // Still to do first, finished after — and only where the cell is read.
         assertTrue("filterNot { it.isCompletedTask }" in drawn, "finished work is not put after the work still to do")
         assertTrue("if (withCounts) {" in drawn, "the order was changed in the string the editor lines up with")

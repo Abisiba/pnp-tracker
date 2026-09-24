@@ -16,7 +16,6 @@ import dev.pnptracker.ui.theme.ThemeMode
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -27,10 +26,13 @@ import kotlin.test.fail
  *
  * It used to be struck through: a line drawn over the name, over the count and
  * over the colours it is made in, which is exactly the part of a cell that is
- * worth reading afterwards. PLAN 12.5 now gives it a ground of its own, a mark
- * and the word `Tamamlandı`, and puts the finished work after the work still to
- * do — while the cell's own document, and the order the user typed it in, are
- * left exactly as they are.
+ * worth reading afterwards. PLAN 12.5 now gives it a ground of its own and puts
+ * the finished work after the work still to do — while the cell's own document,
+ * and the order the user typed it in, are left exactly as they are.
+ *
+ * What the state is said with is measured next door, in
+ * `CompactCompletedTaskTest`: the box the task already carries, and the state a
+ * reader hears. Nothing is written beside the name.
  *
  * Presentation only: nothing here changes what finishing writes.
  */
@@ -129,8 +131,15 @@ class FinishedTaskLookTest {
         spanStyles.firstOrNull { it.start <= text.indexOf(word) && it.end >= text.indexOf(word) + word.length }
             ?: fail("$word is drawn with no style of its own in [$text] with ${spanStyles.map { it.start to it.end }}")
 
+    /** The style over one run of the drawn document, found by where it is rather than by what it says. */
+    private fun AnnotatedString.styleAt(
+        at: Int,
+        length: Int,
+    ) = spanStyles.firstOrNull { it.start <= at && it.end >= at + length }?.item
+        ?: fail("nothing is styled at $at in [$text] with ${spanStyles.map { it.start to it.end }}")
+
     @Test
-    fun `a finished task is not struck through, and says so in a mark and a word`() {
+    fun `a finished task is not struck through, and keeps a ground of its own`() {
         listOf(ThemeMode.LIGHT, ThemeMode.DARK).forEach { theme ->
             RealStack().use { stack ->
                 ComposeSceneHarness(width = 1300, height = 900) {
@@ -154,10 +163,17 @@ class FinishedTaskLookTest {
                     val unfinished = drawn.styleOver("Kuş").item.background
                     assertTrue(finished != unfinished, "finished and unfinished work are drawn on the same ground in $theme")
 
-                    val said = screen.writtenText().joinToString(" ")
-                    assertTrue("Tamamlandı" in said, "nothing says the task is finished in words in $theme: $said")
-                    assertTrue("✓" in drawn.text, "the finished task carries no mark in $theme: ${drawn.text}")
                     assertTrue("Ayı" in drawn.text && "×14" in drawn.text, "the name or the count stopped being readable in $theme")
+                    // The count is on the finished ground too, so what is drawn
+                    // is one compact surface and not a name with a number
+                    // hanging off it (PLAN 12.5). The cell holds two counts, so
+                    // this is the one after the finished name and not the first.
+                    val countAt = drawn.text.indexOf("×14", startIndex = drawn.text.indexOf("Ayı"))
+                    assertEquals(
+                        finished,
+                        drawn.styleAt(countAt, "×14".length).background,
+                        "the count of a finished task is drawn off its own ground in $theme",
+                    )
                 }
             }
         }
@@ -209,14 +225,22 @@ class FinishedTaskLookTest {
                     drawn.styleOver("Ayı").item.background,
                     "a task made active again is still drawn as finished",
                 )
-                assertFalse("Tamamlandı" in screen.writtenText().joinToString(" "), "the cell still calls the task finished")
+                // Its count comes off the finished ground with it: nothing about
+                // the task is drawn as finished any more.
+                val countAt = drawn.text.indexOf("×14", startIndex = drawn.text.indexOf("Ayı"))
+                val otherCountAt = drawn.text.indexOf("×14", startIndex = drawn.text.indexOf("Kuş"))
+                assertEquals(
+                    drawn.styleAt(otherCountAt, "×14".length).background,
+                    drawn.styleAt(countAt, "×14".length).background,
+                    "the count of a reopened task is still drawn on the finished ground",
+                )
                 assertTrue(drawn.text.indexOf("Ayı") < drawn.text.indexOf("Kuş"), "the order the user typed did not come back")
             }
         }
     }
 
     @Test
-    fun `the mark and the word are there in the smallest window and at larger text`() {
+    fun `the finished ground is there in the smallest window and at larger text`() {
         listOf(
             Viewport(1100, 720, Density(1f, 1.5f)),
             Viewport(640, 460, Density(2f, 1.3f)),
@@ -233,9 +257,12 @@ class FinishedTaskLookTest {
                         stack.piecesOf(gameId, CellColumnType.THREE_D).any { it.taskId == tasks.first() && it.isCompletedTask }
                     }
 
-                    val said = screen.writtenText().joinToString(" ")
-                    assertTrue("Tamamlandı" in said, "at ${widthDp}x$heightDp dp nothing says the task is finished: $said")
-                    assertNotNull(screen.cellText("Ayı"), "at ${widthDp}x$heightDp dp the cell is not drawn at all")
+                    val drawn = assertNotNull(screen.cellText("Ayı"), "at ${widthDp}x$heightDp dp the cell is not drawn at all")
+                    assertTrue(
+                        drawn.styleOver("Ayı").item.background != drawn.styleOver("Kuş").item.background,
+                        "at ${widthDp}x$heightDp dp finished and unfinished work are drawn on the same ground",
+                    )
+                    assertTrue("×14" in drawn.text, "at ${widthDp}x$heightDp dp the count stopped being drawn")
                 }
             }
         }
