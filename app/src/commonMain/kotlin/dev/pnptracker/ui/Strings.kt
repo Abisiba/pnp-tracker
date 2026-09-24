@@ -68,7 +68,6 @@ import dev.pnptracker.resources.cell_task_color_search
 import dev.pnptracker.resources.cell_task_color_slot
 import dev.pnptracker.resources.cell_task_color_unknown
 import dev.pnptracker.resources.cell_task_completed
-import dev.pnptracker.resources.cell_task_completed_badge
 import dev.pnptracker.resources.cell_task_create
 import dev.pnptracker.resources.cell_task_created
 import dev.pnptracker.resources.cell_task_created_dismiss
@@ -1483,9 +1482,6 @@ object Strings {
 
         val noColor = Res.string.cell_task_no_color
         val completed = Res.string.cell_task_completed
-
-        /** The mark and the word drawn on a finished task in its cell. */
-        val completedBadge = Res.string.cell_task_completed_badge
 
         val modeLabel = Res.string.cell_task_mode_label
         val modeSingle = Res.string.cell_task_mode_single

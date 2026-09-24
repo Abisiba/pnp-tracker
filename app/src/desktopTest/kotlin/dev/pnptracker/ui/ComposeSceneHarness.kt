@@ -6,6 +6,9 @@ import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.PixelMap
+import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -66,6 +69,24 @@ class ComposeSceneHarness(
     fun render() {
         clock += FRAME_NANOSECONDS
         scene.render(clock).close()
+    }
+
+    /**
+     * Renders one more frame and hands back what was actually painted.
+     *
+     * Part of what a screen says is nowhere in the semantics tree. The box that
+     * says a task is finished draws its mark and stays deliberately silent
+     * (PLAN 12.5), so no description, no text and no state can tell a test
+     * whether the mark is really there — only the pixels can.
+     */
+    fun pixels(): PixelMap {
+        clock += FRAME_NANOSECONDS
+        val image = scene.render(clock)
+        return try {
+            image.toComposeImageBitmap().toPixelMap()
+        } finally {
+            image.close()
+        }
     }
 
     /**

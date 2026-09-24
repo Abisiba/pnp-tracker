@@ -1224,7 +1224,6 @@ private fun drawnDocumentOf(
     val metadata = MaterialTheme.colorScheme.onSurfaceVariant
     val finishedFill = PnpStatus.colors.completedContainer
     val finishedInk = PnpStatus.colors.onCompletedContainer
-    val finishedBadge = stringResource(Strings.CellTask.completedBadge)
     // Finished work last, and only where the cell is being read. PLAN 12.5 puts
     // what is still to do first; the document itself keeps the order it was
     // written in, which is what the editor shows and what is stored, because
@@ -1331,24 +1330,31 @@ private fun drawnDocumentOf(
                         stripes += DrawnStripe(start = at, end = length, edge = paint.edge)
                     }
                 }
+                // The count on the finished ground as well, so what is drawn is
+                // one compact surface rather than a name on green with a number
+                // hanging off it. Nothing is added by this — the same characters
+                // in the same place — which is the whole point: PLAN 12.5 will
+                // not have finishing a task cost it any room.
                 marks[index]?.let { mark ->
-                    withStyle(SpanStyle(color = metadata)) {
+                    val style =
+                        if (finished) {
+                            SpanStyle(background = finishedFill, color = finishedInk)
+                        } else {
+                            SpanStyle(color = metadata)
+                        }
+                    withStyle(style) {
                         append(QUANTITY_GAP)
                         append(mark)
                     }
                 }
-                // The state in a mark and a word, on the same ground as the name.
-                // PLAN 12.5 and 17 both: what is finished is never said by colour
-                // alone. Inside the pressable run, so it belongs to the task and
-                // opens the same menu.
-                if (finished) {
-                    withStyle(
-                        SpanStyle(background = finishedFill, color = finishedInk, fontWeight = FontWeight.Medium),
-                    ) {
-                        append(MARKER_GAP)
-                        append(finishedBadge)
-                    }
-                }
+                // No word is written here. `✓ Tamamlandı` used to be, and in a
+                // 200 dp cell those twelve characters were most of a line: the
+                // name and the count were pushed down, work beside them fell
+                // past the three lines a cell shows, and the label itself came
+                // out as `Tamaml…`. PLAN 12.5 says the state instead in the box
+                // the task already carries — which takes its room whether the
+                // work is done or not — and in the state a reader hears on the
+                // task's own node (`TaskHandle`).
                 tasks += DrawnTask(segment = segment, start = start, end = length, stripes = stripes)
             }
         }
