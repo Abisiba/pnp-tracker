@@ -7,8 +7,8 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** **Dört kullanılabilirlik değişikliği (sürüm yükseltilmedi,
-> yayın yapılmadı).** (1) Görev oluşturma paneli hücrenin içinden çıkarıldı:
+> **Son güncelleme:** **Dört kullanılabilirlik değişikliği + içe aktarmadaki renk
+> açığının kapatılması (sürüm yükseltilmedi, yayın yapılmadı).** (1) Görev oluşturma paneli hücrenin içinden çıkarıldı:
 > artık ekranın ortasında `900 × 720 dp` bir pencere; solda ne yapıldığı, sağda
 > yalnız 3D'de renk, altta sabit `Vazgeç` / `Görevi kaydet`. (2) Oyun adı, adın
 > yazdığı hücreye gerçek çift tıklamayla düzenlenebiliyor; `Enter` kaydeder,
@@ -19,7 +19,12 @@
 > artık üstü çizili değil: kendi arka planı, `✓ Tamamlandı` etiketi ve renkleri
 > okunur; hücrede devam edenler önce, tamamlananlar sonra çiziliyor (belge sırası
 > değişmiyor). PLAN'a dört kural bloğu eklendi (`5.6`, `5.10`, `12.3`, `12.5`,
-> `12.6`, `12.7`, `12.14`). Tam koşu 3799 / 0 / 0 / 0 (280 sınıf). Ayrıntı §25.11.
+> `12.6`, `12.7`, `12.14`). Ayrıca (5) renk kuralı içe aktarmada da uygulandı:
+> inceleme ekranı rengi yalnız 3D taslağında sorar, iki taslak yazma yolu 3D
+> dışına **yeni** renk atamasını reddeder, havuzu sonradan değişmiş bir taslağın
+> rengi silinmez — ekranda açıklanır, `Renkleri kaldır` kullanıcının kendi
+> eylemidir ve çelişki çözülene kadar onay hiçbir görev yazmaz (PLAN `5.10`,
+> `11.4.2`). Tam koşu 3804 / 0 / 0 / 0 (280 sınıf). Ayrıntı §25.11.
 >
 > Daha önce: **v0.1.4 — gerçek kullanımda bulunan iki üretim hatası
 > düzeltildi.** (1) Tablodaki tik tek dokunuşla tamamlıyor, ama havuzun
@@ -203,13 +208,16 @@ bu turun commit'leri  : 93df4f4 docs(plan): write down the four usability rules 
                         fc24ccc feat(tasks): keep colour to the work that is printed in one
                         fe3a4ae feat(games): show a finished task rather than crossing it out
                         a61319d test(games): measure the task window at the size …
+                        02a0e81 docs: record the four usability changes …
+                        f5d93ed fix(import): keep colors exclusive to 3D tasks
                         (+ bu belge commit'i)
 sürüm                 : 0.1.4   YÜKSELTİLMEDİ (tek kaynak app/build.gradle.kts)
 yayınlar              : v0.1.4 → 7ae6287  YAYIMLANDI, latest — bu turda yeni yayın yok
 Room şema sürümü      : 8   (DEĞİŞMEDİ)
 şema dosyaları        : 1.json … 8.json ve sample-import.xlsx bayt bayt aynı
-PLAN.md               : DEĞİŞTİ — dört onaylanmış kural (ff443809… → 8331407d…)
-test durumu           : tam koşu 3799 / 0 / 0 / 0 (280 sınıf); ktlintCheck temiz;
+PLAN.md               : DEĞİŞTİ — dört onaylanmış kural + içe aktarma renk kuralı
+                        (ff443809… → dec7e411…)
+test durumu           : tam koşu 3804 / 0 / 0 / 0 (280 sınıf); ktlintCheck temiz;
                         git diff --check temiz
 smoke                 : desktopWindowSmoke geçici HOME/XDG ile PASSED (tek pencere,
                         çıkış kodu 0, arkada süreç yok)
@@ -5974,10 +5982,38 @@ soruluyordu ve renk seçilmeden **kaydedilemiyordu**.
   veri tutmaz, tek fixture `sample-import.xlsx` ham metindir ve renk ancak
   kullanıcı inceleme ekranında seçerse yazılır. Dolayısıyla veri dönüştürme
   kararı **gerekmedi**.
-- **Açık sınır:** içe aktarma inceleme ekranı hâlâ herhangi bir havuzun taslağına
-  renk atayabiliyor (`ImportDao.setDraftColorsUnderReview`, onayda
-  `insertTaskColor`). Bu tur kapsam dışı bırakıldı: hâlihazırda renk taşıyan
-  taslaklara ne olacağı ürün kararı ister ve sessizce silmek yasak.
+- İçe aktarma da aynı kurala bağlandı; ayrıntı aşağıda "5. İçe aktarmada renk".
+
+## 5. İçe aktarmada renk  *(`f5d93ed`, PLAN 5.10, 11.4.2)*
+
+Önceki turda açık bırakılan sınır kapatıldı. **Ölçüm:** inceleme ekranı renk
+seçimini taslağın havuzuna bakmadan sunuyordu; `ImportDao.setDraftColorsUnderReview`
+ve `editDraftUnderReview` havuza bakmadan yazıyordu; onay hem kapıda
+(`ImportConfirmationStore`) hem transaction'da rengi olduğu gibi `task_colors`'a
+geçiriyordu. Yani kart taslağına renk atayıp onaylamak, renkli bir kart görevi
+üretiyordu.
+
+Uygulanan sözleşme:
+
+- İnceleme formunda renk bölümü yalnız 3D taslağında çizilir.
+- İki taslak yazma yolu da 3D dışı bir havuza **yeni** renk atamasını
+  `ImportReviewFailure.COLOR_NOT_ALLOWED_FOR_POOL` ile reddeder.
+  `editDraftUnderReview` kararını **yazılmakta olan** havuza göre verir; yalnız
+  havuzu değiştiren bir kayıt renge dokunmaz.
+- Rengi olan bir taslak havuzu değişince rengini **korur**. Hem taslak satırında
+  hem formda güvenli Türkçe açıklama çıkar ve `Renkleri kaldır` düğmesi sunulur;
+  düğme formu değiştirir, yazan şey kullanıcının kendi kaydıdır.
+- `ReviewDraftTask.isReady` böyle bir taslak için `false`; onay hem kapıda hem
+  transaction'da `ImportConfirmationFailure.COLOR_NOT_ALLOWED_FOR_POOL` ile
+  bütün batch'i durdurur ve hiçbir satır yazmaz. Renk elle kaldırılınca onay
+  normal çalışır ve kart görevi renksiz yazılır.
+- Şema, migration, rollback, snapshot ve confirmation transaction'ı değişmedi;
+  3D içe aktarma renk davranışı aynen duruyor.
+
+`ImportConfirmationRollbackTest` fixture'ı yeniden kuruldu: dört kart taslağı
+(boru hattı, renksiz) + bir 3D taslağı (iki renk). Tuzakların hepsi yerinde —
+renk yazma tuzağı artık 3D görevinin renklerine düşüyor — ve taslak sırası
+belirlenimci olsun diye 3D taslağı sonradan oluşturuluyor.
 
 ## 4. Tamamlanan görevin görünümü  *(`fe3a4ae`, PLAN 5.6, 12.5)*
 
@@ -6005,6 +6041,13 @@ FinishedTaskLookTest          4  çizgi yok + simge + yazı (iki tema), sıra,
 GameSetupStoreTest           +4  rename: yazar / yazmaz / yok / boş
 TaskFromTextStoreTest        +2  3D dışı renk reddi, renksiz kayıt
 TaskEditStoreTest            +2  renk ekleme reddi, eski renkli kayıt düzenlenebilir
+DraftTaskColorTest           +2  3D dışı taslağa renk reddi (üç havuz); havuz
+                                 değişince renk korunur ve elle kaldırılabilir
+ImportConfirmationStoreTest  +1  çelişkili taslak bütün batch'i durdurur, hiçbir
+                                 satır yazılmaz; renk kalkınca onay geçer ve
+                                 kart görevi renksiz yazılır
+ImportReviewScreenTest       +2  üç havuzda renk bölümü yok; eski renkli taslak
+                                 açıklama + `Renkleri kaldır` sunar, sızıntı yok
 ```
 
 Güncellenen sözleşme testleri: `GameTableLayoutTest` (panel → pencere, alanların
@@ -6019,7 +6062,7 @@ invariant'lar bu kez rengin gerçekten bulunduğu yerde ölçülüyor.
 - Sürüm yükseltme, etiket, GitHub Release (kullanıcı açıkça istemedi).
 - İş 13 (temiz Garuda turu) — hâlâ projenin tek kalan bağlayıcı işi.
 - Paket smoke'ları: paketleme ve sürüm değişmedi.
-- İçe aktarma inceleme ekranındaki renk atama (yukarıda).
+- Var olan hiçbir rengin kendiliğinden silinmesi: ne görevde ne taslakta.
 
 ---
 
