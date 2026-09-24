@@ -7,7 +7,21 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** **Dört kullanılabilirlik değişikliği + içe aktarmadaki renk
+> **Son güncelleme:** **Tamamlanan görevin kompakt görünümü ve sürüm 0.1.5.**
+> Gerçek kullanım, dört değişiklikten üçünü onayladı ve dördüncüsünde bir kusur
+> buldu: `✓ Tamamlandı` etiketi 200 dp genişliğindeki hücrede satır kırıyor,
+> görevin adını ve adedini aşağı itiyor, yanındaki işi hücrenin gösterdiği üç
+> satırın dışına atıyor ve bazen kendisi `Tamaml…` diye kesiliyordu (ölçüldü: tek
+> bir tamamlanmış görevde hücre 40 dp'den 61 dp'ye çıkıyor). Etiket kaldırıldı.
+> Kalanlar: görevin zaten çizildiği açık yeşil yüzey — artık adedi de üstünde,
+> yani tek ve kompakt bir yüzey — ve görevin zaten taşıdığı tamamlanma kutusu;
+> kutu iş bitmiş olsun olmasın yerini ayırdığı için tamamlanmanın genişlik bedeli
+> **sıfırdır**. Durum ekran okuyucuya yine görevin kendi durum açıklamasıyla
+> söyleniyor. PLAN 12.5 koddan önce düzeltildi ve üç eski "üstü çizili" satırı da
+> bu kararla hizalandı. Sürüm `0.1.5`. Tam koşu 3809 / 0 / 0 / 0 (281 sınıf).
+> Ayrıntı §25.12.
+>
+> Daha önce: **Dört kullanılabilirlik değişikliği + içe aktarmadaki renk
 > açığının kapatılması (sürüm yükseltilmedi, yayın yapılmadı).** (1) Görev oluşturma paneli hücrenin içinden çıkarıldı:
 > artık ekranın ortasında `900 × 720 dp` bir pencere; solda ne yapıldığı, sağda
 > yalnız 3D'de renk, altta sabit `Vazgeç` / `Görevi kaydet`. (2) Oyun adı, adın
@@ -200,28 +214,25 @@ Aşağıdaki değerler bu dosya commit edilmeden hemen önce repo üzerinde
 doğrulanmıştır.
 
 ```text
-branch                : fix/game-table-usability → main (korumalı: PR + check zorunlu)
-başlangıç HEAD        : 7ae6287 (docs: record the two defects found in real use)
-bu turun commit'leri  : 93df4f4 docs(plan): write down the four usability rules …
-                        2263021 feat(games): describe a task in a window of its own
-                        b14f36d feat(games): let a game be given another name …
-                        fc24ccc feat(tasks): keep colour to the work that is printed in one
-                        fe3a4ae feat(games): show a finished task rather than crossing it out
-                        a61319d test(games): measure the task window at the size …
-                        02a0e81 docs: record the four usability changes …
-                        f5d93ed fix(import): keep colors exclusive to 3D tasks
+branch                : fix/compact-completed-task → main (korumalı: PR + check zorunlu)
+başlangıç HEAD        : e51d173 (docs: record how the import colour gap was closed)
+bu turun commit'leri  : 2f93147 docs(plan): write down the finished task without its word
+                        66e0b62 feat(games): show a finished task without spending a line on it
+                        ecc9f37 build: raise the version to 0.1.5
                         (+ bu belge commit'i)
-sürüm                 : 0.1.4   YÜKSELTİLMEDİ (tek kaynak app/build.gradle.kts)
-yayınlar              : v0.1.4 → 7ae6287  YAYIMLANDI, latest — bu turda yeni yayın yok
+sürüm                 : 0.1.5   YÜKSELTİLDİ (tek kaynak app/build.gradle.kts)
+yayınlar              : v0.1.4 → 7ae6287 YAYIMLANDI; v0.1.5 etiketi bu belge
+                        yazılırken HENÜZ YOK — merge edilmiş main'e atılacak
 Room şema sürümü      : 8   (DEĞİŞMEDİ)
 şema dosyaları        : 1.json … 8.json ve sample-import.xlsx bayt bayt aynı
-PLAN.md               : DEĞİŞTİ — dört onaylanmış kural + içe aktarma renk kuralı
-                        (ff443809… → dec7e411…)
-test durumu           : tam koşu 3804 / 0 / 0 / 0 (280 sınıf); ktlintCheck temiz;
+PLAN.md               : DEĞİŞTİ — 12.5 tamamlanan görevin görünümü; üç eski
+                        "üstü çizili" satırı hizalandı (dec7e411… → e3d6c995…)
+test durumu           : tam koşu 3809 / 0 / 0 / 0 (281 sınıf); ktlintCheck temiz;
                         git diff --check temiz
 smoke                 : desktopWindowSmoke geçici HOME/XDG ile PASSED (tek pencere,
                         çıkış kodu 0, arkada süreç yok)
-paket smoke'ları      : bu turda koşulmadı — paketleme ve sürüm değişmedi
+paket smoke'ları      : bu turda yerelde koşulmadı; paketleri yayın akışı üretir ve
+                        verifyLinuxPackage + verifyArchPackage orada çalışır
 gerçek sistem         : kurulum yapılmadı, sudo kullanılmadı; bütün testler geçici
                         veritabanlarında koştu ve gerçek uygulama dosyasının
                         dokunulmadığını doğruladı
@@ -833,8 +844,8 @@ Tamamlanmış bir oyunun içindeki tamamlanmamış görev aktif havuzdan otomati
 
 ### Tamamlanmış Task
 
-Tamamlanan görev bütün aktif havuz projection'larından çıkar; hücrede tikli ve üstü
-çizili kalır, oyun kaydında ve geçmişte durur.
+Tamamlanan görev bütün aktif havuz projection'larından çıkar; hücrede tikli
+kalır ve tamamlanma yüzeyiyle çizilir (§25.12), oyun kaydında ve geçmişte durur.
 
 ### Çapasız / segmentsiz Task
 
@@ -6017,6 +6028,10 @@ belirlenimci olsun diye 3D taslağı sonradan oluşturuluyor.
 
 ## 4. Tamamlanan görevin görünümü  *(`fe3a4ae`, PLAN 5.6, 12.5)*
 
+> **Bu maddenin `✓ Tamamlandı` etiketi 0.1.5'te kaldırıldı** — gerçek kullanımda
+> dar hücrede satır kırdığı için. Bugünkü hâli §25.12'dedir; aşağısı o günkü
+> hâlin kaydıdır.
+
 Üstü çizili metin kaldırıldı — çizgi adı, adedi ve renkleri birden okunmaz
 yapıyordu. Yerine tamamlanma arka planı (`PnpStatus.colors.completedContainer`),
 `✓ Tamamlandı` etiketi ve **bütün** renklerin kendi göstergesi geldi; ad ve adet
@@ -6063,6 +6078,78 @@ invariant'lar bu kez rengin gerçekten bulunduğu yerde ölçülüyor.
 - İş 13 (temiz Garuda turu) — hâlâ projenin tek kalan bağlayıcı işi.
 - Paket smoke'ları: paketleme ve sürüm değişmedi.
 - Var olan hiçbir rengin kendiliğinden silinmesi: ne görevde ne taslakta.
+
+---
+
+# 25.12 TAMAMLANAN GÖREVİN KOMPAKT GÖRÜNÜMÜ  *(v0.1.5)*
+
+Gerçek kullanım kontrolü dört değişiklikten üçünü onayladı (geniş görev penceresi,
+hücrede yeniden adlandırma, rengin yalnız 3D'de olması) ve dördüncüsünde bir kusur
+buldu.
+
+## Kusur — ölçüldü
+
+```text
+bulgu     tamamlanan görevin yanındaki `✓ Tamamlandı` etiketi dar hücrede satır
+          kırıyor, görevi sıkıştırıyor ve bazen `Tamaml…` diye kesiliyor
+neden     hücre 200 dp geniş ve üç satır gösteriyor; etiket 12 karakter, yani
+          bir satırın çoğu
+ölçüm     26 karakterlik adı olan tek bir görev tamamlanınca hücre 40 dp → 61 dp;
+          aynı hücredeki ikinci görev üç satırın dışına düşüyor
+```
+
+## Yeni sözleşme  *(PLAN 12.5, koddan önce yazıldı — `2f93147`)*
+
+- Görünür `Tamamlandı` **kelimesi yok**.
+- Tamamlanan görev, temayla uyumlu açık yeşil yüzeyinde kalıyor
+  (`PnpStatus.colors.completedContainer`) ve **adedi de bu yüzeye alındı**: çizilen
+  şey tek ve kompakt bir yüzey, sayının sarktığı bir ad değil. Aynı karakterler,
+  aynı yer — eklenen genişlik yok.
+- Durum yalnız renkle anlatılmıyor: görevin zaten taşıdığı tamamlanma kutusu
+  işaretli çiziliyor. Kutu satırda iş bitmiş olsun olmasın yer ayırdığı için
+  tamamlanmanın **genişlik bedeli sıfır**.
+- Ekran okuyucu durumu yine `tamamlandı` olarak duyuyor: `TaskHandle`'ın
+  `stateDescription`'ı değişmedi, ada katlanmadı.
+- Devam eden görevlerin görünümü, sıralama (devam edenler önce), yeniden açma,
+  tamamlama transaction'ı, geçmiş ve havuz filtreleri **değişmedi**.
+- `cell_task_completed_badge` dizesi ve `Strings.CellTask.completedBadge`
+  kaldırıldı; artık hiçbir yerde kullanılmıyor.
+
+## Testler
+
+```text
+CompactCompletedTaskTest       5  yazılı kelime yok + iki temada durum açıklaması;
+                                  tamamlamak hücreyi büyütmüyor; dar hücrede yanındaki
+                                  iş dışarı itilmiyor; kutu işaretini gerçekten
+                                  çiziyor (piksel); 1100×720 ×1,5 ve 640×460 ×2 ×1,3
+FinishedTaskLookTest           4  çizgi yok, ayrı yüzey, adedin de yüzeyde olması,
+                                  sıra ve belge düzeni, yeniden açmada iz kalmaması
+GameTableLayoutTest           73  kaynak iddiası: etiket dizesi ekranda hiç geçmiyor
+ComposeSceneHarness               yeni `pixels()` — çizilen kareyi PixelMap olarak verir
+```
+
+Dördünün üçü (kelime, hücre yüksekliği, dar hücrede sıkışma) **önce kırmızı**
+koştu ve kusuru birebir gösterdi. Kutu işaretinin ve durum açıklamasının testleri
+kırmızı olamazdı: ikisi de bugün de doğruydu ve yeni kuralın koruması gereken
+şeyler. Bu bilerek böyle raporlanmıştır.
+
+`pixels()` neden gerekli: kutu işaretini çiziyor ve **hiçbir şey söylemiyor**
+(kendi semantiği bilerek temizlenmiş, yoksa her görev iki kez okunurdu). Açıklama,
+metin ve durum bu yüzden onu göremez; yalnız pikseller görebilir.
+
+## Sürüm
+
+`0.1.5` (`ecc9f37`). Sürümün tek kaynağı `app/build.gradle.kts`; paket adları,
+jpackage, PKGBUILD ve yedek belgeleri oradan türer. Room şeması 8, migration yok,
+`1.json`–`8.json` ve `sample-import.xlsx` bayt bayt aynı.
+
+## Bu turda bilinçli olarak yapılmayanlar
+
+- Tema renklerine dokunulmadı: yüzey zaten açık yeşildi (`0xFFD3EFD9` / koyu
+  temada `0xFF1B3A25`).
+- Tamamlanma kutusunun kendi semantiği eklenmedi — bir görevin iki kez okunması
+  ve iki kez Tab durağı olması pahasına gelirdi (PLAN 12.5).
+- İş 13 (temiz Garuda turu) — projenin kalan tek bağlayıcı işi.
 
 ---
 
@@ -6233,7 +6320,10 @@ DraftRemovalFixtures (desktopTest)      her boyutta gerçek inceleme yollarıyla
                                         taslağın kendi satırları çıkarılmış hâli
                                         (withoutDraft); foreign_key_check +
                                         integrity_check; tuzak kurmak için ham SQL
-ComposeSceneHarness                     gerçek Compose sahnesi (desktopTest)
+ComposeSceneHarness                     gerçek Compose sahnesi (desktopTest);
+                                        `pixels()` çizilen kareyi PixelMap olarak
+                                        verir — semantiği olmayan bir çizimin
+                                        (tamamlanma kutusunun işareti) tek kanıtı
 LogHome (desktopTest)                   geçici state evi + gerçek XDG konumlarının
                                         açılmadan öncesi/sonrası karşılaştırması
 FaultyLogFileSystem (desktopTest)       log dosya sistemi arayüzünün önüne konan,
@@ -7459,6 +7549,10 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   İŞ 9 TAMAMLANDI: kabul makineden bağımsızdır (doğru sonuç, 42/1.000+ aynı ifade
   yapısı, N+1 yok, arama/süzgeç 0 ifade, tekrarda aynı sonuç); süre/bellek EŞİK
   EKLEME, yalnız ortamla kayıt; aynı yöntemde 2 kat kötüleşmeyi raporla.
+- TAMAMLANAN GÖREV (v0.1.5, §25.12): hücrede YAZILI bir `Tamamlandı` çizme —
+  etiket dar hücrede satır kırıyordu. Durum, görevin zaten taşıdığı tamamlanma
+  kutusunda (işaretli çizilir) ve `TaskHandle`'ın `stateDescription`'ındadır;
+  yüzey açık yeşildir ve adedi de kapsar. Kutuya kendi semantiğini EKLEME.
 - İŞ 16 TAMAM (§25.8, §25.9): depo https://github.com/Abisiba/pnp-tracker, origin
   SSH, düzeltilmiş **v0.1.3** yayımlandı ve `main` korumalı. `main`'e DOĞRUDAN
   PUSH ETME: PR → `check` → **rebase** merge (doğrusal geçmiş merge commit'e izin
