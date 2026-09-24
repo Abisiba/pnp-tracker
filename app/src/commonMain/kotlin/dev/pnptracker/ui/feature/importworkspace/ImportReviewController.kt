@@ -349,6 +349,16 @@ class ImportReviewController(
             }
         }
 
+    /**
+     * Takes every colour off the form at once.
+     *
+     * The user's own way out of a draft that was given colours while it was
+     * still printing and then aimed somewhere that has none (PLAN 5.10). It is
+     * an edit of the form like any other: nothing is written until they save,
+     * and nothing here decides on their behalf.
+     */
+    fun dropAllColors() = changeForm { form -> if (form.colorIds.isEmpty()) form else form.copy(colorIds = emptyList()) }
+
     fun moveColorUp(slot: Int) = swapColors(slot, slot - 1)
 
     fun moveColorDown(slot: Int) = swapColors(slot, slot + 1)

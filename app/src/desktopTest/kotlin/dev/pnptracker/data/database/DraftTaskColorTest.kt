@@ -5,7 +5,9 @@ import dev.pnptracker.domain.importreview.ImportReviewException
 import dev.pnptracker.domain.importreview.ImportReviewFailure
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.ImportBatchStatus
+import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.SourceColumnType
+import dev.pnptracker.domain.model.TrackingMode
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import kotlin.test.AfterTest
@@ -76,12 +78,15 @@ class DraftTaskColorTest {
         val draftId: EntityId,
     )
 
-    private suspend fun given(status: ImportBatchStatus = ImportBatchStatus.DRAFT): Fixture {
+    private suspend fun given(
+        status: ImportBatchStatus = ImportBatchStatus.DRAFT,
+        poolType: PoolType? = null,
+    ): Fixture {
         val batch = anImportBatch(status = status, rawBlockCount = 1)
         val block = aRawImportBlock(batch.id, rawText = "15 KIRMIZI, 19 YEŞİL")
         importDao.insertBatch(batch)
         importDao.insertRawBlock(block)
-        val draft = aDraftTask(block.id, name = "Kırmızı ev")
+        val draft = aDraftTask(block.id, name = "Kırmızı ev").copy(selectedPoolType = poolType)
         // Written straight in, so a confirmed batch can be given a draft the
         // guarded path would rightly refuse to add.
         importDao.addDraftTask(draft)
@@ -98,6 +103,47 @@ class DraftTaskColorTest {
         colorIds: List<EntityId>,
         clock: Clock = StoppedClock(moment),
     ): Boolean = importDao.setDraftColorsUnderReview(draftId, colorIds, clock)
+
+    @Test
+    fun `a draft in a pool that has no colours cannot be given one`() =
+        runBlocking<Unit> {
+            // PLAN 5.10 gives colours to three dimensional printing alone. The
+            // review screen offers none for the other three pools, so this is
+            // refused at the write rather than left to the screen.
+            listOf(PoolType.CARD, PoolType.BOARD, PoolType.SPECIAL).forEach { poolType ->
+                val fixture = given(poolType = poolType)
+                val grey = colorId("Gri")
+
+                val refusal = assertFailsWith<ImportReviewException> { set(fixture.draftId, listOf(grey)) }
+
+                assertEquals(ImportReviewFailure.COLOR_NOT_ALLOWED_FOR_POOL, refusal.failure, "$poolType took a colour")
+                assertEquals(emptyList(), chosen(fixture.draftId), "$poolType was left holding a colour")
+            }
+        }
+
+    @Test
+    fun `a colour chosen before the pool changed is kept, and can be taken off by hand`() =
+        runBlocking<Unit> {
+            // The way such a draft really comes about: the colour was chosen
+            // while the draft was still printing, and the pool was changed
+            // afterwards. Nothing takes the colour away on its own.
+            val fixture = given()
+            val grey = colorId("Gri")
+            assertTrue(set(fixture.draftId, listOf(grey)))
+
+            importDao.setDraftTargetUnderReview(
+                draftId = fixture.draftId,
+                targetCellId = null,
+                poolType = PoolType.CARD,
+                trackingMode = TrackingMode.PIPELINE,
+                updatedAt = moment,
+            )
+
+            assertEquals(listOf(grey to 0), chosen(fixture.draftId), "changing the pool threw the colour away")
+            // And the user's own way out of it.
+            assertTrue(set(fixture.draftId, emptyList()), "the colour could not be taken off")
+            assertEquals(emptyList(), chosen(fixture.draftId))
+        }
 
     @Test
     fun `a draft with no colours at all is a real answer`() =

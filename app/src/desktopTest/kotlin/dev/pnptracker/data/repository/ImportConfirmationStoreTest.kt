@@ -410,6 +410,41 @@ class ImportConfirmationStoreTest {
         }
 
     @Test
+    fun `a draft carrying a colour its pool cannot hold stops the whole batch`() =
+        runBlocking {
+            // How such a draft really comes about: the colour was chosen while
+            // it was still printing, and the pool was changed afterwards. PLAN
+            // 5.10 gives colours to printing alone, so confirming would have to
+            // write a card task with a colour or quietly drop what the user
+            // chose. It does neither.
+            val fixture = given(draftCount = 1)
+            val grey = assertNotNull(database.colorDao().resolve("Gri")).id
+            database.importDao().setDraftColorsUnderReview(fixture.draftOneId, listOf(grey), StoppedClock(moment))
+            store.aimDraft(fixture.draftOneId, fixture.cardCellId, PoolType.CARD, TrackingMode.PIPELINE)
+            val before = snapshot(fixture.batchId, fixture.gameId)
+
+            val refusal =
+                assertFailsWith<ImportConfirmationException> {
+                    store.confirm(fixture.batchId, acknowledgeUnprocessedBlocks = false)
+                }
+
+            assertEquals(ImportConfirmationFailure.COLOR_NOT_ALLOWED_FOR_POOL, refusal.failure)
+            assertEquals(before, snapshot(fixture.batchId, fixture.gameId), "a refused confirmation wrote something")
+            assertTrue(tasks().isEmpty(), "a task was made out of a draft that contradicts itself")
+
+            // Taking the colour off by hand is the whole of what it takes.
+            database.importDao().setDraftColorsUnderReview(fixture.draftOneId, emptyList(), StoppedClock(moment))
+
+            store.confirm(fixture.batchId, acknowledgeUnprocessedBlocks = false)
+
+            assertEquals(1, tasks().size, "the import could not be confirmed once the colour was gone")
+            assertTrue(
+                database.taskColorDao().colorsOfTask(tasks().single().id).isEmpty(),
+                "the card task was written with a colour after all",
+            )
+        }
+
+    @Test
     fun `deleting the only game leaves nowhere to put a task, and the import says so`() =
         runBlocking {
             val fixture = given(draftCount = 1)

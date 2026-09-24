@@ -78,6 +78,17 @@ enum class ImportConfirmationFailure {
     COLOR_NO_LONGER_AVAILABLE,
 
     /**
+     * A draft carries a colour the pool it is aimed at cannot hold.
+     *
+     * PLAN 5.10 gives colours to three dimensional printing alone. Such a draft
+     * comes about when the colour was chosen while it was still printing and the
+     * pool was changed afterwards; confirming would have to write a colour onto
+     * work that has none, or throw away what the user chose. It does neither and
+     * stops instead, so the choice can be taken off by hand.
+     */
+    COLOR_NOT_ALLOWED_FOR_POOL,
+
+    /**
      * A draft's text selection no longer fits the cell it came from.
      *
      * The raw text is never rewritten, so this is a draft whose cell has gone —

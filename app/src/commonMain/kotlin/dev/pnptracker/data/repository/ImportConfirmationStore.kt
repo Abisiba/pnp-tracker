@@ -34,6 +34,7 @@ import dev.pnptracker.domain.model.HintDecision
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.rules.poolHoldsColors
 import dev.pnptracker.domain.text.graphemeBoundariesOf
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -180,6 +181,9 @@ class ImportConfirmationStore(
                             ImportConfirmationFailure.COMPLETION_HINT_UNDECIDED
 
                         chosen.any { it !in catalogue } -> ImportConfirmationFailure.COLOR_NO_LONGER_AVAILABLE
+                        chosen.isNotEmpty() && draft.selectedPoolType?.let { !poolHoldsColors(it) } == true ->
+                            ImportConfirmationFailure.COLOR_NOT_ALLOWED_FOR_POOL
+
                         !selectionStillFits(draft, block, boundaries) ->
                             ImportConfirmationFailure.SELECTION_NO_LONGER_FITS
 
