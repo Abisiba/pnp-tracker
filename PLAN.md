@@ -1303,11 +1303,20 @@ Tamamlanan görev:
 - Aktif üretim havuzundan çıkar.
 - Üstü çizili **gösterilmez**. Üstü çizili metin okunmayı zorlaştırıyordu ve
   durumu yalnız tek bir işaretle anlatıyordu.
-- Temayla uyumlu, açık seçik farklı bir arka planla çizilir; yanında bir onay
-  simgesi ve dolu bir `Tamamlandı` etiketi bulunur. Durum yalnız renkle
-  anlatılmaz: simge ve yazı da vardır, ikisi de açık ve koyu temada okunur.
+- Temayla uyumlu, açık yeşil tonlu ve **kompakt** bir görev yüzeyi üzerinde
+  çizilir. Yüzey görevin kendi genişliğidir; adın, adedin ve renklerin
+  kullanabileceği yeri daraltmaz.
+- Görünür bir `Tamamlandı` **kelimesi çizilmez**. Etiket, dar hücrede satır
+  kırıp görevi sıkıştırıyor ve bazı durumlarda kendisi de kesiliyordu; okunur
+  kalması gereken şey adın, adedin ve renklerin kendisidir.
+- Durum yalnız renge bağlı değildir: görevin zaten taşıdığı tamamlanma kutusu
+  işaretli çizilir ve onay simgesi görünür kalır. Kutu görevin yanında her
+  hâlükârda yer tuttuğu için tamamlanma bir genişlik bedeli getirmez.
+- Ekran okuyucu görevin durumunu `Tamamlandı` olarak duymaya devam eder: durum,
+  görevin kendi düğümünde bir durum açıklamasıdır ve adın içine katlanmaz.
 - Görev adı, gerekli adedi ve varsa 3D renkleri okunabilir kalır; renk bilgisi
   tamamlanma görünümü uğruna kaybolmaz.
+- Devam eden görevlerin görünümü bundan etkilenmez.
 - Aynı hücrede devam eden görevler önce, tamamlanan görevler sonra çizilir.
   Bu yalnız okuma yüzeyinin sırasıdır: hücrenin belgesi (`5.5`) ve parçaların
   `orderIndex` düzeni değişmez, hücre düzenlemeye açıldığında kullanıcı yazdığı
@@ -3344,7 +3353,7 @@ Ek olarak Faz 2 içinde tamamlanacak yardımcı işler:
 - Bitmemiş iş yokken onay sorulmadan tamamlanması
 - Tamamlanmış oyunda eksik parça bildiriminin oyunu yeniden açması
 - Yeniden açılmanın diğer tamamlanmış görevleri etkilememesi
-- Tamamlanan görevin hücrede tikli ve üstü çizili kalması
+- Tamamlanan görevin hücrede tikli kalması ve tamamlanma yüzeyiyle çizilmesi (`12.5`)
 - Arama ve filtrelerin Türkçe karakterlerle çalışması
 
 #### Faz 2 tamamlanma ölçütü
@@ -3780,7 +3789,7 @@ Beklenti:
 - Oyun tablosu ve üç global görünüm
 - Ana sayfa havuz özetleri
 - Özel havuzun koşullu görünmesi
-- Inline `TaskSegment` görünümü, tik ve üstü çizili metin
+- Inline `TaskSegment` görünümü, tik ve tamamlanan görevin yüzeyi
 - Kelimeye çapalı popover
 - `Renk seçilecek` görev bölümü
 - Renk çarkı ve isim zorunluluğu
@@ -3889,7 +3898,7 @@ içermelidir.
 - Kullanıcı hücre metnini seçerek elle görevlere ayırabilir ve bir görevi metne geri döndürebilir.
 - `**`, yeşil hücre ve belirsiz renk ipuçları kullanıcı onayıyla işlenir.
 - Bilinmeyen renk/adet ve sınıflandırılmamış işler kaybolmaz.
-- Tamamlanan görev aktif havuzdan çıkar; hücrede tikli ve üstü çizili kalır, oyun ve geçmişte durur.
+- Tamamlanan görev aktif havuzdan çıkar; hücrede tikli ve tamamlanma yüzeyiyle kalır, oyun ve geçmişte durur.
 - Sürümlü JSON yedekleme ve geri yükleme doğrulanmıştır: yedek bütün uygulama verisini taşır, geri yükleme tek transaction'dır, öncesinde güvenlik yedeği alınır ve bozuk veya desteklenmeyen bir yedek hiçbir şey yazmadan reddedilir.
 - Otomatik snapshot doğrulanmıştır: her içe aktarma onayı ve her migration öncesinde alınır, alınamazsa işlem hiç başlamaz, tür başına döngüsel olarak saklanır ve saklanacak sayı `Ayarlar` ekranından değiştirilebilir.
 - Şema migrationları testlidir.
