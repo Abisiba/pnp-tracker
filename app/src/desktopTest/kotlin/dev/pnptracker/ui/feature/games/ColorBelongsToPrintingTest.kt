@@ -27,8 +27,16 @@ import kotlin.test.fail
  * holding, in each of the four columns.
  */
 class ColorBelongsToPrintingTest {
+    /**
+     * Renders until [done] holds, saying what it was waiting on if it never does.
+     *
+     * [detail] is read only when the wait runs out, and is where a test says
+     * what it would need to know to explain the failure: a wait for a panel that
+     * refused to open cannot be explained by "it did not open".
+     */
     private fun ComposeSceneHarness.settle(
         what: String,
+        detail: () -> String = { "" },
         done: () -> Boolean,
     ) {
         repeat(200) {
@@ -36,7 +44,15 @@ class ColorBelongsToPrintingTest {
             if (done()) return
             Thread.sleep(10)
         }
-        fail("never happened: $what")
+        fail("never happened: $what${detail()}")
+    }
+
+    /** What the table is in the middle of, in words safe to print. */
+    private fun whatIsOpen(table: GameTableController): String {
+        val work = table.state.work
+        val editor = work as? CellWork.WritingText
+        return "; the work is ${work?.let { it::class.simpleName } ?: "nothing"}" +
+            ", unsaved=${editor?.hasUnsavedChanges}, refused=${editor?.selectionFailure}"
     }
 
     /** A game with [text] in the column named, and the task window open over it. */
@@ -60,10 +76,16 @@ class ColorBelongsToPrintingTest {
         render()
         runBlocking { table.saveEditing() }
         settle("the word is stored") { stack.piecesOf(gameId, columnType).any { it.text == text } }
+        // Waited for rather than assumed: the panel refuses to open over an
+        // editor with unsaved changes, so opening one over the editor that was
+        // still there would refuse for a reason the test never asked about.
+        settle("the editor closes after the save", { whatIsOpen(table) }) { table.state.work == null }
         table.beginEditing(gameId, columnType)
-        settle("the editor opens again") { table.state.work is CellWork.WritingText }
+        settle("the editor opens again on the stored word", { whatIsOpen(table) }) {
+            (table.state.work as? CellWork.WritingText)?.let { it.originalText == text && !it.hasUnsavedChanges } == true
+        }
         table.beginTaskComposer(0, text.length)
-        settle("the window opens") { table.state.work is CellWork.MakingTask }
+        settle("the window opens", { whatIsOpen(table) }) { table.state.work is CellWork.MakingTask }
         settle("the colours are read") { table.state.colors.isNotEmpty() }
         return gameId
     }
