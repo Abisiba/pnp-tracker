@@ -18,8 +18,10 @@ import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.unit.Density
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.InternalCoroutinesApi
 import kotlinx.coroutines.yield
+import kotlin.coroutines.CoroutineContext
 
 /**
  * A real Compose composition, off screen, that real key strokes can be sent to.
@@ -42,16 +44,19 @@ class ComposeSceneHarness(
     density: Density = Density(1f),
     content: @Composable () -> Unit,
 ) : AutoCloseable {
+    /** The queue this thread's screens run their own work from; see [UiQueue]. */
+    private val ui = UiQueue.ofThisThread()
+
     private val scene =
         ImageComposeScene(
             width = width,
             height = height,
             density = density,
-            // Unconfined, so an effect a composable launches — the screen
-            // collecting its own table, a string resource being read — runs on
-            // the thread that rendered the frame rather than waiting for a
-            // dispatcher nothing in a test is turning.
-            coroutineContext = Dispatchers.Unconfined,
+            // Everything this screen launches — the screen collecting its own
+            // table, a string resource being read — is queued here and run on
+            // the thread driving the harness, which is the one thread the whole
+            // screen lives on. See [UiQueue] for why it is not `Unconfined`.
+            coroutineContext = ui,
             content = content,
         )
 
@@ -67,8 +72,13 @@ class ComposeSceneHarness(
 
     /** Advances a frame, which is what makes a change actually take effect. */
     fun render() {
+        // Before and after: before, so the frame is drawn from work that had
+        // already arrived, and after, so what this frame launched has run by the
+        // time the test looks.
+        ui.drain()
         clock += FRAME_NANOSECONDS
         scene.render(clock).close()
+        ui.drain()
     }
 
     /**
@@ -80,6 +90,7 @@ class ComposeSceneHarness(
      * whether the mark is really there — only the pixels can.
      */
     fun pixels(): PixelMap {
+        ui.drain()
         clock += FRAME_NANOSECONDS
         val image = scene.render(clock)
         return try {
@@ -243,8 +254,17 @@ class ComposeSceneHarness(
         return handled
     }
 
-    /** Every semantics node the scene really has, merged as a reader sees them. */
-    fun nodes(): List<SemanticsNode> = scene.semanticsOwners.flatMap { owner -> owner.rootSemanticsNode.flattened() }
+    /**
+     * Every semantics node the scene really has, merged as a reader sees them.
+     *
+     * Drains first, because every question a test asks about the screen comes
+     * through here, and the answer should include work that had already arrived
+     * — exactly as a UI thread would have run it before anybody could look.
+     */
+    fun nodes(): List<SemanticsNode> {
+        ui.drain()
+        return scene.semanticsOwners.flatMap { owner -> owner.rootSemanticsNode.flattened() }
+    }
 
     private fun SemanticsNode.flattened(): List<SemanticsNode> = listOf(this) + children.flatMap { it.flattened() }
 
@@ -313,13 +333,89 @@ class ComposeSceneHarness(
         return done
     }
 
-    override fun close() = scene.close()
+    override fun close() {
+        // The queue is the thread's and not this screen's, so nothing is thrown
+        // away here: another screen may still be open on it. Closing cancels
+        // this composition, and work of its own that is still queued resumes
+        // into that cancellation the next time the queue is drained.
+        scene.close()
+    }
 
     private companion object {
         const val FRAME_NANOSECONDS = 16_000_000L
 
         /** Longer than Compose's own minimum between two taps, shorter than its timeout. */
         const val DOUBLE_CLICK_GAP_MILLISECONDS = 60L
+    }
+}
+
+/**
+ * The one thread a screen's own work runs on: the one driving the harness.
+ *
+ * The application has a single UI thread. The composition, the effects a
+ * composable launches, the flow a screen collects and every controller call a
+ * control makes all run on it, so no two of them are ever part way through at
+ * once — which is what makes a controller that reads its state, copies it and
+ * writes the copy back safe.
+ *
+ * Tests used to give the scene `Dispatchers.Unconfined`, which keeps none of
+ * that: it resumes work wherever it was woken, so a flow emitting from a
+ * database thread ran the collector *on that thread*, beside a test driving the
+ * same controller from its own. Two threads, one read-modify-write. Measured on
+ * this machine with the table emitting while a cell was saved: a finished save
+ * was undone in 482,772 of 17,361,598 attempts — about three in a hundred — and
+ * every time it left the editor open over the words it had just stored, which is
+ * exactly how the runner failed twice.
+ *
+ * So this is the same bargain the application's own dispatcher makes. Work woken
+ * on the harness's own thread runs there and then, which is what keeps a frame
+ * whole: Compose recomposes from inside `render`, when the frame clock ticks, and
+ * a recomposition put off until afterwards would draw the frame before it. Work
+ * woken on any other thread is queued and run on the harness's thread instead,
+ * in the order it arrived, the way a screen hands a reading to the UI thread.
+ *
+ * Nothing here owns a thread of its own, so a closed harness leaves nothing
+ * behind to join and nothing to leak.
+ */
+private class UiQueue private constructor(
+    private val owner: Thread,
+) : CoroutineDispatcher() {
+    private val queued = ArrayDeque<Runnable>()
+
+    /** Only work from somewhere else has to be handed over; see the class note. */
+    @OptIn(InternalCoroutinesApi::class)
+    override fun isDispatchNeeded(context: CoroutineContext): Boolean = Thread.currentThread() != owner
+
+    override fun dispatch(
+        context: CoroutineContext,
+        block: Runnable,
+    ) {
+        // Called from any thread — a database thread resuming a collector, for
+        // one — and run from only one, so the queue itself is the handover.
+        synchronized(queued) { queued.addLast(block) }
+    }
+
+    /** Runs everything waiting, and anything that queues in its turn. */
+    fun drain() {
+        while (true) {
+            val next = synchronized(queued) { queued.removeFirstOrNull() } ?: return
+            next.run()
+        }
+    }
+
+    companion object {
+        private val ofThread = ThreadLocal.withInitial { UiQueue(Thread.currentThread()) }
+
+        /**
+         * The queue belonging to the thread asking, made once.
+         *
+         * One per thread rather than one per screen, because the application has
+         * one UI thread and not one per window: a test that holds two screens
+         * open at once — the table underneath, a pool over it — has both of them
+         * running their work on the thread it drives, so rendering either must
+         * run whatever had arrived for both.
+         */
+        fun ofThisThread(): UiQueue = ofThread.get()
     }
 }
 
