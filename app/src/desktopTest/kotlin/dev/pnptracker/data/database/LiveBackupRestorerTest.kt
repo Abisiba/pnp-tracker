@@ -277,6 +277,12 @@ class LiveBackupRestorerTest {
         assertNull(LiveBackupRestorer(database).restore(backup, aSafetySnapshot(before)))
         return driver
             .stop()
+            // Laid out on one line first. A DAO query is written across several
+            // lines in its own source, so its text arrives beginning with a
+            // newline and an indent, and a filter looking for `SELECT` at the very
+            // first character passed silently over every one of them — including
+            // the per-row reads an N+1 would show up as.
+            .map { statement -> statement.trim().replace(RUN_OF_SPACE, " ") }
             .filter { it.startsWith("SELECT") || it.startsWith("INSERT") || it.startsWith("DELETE") }
             // Room's own bookkeeping is left out, and only that: see
             // [FRAMEWORK_OWN_TABLES].

@@ -235,6 +235,10 @@ class TemporaryBackupProbeTest {
             // reads, whatever the rows number.
             val reads = large.keys.filter { it.startsWith("SELECT * FROM") }
             assertEquals(15, reads.size, "reading it back is meant to be one query per table: $reads")
+            assertTrue(
+                large.filterKeys { it in reads }.values.all { it == 1 },
+                "a table was read more than once, which is where an N+1 hides: $large",
+            )
             val clears = large.keys.filter { it.startsWith("DELETE") }
             assertEquals(15, clears.size, "emptying it is meant to be one statement per table: $clears")
         }
@@ -258,6 +262,12 @@ class TemporaryBackupProbeTest {
         )
         return driver
             .stop()
+            // Laid out on one line first. A DAO query is written across several
+            // lines in its own source, so its text arrives beginning with a
+            // newline and an indent, and a filter that looked for `SELECT` at the
+            // very first character passed silently over every one of them — the
+            // reads that would show an N+1 among them.
+            .map { statement -> statement.trim().replace(RUN_OF_SPACE, " ") }
             .filter { it.startsWith("SELECT") || it.startsWith("INSERT") || it.startsWith("DELETE") }
             .filterNot { statement -> FRAMEWORK_OWN_TABLES.any { it in statement } }
             .groupingBy { statement -> statement.take(40) }

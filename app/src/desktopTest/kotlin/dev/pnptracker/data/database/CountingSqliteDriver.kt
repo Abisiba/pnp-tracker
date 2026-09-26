@@ -103,3 +103,6 @@ class CountingSqliteDriver(
  * can never disappear behind the filter.
  */
 internal val FRAMEWORK_OWN_TABLES = listOf("room_master_table", "room_table_modification_log", "sqlite_master")
+
+/** Any run of whitespace, so a query written across several lines reads as one. */
+internal val RUN_OF_SPACE = Regex("\\s+")
