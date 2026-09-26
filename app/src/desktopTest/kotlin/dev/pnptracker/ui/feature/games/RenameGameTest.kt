@@ -189,7 +189,12 @@ class RenameGameTest {
                 stack.table.editGameRename("  Harmoies  ")
                 screen.render()
                 screen.press(Key.Enter)
-                screen.render()
+                // Waited for rather than counted in frames: the save runs out to
+                // the database and comes back on a thread of its own, so a frame
+                // is not a promise that it has been. Waiting also puts the reading
+                // below *after* the attempt instead of possibly racing it, which
+                // is the only way "nothing was written" means anything.
+                screen.settle("the editor closes over a name that needed no writing") { stack.table.state.rowWork == null }
 
                 val after = runBlocking { stack.database.gameDao().activeGameById(gameId) }
                 assertNull(stack.table.state.rowWork, "the editor stayed open over a name that needed no writing")
