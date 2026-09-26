@@ -206,33 +206,48 @@ class TemporaryBackupProbeTest {
         }
 
     @Test
-    fun `a large backup runs the same kinds of statement as a small one, only more inserts`() =
+    fun `a large backup runs the same statements of its own as a small one, only more inserts`() =
         runBlocking<Unit> {
-            // What must not grow is the shape of the work: one statement per table
-            // however many rows there are, and no reading back row by row. The
-            // number of inserts grows with the rows, and that is what an insert is.
+            // What must not grow is the shape of the probe's own work: one
+            // statement per table however many rows there are, and no reading
+            // back row by row. The number of inserts grows with the rows, and
+            // that is what an insert is.
+            //
+            // "Of its own" is the whole of the difference between this test and a
+            // count of everything the database saw. Room runs statements of its
+            // own against the same connection, on its own schedule, and how many
+            // times it gets to is the machine's business (see [shapeOf]). The
+            // rule being measured here is not weakened by leaving those out —
+            // every statement the backup pipeline itself issues is still counted,
+            // still compared kind by kind, and still compared count by count.
             val small = shapeOf(aWholeBackup())
             val large = shapeOf(oneThousandTasks())
 
-            assertEquals(small.keys, large.keys, "a bigger backup ran a different kind of statement")
+            assertEquals(small.keys, large.keys, "a bigger backup ran a different kind of statement of its own")
             assertEquals(
                 small.filterKeys { !it.startsWith("INSERT") },
                 large.filterKeys { !it.startsWith("INSERT") },
-                "something other than the inserts grew with the data",
+                "something other than the inserts grew in the probe's own work",
             )
             val insertedTasks = large.entries.single { it.key.startsWith("INSERT INTO tasks") }.value
             assertTrue(insertedTasks > 1_000, "the large backup did not write its tasks: $insertedTasks")
-            // Room asks its own questions when it opens a database — the schema
-            // hash, the modification log — and those are counted above by the
-            // equality; what matters here is that reading the data back is one
-            // query per table and never one per row.
-            val reads = large.keys.filter { it.startsWith("SELECT * FROM") && "room_" !in it }
+            // One query per table and never one per row: fifteen tables, fifteen
+            // reads, whatever the rows number.
+            val reads = large.keys.filter { it.startsWith("SELECT * FROM") }
             assertEquals(15, reads.size, "reading it back is meant to be one query per table: $reads")
             val clears = large.keys.filter { it.startsWith("DELETE") }
             assertEquals(15, clears.size, "emptying it is meant to be one statement per table: $clears")
         }
 
-    /** What was run against the database, and how often, while the probe worked. */
+    /**
+     * What the probe itself ran against the database, and how often.
+     *
+     * Room's own bookkeeping is left out, and only that: the tables named in
+     * [FRAMEWORK_OWN_TABLES] belong to the framework and to SQLite, never to this
+     * application, and how many times they are read says how busy the machine was.
+     *
+     * Everything the probe itself issues stays in, statement by statement.
+     */
     private suspend fun shapeOf(data: BackupData): Map<String, Int> {
         val driver = CountingSqliteDriver()
         val root = directory()
@@ -244,6 +259,7 @@ class TemporaryBackupProbeTest {
         return driver
             .stop()
             .filter { it.startsWith("SELECT") || it.startsWith("INSERT") || it.startsWith("DELETE") }
+            .filterNot { statement -> FRAMEWORK_OWN_TABLES.any { it in statement } }
             .groupingBy { statement -> statement.take(40) }
             .eachCount()
     }
