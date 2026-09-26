@@ -278,12 +278,9 @@ class LiveBackupRestorerTest {
         return driver
             .stop()
             .filter { it.startsWith("SELECT") || it.startsWith("INSERT") || it.startsWith("DELETE") }
-            // Room's own bookkeeping is left out. It asks the modification log
-            // and the master table its own questions, on its own schedule — the
-            // refresh after a write is started in the background — so counting
-            // them would measure when this machine happened to run them rather
-            // than what the restore does.
-            .filter { "room_" !in it && "sqlite_master" !in it }
+            // Room's own bookkeeping is left out, and only that: see
+            // [FRAMEWORK_OWN_TABLES].
+            .filterNot { statement -> FRAMEWORK_OWN_TABLES.any { it in statement } }
             .groupingBy { statement -> statement.take(40) }
             .eachCount()
     }

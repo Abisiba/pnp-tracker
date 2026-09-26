@@ -86,3 +86,20 @@ class CountingSqliteDriver(
         }
     }
 }
+
+/**
+ * The tables the framework keeps for itself, named one by one on purpose.
+ *
+ * Room reads its schema identity from `room_master_table` when it opens a
+ * database, its invalidation tracker reads `room_table_modification_log` on its
+ * own schedule — the refresh after a write is started in the background — and
+ * `sqlite_master` is SQLite's own catalogue. None of them is a table this
+ * application has, and how many times any of them is read says how busy the
+ * machine was, not what the code did: a runner slower than a desk read the
+ * tracker's log twice where the same work read it once, and failed a release for
+ * it.
+ *
+ * Named rather than matched by a prefix, so a statement of the application's own
+ * can never disappear behind the filter.
+ */
+internal val FRAMEWORK_OWN_TABLES = listOf("room_master_table", "room_table_modification_log", "sqlite_master")
