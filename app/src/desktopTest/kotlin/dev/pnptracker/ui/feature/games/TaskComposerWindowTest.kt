@@ -54,12 +54,33 @@ class TaskComposerWindowTest {
         fail("never happened: $what${detail()}")
     }
 
-    /** What the table is in the middle of, in words safe to print. */
-    private fun whatIsOpen(table: GameTableController): String {
+    /**
+     * What the table is in the middle of, in words safe to print.
+     *
+     * Structure only — the kind of work, the flags on it, and the names of the
+     * refusals, which are a fixed vocabulary. Nothing the user typed, nothing
+     * with an identity in it: a message that named a game or a cell would put a
+     * person's own words in a build log to explain a test.
+     *
+     * [storedReachedExpected] is the one thing about the database worth saying
+     * here: whether the words the editor was saving are in the cell now. A save
+     * that stored them and an editor that still calls itself unsaved cannot both
+     * be right, and knowing which is the difference between a defect in the
+     * transaction and a defect in how the screen was driven.
+     */
+    private fun whatIsOpen(
+        table: GameTableController,
+        storedReachedExpected: Boolean,
+    ): String {
         val work = table.state.work
         val editor = work as? CellWork.WritingText
         return "; the work is ${work?.let { it::class.simpleName } ?: "nothing"}" +
-            ", unsaved=${editor?.hasUnsavedChanges}, refused=${editor?.selectionFailure}"
+            ", isSaving=${editor?.isSaving}" +
+            ", unsaved=${editor?.hasUnsavedChanges}" +
+            ", failure=${editor?.failure?.name ?: "none"}" +
+            ", refused=${editor?.selectionFailure?.name ?: "none"}" +
+            ", blockedByEditor=${table.state.blockedByEditor}" +
+            ", storedReachedExpected=$storedReachedExpected"
     }
 
     /** A game with [text] written in the column named, and the panel open over all of it. */
@@ -82,17 +103,18 @@ class TaskComposerWindowTest {
         table.editCellText(text)
         render()
         runBlocking { table.saveEditing() }
-        settle("the word is stored") { stack.piecesOf(gameId, columnType).any { it.text == text } }
+        val stored = { stack.piecesOf(gameId, columnType).any { it.text == text } }
+        settle("the word is stored") { stored() }
         // Waited for rather than assumed: the window refuses to open over an
         // editor with unsaved changes, so opening one over the editor that was
         // still there would refuse for a reason the test never asked about.
-        settle("the editor closes after the save", { whatIsOpen(table) }) { table.state.work == null }
+        settle("the editor closes after the save", { whatIsOpen(table, stored()) }) { table.state.work == null }
         table.beginEditing(gameId, columnType)
-        settle("the editor opens again on the stored word", { whatIsOpen(table) }) {
+        settle("the editor opens again on the stored word", { whatIsOpen(table, stored()) }) {
             (table.state.work as? CellWork.WritingText)?.let { it.originalText == text && !it.hasUnsavedChanges } == true
         }
         table.beginTaskComposer(0, text.length)
-        settle("the window opens", { whatIsOpen(table) }) { table.state.work is CellWork.MakingTask }
+        settle("the window opens", { whatIsOpen(table, stored()) }) { table.state.work is CellWork.MakingTask }
         settle("the colours are read") { table.state.colors.isNotEmpty() }
         return gameId
     }
