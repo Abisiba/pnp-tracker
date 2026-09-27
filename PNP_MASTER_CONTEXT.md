@@ -7,19 +7,20 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** **Tamamlanan görevin kompakt görünümü ve sürüm 0.1.5.**
-> Gerçek kullanım, dört değişiklikten üçünü onayladı ve dördüncüsünde bir kusur
-> buldu: `✓ Tamamlandı` etiketi 200 dp genişliğindeki hücrede satır kırıyor,
-> görevin adını ve adedini aşağı itiyor, yanındaki işi hücrenin gösterdiği üç
-> satırın dışına atıyor ve bazen kendisi `Tamaml…` diye kesiliyordu (ölçüldü: tek
-> bir tamamlanmış görevde hücre 40 dp'den 61 dp'ye çıkıyor). Etiket kaldırıldı.
-> Kalanlar: görevin zaten çizildiği açık yeşil yüzey — artık adedi de üstünde,
-> yani tek ve kompakt bir yüzey — ve görevin zaten taşıdığı tamamlanma kutusu;
-> kutu iş bitmiş olsun olmasın yerini ayırdığı için tamamlanmanın genişlik bedeli
-> **sıfırdır**. Durum ekran okuyucuya yine görevin kendi durum açıklamasıyla
-> söyleniyor. PLAN 12.5 koddan önce düzeltildi ve üç eski "üstü çizili" satırı da
-> bu kararla hizalandı. Sürüm `0.1.5`. Tam koşu 3809 / 0 / 0 / 0 (281 sınıf).
-> Ayrıntı §25.12.
+> **Son güncelleme:** **v0.1.7 yayımlandı — ve yayımlanabilmesi için testlerin
+> zamana dayalı üç varsayımı ayıklandı.** Tamamlanan görevin kompakt görünümü
+> (§25.12) `0.1.5` olarak etiketlendi, ama yayın koşusu iki kez düştü; `0.1.6`
+> olarak etiketlendi, bir kez daha düştü. Üç düşüşün hiçbiri üretimde değildi:
+> üçü de **testin kendi denetiminde olmayan bir olayın zamanını, sayısını ya da
+> sırasını sabit kabul etmesiydi**. Etiket taşınmadığı için iş `0.1.7` olarak
+> çıktı; `v0.1.5` ve `v0.1.6` yayımlanmamış tarihsel etiket olarak kendi
+> commit'lerinde kaldı (`v0.1.0` ve `v0.1.2` gibi). Bu turda paket bütün test
+> paketi bu kusur sınıfı için **sistematik olarak tarandı** (317 dosya), üç
+> kanıtlanmış kusur düzeltildi, biri kanıt yetersizliğinden açık sınır olarak
+> bırakıldı. Etiketten önce yayın yolu `workflow_dispatch` ile baştan sona
+> denendi: `verify` ve `package` yeşil, `publish` atlandı, hiçbir şey
+> yayımlanmadı. Gerçek yayın ve varlıkların depo dışı doğrulaması §25.13'tedir.
+> Tam koşu 3811 / 0 / 0 / 0 (282 sınıf).
 >
 > Daha önce: **Dört kullanılabilirlik değişikliği + içe aktarmadaki renk
 > açığının kapatılması (sürüm yükseltilmedi, yayın yapılmadı).** (1) Görev oluşturma paneli hücrenin içinden çıkarıldı:
@@ -214,33 +215,55 @@ Aşağıdaki değerler bu dosya commit edilmeden hemen önce repo üzerinde
 doğrulanmıştır.
 
 ```text
-branch                : fix/compact-completed-task → main (korumalı: PR + check zorunlu)
+branch                : docs/record-0-1-7 → main (korumalı: PR + check zorunlu)
 başlangıç HEAD        : e51d173 (docs: record how the import colour gap was closed)
-bu turun commit'leri  : 2f93147 docs(plan): write down the finished task without its word
-                        66e0b62 feat(games): show a finished task without spending a line on it
-                        ecc9f37 build: raise the version to 0.1.5
+0.1.5 turunun işi     : 3c186b6 docs(plan): write down the finished task without its word
+                        6943573 feat(games): show a finished task without spending a line on it
+                        cf67ba0 build: raise the version to 0.1.5
+                        4906b52 docs: record the compact finished task and the 0.1.5 checkpoint
+test kararlılığı      : 3ea1cae test(ui): wait on what the screen did, not on a number of frames        (PR #8)
+                        538ef5c test(ui): expose task editor state when synchronization fails           (PR #10)
+                        67dd7e1 test(ui): run scene interactions on one UI dispatcher                   (PR #10)
+                        3fa5de3 test(backup): ignore Room bookkeeping in statement shape checks         (PR #12)
+                        cb116c6 test(backup): count the queries written across several lines too        (PR #12)
+                        f4083dc test(games): wait for the rename to come back before reading the row    (PR #12)
+sürüm commit'leri     : 890b04f build: raise the version to 0.1.6   (etiketlendi, yayın koşusu düştü)
+                        5a166d2 build: raise the version to 0.1.7   (YAYIMLANDI)
                         (+ bu belge commit'i)
-sürüm                 : 0.1.5   YÜKSELTİLDİ (tek kaynak app/build.gradle.kts)
-yayınlar              : v0.1.4 → 7ae6287 YAYIMLANDI; v0.1.5 etiketi bu belge
-                        yazılırken HENÜZ YOK — merge edilmiş main'e atılacak
+sürüm                 : 0.1.7   (tek kaynak app/build.gradle.kts)
+yayınlar              : v0.1.7 → 5a166d2 YAYIMLANDI ve **latest**
+                        v0.1.4 → 7ae6287 YAYIMLANDI (dokunulmadı; 8 varlığın adı,
+                        boyutu, SHA-256'sı ve zaman damgası bu turdan önce
+                        kaydedilip sonra birebir doğrulandı)
+                        v0.1.5 → 4906b52 ve v0.1.6 → 890b04f: etiket var, yayın
+                        ve asset YOK — yayımlanmamış tarihsel etiketler
+                        (v0.1.0 ve v0.1.2 gibi); taşınmadı, silinmedi
+yayın provası         : run 36301981842 (workflow_dispatch, main 5a166d2):
+                        verify + package yeşil, publish ATLANDI, release/asset
+                        oluşmadı — etiket ondan sonra atıldı
+gerçek yayın koşusu   : run 36302651254 (push v0.1.7): üç iş de yeşil
 Room şema sürümü      : 8   (DEĞİŞMEDİ)
 şema dosyaları        : 1.json … 8.json ve sample-import.xlsx bayt bayt aynı
-PLAN.md               : DEĞİŞTİ — 12.5 tamamlanan görevin görünümü; üç eski
-                        "üstü çizili" satırı hizalandı (dec7e411… → e3d6c995…)
-test durumu           : tam koşu 3809 / 0 / 0 / 0 (281 sınıf); ktlintCheck temiz;
+PLAN.md               : DEĞİŞMEDİ (e3d6c995…) — bu turda yalnız test kodu ve
+                        sürüm satırı değişti
+test durumu           : tam koşu 3811 / 0 / 0 / 0 (282 sınıf); ktlintCheck temiz;
                         git diff --check temiz
-smoke                 : desktopWindowSmoke geçici HOME/XDG ile PASSED (tek pencere,
-                        çıkış kodu 0, arkada süreç yok)
-paket smoke'ları      : bu turda yerelde koşulmadı; paketleri yayın akışı üretir ve
-                        verifyLinuxPackage + verifyArchPackage orada çalışır
+smoke                 : desktopWindowSmoke bu turda KOŞULMADI ve gerekmiyordu —
+                        test turlarının tamamı yalnız app/src/desktopTest altında
+                        kaldı, üretim baytları değişmedi (§25.13)
+paket doğrulaması     : yayımlanmış Arch paketine karşı verifyArchPackage geçti
+                        (29 ELF, 26 kütüphane, 172 paketlik bağımlılık kapanışı)
 gerçek sistem         : kurulum yapılmadı, sudo kullanılmadı; bütün testler geçici
                         veritabanlarında koştu ve gerçek uygulama dosyasının
                         dokunulmadığını doğruladı
 ```
 
-**Bu commit bağımlılık kusurunu, denetimini ve düzeltilmiş yayını kaydeder.**
-İş 13 **TAMAMLANMADI**: temiz Garuda turu **`v0.1.3`** paketiyle yapılacaktır
-(§25.9, §33 R6). Projenin kalan tek bağlayıcı işi odur.
+**Bu commit iki düşen yayını, kök nedenlerini, paketin sistematik taramasını,
+etiketten önceki yayın provasını ve gerçek `v0.1.7` yayınını kaydeder (§25.13).**
+İş 13 **TAMAMLANMADI**: temiz Garuda turu hâlâ yapılmadı ve projenin kalan tek
+bağlayıcı işi odur (§25.9, §33 R6). Hangi paketle yapılacağı kullanıcının
+kararıdır: eski not **`v0.1.3`** diyordu, bugün yayımlanmış en yeni paket
+**`v0.1.7`**'dir.
 
 **Önceki belge commit'i (`3b1524d` + düzeltmesi `e6d1641`) İş 14'ü kapatıyor ve
 İş 13'ün hazır olduğunu kaydediyordu.** İş 13 hâlâ **TAMAMLANMADI**: doğrulama
@@ -6098,7 +6121,7 @@ neden     hücre 200 dp geniş ve üç satır gösteriyor; etiket 12 karakter, y
           aynı hücredeki ikinci görev üç satırın dışına düşüyor
 ```
 
-## Yeni sözleşme  *(PLAN 12.5, koddan önce yazıldı — `2f93147`)*
+## Yeni sözleşme  *(PLAN 12.5, koddan önce yazıldı — `3c186b6`)*
 
 - Görünür `Tamamlandı` **kelimesi yok**.
 - Tamamlanan görev, temayla uyumlu açık yeşil yüzeyinde kalıyor
@@ -6139,7 +6162,7 @@ metin ve durum bu yüzden onu göremez; yalnız pikseller görebilir.
 
 ## Sürüm
 
-`0.1.5` (`ecc9f37`). Sürümün tek kaynağı `app/build.gradle.kts`; paket adları,
+`0.1.5` (`cf67ba0`; rebase merge sonrası hash). Sürümün tek kaynağı `app/build.gradle.kts`; paket adları,
 jpackage, PKGBUILD ve yedek belgeleri oradan türer. Room şeması 8, migration yok,
 `1.json`–`8.json` ve `sample-import.xlsx` bayt bayt aynı.
 
@@ -6150,6 +6173,266 @@ jpackage, PKGBUILD ve yedek belgeleri oradan türer. Room şeması 8, migration 
 - Tamamlanma kutusunun kendi semantiği eklenmedi — bir görevin iki kez okunması
   ve iki kez Tab durağı olması pahasına gelirdi (PLAN 12.5).
 - İş 13 (temiz Garuda turu) — projenin kalan tek bağlayıcı işi.
+
+---
+
+# 25.13 İKİ DÜŞEN YAYIN, BİR TARAMA VE v0.1.7  *(v0.1.7)*
+
+§25.12'nin işi `0.1.5` olarak etiketlendi ve **yayımlanamadı**. Sonra `0.1.6`
+olarak etiketlendi ve yine yayımlanamadı. Üçüncü denemede, kök neden bulunup
+paket taradıktan sonra çıktı. Üretimde tek bir kusur bulunmadı; üçü de testlerin
+kendi varsayımıydı.
+
+## Düşüş zinciri
+
+```text
+v0.1.5  4906b52  run 36039831899  iki deneme de düştü
+        1. deneme  ColorBelongsToPrintingTest > changing a task that has no colour…
+                   "never happened: the window opens"
+        2. deneme  StaleSurfacesTest > a second restore asks again
+v0.1.6  890b04f  run 36270826968  düştü
+                   TemporaryBackupProbeTest > a large backup runs the same kinds…
+                   "something other than the inserts grew with the data"
+                   SELECT * FROM room_table_modification_lo  beklenen 1, gerçek 2
+v0.1.7  5a166d2  run 36302651254  verify + package + publish ÜÇÜ DE YEŞİL
+```
+
+Her düşüşte `packages` ve `github release` atlandı, yani hiçbir yarım yayın
+oluşmadı. Düşen koşular **yeniden çalıştırılmadı**: bir kusur şansla yeşile
+dönerse düzeltilmiş olmaz. Etiket taşınmaz/silinmez (§35) ve `checkReleaseTag`
+yalnız `v<project.version>` kabul eder, bu yüzden her düzeltme turu bir sürüm
+numarasına mal oldu.
+
+## Üç kök neden, üç mekanizma
+
+**1. Kare sayısına güvenmek (PR #8, `3ea1cae`).** `StaleSurfacesTest` geri
+yüklemeden sonra tek kare çizip sayıyordu. `a second restore asks again`'de bu
+yalnız yavaşlık değil imkânsızlık üretiyor: ilk tick görülmeden ikincisi gelirse
+effect ikisi için bir kez çalışır ve sayaç **hiç** 2'ye çıkamaz. Artık her adım
+beklediği sayıya kadar bekliyor; "hiçbir şey olmadı" diyen testler birkaç kare
+çizdikten sonra konuşuyor (olmayan bir olay beklenemez).
+
+**2. Ekranın işini rastgele bir iş parçacığında koşturmak (PR #10, `67dd7e1`).**
+Bu, üçünün en öğreticisi. `GameTableController.state`'e iki yer yazıyor:
+`saveEditing`'in başarı satırı ve `observeTable`'ın collect gövdesi — ikincisi
+`state`'i **okuyup kopyalayıp geri yazıyor**. Üretimde ikisi de tek UI iş
+parçacığında olduğu için bu güvenlidir (üretimde hiç `flowOn` yok, controller'da
+dispatcher atlaması yok, her çağrı `rememberCoroutineScope`/`LaunchedEffect`
+üzerinden). Test koşumu ise sahneye `Dispatchers.Unconfined` veriyordu: veritabanı
+iş parçacığından gelen bir emisyon collector'ı **o iş parçacığında** koşturuyor,
+testin kendi `runBlocking`'i ise başka iş parçacığında. İki iş parçacığı, tek
+oku-değiştir-yaz.
+
+Ölçüldü (geçici sonda, commit edilmedi):
+
+```text
+kaydeden iş parçacığı   Test worker
+collector iş parçacığı  DefaultDispatcher-worker-1
+deneme                  17 361 598
+kaybedilen yazma           482 772   (~%2,8)
+üretilen son durum      work=WritingText, isSaving=false, unsaved=true,
+                        failure=null, refusal=null, blockedByEditor=false
+```
+
+Son satır CI mesajının birebir aynısı. `isSaving=false` çıkması da açıklanıyor:
+collector `state`'i kaydetme başlamadan önce okuduysa, geri yazması kaydetmenin
+hiç olmadığı bir anı diriltir. `CellTextException` ihtimali **koddan dışlandı**:
+`CellSegmentDao.saveDocumentText` `@Transaction` ve bütün `refuse(...)` çağrıları
+yazmalardan önce; "kelime DB'de + düzenleyici kaydedilmemiş" o yolla üretilemez.
+
+Düzeltme, üretimin pazarlığını test koşumuna geri getiriyor: harness'ı süren iş
+parçacığında uyanan iş **satır içi** koşuyor (kare bütünlüğü için gerekli —
+recomposer `withFrameNanos` ile uyanır, ertelenirse kare bir geriden gelir; bunu
+altı test söyledi), başka iş parçacığından uyanan iş kuyruğa alınıp harness'ın iş
+parçacığında koşuyor. Kuyruk ekranın değil **iş parçacığının**: üretimde tek UI
+iş parçacığı bütün pencereleri çevirir, ve bir test tablonun üstünde havuzu açık
+tutabiliyor. Kendi iş parçacığı yok, sızacak bir şey yok.
+`SceneWorkOnOneThreadTest` bunu koruyor; ikinci testi Unconfined ile kırmızı
+(`pool-1-thread-1` ≠ `Test worker`), ilki kırmızı olamazdı ve bu böyle raporlandı.
+
+**3. Framework'ün defterini uygulamanın işi sanmak (PR #12, `3fa5de3`).** Room,
+`room_table_modification_log`'u kendi programında okur — yazmadan sonraki
+yenileme arka planda başlar — ve koşucu, küçük yedeklemenin bir kez gördüğü yere
+iki kez yetişti. Şekil denetimi bunu yedeklemenin işi olarak sayıyordu.
+`FRAMEWORK_OWN_TABLES` artık üç tabloyu **tek tek** adlandırıyor (Room'un şema
+kimliği, Room'un invalidation günlüğü, SQLite'ın kataloğu); önek eşlemesi yok, ki
+uygulamanın kendi ifadesi filtrenin arkasına saklanamasın. Ölçülen kural aynı
+katılıkta: yedekleme hattının **kendi** ifadeleri hâlâ tür tür ve sayı sayı
+karşılaştırılıyor. `LiveBackupRestorerTest` bu sonuca kendi yorumunda zaten
+varmıştı; artık aynı adlandırılmış listeyle söylüyor.
+
+## Sistematik tarama  *(bu turun asıl işi)*
+
+Dördüncü sürüm numarasını harcamamak için paket, tek kusur sınıfı için baştan
+sona tarandı: **testin kontrol etmediği bir olayın zamanını, sayısını veya
+sırasını sabit kabul etmek.** 317 test dosyası, ~99 bin satır.
+
+```text
+sınıf 1  testin tamamen kontrol ettiği, geçerli kesin iddia
+sınıf 2  framework davranışına bağlı ama olay tabanlı güvenli ölçülmüş
+sınıf 3  kontrol edilmeyen zamanlama/sayı/sıra varsayımı — gerçek kusur
+sınıf 4  şüpheli, değiştirmek için yeterli kanıt yok → raporlanır, dokunulmaz
+```
+
+| örüntü | yer | sınıf |
+|---|---|---|
+| framework SQL'i uygulamanınki gibi sayılıyor | `TemporaryBackupProbeTest.shapeOf` | **3 → düzeltildi** |
+| filtre çok satırlı DAO SQL'ini görmüyor | iki yedekleme `shapeOf`'u | **3 → düzeltildi** |
+| olayı beklemeden sonraki durum okunuyor | `RenameGameTest` | **3 → düzeltildi** |
+| sabit kare sayısı (`SETTLING_FRAMES = 6`) | `CellTaskSeparationTest`, `TaskChipKeyboardTest`, `SearchToolbarRenderTest` | 1 — taklit store, akış satır içi; bekleneni karelerin kendisi üretir |
+| `repeat(SETTLED_FRAMES)` | `StaleSurfacesTest` | 1 — olumsuz iddia; olmayan olay beklenemez |
+| `settle` içinde `Thread.sleep(10)` | yedi UI sınıfı | 2 — ölçüt olay, uyku yalnız yoklama aralığı |
+| üst sınırlı süre | `QueuedDiagnosticsTest`, `CsvImportQueryCountTest` | 2 — ürünün kendi vaadi; birincil kanıt olay tabanlı |
+| süre ölçülüp yalnız yazdırılıyor | `DatabaseDamageMeasurementTest`, `LargeLibraryPerformanceTest` | 1 |
+| iki olayın sırası | `CsvFileChoiceTest`, `ExportControllerTest` | 1 — sırayı `CompletableDeferred` el sıkışmasıyla test kurar |
+| çapraz iş parçacığı sürüşü | `DraftRemovalRaceTest`, `UnfinishedImportsSmokeTest` | 1–2 — eşzamanlılığın kendisini ölçerler |
+| "5 kare değişmediyse yerleşti" | `AppKeyboardAndScalingTest.settle` | 2 — taklit store, dış üretici yok |
+| çift tıklama arasında gerçek 60 ms | `ComposeSceneHarness.mouseDoubleClick` | **4 — DOKUNULMADI** |
+
+**Açık sınır (sınıf 4).** `mouseDoubleClick` iki tık arasında gerçek 60 ms
+bekler. Compose'un çift-tık algısının hem alt hem üst zaman sınırı var, sahnenin
+kare saati sanal ama `withTimeout` gerçek zamanı kullanıyor — yani beklenecek bir
+olay yok. Yanlış çalıştığına dair kanıt da yok. Kanıt çıkmadıkça değiştirilmez;
+çıkarsa yeri burasıdır.
+
+## Mutation kanıtı
+
+"Şekil denetimi bir N+1'i yakalar" iddiası ölçüldü: üretime geçici olarak görev
+başına bir okuma eklendi (1000 satır için 1000 sorgu). **Test yeşil kaldı** — ve
+bu, ikinci kusuru ortaya çıkardı: bir DAO sorgusu kendi kaynağında birkaç satıra
+yazıldığı için metni satırbaşı ve girintiyle başlıyor, `startsWith("SELECT")` ise
+hepsine "hayır" diyordu. Denetim tek satıra yazılmış ifadeleri ölçüyor, gerisini
+sessizce atlıyordu — satır satır okumalar tam olarak orada saklanır. İfadeler tek
+satıra indirildikten sonra aynı mutation testi kırmızıya döndürdü
+(`something other than the inserts grew in the probe's own work`). Mutation geri
+alındı; `git diff main -- ':(exclude)app/src/desktopTest'` boş. Deponun diğer
+bütün sayım testleri bu normalizasyonu zaten yapıyordu; bu ikisi istisnaydı.
+
+Ölçülen şekil (küçük 2 görev / büyük 1002 görev; 47 ifade türü, ikisinde de aynı):
+
+```text
+DELETE FROM <15 tablo>                     1 → 1     tablo başına tek boşaltma
+SELECT * FROM <15 tablo> ORDER BY …        1 → 1     tablo başına tek okuma, N+1 yok
+SELECT COUNT(*) FROM games WHERE deleted   1 → 1
+INSERT OR IGNORE INTO colors (seed)       12 → 12
+INSERT INTO tasks                          2 → 1002  yalnız insert'ler büyür
+INSERT INTO cell_segments                  3 → 1003
+toplam çalıştırma                         64 → 2064
+insert dışında sayısı büyüyen ifade: yok
+```
+
+`RenameGameTest` için de ölçüm yapıldı: bugünkü hâliyle iddia 24 koşunun 24'ünde
+zamanında doğruydu (bir düzinesi işlemcinin onda biriyle), çünkü 1300 × 900 bir
+karenin çizimi milisaniye, veritabanı gidiş-dönüşü mikrosaniye. Yani görülmüş bir
+düşüş değil, **yüz katlık ve hiçbir şeyin tutmadığı bir pay**; iki yayını düşüren
+varsayımlarla aynı şekilde. Beklemek ayrıca "değişmeyen ad yine de yazıldı mı"
+kontrolünü denemenin **sonrasına** taşıyor, yani iddia güçlendi.
+
+## Etiketten önce yayın provası
+
+`release.yml` zaten `workflow_dispatch` destekliyor ve elle koşuda `verify`
+`checkReleaseTag`'i atlar, `package` koşar, `publish` ise
+`github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')` koşuluyla
+atlanır. Bu yol **etiket atılmadan önce** çalıştırıldı:
+
+```text
+run 36301981842  workflow_dispatch, main 5a166d2
+  tag and tests  success   6 dk 30 sn   (xvfb altında clean check --rerun-tasks)
+  packages       success   5 dk 9 sn    (Arch konteyneri: verifyLinuxPackage,
+                                        verifyArchPackage, packageRelease, sha256sum -c)
+  github release SKIPPED
+sonuç: gh release view v0.1.7 → "release not found"; latest hâlâ v0.1.4
+```
+
+Bundan sonra annotated `v0.1.7` etiketi doğrulanmış commit'e (`5a166d2`) atıldı.
+**Bu adım bundan sonra her yayında yapılır:** gerçek koşucuyu, konteyneri, tam
+test paketini ve iki paket doğrulamasını bir sürüm numarası harcamadan sınar.
+
+## Gerçek yayın
+
+```text
+release   https://github.com/Abisiba/pnp-tracker/releases/tag/v0.1.7
+etiket    v0.1.7 (annotated) → 5a166d2, latest
+koşu      https://github.com/Abisiba/pnp-tracker/actions/runs/36302651254
+          tag and tests / packages / github release: üçü de success
+yayın     2026-09-27T07:29:50Z
+```
+
+| varlık | boyut | SHA-256 |
+|---|---|---|
+| `pnp-tracker-0.1.7-linux-x86_64.tar.gz` | 94 121 428 | `fb54cf827ebc04f57e74ffadf28dc236274f4b976160735d1ef523dcb0d1b55f` |
+| `pnp-tracker-0.1.7-1-x86_64.pkg.tar.zst` | 92 249 362 | `844a7decd46c0367f9668df5a331a5b5bf7845b044a292e4c61f86fd26be65a0` |
+| `SHA256SUMS` | 209 | `f47da93d61dd9805ab350929e38e28500fc6dd5a21492b0d63b9826a54614d78` |
+| `LICENSE` | 1 081 | `317753ddbc178bacfb2227197b4724400a91c9be44ea13c4019b6e0207b51455` |
+| `THIRD_PARTY_NOTICES.md` | 4 919 | `a94b02412a6dd4dd6fdf46ad10e0d3f724fed8a5128441e8b0f1f85f7b4149bb` |
+| `kullanim-kilavuzu.md` | 14 684 | `1cd6c1c030b41444c27884550ced8a5fb4c083b011f22427ef4069fd4451793e` |
+| `ornek-ice-aktarma.md` | 6 636 | `862869d40e7285e460c743d4078e7c58578e853be2799d5404ebbcfc9197fcf0` |
+| `ornek-ice-aktarma.csv` | 448 | `da6b3a700fb163091274d88a4b2550bf92abd488c70f2420a86224879dd14591` |
+
+## Varlıkların depo dışı doğrulaması
+
+Depoyla ilgisi olmayan geçici bir dizine indirilip doğrulandı, sonra dizin
+silindi:
+
+```text
+sha256sum -c SHA256SUMS      iki paket de Tamam; sekiz varlığın kendi özeti de
+                             yayında duyurulanla aynı
+boş dosya                    0
+arşiv                        249 girdi, tek üst dizin pnp-tracker-0.1.7,
+                             mutlak yol 0, ".." 0, sembolik bağ 0
+paket                        268 girdi, mutlak yol 0, ".." 0
+sızıntı taraması             /home/abis, Projeler, PNP_NOT_UYGULAMASI,
+                             .gradle/caches, kullanıcı adı → hiçbiri yok
+VERSION                      0.1.7   .PKGINFO: pkgver = 0.1.7-1, license = MIT
+sistem Java'sı               depend = java|jre|jdk YOK; java komutu paketlenmemiş;
+                             /usr/lib/jvm, /usr/bin/java, JAVA_HOME referansı yok
+gömülü runtime               opt/pnp-tracker/lib/runtime — libjava.so, libjvm.so,
+                             JAVA_VERSION 21.0.12.1, 13 modül
+LICENSE / NOTICES            arşivde ve pakette (usr/share/licenses/pnp-tracker)
+                             yayımlanan dosyalarla birebir aynı; 11 üçüncü taraf
+                             lisans metni, 13 runtime legal dizini
+kılavuzlar ve örnek CSV      yerinde ve okunur
+```
+
+Yayımlanmış Arch paketine karşı deponun kendi denetimi (`verifyArchPackage`,
+indirilen dosya `app/build/arch/dist/` altına konularak, `-x packageArch`):
+
+```text
+29 ELF dosyası, 26 ayrı kütüphane
+bildirilen: alsa-lib fontconfig giflib glibc harfbuzz lcms2 libglvnd
+            libjpeg-turbo libstdc++ libx11 libxext libxi libxrender libxtst
+bağımlılık kapanışı: 172 paket — DT_NEEDED'ın istediği her kütüphane karşılanıyor
+                     (libfreetype, libgcc_s, libpng16, libz geçişli olarak)
+desktop entry: desktop-file-validate temiz
+"bağımlılıklar denetlenemedi / denetime güvenilemez" uyarısı: yok
+```
+
+## Eski etiketler
+
+```text
+v0.1.4 → 7ae6287   YAYIMLANDI, dokunulmadı: sekiz varlığın adı, boyutu, SHA-256'sı
+                   ve zaman damgası bu tur başlamadan kaydedilip sonra birebir
+                   karşılaştırıldı
+v0.1.5 → 4906b52   etiket duruyor, yayın ve asset YOK
+v0.1.6 → 890b04f   etiket duruyor, yayın ve asset YOK
+```
+
+`v0.1.5` ve `v0.1.6`, `v0.1.0` ve `v0.1.2` gibi **yayımlanmamış tarihsel
+etiketlerdir**. Taşınmadılar, silinmediler ve silinmeyecekler.
+
+## Bu turda bilinmesi gerekenler
+
+- Üretim kodu bu turda **hiç değişmedi**: `git diff` ile `main`,
+  `app/src/desktopTest` dışında yalnız `app/build.gradle.kts`'in sürüm satırında
+  ayrılıyor. PLAN, Room şeması, `1.json`–`8.json` ve `sample-import.xlsx`
+  dokunulmadı.
+- `desktopWindowSmoke` koşulmadı ve gerekmiyordu: değişiklikler yalnız
+  `app/src/desktopTest` altında, üretim baytları aynı ve smoke'un giriş noktası
+  (`DesktopWindowSmokeKt`) değişen hiçbir sınıfı yüklemiyor.
+- Bir düşen yayın koşusu **yeniden çalıştırılmaz**. Şansla yeşile dönmesi kusuru
+  düzeltmez ve etiketi harcar.
+- İş 13 (temiz Garuda turu) — projenin kalan tek bağlayıcı işi; bu turda ona
+  dönülmedi.
 
 ---
 
@@ -7558,7 +7841,14 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   PUSH ETME: PR → `check` → **rebase** merge (doğrusal geçmiş merge commit'e izin
   vermez). Paketin bağlandığı her kütüphane `depends`'te olmalı; denetim
   `verifyArchPackage` içindedir ve kurulu olmayı cevap saymaz. Etiketleri taşıma
-  veya silme: v0.1.0 ve v0.1.2 yayımlanmamış etiketler olarak duruyor.
+  veya silme: v0.1.0, v0.1.2, v0.1.5 ve v0.1.6 yayımlanmamış etiketler olarak
+  duruyor (son ikisi yayın koşuları testlerde düştüğü için — §25.13).
+  **Etiketten önce yayın yolunu `workflow_dispatch` ile bir kez koştur:** elle
+  koşuda `verify` ve `package` çalışır, `publish` atlanır, yani gerçek koşucu,
+  konteyner, tam test paketi ve iki paket doğrulaması bir sürüm numarası
+  harcanmadan sınanır. **Düşen bir yayın koşusunu yeniden çalıştırma:** şansla
+  yeşile dönmesi kusuru düzeltmez, etiketi harcar; kök nedeni bul, düzelt,
+  sürümü kullanıcının kararıyla yükselt.
   İŞ 13 TURU **v0.1.3** PAKETİYLE YAPILIR. Kuralı bozma: etiketi taşıma/silme, force push yapma, mevcut
   bir yayını ezme; yayın yalnız `v<Gradle sürümü>` etiketiyle çıkar ve sürüm
   yükseltmek kullanıcının kararıdır. CI'da bir şey düşerse testi atlatma,
