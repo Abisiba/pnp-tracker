@@ -296,6 +296,8 @@
     <string name="table_cell_empty_description">%1$s hücresi boş</string>
     <string name="table_cell_description">%1$s hücresi: %2$s</string>
     <string name="table_cell_more">devamı var</string>
+    <string name="table_fit_column">Sütunu içeriğe göre ayarla</string>
+    <string name="table_reset_sizes">Hücre boyutlarını sıfırla</string>
     <string name="table_row_completed">Tamamlandı</string>
     <string name="table_row_ongoing">Devam ediyor</string>
     <string name="table_completed_mark">✓</string>

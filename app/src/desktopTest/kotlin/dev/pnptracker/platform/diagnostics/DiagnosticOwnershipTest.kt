@@ -59,6 +59,10 @@ class DiagnosticOwnershipTest {
         setOf(
             "CellTextStore.kt",
             "ColorCatalogueStore.kt",
+            // The table's own sizes are a file rather than a table, and PLAN 12.17
+            // asks for the same pair of records the stores write: the disk
+            // refusing a read, and the disk refusing a write.
+            "DesktopTableSizesStore.kt",
             "GameSetupStore.kt",
             "ImportConfirmationStore.kt",
             "ImportDraftRemovalStore.kt",

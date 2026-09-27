@@ -108,6 +108,7 @@ class LargeLibraryPerformanceTest {
                 config.resolve("settings.json"),
                 home.root.resolve("state/pnp-tracker"),
                 home.root.resolve("state/pnp-tracker/logs"),
+                home.root.resolve("state/pnp-tracker/table-sizes.json"),
             )
         Files.createDirectories(paths.backupsDirectory)
         Files.createDirectories(paths.configDirectory)

@@ -1,5 +1,9 @@
 package dev.pnptracker.ui.feature.games
 
+import dev.pnptracker.domain.games.DEFAULT_CELL_COLUMN_WIDTH_DP
+import dev.pnptracker.domain.games.DEFAULT_GAME_COLUMN_WIDTH_DP
+import dev.pnptracker.domain.games.MINIMUM_COLUMN_WIDTH_DP
+import dev.pnptracker.domain.games.MINIMUM_ROW_HEIGHT_DP
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
@@ -88,20 +92,18 @@ class GameTableLayoutTest {
         // The header is inside the same horizontally scrolled column as the rows,
         // so a column and its name can never come apart.
         val scrolled = source.substringAfter(".horizontalScroll(horizontal)")
-        assertTrue(scrolled.contains("TableHeader()"), "the header does not scroll with the table")
+        assertTrue(scrolled.contains("TableHeader("), "the header does not scroll with the table")
         assertTrue(scrolled.contains("LazyColumn("), "the rows do not scroll with the header")
     }
 
     @Test
     fun `the game name column has a readable width of its own`() {
-        assertTrue(
-            Regex("""private val GameColumnWidth = (\d+)\.dp""").find(source)!!.groupValues[1].toInt() >= 200,
-            "the game name column is too narrow to read a name in",
-        )
-        assertTrue(
-            Regex("""private val CellColumnWidth = (\d+)\.dp""").find(source)!!.groupValues[1].toInt() > 0,
-            "a cell column has no width",
-        )
+        // The widths are the user's own now (PLAN 12.17), so what is pinned here
+        // is the default they fall back to and the floor they cannot go under.
+        assertTrue(DEFAULT_GAME_COLUMN_WIDTH_DP >= 200f, "the game name column is too narrow to read a name in")
+        assertTrue(DEFAULT_CELL_COLUMN_WIDTH_DP > 0f, "a cell column has no width")
+        assertTrue(MINIMUM_COLUMN_WIDTH_DP > 0f, "a column may be dragged away to nothing")
+        assertTrue(MINIMUM_COLUMN_WIDTH_DP < DEFAULT_CELL_COLUMN_WIDTH_DP, "the smallest width is not smaller than the default")
     }
 
     @Test
@@ -110,23 +112,43 @@ class GameTableLayoutTest {
         // go negative when the window is made small: it does not depend on the
         // window at all.
         assertTrue(
-            source.contains("private val TableWidth = GameColumnWidth + CellColumnWidth * CellColumnType.entries.size"),
+            source.contains("TableColumn.entries.fold(0.dp) { total, column -> total + dpOf(column) }"),
             "the table's width is not derived from the columns it holds",
+        )
+        assertTrue(
+            Regex("""\.width\(state\.sizes\.tableWidth\(\)\)""").findAll(source).count() >= 3,
+            "something in the table is given a width of its own instead of the columns'",
         )
     }
 
     @Test
-    fun `nothing in a row is given a fixed height`() {
-        // PLAN 17 asks for text scaling to work. A row told exactly how tall to
-        // be would clip its own text at 2.0x; a minimum lets it grow instead.
-        val fixedHeights = Regex("""\.height\((?!In)""").findAll(source).count()
-        assertTrue(fixedHeights == 0, "a fixed height would clip its text when the user scales it up")
+    fun `a row is only ever given a height the user asked for`() {
+        // PLAN 17 asks for text scaling to work, so nothing here may be told how
+        // tall to be on its own account: a row told exactly how tall to be would
+        // clip its own text at 2.0x. PLAN 12.17 adds the one exception, which is
+        // the user saying so — and even then the least a row may be is a floor,
+        // not a number somebody typed into the layout.
+        val row = source.substringAfter("private fun TableRow(").substringBefore("private fun GameNameCell(")
+        assertTrue(
+            "Modifier.height(IntrinsicSize.Min) else Modifier.height(height)" in row,
+            "a row is given a height that is neither the user's nor its content's",
+        )
         assertTrue(source.contains("heightIn(min ="), "rows have no minimum height to keep them tappable")
+        // Every other fixed height in the file is a grip or the user's own number.
+        // A grip is furniture: it carries no text, so scaling cannot clip it.
+        val fixed = Regex("""\.height\((?!In)([^)]*)\)""").findAll(source).map { it.groupValues[1] }.toList()
+        val unexplained = fixed.filterNot { it == "BoundaryGrip" || it == "height" || it == "IntrinsicSize.Min" }
+        assertEquals(emptyList(), unexplained, "something that carries text was told exactly how tall to be")
+        assertTrue(MINIMUM_ROW_HEIGHT_DP > 0f, "a row may be dragged away to nothing")
     }
 
     @Test
     fun `long cell content is cut rather than allowed to grow without end`() {
-        assertTrue(source.contains("maxLines = CELL_PREVIEW_LINES"), "a cell can grow to any height")
+        assertTrue(source.contains("maxLines = visibleLines"), "a cell can grow to any height")
+        assertTrue(
+            source.contains("if (height == null) return CELL_PREVIEW_LINES"),
+            "a row nobody resized lost the preview it has always had",
+        )
         assertTrue(
             source.contains("overflow = TextOverflow.Ellipsis"),
             "nothing tells the user a cell has more in it than is shown",
@@ -215,7 +237,10 @@ class GameTableLayoutTest {
             assertTrue(overlay !in source, "the table opens a $overlay over the window")
         }
         val editor = source.substringAfter("private fun CellEditorSlot(").substringBefore("private class TaskPainting(")
-        assertTrue("width(CellColumnWidth)" in editor, "the cell being worked in is not the width of its own column")
+        assertTrue(
+            "maxOf(width, DEFAULT_CELL_COLUMN_WIDTH_DP.dp)" in editor,
+            "the cell being worked in is not the width of its own column",
+        )
         assertTrue("Popup" !in editor, "the cell editor opens a popup of its own")
     }
 
@@ -435,7 +460,10 @@ class GameTableLayoutTest {
         assertTrue("heightIn(max = TaskNameHeight)" in body, "a long name grows the window instead of scrolling")
         // The cell underneath is still the cell.
         val editor = source.substringAfter("private fun CellEditorSlot(").substringBefore("private fun CellEditorActions(")
-        assertTrue("width(CellColumnWidth)" in editor, "the cell being worked in is not the width of its own column")
+        assertTrue(
+            "maxOf(width, DEFAULT_CELL_COLUMN_WIDTH_DP.dp)" in editor,
+            "the cell being worked in is not the width of its own column",
+        )
     }
 
     @Test
@@ -859,11 +887,11 @@ class GameTableLayoutTest {
         // window without scrolling the table sideways.
         val cell = source.substringAfter("private fun GameNameCell(").substringBefore("private val TickSize")
         assertTrue("GameCompletionTick(" in cell, "a game row has no way to be finished")
-        assertTrue("GameColumnWidth" in cell, "the tick moved out of the name column")
+        assertTrue("width(width)" in cell, "the tick moved out of the name column")
         // Still five cell columns beside the name, so the tick cost the table no
         // width and nothing moved out of reach in a narrow window.
         assertTrue(
-            "GameColumnWidth + CellColumnWidth * CellColumnType.entries.size" in source,
+            "TableColumn.entries.fold(0.dp)" in source && "CellColumnType.entries.forEach" in source,
             "the table grew a column of its own for the tick",
         )
         val tick = source.substringAfter("private fun GameCompletionTick(").substringBefore("private fun GameCompletionPopover(")

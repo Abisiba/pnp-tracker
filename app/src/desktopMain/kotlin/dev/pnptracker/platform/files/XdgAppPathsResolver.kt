@@ -27,6 +27,7 @@ class XdgAppPathsResolver(
             settingsFile = configDirectory.resolve(SETTINGS_FILE_NAME),
             stateDirectory = stateDirectory,
             logsDirectory = stateDirectory.resolve(LOGS_DIRECTORY_NAME),
+            tableSizesFile = stateDirectory.resolve(TABLE_SIZES_FILE_NAME),
         )
     }
 
@@ -91,5 +92,6 @@ class XdgAppPathsResolver(
         const val BACKUPS_DIRECTORY_NAME = "backups"
         const val SETTINGS_FILE_NAME = "settings.json"
         const val LOGS_DIRECTORY_NAME = "logs"
+        const val TABLE_SIZES_FILE_NAME = "table-sizes.json"
     }
 }

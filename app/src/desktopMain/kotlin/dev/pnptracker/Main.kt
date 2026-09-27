@@ -54,6 +54,7 @@ import dev.pnptracker.platform.files.XdgAppPathsResolver
 import dev.pnptracker.platform.importfiles.AwtImportFilePicker
 import dev.pnptracker.platform.importfiles.DesktopImportFileGateway
 import dev.pnptracker.platform.settings.DesktopSettingsStore
+import dev.pnptracker.platform.settings.DesktopTableSizesStore
 import dev.pnptracker.platform.startup.MigrationSnapshotSetWriter
 import dev.pnptracker.platform.startup.StartupGate
 import dev.pnptracker.ui.PnpTrackerApp
@@ -217,6 +218,8 @@ fun main() {
             taskCreation = TaskFromTextStore(database.taskFromTextDao(), diagnostics = diagnostics),
             taskEditing = TaskEditStore(database.taskEditDao(), diagnostics = diagnostics),
             taskProgress = taskProgress,
+            // The table's own sizes, kept in the state directory (PLAN 12.17).
+            tableSizes = DesktopTableSizesStore(paths.tableSizesFile, diagnostics = diagnostics),
             diagnostics = diagnostics,
         )
     // The exporter owns the only Path on its side of the application, exactly as

@@ -27,6 +27,10 @@ import dev.pnptracker.domain.games.GameCompletionSnapshot
 import dev.pnptracker.domain.games.GameSetupException
 import dev.pnptracker.domain.games.GameTableRow
 import dev.pnptracker.domain.games.GameTableView
+import dev.pnptracker.domain.games.TableColumn
+import dev.pnptracker.domain.games.TableSizes
+import dev.pnptracker.domain.games.TableSizesStore
+import dev.pnptracker.domain.games.automaticWidthFor
 import dev.pnptracker.domain.games.planDocumentChange
 import dev.pnptracker.domain.games.runsFrom
 import dev.pnptracker.domain.model.CellColumnType
@@ -81,6 +85,8 @@ class GameTableController(
     private val taskCreation: TaskCreationFromText,
     private val taskEditing: TaskEditing,
     private val taskProgress: TaskProgressing,
+    /** Where the table's own sizes are remembered (PLAN 12.17). */
+    private val tableSizes: TableSizesStore = TableSizesStore.Forgetful,
     private val idGenerator: IdGenerator = IdGenerator.Random,
     private val diagnostics: Diagnostics = Diagnostics.None,
 ) : TaskEditingHost,
@@ -141,6 +147,73 @@ class GameTableController(
     /** Asks for the screen to be read again, after a reading storage refused. */
     fun readAgain() {
         readAttempt += 1
+    }
+
+    // --------------------------------------------- the sizes the table is drawn at
+
+    /**
+     * Reads the sizes this machine draws the table at, once, as the screen opens.
+     *
+     * Never fails and never blocks the table: an unreadable file answers with the
+     * defaults (PLAN 12.17), so nothing above here has to decide what to do about
+     * a layout.
+     */
+    suspend fun readSizes() {
+        // The reading is taken first and the state is touched afterwards, on
+        // purpose. `state = state.copy(sizes = read())` reads `state` *before*
+        // suspending for the file and writes it after, so a table that arrived
+        // while the file was being read would be thrown away — and it was: the
+        // rows stayed at `Loading` for as long as the screen was open.
+        val read = tableSizes.read()
+        state = state.copy(sizes = read)
+    }
+
+    /**
+     * Gives [column] a new width, while the pointer is still moving.
+     *
+     * Nothing is written here. A drag is a hundred of these, and a file per frame
+     * would be a hundred writes for one decision; [rememberSizes] is the decision.
+     */
+    fun resizeColumn(
+        column: TableColumn,
+        width: Float,
+    ) {
+        state = state.copy(sizes = state.sizes.withColumn(column, width))
+    }
+
+    /** Gives one row a new height, while the pointer is still moving. */
+    fun resizeRow(
+        gameId: EntityId,
+        height: Float,
+    ) {
+        state = state.copy(sizes = state.sizes.withRow(gameId, height))
+    }
+
+    /** Fits [column] to the widest thing measured in it, within the bounds. */
+    fun fitColumn(
+        column: TableColumn,
+        measuredDp: Float,
+    ) {
+        state = state.copy(sizes = state.sizes.withColumn(column, automaticWidthFor(measuredDp)))
+    }
+
+    /**
+     * Remembers the sizes as they now stand: the end of a drag, or of a fit.
+     *
+     * Pruned to the games the table actually holds, which is where PLAN 12.17's
+     * promise about deleted games is kept — the rows that are gone go with this
+     * write rather than needing a sweep of their own.
+     */
+    suspend fun rememberSizes() {
+        val kept = state.sizes.prunedTo(allRows.mapTo(mutableSetOf()) { it.gameId })
+        state = state.copy(sizes = kept)
+        tableSizes.write(kept)
+    }
+
+    /** Puts every column and every row back to the table's own defaults. */
+    suspend fun resetSizes() {
+        state = state.copy(sizes = TableSizes.Default)
+        tableSizes.write(TableSizes.Default)
     }
 
     /**
