@@ -1230,6 +1230,7 @@ Tablo eylemleri:
 - Oyun adını yeniden adlandırma
 - Oyun satırındaki tamamlanma tikine basma
 - Oyun silme
+- Sütun genişliklerini ve satır yüksekliklerini kendi ölçüsüne getirme (`12.17`)
 
 Oyun adını yeniden adlandırma:
 
@@ -1651,6 +1652,94 @@ Faz 3 / İş 4 ekrana **tek** bir ayar ekler: saklanacak otomatik yedek sayısı
   gecikmeyi kısa bir metinle açıklar.
 - Son otomatik snapshot zamanı gösterilmez ve "yedek klasörünü aç" eylemi
   eklenmez; ikisi de bu işin kapsamı dışındadır.
+
+### 12.17 Ayarlanabilir tablo ölçüleri
+
+Tablo (`12.3`) Excel benzeri bir çalışma yüzeyidir ve her kullanıcının yükü
+farklıdır: birinin 3D hücresi üç satır, başkasının on beş satırdır. Bu yüzden
+sütun genişlikleri ve satır yükseklikleri kullanıcının kendi ölçüleridir.
+
+**Ne ayarlanır**
+
+- Altı sütunun her biri ayrı ayrı: `Oyun adı`, `3D`, `Kart`, `Mukavva`, `Özel`,
+  `Notlar`. Sütun ölçüsü o sütunun **tamamına** uygulanır.
+- Her oyun satırının yüksekliği **yalnız o satıra** uygulanır; ölçü oyunun
+  kimliğine bağlanır.
+
+**Ölçünün anlamı**
+
+- Kullanıcının verdiği yükseklik, hücrenin bugüne kadar sabit olan önizleme
+  bütçesinin yerine geçer: her hücre o yükseklikte **sığdığı kadar** satır
+  gösterir ve hücrenin devamı olduğunu söyleyen mevcut ipucu yerinde kalır.
+  Varsayılan ölçüde bugünkü görünüm aynen korunur. Ölçü hiçbir
+  belgeyi, görevi, rengi veya adedi değiştirmez; yalnız ne kadarının aynı anda
+  göründüğünü değiştirir.
+- Ölçü değiştirmek veri yazmaz: ne `updated_at`, ne bir geçmiş satırı, ne bir
+  havuz kaydı. Tabloda açık bir hücre düzenleyicisi varsa ölçü değişikliği onu
+  kapatmaz, içeriğini değiştirmez ve engellenmez — ölçü veri üzerinde iş değil,
+  görünüm değişikliğidir.
+- Ölçü **önizlemenin** ölçüsüdür. Açık bir hücre düzenleyicisi, kendi
+  denetimlerinin (metin alanı, renk çarkı, adet) sığması için gereken genişliğin
+  altına inmez: kullanıcı sütunu en küçük ölçüsüne çekmişse bile düzenleyici
+  varsayılan sütun genişliği kadar yer alır, çünkü içindeki çark o genişliğe göre
+  çizilir ve daha darında kırpılırdı. Düzenleyici kapandığında hücre yine
+  kullanıcının ölçüsündedir.
+
+**Makul en küçük ölçüler, ama üst sınır yok**
+
+- Bir sütun, başlığının okunur kalacağı ve oyun satırının tamamlanma kutusunun
+  yerini ayırabileceği genişliğin altına indirilemez.
+- Bir satır, tablonun bugün de her satıra verdiği en küçük yüksekliğin — hücrenin
+  kendi taban yüksekliğinin — altına indirilemez. Bu taban bir satır metinden
+  yüksektir ve bilerek öyledir: tik, çerçeve ve dolgu o yerde durur. Varsayılan
+  ölçüde bugünkü satır yüksekliği aynen korunur.
+- Kullanıcının **elle büyütmesinin üst sınırı yoktur**; tablo yana kaydırılır.
+  Üst sınır yalnız otomatik genişliğe uygulanır (aşağıda).
+
+**Nasıl değiştirilir**
+
+- **Fareyle sürükleme:** iki başlık hücresi arasındaki tutma şeridi basılıp
+  sürüklendiğinde o sütunun genişliği canlı değişir; bırakıldığında kalıcılaşır.
+  Bir satırın alt kenarı aynı şekilde o satırın yüksekliğini değiştirir. Şerit
+  üzerinde imleç yeniden boyutlandırma imlecine döner. Sürükleme hiçbir
+  düzenleyici açmaz ve odağı çalmaz.
+- **Başlık ayırıcısına çift tıklama:** o sütunu, **o an görünümde olan**
+  satırların en geniş içeriğine göre ayarlar. Sonuç en küçük ölçü ile bir üst
+  sınır arasına kırpılır; tek bir çok uzun hücre sütunu ekrandan taşırmaz.
+- **Klavye yolu:** sürekli sürükleme jesti fareye özgüdür, ama hiçbir **sonuç**
+  fareye mahkûm değildir. Tablo denetimlerinde (`12.3`) iki eylem bulunur:
+  altı sütunu listeleyen `Sütunu içeriğe göre ayarla` ve
+  `Hücre boyutlarını sıfırla`. İkisi de klavyeyle ulaşılabilir ve `17.`'nin
+  kurallarına uyar. Tabloya yeni Tab durağı **eklenmez**: yoğun bir tablonun
+  odak sırası, altı ayırıcı durağıyla bozulmaz.
+- `Hücre boyutlarını sıfırla` bütün sütunları ve bütün satırları varsayılan
+  ölçülere döndürür.
+
+**Nerede saklanır**
+
+- `$XDG_STATE_HOME/pnp-tracker/table-sizes.json`. XDG'nin uygulama durumu için
+  tarif ettiği yer burasıdır: ölçüler kullanıcının düzenlediği bir ayar değil,
+  makinenin yerleşim durumudur. Bu yüzden `settings.json`'ın (`12.16`) içine
+  girmez ve o dosyanın sözleşmesini değiştirmez.
+- Belge sürümlüdür ve atomik yazılır. `14.4.12`'nin üç kuralı burada da geçerlidir:
+  dosya **okumayla oluşmaz**, okunamayan dosya **kendiliğinden onarılmaz veya
+  üzerine yazılmaz**, yazımlar sıralanır. Kullanıcı bundan sonra bir ölçü
+  değiştirirse bu onun açık talimatıdır: belge o zaman baştan yazılır ve
+  okunamamış içerik artık geçerli değildir.
+- Dosya okunamazsa tablo **varsayılan ölçülerle** açılır. Kullanıcıya hata
+  gösterilmez — kaybedilen şey bir yerleşimdir, veri değil — ve tanılamaya
+  **yalnız bir kez** kaydedilir.
+- Tabloda artık bulunmayan oyunların satır ölçüleri, dosya bir **sonraki
+  yazımda** budanır. Silinen ya da geri yüklemeyle kaybolan bir oyun arkasında
+  ölçü bırakmaz.
+- Ölçüler **Room'a girmez** (yeni tablo, sütun veya migration yoktur) ve
+  **yedeğin kapsamına girmez** (`14.4.1`). Geri yüklenen bir yedek ölçü
+  taşımaz: yedek veriyi taşır, bu makinenin o veriye bakışını taşımaz.
+
+**Kapsam dışı**
+
+- Sütun sırasını değiştirme, sütun gizleme, satır sıralamasını elle değiştirme
+  ve ölçülerin makineler arasında taşınması bu işin kapsamında değildir.
 
 ## 13. Arama, filtreleme ve sıralama
 
