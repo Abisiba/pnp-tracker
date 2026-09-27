@@ -1,5 +1,6 @@
 package dev.pnptracker.ui.feature.colors
 
+import dev.pnptracker.domain.games.DEFAULT_CELL_COLUMN_WIDTH_DP
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
@@ -134,8 +135,15 @@ class ColorPickerLayoutTest {
     fun `the wheel wraps rather than overflowing the panel it sits in`() {
         assertTrue(picker.contains("FlowRow("), "the twelve squares cannot wrap, so they run out of a narrow panel")
         val size = Regex("""private val WheelSize = (\d+)\.dp""").find(picker)!!.groupValues[1].toInt()
-        val cellWidth = Regex("""private val CellColumnWidth = (\d+)\.dp""").find(gameScreen)!!.groupValues[1].toInt()
+        // The width a cell being worked in is guaranteed, whatever the user has
+        // dragged the column to (PLAN 12.17): the panel takes the default column's
+        // width when the column itself is narrower.
+        val cellWidth = DEFAULT_CELL_COLUMN_WIDTH_DP.toInt()
         assertTrue(size <= cellWidth - 20, "the wheel is $size dp in a $cellWidth dp cell, so it would be clipped")
+        assertTrue(
+            "maxOf(width, DEFAULT_CELL_COLUMN_WIDTH_DP.dp)" in gameScreen,
+            "a cell being worked in can be narrower than the wheel drawn inside it",
+        )
     }
 
     @Test

@@ -805,10 +805,12 @@ import dev.pnptracker.resources.table_empty_library_hint
 import dev.pnptracker.resources.table_empty_ongoing
 import dev.pnptracker.resources.table_empty_ongoing_hint
 import dev.pnptracker.resources.table_empty_tick
+import dev.pnptracker.resources.table_fit_column
 import dev.pnptracker.resources.table_label
 import dev.pnptracker.resources.table_loading
 import dev.pnptracker.resources.table_rename_game
 import dev.pnptracker.resources.table_rename_saving
+import dev.pnptracker.resources.table_reset_sizes
 import dev.pnptracker.resources.table_row_completed
 import dev.pnptracker.resources.table_row_description
 import dev.pnptracker.resources.table_row_ongoing
@@ -1381,6 +1383,8 @@ object Strings {
         val cellEmptyDescription = Res.string.table_cell_empty_description
         val cellDescription = Res.string.table_cell_description
         val cellMore = Res.string.table_cell_more
+        val fitColumn = Res.string.table_fit_column
+        val resetSizes = Res.string.table_reset_sizes
 
         val rowCompleted = Res.string.table_row_completed
         val rowOngoing = Res.string.table_row_ongoing

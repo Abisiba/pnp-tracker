@@ -8,6 +8,7 @@ import dev.pnptracker.domain.games.GameCompletionSnapshot
 import dev.pnptracker.domain.games.GameSetupFailure
 import dev.pnptracker.domain.games.GameTableRow
 import dev.pnptracker.domain.games.GameTableView
+import dev.pnptracker.domain.games.TableSizes
 import dev.pnptracker.domain.games.documentText
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
@@ -875,6 +876,14 @@ data class GameTableScreenState(
     val rowWork: RowWork? = null,
     /** The whole colour catalogue, which the task panels pick from. */
     val colors: List<ColorSummary> = emptyList(),
+    /**
+     * The sizes this machine draws the table at (PLAN 12.17).
+     *
+     * Part of the screen's state and not of the rows: a size belongs to how the
+     * table is drawn, never to the data in it, and a reading that arrives while
+     * somebody is dragging must not take their measurement away.
+     */
+    val sizes: TableSizes = TableSizes.Default,
     /** True when something was refused because a cell is still being worked in. */
     val blockedByEditor: Boolean = false,
     /** The task the last save made, until the user has been told about it. */

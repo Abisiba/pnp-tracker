@@ -114,6 +114,9 @@ class DiagnosticSurfaceTest {
                 // Storage refusing, at the boundary that turns it into an answer.
                 "CellTextStore.kt",
                 "ColorCatalogueStore.kt",
+                // The table's sizes are kept in a file of their own (PLAN 12.17),
+                // and the disk refusing it is recorded the way a store's is.
+                "DesktopTableSizesStore.kt",
                 "GameSetupStore.kt",
                 "ImportConfirmationStore.kt",
                 "ImportDraftRemovalStore.kt",

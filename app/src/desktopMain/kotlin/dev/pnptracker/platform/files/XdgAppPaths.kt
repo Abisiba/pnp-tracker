@@ -17,4 +17,11 @@ data class XdgAppPaths(
     val stateDirectory: Path,
     /** Where the diagnostic log lives (PLAN 14.7.1); made only when a first line is written. */
     val logsDirectory: Path,
+    /**
+     * The sizes the game table is drawn at on this machine (PLAN 12.17).
+     *
+     * State and not configuration: the user does not edit it, and losing it costs
+     * a layout rather than a setting. Made only when somebody resizes something.
+     */
+    val tableSizesFile: Path,
 )
