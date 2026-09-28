@@ -135,23 +135,6 @@ jobs:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
           add-job-summary: on-failure
 
-      - name: Kurucu aracı
-        # jpackage builds a Windows installer with WiX, and JDK 21 speaks to WiX 3.
-        # The version is pinned rather than taken from whatever the image happens to
-        # carry, and what was used is printed (PLAN 14.8.6).
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $bin = 'C:\Program Files (x86)\WiX Toolset v3.14\bin'
-          if (-not (Test-Path "$bin\candle.exe")) {
-            choco install wixtoolset --version 3.14.1 --no-progress -y
-          }
-          if (-not (Test-Path "$bin\candle.exe")) {
-            throw "WiX 3.14 is not at $bin after installing it"
-          }
-          & "$bin\candle.exe" -? | Select-Object -First 1
-          Add-Content -Path $env:GITHUB_PATH -Value $bin
-
       - name: clean check
         # The same memory-limited form the Linux job uses. Windows runners have an
         # interactive desktop session, so the tests that open a Compose scene need
@@ -178,6 +161,23 @@ jobs:
             '-Dorg.gradle.jvmargs=-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8'
           Get-ChildItem app\build\windows\dist | Select-Object Name, Length
           Get-FileHash -Algorithm SHA256 app\build\windows\dist\*.exe | Format-List
+
+      - name: Kurucuyu üreten aracın sürümü
+        # jpackage builds a Windows installer with WiX, and the WiX it uses is the
+        # one the Compose plugin fetches for itself during the build — pinned by
+        # that plugin's version, not by anything this workflow installs. So the
+        # tool that really made the installer is the one audited here, after the
+        # fact, rather than a version this file claims and jpackage never sees
+        # (PLAN 14.8.6).
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $found = Get-ChildItem -Path build, app\build, $env:GRADLE_USER_HOME -Recurse -Filter candle.exe -ErrorAction SilentlyContinue
+          if (-not $found) { throw "the tool that built the installer was not found, so its version cannot be recorded" }
+          foreach ($candle in $found) {
+            Write-Output $candle.FullName
+            & $candle.FullName -? | Select-Object -First 1
+          }
 
       - name: Kurucu
         # The installer is published on the pull request so a real Windows 11

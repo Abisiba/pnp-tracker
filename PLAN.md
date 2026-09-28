@@ -3346,6 +3346,13 @@ Windows desteği, bir testin platform yüzünden **atlanmasıyla** kurulmaz. Ayr
   çalışılmaz.
 - Paketleme mevcut Gradle mimarisini genişletir; kabuk içinde ikinci ve bağımsız
   bir derleme hattı kurulmaz. Linux ve Arch paketleme görevleri bozulmaz.
+- Kurucuyu üreten araç (WiX) **ölçülerek** kayda geçer. Ölçülen: jpackage'ın
+  kullandığı WiX, Compose eklentisinin derleme sırasında kendisi için indirdiği
+  sürümdür (`wix3112rtm`); sabitleyen şey eklentinin sürümüdür, koşucunun imajı
+  veya CI dosyasının kurduğu bir sürüm değil. Koşucuda ayrıca WiX bulunsa bile
+  kurucuyu o üretmez. Bu yüzden doğrulama, **kurucuyu gerçekten üreten** aracın
+  sürümünü üretimden sonra kaydeder; CI dosyası kullanılmayan bir sürümü
+  sabitlediğini iddia etmez.
 - Otomatik doğrulama en az şunları kanıtlar: çıktının gerçekten `.exe` ve boş
   olmadığı; dosya adındaki ve uygulamadaki sürümün aynı olduğu; gömülü çalışma
   ortamının bulunduğu ve sistem Java'sına başvurulmadığı; kişisel kullanıcı adı,

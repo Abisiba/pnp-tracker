@@ -15,7 +15,12 @@
 > menüsüne girer, **imzasızdır** (SmartScreen uyarısı açık sınır olarak yazılı) ve
 > kaldırılınca kullanıcının verisini bırakır. Veri yerleşimi
 > `%LOCALAPPDATA%\pnp-tracker\data\` ile `…\state\` **kardeş**, ayar
-> `%APPDATA%\pnp-tracker\` altında. Yolu seçen tek yer `AppPathsResolver`'dır
+> `%APPDATA%\pnp-tracker\` altında. **Kurucu üretildi ve doğrulandı** (PR #18,
+> 90 929 152 bayt, SHA-256 `ad2c5b17…`, 13 modüllü gömülü çalışma ortamı); gerçek
+> bir Windows 11 makinesinde elle test EDİLMEDİ (İş 18). Windows koşusu iki şeyi
+> ölçtü ve ikisi PLAN'a geçti: ölü bir sürecin dosya tutuşu hemen bırakılmıyor
+> (İş 20, açık ürün kararı) ve `close` dönmüş bir veritabanı günlüğünü açık
+> tutabiliyor (İş 19, Linux'ta da). Yolu seçen tek yer `AppPathsResolver`'dır
 > (eski `XdgAppPathsResolver`); Linux'ta XDG davranışı, paketler ve testler
 > **değişmedi**. Testler platform yüzünden atlanmadı: anlamı platformdan bağımsız
 > olanlara Windows karşılığı yazıldı (ACL ile yazılamaz dizin, `java.exe`), konusu
@@ -6636,7 +6641,7 @@ Doğrulama dizini iş bitince silindi.
 
 ---
 
-# 25.15 WINDOWS İKİNCİ DESTEKLENEN HEDEF  *(Faz 3 / İş 17 — kurucu hazır, İş 18 KOŞULMADI)*
+# 25.15 WINDOWS İKİNCİ DESTEKLENEN HEDEF  *(Faz 3 / İş 17 — kurucu ÜRETİLDİ ve DOĞRULANDI, İş 18 KOŞULMADI)*
 
 Bağlayıcı metin PLAN `14.8` (ve `3.1`, `4.`, `14.2`, `18.` Faz 3 / İş 17–18,
 `23.`). Bu bölüm kararların özetini, incelemenin **ölçülmüş** sonucunu ve bu
@@ -6799,11 +6804,102 @@ release.yml         DOKUNULMADI. Etiketli bir yayının üç paketi tek SHA256SU
 sürüm / etiket      0.1.8 kaldı; etiket ve GitHub Release YOK
 imza                YOK ve uydurulmadı; SmartScreen uyarısı açık sınır
 İş 18               temiz Windows 11 turu KOŞULMADI — bu makinede koşulamaz
+İş 19 / İş 20       Windows koşusunun ölçtüğü iki soru; ikisi de bu turda
+                    karara bağlanmadı, ikisi de PLAN'da yazılı
 İş 13               temiz Garuda turu; bu turda ona dönülmedi
 masaüstü smoke      Windows'a ait bir pencere kapatıcısı YAZILMADI: PLAN 14.8.5
                     süreç kimliğiyle doğrulamayı şart koşuyor ve bunu yalnız
                     gerçek bir Windows oturumunda ölçerek yazmak doğru olur
 Room şeması         8; migration, 1.json–8.json ve fixture dokunulmadı
+```
+
+## Windows koşucusunda gerçekten olanlar  *(PR #18, ölçüm)*
+
+İlk gerçek Windows koşusuna kadar hiçbir Windows sonucu yazılmamıştı. Koşunca
+sırayla şunlar çıktı ve her biri **kök nedeninden** düzeltildi — hiçbir koşu
+yeniden çalıştırılmadı, hiçbir test atlanmadı, hiçbir assertion zayıflatılmadı:
+
+```text
+1  PowerShell    -Pkotlin.compiler.execution.strategy=in-process ikiye bölündü:
+                 PowerShell bir parametre adını İLK NOKTADA bitiriyor, kuyruk
+                 görev adı sanıldı. Test derlenmeden düştü. Noktalı argümanlar
+                 alıntılandı; her pwsh adımını bu kurala bağlayan test yazıldı
+2  27 test       hepsi "nasıl sorduğu" yüzünden: CRLF checkout (3), /proc/self/fd
+                 (3), sinyalsiz sistemde SIGKILL beklemek (8), kod sayfası (1),
+                 ters eğik çizgi (2), NTFS'in almadığı `?` (1), eşlenmiş DLL (1),
+                 close sonrası açık kalan günlük (6), Linux'a ait dialog testi (1)
+                 → 27'den 8'e, sonra 1'e, sonra 0'a
+3  paketleme     jpackage kurucuyu ÜRETTİ; sonra kendi denetimim reddetti: skiko
+                 jar'ının .cfg satırını `/` ile arıyordum, Windows başlatıcısı
+                 sınıf yolunu `\` ile yazıyor. Jar adı digest taşıdığı için
+                 ayırıcı kalıptan tamamen çıkarıldı
+```
+
+**Kurucu üretildi ve doğrulandı** (run `36422382166`, iki check de yeşil):
+
+```text
+ad            pnp-tracker-0.1.8-windows-x86_64.exe
+boyut         90 929 152 bayt  (~86,7 MiB)
+SHA-256       ad2c5b17cbcdf0455143192decaa283eeb0335f608a02d752cdcf27d39405c96
+              (koşucunun kendi Get-FileHash'i ile birebir aynı)
+biçim         PE32+ executable, MS Windows GUI, x86-64
+çalışma ort.  gömülü, 13 modül, jvm.dll paketin içinde; JDK: Temurin 21.0.12
+artifact      windows-installer, 14 gün, if-no-files-found: error
+WindowsPkgChk PACKAGE: PASSED
+Windows testi 282 sınıf / 3814 test, 0 atlanan, 0 düşen
+```
+
+## Ölçülen iki Windows gerçeği  *(ikisi de PLAN'a gerçek değeriyle geçti)*
+
+**1. Ölü sürecin dosya tutuşu hemen bırakılmıyor.** PLAN'a kendi yazdığım
+"Windows'ta da süreç ölünce bırakılır" cümlesi **ölçümle yanlışlandı**. İki
+görünümü var ve ikisi tek olgudur:
+
+```text
+instance kilidi   tutan kopyanın öldüğü KANITLANDIKTAN sonra ilk açılış
+                  ANOTHER_COPY_IS_RUNNING ile reddedildi; kilit ikinci
+                  denemede geldi → gecikme tek bir 50 ms'lik yoklama içinde
+veritabanı        bir adım ötede: öldürmenin hemen ardından açılış
+                  MIGRATION_FAILED ile reddedildi — şeması güncel, taşınacak
+                  hiçbir şeyi olmayan bir veritabanında
+```
+
+**Ürün sonucu:** Windows'ta çöküşün hemen ardından yeniden açan bir kullanıcı,
+uygulamanın **en sert ret metnini** görebilir. Uygulama davranışı bu turda
+DEĞİŞTİRİLMEDİ; karar PLAN Faz 3 / **İş 20**'de açık duruyor ve ölçüm okunmadan
+karara bağlanmayacak. Testler artık zamanlamayı değil kurtarmayı ölçüyor: `kill`,
+sistem tuttuklarını geri verene kadar dönmüyor ve bunu **uygulamanın kendi
+kilidiyle sayarak** bekliyor, uyutarak değil.
+
+**2. `close` dönmüş bir veritabanı günlüğünü açık tutabiliyor.** `pnp.db-wal` ve
+`pnp.db-shm`, `close` döndükten sonra da bu süreçte açık kalıyor. Ölçülen iki
+durum: sürücünün içinde bilinçli düşürülen bir ifade, ve sahnesi yaşarken
+okumayı sürdüren bir ekran. **Windows'a özgü değil** — Linux'ta da aynen oluyor,
+orada açık dosyayı silmek serbest olduğu için görünmüyordu. Test iskelesi bunu
+adıyla kabul eder (yalnız o dosyalar, yalnız durumu bildiren bir çağrı için,
+kalan yazdırılarak) ve soru PLAN Faz 3 / **İş 19**'da duruyor. Gerçek kurulum
+doğrulamasının "normal kapanıştan sonra yan dosya kalmaz" maddesi YERİNDE.
+
+## Kurucuyu üreten aracın gerçeği
+
+CI dosyam WiX 3.14.1'i sabitlediğini söylüyordu; koşu bunun **kurucuyu üreten
+araç olmadığını** gösterdi. jpackage'ın kullandığı WiX, Compose eklentisinin
+derleme sırasında kendisi için indirdiği sürümdür (`wix3112rtm`); sabitleyen şey
+eklentinin sürümüdür. Koşucuda WiX 3.14.1.8722 bulunuyor olsa bile kurucuyu o
+üretmiyor. Bu yüzden CI artık kullanılmayan bir sürümü sabitlediğini iddia
+etmiyor: **kurucuyu gerçekten üreten** aracın sürümünü üretimden sonra kaydediyor.
+
+## Kapsam kaybı  *(PLAN 14.8.5 gereği raporlanır)*
+
+```text
+Linux'ta kanıtlanıp Windows'ta kanıtlanmayan tek iddia: "okunan dosyanın hiçbir
+tanıtıcısı açık kalmadı". Linux /proc/self/fd ile doğrudan cevaplıyor; Windows'ta
+bir Java testinin okuyabileceği karşılığı yok ve yeniden adlandırma denemesi de
+cevap vermiyor, çünkü Java tanıtıcısı silmeye/yeniden adlandırmaya açık alınıyor.
+Windows'ta kanıtsız kalan şey "okuyucu dosyayı kapattı" DEĞİL, "hiçbir tanıtıcı
+kalmadı"dır; kapatma kendi testleriyle iki sistemde de kanıtlı.
+Platforma ait olduğu için Windows'ta koşmayan üç sınıf, build'de adıyla listeli:
+GarudaVerificationScriptsTest, DesktopBackupDirectoryTest, DiagnosticLogSinkTest.
 ```
 
 ## Bu turda bilinmesi gerekenler
@@ -7427,7 +7523,7 @@ yardımcı işler
       yapılandırılmış görev CSV dışa aktarma
 ```
 
-## Faz 3 — 18 İŞTEN 16'SI BİTTİ (İş 13 temiz Garuda, İş 18 temiz Windows 11 turunu bekliyor)
+## Faz 3 — 20 İŞTEN 16'SI BİTTİ (İş 13 temiz Garuda, İş 18 temiz Windows 11 turu, İş 19 ve İş 20 Windows koşusunun ölçtüğü iki soruyu bekliyor)
 
 PLAN `18.` — Faz 3 işler listesi.
 

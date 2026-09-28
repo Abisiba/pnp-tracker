@@ -231,8 +231,11 @@ class WorkflowsTest {
         assertEquals("windows-2025", windows["runs-on"], "Windows koşucusu sabit değil")
         assertEquals(mapOf("contents" to "read"), windows.getValue("permissions").asMap(), "Windows işi yazma izni istiyor")
         val commands = steps(windows).mapNotNull { it["run"] as String? }
-        // The installer tool is pinned rather than taken from the image.
-        assertTrue(commands.any { "wixtoolset --version 3.14.1" in it }, "WiX sürümü sabitlenmemiş")
+        // The tool that actually builds the installer is the WiX the Compose
+        // plugin fetches during the build, pinned by that plugin's version. So
+        // what is required here is that the run records the version of that tool
+        // — the one jpackage used — rather than of one this file installed.
+        assertTrue(commands.any { "candle.exe" in it }, "kurucuyu üreten aracın sürümü kaydedilmiyor")
         assertTrue(commands.any { "verifyWindowsPackage" in it }, "kurucu doğrulanmıyor")
         // The Windows counterpart of the Linux job's last step.
         val guard = commands.single { "pnp-tracker\"" in it && "Test-Path" in it }
