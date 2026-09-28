@@ -64,7 +64,9 @@ class UnreadableScreensTest {
     fun closeDatabase() {
         database.close()
         directory.assertRealApplicationDatabaseUntouched(realDatabaseExistedBefore)
-        directory.delete()
+        // The screens here are drawn over a real reader, and one that is still
+        // collecting when the scene ends leaves the database open (İş 19).
+        directory.delete(allowingADatabaseStillOpen = true)
     }
 
     /** A refusal carrying everything a screen must not repeat back. */

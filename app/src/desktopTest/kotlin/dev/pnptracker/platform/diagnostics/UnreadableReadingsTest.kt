@@ -86,7 +86,8 @@ class UnreadableReadingsTest {
         failing.disarm()
         database.close()
         directory.assertRealApplicationDatabaseUntouched(realDatabaseExistedBefore)
-        directory.delete()
+        // A statement refused inside the driver leaves the database open (İş 19).
+        directory.delete(allowingADatabaseStillOpen = failing.refusedSomething)
     }
 
     private fun plain(sql: String) =

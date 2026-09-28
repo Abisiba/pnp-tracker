@@ -24,6 +24,16 @@ class FailingSqliteDriver(
 ) : SQLiteDriver {
     private var trap: Trap? = null
 
+    /**
+     * Whether a statement was really refused, not merely armed for.
+     *
+     * A connection whose statement was broken half way through keeps its log:
+     * `pnp.db-wal` and `pnp.db-shm` are still there after `close`. A test that
+     * did this has to say so when it clears up, and this is how it knows.
+     */
+    var refusedSomething: Boolean = false
+        private set
+
     private class Trap(
         val matches: (String) -> Boolean,
         val occurrence: Int,
@@ -57,7 +67,10 @@ class FailingSqliteDriver(
                 trap.seen += 1
                 trap.seen == trap.occurrence
             }
-        if (armed) throw SQLiteException("the trap refused this write: $sql")
+        if (armed) {
+            synchronized(this) { refusedSomething = true }
+            throw SQLiteException("the trap refused this write: $sql")
+        }
     }
 
     override fun open(fileName: String): SQLiteConnection = Trapped(delegate.open(fileName))

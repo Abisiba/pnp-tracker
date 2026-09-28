@@ -3268,6 +3268,16 @@ olduğu için sessizce oluşamaz:
   kapanıştan sonra o **tek dosya geçici dizinde kalır**. Kullanıcı verisi
   taşımaz, kullanıcı alanında değildir ve uygulama onu hiçbir şeyin işareti
   olarak okumaz; öldürülen bir süreç iki sistemde de aynı dosyayı bırakır.
+- **Kapanıştan sonra kalan günlük.** Ölçülen bir gerçek: `close` dönmüş olsa da
+  veritabanı ve `-wal`, `-shm` dosyaları bu süreçte açık kalabiliyor. İki durum
+  ölçüldü — sürücünün içinde bilinçli olarak düşürülen bir ifade ve sahnesi
+  yaşarken okumayı sürdüren bir ekran. Bu **Windows'a özgü bir kusur değildir**:
+  Linux'ta da aynen oluyor, orada açık dosyayı silmek serbest olduğu için
+  görünmüyordu; Windows silmeyi reddedince ortaya çıktı. Bu yüzden test iskelesi
+  bunu **adıyla** kabul eder: yalnız o dosyalar, yalnız durumun geçerli olduğunu
+  söyleyen bir çağrı için, ve kalan ne varsa yazdırılarak. Bir veritabanının
+  `close` sonrası günlüğünü hiç bırakmaması gerekip gerekmediği ayrı bir sorudur
+  ve `18.` Faz 3 / İş 19'da sorulur.
 - **Bir adın yasak olması.** NTFS bazı karakterleri ada hiç almaz — `?` bunların
   başında gelir. Bu karakterleri konu edinen bir doğrulama, sorusunu o sistemde
   **yasal olan** karakterlerle aynen sorar; soruyu düşürmek veya testi silmek
@@ -3792,9 +3802,23 @@ Kişisel kullanımda veri kaybı riski düşük, test edilmiş ve Garuda Linux�
     Garuda turunun karşılığıdır ve aynı kuralla: bu geliştirme makinesi temiz ortam
     sayılmaz, tur ayrı bir makinede veya sanal makinede koşulur ve sonuçları
     matrisiyle kaydedilir.
+19. `close` dönmüş bir veritabanının `-wal` ve `-shm` dosyalarını neden açık
+    tuttuğunu araştır (`14.8.4`, İş 17'de ölçüldü). Ölçülen iki durum: sürücünün
+    içinde düşürülen bir ifade ve sahnesi yaşarken okumayı sürdüren bir ekran.
+    İki sistemde de oluyor; Linux açık dosyayı silmeye izin verdiği için gizli
+    kalmıştı. Sıra şudur: önce hangi bağlantının ve hangi hazırlanmış ifadenin
+    kapanmadığı ölçülür, sonra bunun bizim kodumuzda mı yoksa Room/androidx.sqlite
+    tarafında mı olduğu ayrılır. Kendi kodumuzdaysa düzeltilir; değilse sınır
+    dürüstçe yazılır. Bu iş bitene kadar test iskelesinin adıyla verdiği izin
+    yerinde kalır ve **gerçek kurulum doğrulamasının** "kapanıştan sonra
+    `-wal`/`-shm` kalmadığı" maddesi (`14.8.6`) normal kapanış için geçerliliğini
+    korur: izin yalnız yukarıdaki iki duruma tanınmıştır, normal kapanışa değil.
 
 #### Faz 3 testleri
 
+- Bir ifadesi düşürülmüş veya okuması sürmekte olan bir veritabanının `close`
+  sonrasında neyi açık tuttuğunun ölçülmesi (İş 19); normal kapanışta hiçbir yan
+  dosyanın kalmaması
 - JSON yedekle/geri yükle round-trip
 - Deterministik yedek üretimi: aynı veritabanı iki kez dışa aktarıldığında `createdAt` dışında bayt bayt aynı dosya
 - Yedeğin, şema sürümündeki her tablonun her sütununu taşıdığının şemadan doğrulanması
