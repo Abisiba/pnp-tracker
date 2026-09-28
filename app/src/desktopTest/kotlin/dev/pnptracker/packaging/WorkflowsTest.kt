@@ -208,6 +208,24 @@ class WorkflowsTest {
     }
 
     @Test
+    fun `a powershell step quotes every argument that carries a dot`() {
+        // PowerShell ends a parameter name at the first dot, so `-Pa.b=c` arrives at
+        // the program as two arguments and the tail is read as something else. Bash
+        // does not do this, which is why a command can pass on the Linux runner and
+        // fail on the Windows one; the rule is checked here rather than found there.
+        val powershell =
+            (everyStep(ci) + everyStep(release))
+                .filter { it["shell"] == "pwsh" }
+                .mapNotNull { it["run"] as String? }
+        assertTrue(powershell.isNotEmpty(), "hiçbir PowerShell adımı bulunamadı")
+        powershell.forEach { command ->
+            val unquoted = command.replace(Regex("'[^'\n]*'"), " ").replace(Regex("\"[^\"\n]*\""), " ")
+            val split = unquoted.split(Regex("\\s+")).filter { it.startsWith("-") && "." in it }
+            assertEquals(emptyList(), split, "PowerShell bu argümanı bölerdi: $command")
+        }
+    }
+
+    @Test
     fun `the windows job proves the installer and never reaches a real user's folders`() {
         val windows = jobs(ci).getValue("windows")
         assertEquals("windows-2025", windows["runs-on"], "Windows koşucusu sabit değil")
