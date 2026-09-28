@@ -7,13 +7,19 @@ import dev.pnptracker.domain.games.DEFAULT_CELL_COLUMN_WIDTH_DP
 import dev.pnptracker.domain.games.MINIMUM_COLUMN_WIDTH_DP
 import dev.pnptracker.domain.games.MINIMUM_ROW_HEIGHT_DP
 import dev.pnptracker.domain.games.TableColumn
+import dev.pnptracker.domain.games.TableSizes
+import dev.pnptracker.domain.games.TableSizesStore
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.platform.settings.DesktopTableSizesStore
 import dev.pnptracker.ui.ComposeSceneHarness
 import dev.pnptracker.ui.RealStack
 import dev.pnptracker.ui.reads
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.AfterTest
@@ -260,6 +266,72 @@ class TableResizeTest {
         }
     }
 
+    /**
+     * The real store behind a disk that takes [SLOW_DISK_MS] to write, which is
+     * what left a size queued behind the one before it when the window closed.
+     */
+    private fun slowStore(): TableSizesStore {
+        val real = DesktopTableSizesStore(sizesFile)
+        val oneAtATime = Mutex()
+        return object : TableSizesStore {
+            override suspend fun read(): TableSizes = real.read()
+
+            override suspend fun write(sizes: TableSizes) {
+                oneAtATime.withLock {
+                    withContext(Dispatchers.IO) { Thread.sleep(SLOW_DISK_MS) }
+                    real.write(sizes)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `a size dragged just before the window closes is on disk the next time`() {
+        RealStack().use { stack ->
+            val gameId: EntityId
+            val table = stack.tableControllerWith(sizes = slowStore())
+            val first = ComposeSceneHarness(width = 1500, height = 900) { GameTableScreen(table) }
+            first.settle("the table is read") { table.state.rows !is GameTableRowsState.Loading }
+            gameId = makeHarmonies(first, table, stack)
+            val boundary = first.columnBoundary("Kart")
+            first.dragFrom(boundary, boundary + Offset(120f, 0f))
+            first.dragFrom(first.rowBottom("Kart"), first.rowBottom("Kart") + Offset(0f, 90f))
+            first.render()
+            // What the window does as it closes, and then the screen goes at once:
+            // the writes the drags launched are still waiting their turn.
+            runBlocking { table.finishWritingSizes() }
+            first.close()
+
+            val stored = runBlocking { DesktopTableSizesStore(sizesFile).read() }
+            assertEquals(320f, stored.widthOf(TableColumn.CARD), TOLERANCE, "the width was lost: $stored")
+            assertTrue((stored.heightOf(gameId) ?: 0f) > MINIMUM_ROW_HEIGHT_DP, "the last height was lost: $stored")
+        }
+    }
+
+    @Test
+    fun `closing a table nobody resized writes no sizes file`() {
+        RealStack().use { stack ->
+            val (screen, table) = openTable(stack)
+            screen.use {
+                makeHarmonies(screen, table, stack)
+                runBlocking { table.finishWritingSizes() }
+            }
+
+            assertTrue(Files.notExists(sizesFile), "closing created the sizes file for nothing")
+        }
+    }
+
+    @Test
+    fun `the window finishes the sizes before it closes the database`() {
+        val main = Files.readString(Path.of("src/desktopMain/kotlin/dev/pnptracker/Main.kt"))
+        val closing = main.substringAfter("onCloseRequest = {").substringBefore("exitApplication()")
+        assertTrue("gameTableController.finishWritingSizes()" in closing, "the window does not finish the sizes as it closes")
+        assertTrue(
+            closing.indexOf("finishWritingSizes()") < closing.indexOf("database.close()"),
+            "the sizes are finished after the database is already closed",
+        )
+    }
+
     @Test
     fun `fitting a column to its content is offered from the keyboard and holds the bounds`() {
         RealStack().use { stack ->
@@ -350,6 +422,7 @@ class TableResizeTest {
 
     private companion object {
         const val TOLERANCE = 2f
+        const val SLOW_DISK_MS = 300L
         const val AUTOMATIC_LIMIT = 480f
         const val FIT_COLUMN = "Sütunu içeriğe göre ayarla"
         const val RESET_SIZES = "Hücre boyutlarını sıfırla"

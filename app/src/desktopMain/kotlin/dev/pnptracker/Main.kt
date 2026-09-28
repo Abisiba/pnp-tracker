@@ -302,6 +302,9 @@ fun main() {
         CompositionLocalProvider(LocalWindowExceptionHandlerFactory provides RecordingWindowExceptionHandlerFactory(diagnostics)) {
             Window(
                 onCloseRequest = {
+                    // A size dragged a moment ago may still be on its way to the
+                    // file; it is finished before anything is closed (PLAN 12.17).
+                    runBlocking { gameTableController.finishWritingSizes() }
                     database.close()
                     diagnostics.close()
                     exitApplication()

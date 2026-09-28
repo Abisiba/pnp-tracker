@@ -1786,6 +1786,12 @@ sütun genişlikleri ve satır yükseklikleri kullanıcının kendi ölçülerid
   üzerine yazılmaz**, yazımlar sıralanır. Kullanıcı bundan sonra bir ölçü
   değiştirirse bu onun açık talimatıdır: belge o zaman baştan yazılır ve
   okunamamış içerik artık geçerli değildir.
+- Pencere kapanırken, veritabanı kapanmadan önce, henüz dosyada olmayan son ölçü
+  aynı dosyaya yazılır ve yazımın bitmesi beklenir. Az önce sürüklenmiş bir ölçü,
+  sürüklemenin kendi yazımı sırada beklerken pencere kapansa da kaybolmaz.
+  Kimsenin ölçüsünü değiştirmediği tablo kapanışta dosya oluşturmaz. Yazım
+  pencerenin iş parçacığında yapılmaz, böylece kapanış kendi yazımını beklerken
+  kilitlenmez.
 - Dosya okunamazsa tablo **varsayılan ölçülerle** açılır. Kullanıcıya hata
   gösterilmez — kaybedilen şey bir yerleşimdir, veri değil — ve tanılamaya
   **yalnız bir kez** kaydedilir.
