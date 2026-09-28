@@ -79,6 +79,7 @@ class AppPathsResolver(
             stateDirectory = stateDirectory,
             logsDirectory = stateDirectory.resolve(LOGS_DIRECTORY_NAME),
             tableSizesFile = stateDirectory.resolve(TABLE_SIZES_FILE_NAME),
+            gameOrderFile = stateDirectory.resolve(GAME_ORDER_FILE_NAME),
         )
 
     /**
@@ -172,6 +173,7 @@ class AppPathsResolver(
         const val BACKUPS_DIRECTORY_NAME = "backups"
         const val SETTINGS_FILE_NAME = "settings.json"
         const val APPEARANCE_FILE_NAME = "appearance.json"
+        const val GAME_ORDER_FILE_NAME = "game-order.json"
         const val LOGS_DIRECTORY_NAME = "logs"
         const val TABLE_SIZES_FILE_NAME = "table-sizes.json"
     }

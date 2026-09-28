@@ -119,6 +119,8 @@ class DiagnosticSurfaceTest {
                 "DesktopTableSizesStore.kt",
                 // The appearance is kept in a file of its own too (PLAN 12.16).
                 "DesktopAppearanceStore.kt",
+                // And the order the games are laid out in (PLAN 12.18).
+                "DesktopGameOrderStore.kt",
                 "GameSetupStore.kt",
                 "ImportConfirmationStore.kt",
                 "ImportDraftRemovalStore.kt",

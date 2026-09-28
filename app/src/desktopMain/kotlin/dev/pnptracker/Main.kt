@@ -56,6 +56,7 @@ import dev.pnptracker.platform.files.AppPathsResolver
 import dev.pnptracker.platform.importfiles.AwtImportFilePicker
 import dev.pnptracker.platform.importfiles.DesktopImportFileGateway
 import dev.pnptracker.platform.settings.DesktopAppearanceStore
+import dev.pnptracker.platform.settings.DesktopGameOrderStore
 import dev.pnptracker.platform.settings.DesktopSettingsStore
 import dev.pnptracker.platform.settings.DesktopTableSizesStore
 import dev.pnptracker.platform.startup.MigrationSnapshotSetWriter
@@ -234,6 +235,7 @@ fun main() {
             taskProgress = taskProgress,
             // The table's own sizes, kept in the state directory (PLAN 12.17).
             tableSizes = DesktopTableSizesStore(paths.tableSizesFile, diagnostics = diagnostics),
+            gameOrder = DesktopGameOrderStore(paths.gameOrderFile, diagnostics = diagnostics),
             diagnostics = diagnostics,
         )
     // The exporter owns the only Path on its side of the application, exactly as

@@ -14,6 +14,7 @@ import dev.pnptracker.data.repository.TaskEditStore
 import dev.pnptracker.data.repository.TaskFromTextStore
 import dev.pnptracker.data.repository.TaskProgressStore
 import dev.pnptracker.data.repository.TaskProgressing
+import dev.pnptracker.domain.games.GameOrderStore
 import dev.pnptracker.domain.games.TableSizesStore
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
@@ -61,6 +62,7 @@ class RealStack : AutoCloseable {
         creation: TaskCreationFromText = taskCreation,
         setup: GameSetup = gameSetup,
         sizes: TableSizesStore = TableSizesStore.Forgetful,
+        order: GameOrderStore = GameOrderStore.Forgetful,
     ): GameTableController =
         GameTableController(
             table = GameTableStore(database.gameDao(), database.gameCellDao(), database.gameTableDao()),
@@ -71,6 +73,7 @@ class RealStack : AutoCloseable {
             taskEditing = TaskEditStore(database.taskEditDao()),
             taskProgress = taskProgress,
             tableSizes = sizes,
+            gameOrder = order,
         )
 
     val pools =

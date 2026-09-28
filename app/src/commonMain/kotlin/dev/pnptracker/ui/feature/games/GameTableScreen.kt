@@ -8,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -82,6 +83,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -93,6 +95,8 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -120,6 +124,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Density
@@ -134,6 +139,7 @@ import androidx.compose.ui.unit.min
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.zIndex
 import dev.pnptracker.domain.colors.ColorSetupFailure
 import dev.pnptracker.domain.colors.ColorSummary
 import dev.pnptracker.domain.games.CellPreview
@@ -141,6 +147,7 @@ import dev.pnptracker.domain.games.CellSegmentPreview
 import dev.pnptracker.domain.games.CellTextFailure
 import dev.pnptracker.domain.games.DEFAULT_CELL_COLUMN_WIDTH_DP
 import dev.pnptracker.domain.games.DEFAULT_GAME_COLUMN_WIDTH_DP
+import dev.pnptracker.domain.games.GameArrangement
 import dev.pnptracker.domain.games.GameSetupFailure
 import dev.pnptracker.domain.games.GameTableRow
 import dev.pnptracker.domain.games.GameTableView
@@ -186,6 +193,7 @@ import dev.pnptracker.ui.theme.readableInkOn
 import dev.pnptracker.ui.theme.visibleEdgeOn
 import dev.pnptracker.ui.viewNameOf
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -317,7 +325,10 @@ fun GameTableScreen(
     LaunchedEffect(controller, controller.readAttempt) { controller.observeTable() }
     LaunchedEffect(controller, controller.readAttempt) { controller.observeColorCatalogue() }
     // Read once, not collected: a file nobody else writes has nothing to observe.
-    LaunchedEffect(controller) { controller.readSizes() }
+    LaunchedEffect(controller) {
+        controller.readSizes()
+        controller.readOrder()
+    }
 
     val state = controller.state
     BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(24.dp)) {
@@ -490,6 +501,8 @@ private fun TableControls(
             }
         }
 
+        ArrangementControls(controller = controller, state = state)
+
         TableSearchControls(controller = controller, state = state)
 
         TableSizeControls(controller = controller, state = state)
@@ -657,6 +670,66 @@ private fun tableFilterSummaryOf(state: GameTableScreenState): List<String> {
 }
 
 /**
+ * `Benim sıram` or `A–Z` (PLAN 12.18).
+ *
+ * Only where the rows go changes. Every game keeps its number, which is its place
+ * in the user's order, and that order is left alone — so going back to `Benim
+ * sıram` brings back exactly what was there.
+ */
+@Composable
+private fun ArrangementControls(
+    controller: GameTableController,
+    state: GameTableScreenState,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.selectableGroup(),
+    ) {
+        Text(
+            text = stringResource(Strings.Table.arrangementLabel),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        GameArrangement.entries.forEach { arrangement ->
+            val selected = state.arrangement == arrangement
+            val stateText =
+                stringResource(if (selected) Strings.Accessibility.selected else Strings.Accessibility.notSelected)
+            FilterChip(
+                selected = selected,
+                onClick = { controller.arrange(arrangement) },
+                label = {
+                    Text(
+                        text = stringResource(arrangementNameOf(arrangement)),
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                    )
+                },
+                modifier =
+                    Modifier
+                        .focusOutline(ComposerShape)
+                        .semantics { stateDescription = stateText },
+            )
+        }
+        if (!controller.canReorder) {
+            // Said rather than left to be discovered: in this layout the handles
+            // are gone, and the reason is that a place here is the name's.
+            Text(
+                text = stringResource(Strings.Table.arrangementAlphabeticalNote),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** What the two layouts are called. */
+private fun arrangementNameOf(arrangement: GameArrangement): StringResource =
+    when (arrangement) {
+        GameArrangement.MINE -> Strings.Table.arrangementMine
+        GameArrangement.ALPHABETICAL -> Strings.Table.arrangementAlphabetical
+    }
+
+/**
  * One of the three views.
  *
  * The chip says in words whether it is the one showing, so the filled background
@@ -797,9 +870,10 @@ private fun Table(
         ) {
             TableHeader(sizes = state.sizes, controller = controller, rows = rows)
             HorizontalDivider(modifier = Modifier.width(state.sizes.tableWidth()))
+            val drag = remember { RowDrag() }
             LazyColumn(modifier = Modifier.width(state.sizes.tableWidth()).fillMaxHeight()) {
                 items(rows, key = { it.gameId.value }) { row ->
-                    RowWithItsOwnHeight(row = row, controller = controller, state = state)
+                    RowWithItsOwnHeight(row = row, controller = controller, state = state, drag = drag)
                     HorizontalDivider(modifier = Modifier.width(state.sizes.tableWidth()))
                 }
             }
@@ -900,17 +974,26 @@ private fun RowWithItsOwnHeight(
     row: GameTableRow,
     controller: GameTableController,
     state: GameTableScreenState,
+    drag: RowDrag,
 ) {
     val density = LocalDensity.current
     var measured by remember(row.gameId) { mutableStateOf(0f) }
     val chosen = state.sizes.heightOf(row.gameId)
+    val carried = drag.gameId == row.gameId
     Box(
         modifier =
             Modifier
                 .width(state.sizes.tableWidth())
-                .onSizeChanged { measured = with(density) { it.height.toDp().value } },
+                .onSizeChanged { measured = with(density) { it.height.toDp().value } }
+                .onGloballyPositioned { drag.place(row.gameId, it.boundsInRoot().top, it.boundsInRoot().bottom) }
+                // The row being carried follows the pointer and is drawn above the
+                // others, so where it is going is something the user can see. It is
+                // not raised off the page: the table stays a grid even while a row
+                // is being carried.
+                .zIndex(if (carried) 1f else 0f)
+                .graphicsLayer { translationY = if (carried) drag.offset else 0f },
     ) {
-        TableRow(row = row, controller = controller, state = state, height = chosen?.dp)
+        TableRow(row = row, controller = controller, state = state, height = chosen?.dp, drag = drag)
         RowBoundary(
             gameId = row.gameId,
             heightNow = { chosen ?: measured },
@@ -992,7 +1075,7 @@ private fun widthThatFits(
 private const val CELL_FURNITURE = 32f
 
 /** The name column also draws the completion tick beside the name. */
-private const val NAME_COLUMN_FURNITURE = 72f
+private const val NAME_COLUMN_FURNITURE = 118f
 
 @Composable
 private fun HeaderCell(
@@ -1022,6 +1105,7 @@ private fun TableRow(
     controller: GameTableController,
     state: GameTableScreenState,
     height: Dp?,
+    drag: RowDrag,
 ) {
     val stateText =
         stringResource(if (row.isCompleted) Strings.Table.rowCompleted else Strings.Table.rowOngoing)
@@ -1050,6 +1134,7 @@ private fun TableRow(
             state = state,
             controller = controller,
             width = state.sizes.dpOf(TableColumn.GAME_NAME),
+            drag = drag,
         )
         CellColumnType.entries.forEach { columnType ->
             val cell = row.cell(columnType)
@@ -1103,6 +1188,7 @@ private fun GameNameCell(
     state: GameTableScreenState,
     controller: GameTableController,
     width: Dp,
+    drag: RowDrag,
 ) {
     Column(
         modifier =
@@ -1115,6 +1201,12 @@ private fun GameNameCell(
     ) {
         val renaming = state.renamingOf(row.gameId)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Top) {
+            GameOrderHandle(
+                row = row,
+                number = state.numbers[row.gameId],
+                controller = controller,
+                drag = drag,
+            )
             GameCompletionTick(
                 row = row,
                 stateText = stateText,
@@ -1162,6 +1254,148 @@ private fun GameNameCell(
         }
     }
 }
+
+/**
+ * Where a row is being carried to, while it is being carried.
+ *
+ * Only the screen's business: which row the pointer has, how far it has moved it,
+ * and where every row is drawn, so the one under the pointer when it is let go can
+ * be found. Nothing here is written anywhere; the move itself is the controller's.
+ */
+private class RowDrag {
+    var gameId: EntityId? by mutableStateOf(null)
+        private set
+    var offset: Float by mutableStateOf(0f)
+        private set
+    private val drawnAt = mutableMapOf<EntityId, Pair<Float, Float>>()
+
+    fun place(
+        gameId: EntityId,
+        top: Float,
+        bottom: Float,
+    ) {
+        // A row being carried is drawn where the pointer is, not where it belongs,
+        // so where it belongs is what is kept.
+        if (gameId == this.gameId) return
+        drawnAt[gameId] = top to bottom
+    }
+
+    fun start(gameId: EntityId) {
+        this.gameId = gameId
+        offset = 0f
+    }
+
+    fun moveBy(delta: Float) {
+        offset += delta
+    }
+
+    /** The row the carried one is over now, or null if it is over none but itself. */
+    fun target(): EntityId? {
+        val carried = gameId ?: return null
+        val (top, bottom) = drawnAt[carried] ?: return null
+        val middle = (top + bottom) / 2 + offset
+        return drawnAt.entries.firstOrNull { (id, span) -> id != carried && middle in span.first..span.second }?.key
+    }
+
+    fun finish() {
+        gameId = null
+        offset = 0f
+    }
+}
+
+/**
+ * A game's number, and the handle the game is moved by (PLAN 12.18).
+ *
+ * The number is the game's place in the user's order and it is drawn in both
+ * layouts — reading the table alphabetically renumbers nothing.
+ *
+ * In the user's own order the number is also the handle. The pointer takes the row
+ * by it and carries it up or down; letting go over another row puts the game where
+ * that row was. The keyboard reaches it with Tab and moves the game one place with
+ * the up and down arrows. In the alphabetical layout it is only a number: a place
+ * there is the name's, so there is nothing to move.
+ */
+@Composable
+private fun GameOrderHandle(
+    row: GameTableRow,
+    number: Int?,
+    controller: GameTableController,
+    drag: RowDrag,
+) {
+    val scope = rememberCoroutineScope()
+    val label = number?.toString().orEmpty()
+    if (!controller.canReorder) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(OrderNumberWidth).clearAndSetSemantics { },
+        )
+        return
+    }
+    val description = stringResource(Strings.Table.moveGameDescription, label, row.gameName)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier =
+            Modifier
+                .width(OrderNumberWidth)
+                .focusOutline(ComposerShape)
+                .pointerHoverIcon(PointerIcon.Hand)
+                .semantics { contentDescription = description }
+                .focusable()
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (event.key) {
+                        Key.DirectionUp -> {
+                            scope.launch { controller.moveGameUp(row.gameId) }
+                            true
+                        }
+
+                        Key.DirectionDown -> {
+                            scope.launch { controller.moveGameDown(row.gameId) }
+                            true
+                        }
+
+                        else -> false
+                    }
+                }.pointerInput(row.gameId) {
+                    detectDragGestures(
+                        onDragStart = { drag.start(row.gameId) },
+                        onDrag = { change, amount ->
+                            change.consume()
+                            drag.moveBy(amount.y)
+                        },
+                        onDragEnd = {
+                            val target = drag.target()
+                            drag.finish()
+                            if (target != null) scope.launch { controller.moveGame(row.gameId, target) }
+                        },
+                        onDragCancel = { drag.finish() },
+                    )
+                },
+    ) {
+        Text(
+            text = DRAG_MARK,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.clearAndSetSemantics { },
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1f).clearAndSetSemantics { },
+        )
+    }
+}
+
+/** How much of the name column the number and its handle take. */
+private val OrderNumberWidth = 40.dp
+
+/** Drawn beside the number in the user's own order: the thing to take hold of. */
+private const val DRAG_MARK = "\u2807"
 
 /**
  * A game's name, open for typing in the cell it is written in (PLAN 12.3).

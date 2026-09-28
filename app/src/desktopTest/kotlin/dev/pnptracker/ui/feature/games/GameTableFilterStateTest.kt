@@ -179,7 +179,10 @@ class GameTableFilterStateTest {
                 assertEquals(listOf("Bitmiş oyun"), controller.namesShown())
 
                 controller.showView(GameTableView.ALL)
-                assertEquals(listOf("Devam eden", "Bitmiş oyun"), controller.namesShown())
+                // Both, in the table's own order: with nobody having arranged
+                // anything, that is by name (PLAN 12.18), whatever order the
+                // source handed them over in.
+                assertEquals(listOf("Bitmiş oyun", "Devam eden"), controller.namesShown())
             }
         }
 
