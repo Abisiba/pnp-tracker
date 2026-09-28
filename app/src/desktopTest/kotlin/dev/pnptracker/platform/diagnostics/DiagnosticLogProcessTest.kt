@@ -1,10 +1,10 @@
 package dev.pnptracker.platform.diagnostics
 
+import dev.pnptracker.platform.files.PlatformFileRules
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.BufferedReader
 import java.nio.file.Files
-import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -59,7 +59,7 @@ class DiagnosticLogProcessTest {
     }
 
     private fun start(vararg args: String): Writer {
-        val java = Path.of(System.getProperty("java.home"), "bin", "java").toString()
+        val java = PlatformFileRules.javaLauncher().toString()
         val builder =
             ProcessBuilder(
                 java,

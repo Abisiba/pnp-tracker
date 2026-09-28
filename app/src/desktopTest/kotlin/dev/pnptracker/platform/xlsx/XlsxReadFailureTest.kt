@@ -1,5 +1,6 @@
 package dev.pnptracker.platform.xlsx
 
+import dev.pnptracker.platform.files.PlatformFileRules
 import org.apache.poi.EmptyFileException
 import org.apache.poi.EncryptedDocumentException
 import org.apache.poi.hssf.usermodel.HSSFWorkbook
@@ -11,7 +12,6 @@ import java.io.IOException
 import java.nio.file.AccessDeniedException
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.attribute.PosixFilePermissions
 import kotlin.io.path.deleteRecursively
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -44,7 +44,7 @@ class XlsxReadFailureTest {
         check(directory.startsWith(Path.of(System.getProperty("java.io.tmpdir")))) {
             "refusing to delete $directory, which is not under the temporary directory"
         }
-        Files.walk(directory).forEach { path -> Files.setPosixFilePermissions(path, PosixFilePermissions.fromString("rwx------")) }
+        Files.walk(directory).forEach { path -> runCatching { PlatformFileRules.letWritingBack(path) } }
         directory.deleteRecursively()
     }
 
@@ -69,7 +69,7 @@ class XlsxReadFailureTest {
     @Test
     fun `a file the user may not read is reported as unreadable`() {
         val file = Files.createFile(directory.resolve("gizli.xlsx"))
-        Files.setPosixFilePermissions(file, PosixFilePermissions.fromString("---------"))
+        PlatformFileRules.refuseReading(file)
 
         val failure = assertFailsWith<XlsxReadException> { XlsxWorkbookReader().read(file) }
 

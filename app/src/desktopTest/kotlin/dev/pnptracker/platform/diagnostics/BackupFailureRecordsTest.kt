@@ -31,6 +31,7 @@ import dev.pnptracker.domain.settings.SettingsWriteFailure
 import dev.pnptracker.domain.time.LocalMoment
 import dev.pnptracker.platform.backupfiles.DesktopBackupFileGateway
 import dev.pnptracker.platform.exportfiles.DesktopExportFileGateway
+import dev.pnptracker.platform.files.PlatformFileRules
 import dev.pnptracker.platform.settings.DesktopSettingsStore
 import dev.pnptracker.ui.feature.settings.BackupController
 import dev.pnptracker.ui.feature.settings.BackupScreenState
@@ -41,7 +42,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.SerializationException
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.attribute.PosixFilePermissions
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -77,7 +77,7 @@ class BackupFailureRecordsTest {
     @AfterTest
     fun deleteDirectory() {
         opened.forEach { it.close() }
-        unwritable.forEach { Files.setPosixFilePermissions(it, PosixFilePermissions.fromString("rwx------")) }
+        unwritable.forEach { PlatformFileRules.letWritingBack(it) }
         directory.assertRealApplicationDatabaseUntouched(realDatabaseExistedBefore)
         directory.delete()
     }
@@ -85,7 +85,7 @@ class BackupFailureRecordsTest {
     /** A folder this user may not write in, put back before the test's own cleanup. */
     private fun aFolderNobodyCanWriteIn(): Path {
         val folder = Files.createDirectory(directory.root.resolve("kilitli"))
-        Files.setPosixFilePermissions(folder, PosixFilePermissions.fromString("r-x------"))
+        PlatformFileRules.refuseWriting(folder)
         unwritable.add(folder)
         return folder
     }

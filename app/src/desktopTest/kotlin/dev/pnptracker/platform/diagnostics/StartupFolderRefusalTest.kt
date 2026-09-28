@@ -10,11 +10,11 @@ import dev.pnptracker.domain.diagnostics.recordSafely
 import dev.pnptracker.platform.files.AppDirectoryInitializer
 import dev.pnptracker.platform.files.AppPaths
 import dev.pnptracker.platform.files.AppPathsResolver
+import dev.pnptracker.platform.files.PlatformFileRules
 import dev.pnptracker.platform.files.XDG_LAYOUT
 import dev.pnptracker.platform.startup.deleteTemporaryTree
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.attribute.PosixFilePermissions
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -51,7 +51,7 @@ class StartupFolderRefusalTest {
 
     @AfterTest
     fun deleteHome() {
-        unwritable.forEach { runCatching { Files.setPosixFilePermissions(it, PosixFilePermissions.fromString("rwx------")) } }
+        unwritable.forEach { runCatching { PlatformFileRules.letWritingBack(it) } }
         assertEquals(
             realDatabaseExisted,
             Files.exists(TemporaryDatabaseDirectory.realApplicationDatabaseFile()),
@@ -77,7 +77,7 @@ class StartupFolderRefusalTest {
     private fun aFolderNothingCanBeWrittenIn(name: String): Path? {
         val locked = Files.createDirectory(home.resolve(name))
         if (!locked.fileSystem.supportedFileAttributeViews().contains("posix")) return null
-        Files.setPosixFilePermissions(locked, PosixFilePermissions.fromString("r-x------"))
+        PlatformFileRules.refuseWriting(locked)
         unwritable.add(locked)
         // Root ignores the mode, and a test that quietly passes there proves nothing.
         return runCatching { Files.createDirectory(locked.resolve("deneme")) }.fold({ null }, { locked })

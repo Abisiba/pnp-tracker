@@ -34,6 +34,7 @@ import dev.pnptracker.platform.exportfiles.DesktopExportFileGateway
 import dev.pnptracker.platform.files.AppDirectoryInitializer
 import dev.pnptracker.platform.files.AppPaths
 import dev.pnptracker.platform.files.AppPathsResolver
+import dev.pnptracker.platform.files.PlatformFileRules
 import dev.pnptracker.platform.files.XDG_LAYOUT
 import dev.pnptracker.platform.importfiles.DesktopImportFileGateway
 import dev.pnptracker.platform.settings.DesktopSettingsStore
@@ -53,7 +54,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.attribute.PosixFilePermissions
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -115,7 +115,7 @@ class DiagnosticsSmokeTest {
     fun deleteHome() {
         logs.forEach { it.close() }
         database.close()
-        unwritable.forEach { Files.setPosixFilePermissions(it, PosixFilePermissions.fromString("rwx------")) }
+        unwritable.forEach { PlatformFileRules.letWritingBack(it) }
         assertEquals(
             realDatabaseExisted,
             Files.exists(TemporaryDatabaseDirectory.realApplicationDatabaseFile()),
@@ -226,7 +226,7 @@ class DiagnosticsSmokeTest {
 
     private fun aFolderNobodyCanWriteIn(): Path {
         val folder = Files.createDirectory(home.resolve("kilitli"))
-        Files.setPosixFilePermissions(folder, PosixFilePermissions.fromString("r-x------"))
+        PlatformFileRules.refuseWriting(folder)
         unwritable.add(folder)
         return folder
     }

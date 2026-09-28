@@ -35,6 +35,7 @@ import dev.pnptracker.platform.files.AppPathsResolver
 import dev.pnptracker.platform.files.AtomicFileWriter
 import dev.pnptracker.platform.files.AtomicWriteException
 import dev.pnptracker.platform.files.AtomicWriteFailure
+import dev.pnptracker.platform.files.PlatformFileRules
 import dev.pnptracker.platform.files.XDG_LAYOUT
 import dev.pnptracker.platform.settings.DesktopSettingsStore
 import kotlinx.coroutines.runBlocking
@@ -415,7 +416,7 @@ class StartupGateTest {
     }
 
     private fun startALockHolder(): Process {
-        val java = Path.of(System.getProperty("java.home"), "bin", "java").toString()
+        val java = PlatformFileRules.javaLauncher().toString()
         val process =
             ProcessBuilder(
                 java,

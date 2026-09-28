@@ -128,6 +128,27 @@ tasks.register<JavaExec>("desktopWindowSmoke") {
     providers.gradleProperty("smokeScenario").orNull?.let { args(it) }
 }
 
+// ------------------------------------------------- tests a platform owns (PLAN 14.8.5)
+
+// A platform is not supported by skipping its tests, so this list is short, named
+// and justified rather than a flag a test carries. Each class here is *about* a
+// POSIX system: the Arch verification scripts are read by bash, and the other two
+// ask what happens to a named pipe and to an owner-only mode — objects Windows
+// does not have. Everything else runs on both, and what these classes prove is
+// therefore coverage that a Windows run does not have; the report says so.
+val linuxOwnedTests =
+    listOf(
+        "dev.pnptracker.packaging.GarudaVerificationScriptsTest",
+        "dev.pnptracker.platform.backupfiles.DesktopBackupDirectoryTest",
+        "dev.pnptracker.platform.diagnostics.DiagnosticLogSinkTest",
+    )
+
+tasks.withType<Test>().configureEach {
+    if (!System.getProperty("os.name").lowercase().contains("linux")) {
+        linuxOwnedTests.forEach { filter.excludeTestsMatching(it) }
+    }
+}
+
 ktlint {
     filter {
         // Generated sources (Compose resources, Room and KSP output) are not ours to format.

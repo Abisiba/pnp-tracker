@@ -3,6 +3,7 @@ package dev.pnptracker.platform.desktop
 import dev.pnptracker.data.database.DatabaseFactory
 import dev.pnptracker.data.database.fillWithEverything
 import dev.pnptracker.platform.diagnostics.LogHome
+import dev.pnptracker.platform.files.PlatformFileRules
 import dev.pnptracker.platform.startup.DatabaseDamage
 import dev.pnptracker.platform.startup.digestOf
 import kotlinx.coroutines.runBlocking
@@ -87,7 +88,7 @@ private fun runTheWindow(
     val database = data.resolve("pnp-tracker").resolve("pnp.db")
     val damagedDigest = if (damaged) aDamagedDatabase(database) else null
 
-    val java = Path.of(System.getProperty("java.home"), "bin", "java").toString()
+    val java = PlatformFileRules.javaLauncher().toString()
     val builder =
         ProcessBuilder(java, "-Djava.io.tmpdir=$tmp", "-cp", System.getProperty("java.class.path"), "dev.pnptracker.MainKt")
             .redirectErrorStream(true)
