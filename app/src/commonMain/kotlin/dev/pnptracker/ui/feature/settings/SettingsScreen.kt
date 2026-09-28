@@ -1,8 +1,11 @@
 package dev.pnptracker.ui.feature.settings
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -12,6 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -35,14 +40,18 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.pnptracker.domain.backup.BackupFailure
+import dev.pnptracker.domain.settings.AccentColor
+import dev.pnptracker.domain.settings.ThemeMode
 import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.navigation.Screen
 import dev.pnptracker.ui.textsOf
-import dev.pnptracker.ui.theme.ThemeMode
+import dev.pnptracker.ui.theme.accentPaintOf
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
@@ -68,8 +77,7 @@ fun SettingsScreen(
     controller: BackupController,
     restoreController: RestoreController,
     retentionController: RetentionController,
-    themeMode: ThemeMode,
-    onToggleTheme: () -> Unit,
+    appearanceController: AppearanceController,
     modifier: Modifier = Modifier,
 ) {
     val texts = textsOf(Screen.Settings)
@@ -91,42 +99,156 @@ fun SettingsScreen(
         BackupSection(controller, modifier = Modifier.padding(top = 12.dp))
         RestoreSection(restoreController, modifier = Modifier.padding(top = 20.dp))
         RetentionSection(retentionController, modifier = Modifier.padding(top = 20.dp))
-        AppearanceSection(themeMode = themeMode, onToggleTheme = onToggleTheme, modifier = Modifier.padding(top = 20.dp))
+        AppearanceSection(appearanceController, modifier = Modifier.padding(top = 20.dp))
     }
 }
 
 /**
- * How the application looks, which is a setting like any other.
+ * How the application looks, which is a setting like any other (PLAN 12.16).
  *
- * It used to sit at the bottom of the sidebar, and the sidebar is gone (PLAN
- * 12.1). The button names the theme it switches to, so the control can be read
- * without first working out which one is on.
+ * The theme button names the theme it switches to, so it can be read without
+ * first working out which one is on. Under it is the accent, as a closed set of
+ * colours: each is named in words and marked with a tick when it is the one in
+ * use, so which is chosen never rests on telling two swatches apart.
+ *
+ * The note under the heading says what the accent does **not** do. It is the one
+ * thing somebody could reasonably fear from a colour control in this application:
+ * that it would repaint the colours they gave their 3D tasks.
  */
 @Composable
 private fun AppearanceSection(
-    themeMode: ThemeMode,
-    onToggleTheme: () -> Unit,
+    appearanceController: AppearanceController,
     modifier: Modifier = Modifier,
 ) {
+    val scope = rememberCoroutineScope()
+    val appearance = appearanceController.appearance
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             text = stringResource(Strings.Theme.sectionLabel),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
         )
-        Button(onClick = onToggleTheme) {
+        Text(
+            text = stringResource(Strings.Theme.keptNote),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.widthIn(max = MaxTextWidth),
+        )
+        Button(onClick = { scope.launch { appearanceController.toggleTheme() } }) {
             Text(
                 text =
                     stringResource(
-                        when (themeMode) {
+                        when (appearance.themeMode) {
                             ThemeMode.LIGHT -> Strings.Theme.switchToDark
                             ThemeMode.DARK -> Strings.Theme.switchToLight
                         },
                     ),
             )
         }
+
+        Text(
+            text = stringResource(Strings.Theme.accentLabel),
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        Text(
+            text = stringResource(Strings.Theme.accentNote),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.widthIn(max = MaxTextWidth),
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.selectableGroup(),
+        ) {
+            AccentColor.entries.forEach { accent ->
+                AccentChoice(
+                    accent = accent,
+                    themeMode = appearance.themeMode,
+                    selected = accent == appearance.accentColor,
+                    onChoose = { scope.launch { appearanceController.useAccent(accent) } },
+                )
+            }
+        }
+
+        appearanceController.problem?.let {
+            Text(
+                text = stringResource(Strings.Theme.fileNotUnderstood),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.widthIn(max = MaxTextWidth).semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        }
+        appearanceController.notSaved?.let {
+            Text(
+                text = stringResource(Strings.Theme.notSaved),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.widthIn(max = MaxTextWidth).semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        }
     }
 }
+
+/**
+ * One accent to choose from: its colour, its name, and a tick when it is in use.
+ *
+ * The swatch is drawn in the colour the accent would really be in the theme that
+ * is on, so the choice shows what it does. The tick is what says which one is
+ * selected — a swatch that is merely brighter would leave the answer to whoever
+ * can see the difference (PLAN 17).
+ */
+@Composable
+private fun AccentChoice(
+    accent: AccentColor,
+    themeMode: ThemeMode,
+    selected: Boolean,
+    onChoose: () -> Unit,
+) {
+    val paint = accentPaintOf(accent, themeMode)
+    val name = stringResource(accentNameOf(accent))
+    val description = stringResource(Strings.Theme.accentChoice, name)
+    val selectionText =
+        stringResource(if (selected) Strings.Accessibility.selected else Strings.Accessibility.notSelected)
+    TextButton(
+        onClick = onChoose,
+        modifier =
+            Modifier.semantics {
+                contentDescription = description
+                stateDescription = selectionText
+                this.selected = selected
+            },
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier =
+                    Modifier
+                        .size(SwatchSize)
+                        .background(color = paint.colour, shape = CircleShape)
+                        .border(width = 1.dp, color = MaterialTheme.colorScheme.outline, shape = CircleShape),
+            )
+            Text(text = if (selected) "$SELECTED_MARK $name" else name)
+        }
+    }
+}
+
+/** How big a colour is drawn beside its name. */
+private val SwatchSize = 16.dp
+
+/** Shown before the name of the accent in use. */
+private const val SELECTED_MARK = "✓"
+
+/** The Turkish name of one accent. */
+private fun accentNameOf(accent: AccentColor): StringResource =
+    when (accent) {
+        AccentColor.PURPLE -> Strings.Theme.accentPurple
+        AccentColor.BLUE -> Strings.Theme.accentBlue
+        AccentColor.TEAL -> Strings.Theme.accentTeal
+        AccentColor.GREEN -> Strings.Theme.accentGreen
+        AccentColor.AMBER -> Strings.Theme.accentAmber
+        AccentColor.ROSE -> Strings.Theme.accentRose
+    }
 
 /**
  * Saving everything the application holds to one file.

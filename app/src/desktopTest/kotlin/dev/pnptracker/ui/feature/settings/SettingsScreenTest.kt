@@ -11,10 +11,13 @@ import dev.pnptracker.domain.backup.BackupFileHandle
 import dev.pnptracker.domain.backup.BackupSnapshot
 import dev.pnptracker.domain.backup.BackupSource
 import dev.pnptracker.domain.backup.DatabaseBackupExporter
+import dev.pnptracker.domain.settings.AccentColor
+import dev.pnptracker.domain.settings.Appearance
+import dev.pnptracker.domain.settings.AppearanceStore
+import dev.pnptracker.domain.settings.ThemeMode
 import dev.pnptracker.ui.ComposeSceneHarness
 import dev.pnptracker.ui.contentDescriptions
 import dev.pnptracker.ui.theme.PnpTrackerTheme
-import dev.pnptracker.ui.theme.ThemeMode
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.serialization.SerializationException
 import kotlin.test.Test
@@ -119,9 +122,10 @@ class SettingsScreenTest {
         height: Int = 700,
         restore: RestoreController = aRestoreController(FakeSourceGateway(aRealBackupFile())),
         retention: RetentionController = RetentionController(SceneSettings()),
+        appearance: AppearanceController = AppearanceController(AppearanceStore.Forgetful),
     ) = ComposeSceneHarness(width = width, height = height) {
         PnpTrackerTheme(ThemeMode.LIGHT) {
-            SettingsScreen(controller, restore, retention, themeMode = ThemeMode.LIGHT, onToggleTheme = {})
+            SettingsScreen(controller, restore, retention, appearance)
         }
     }
 
@@ -339,6 +343,78 @@ class SettingsScreenTest {
             harness.click("Tamam")
             harness.render()
             assertFalse("Yedek oluşturuldu" in harness.text(), harness.text())
+        }
+    }
+
+    // ------------------------------------------------------- the appearance
+
+    @Test
+    fun `the appearance section offers the theme and every accent by name`() {
+        harness(controller(SceneGateway(SceneFile("pnp-yedek.json")))).use { harness ->
+            val said = harness.text()
+
+            assertTrue("Görünüm" in said, said)
+            // The button names the theme it switches to, not the one that is on.
+            assertTrue("Koyu temaya geç" in said, said)
+            assertTrue("Vurgu rengi" in said, said)
+            listOf("Mor", "Mavi", "Turkuaz", "Yeşil", "Turuncu", "Gül kurusu").forEach { colour ->
+                assertTrue(colour in said, "$colour is not offered: $said")
+            }
+            // And the one promise the section has to make in words.
+            assertTrue("3D görevlerine verdiğiniz renkleri değiştirmez" in said, said)
+            assertTrue("bir sonraki açılışta da geçerli" in said, said)
+        }
+    }
+
+    @Test
+    fun `the accent in use is marked by a tick and not only by its colour`() {
+        harness(controller(SceneGateway(SceneFile("pnp-yedek.json")))).use { harness ->
+            // PLAN 17: which one is chosen may not rest on telling two swatches
+            // apart. The default is the purple, so that is the one marked.
+            assertTrue("✓ Mor" in harness.text(), harness.text())
+            assertTrue("✓ Mavi" !in harness.text(), harness.text())
+        }
+    }
+
+    @Test
+    fun `choosing an accent applies it and remembers it`() {
+        val store = ForgettingStore()
+        val appearance = AppearanceController(store)
+        harness(controller(SceneGateway(SceneFile("pnp-yedek.json"))), appearance = appearance).use { harness ->
+            harness.click("Mavi vurgu rengini kullan")
+            harness.render()
+
+            assertEquals(AccentColor.BLUE, appearance.appearance.accentColor)
+            assertEquals(AccentColor.BLUE, store.written?.accentColor, "the choice was not written down")
+            assertTrue("✓ Mavi" in harness.text(), harness.text())
+        }
+    }
+
+    @Test
+    fun `switching the theme keeps the accent and is remembered`() {
+        val store = ForgettingStore()
+        val appearance = AppearanceController(store)
+        harness(controller(SceneGateway(SceneFile("pnp-yedek.json"))), appearance = appearance).use { harness ->
+            harness.clickText("Koyu temaya geç")
+            harness.render()
+
+            assertEquals(ThemeMode.DARK, appearance.appearance.themeMode)
+            assertEquals(AccentColor.PURPLE, appearance.appearance.accentColor)
+            assertEquals(ThemeMode.DARK, store.written?.themeMode, "the theme was not written down")
+            // The button now names the way back.
+            assertTrue("Açık temaya geç" in harness.text(), harness.text())
+        }
+    }
+
+    /** An appearance store that keeps the last thing written, in memory. */
+    private class ForgettingStore : AppearanceStore {
+        var written: Appearance? = null
+            private set
+
+        override suspend fun read(): Appearance = written ?: Appearance()
+
+        override suspend fun write(appearance: Appearance) {
+            written = appearance
         }
     }
 

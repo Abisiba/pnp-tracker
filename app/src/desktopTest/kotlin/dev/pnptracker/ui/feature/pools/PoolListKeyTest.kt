@@ -20,11 +20,11 @@ import dev.pnptracker.domain.pools.PoolColor
 import dev.pnptracker.domain.pools.PoolNavigationSummary
 import dev.pnptracker.domain.pools.PoolSnapshot
 import dev.pnptracker.domain.pools.PoolTask
+import dev.pnptracker.domain.settings.ThemeMode
 import dev.pnptracker.domain.tasks.StageSnapshot
 import dev.pnptracker.domain.tasks.TaskFlags
 import dev.pnptracker.ui.ComposeSceneHarness
 import dev.pnptracker.ui.theme.PnpTrackerTheme
-import dev.pnptracker.ui.theme.ThemeMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.test.Test

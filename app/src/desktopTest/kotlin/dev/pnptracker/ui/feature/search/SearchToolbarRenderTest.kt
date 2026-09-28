@@ -11,6 +11,7 @@ import dev.pnptracker.domain.pools.PoolNavigationSummary
 import dev.pnptracker.domain.pools.PoolSnapshot
 import dev.pnptracker.domain.pools.PoolTask
 import dev.pnptracker.domain.search.TaskStateFilter
+import dev.pnptracker.domain.settings.ThemeMode
 import dev.pnptracker.ui.ComposeSceneHarness
 import dev.pnptracker.ui.NoColors
 import dev.pnptracker.ui.NoEditing
@@ -21,7 +22,6 @@ import dev.pnptracker.ui.feature.pools.PoolController
 import dev.pnptracker.ui.feature.pools.PoolFilterSurface
 import dev.pnptracker.ui.feature.pools.PoolScreen
 import dev.pnptracker.ui.theme.PnpTrackerTheme
-import dev.pnptracker.ui.theme.ThemeMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking

@@ -16,6 +16,7 @@ import dev.pnptracker.data.repository.TaskEditStore
 import dev.pnptracker.data.repository.TaskFromTextStore
 import dev.pnptracker.data.repository.TaskProgressStore
 import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.settings.ThemeMode
 import dev.pnptracker.ui.feature.colors.ColorCatalogueController
 import dev.pnptracker.ui.feature.colors.ColorCatalogueScreen
 import dev.pnptracker.ui.feature.games.GameTableController
@@ -23,7 +24,6 @@ import dev.pnptracker.ui.feature.games.GameTableScreen
 import dev.pnptracker.ui.feature.pools.PoolController
 import dev.pnptracker.ui.feature.pools.PoolScreen
 import dev.pnptracker.ui.theme.PnpTrackerTheme
-import dev.pnptracker.ui.theme.ThemeMode
 import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest

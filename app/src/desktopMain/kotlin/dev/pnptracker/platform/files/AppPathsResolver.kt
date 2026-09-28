@@ -75,6 +75,7 @@ class AppPathsResolver(
             backupsDirectory = dataDirectory.resolve(BACKUPS_DIRECTORY_NAME),
             configDirectory = configDirectory,
             settingsFile = configDirectory.resolve(SETTINGS_FILE_NAME),
+            appearanceFile = configDirectory.resolve(APPEARANCE_FILE_NAME),
             stateDirectory = stateDirectory,
             logsDirectory = stateDirectory.resolve(LOGS_DIRECTORY_NAME),
             tableSizesFile = stateDirectory.resolve(TABLE_SIZES_FILE_NAME),
@@ -170,6 +171,7 @@ class AppPathsResolver(
         const val DATABASE_FILE_NAME = "pnp.db"
         const val BACKUPS_DIRECTORY_NAME = "backups"
         const val SETTINGS_FILE_NAME = "settings.json"
+        const val APPEARANCE_FILE_NAME = "appearance.json"
         const val LOGS_DIRECTORY_NAME = "logs"
         const val TABLE_SIZES_FILE_NAME = "table-sizes.json"
     }

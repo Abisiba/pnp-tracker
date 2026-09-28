@@ -324,6 +324,27 @@ class ComposeSceneHarness(
         return focusedNode()?.contentDescriptions()?.contains(description) == true
     }
 
+    /**
+     * Clicks a node that is found by the words on it rather than by a description.
+     *
+     * For a control whose visible label already says what it does, and which
+     * therefore has no description of its own to be found by: giving it one that
+     * repeated the label would only make a screen reader say it twice.
+     */
+    fun clickText(text: String): Boolean {
+        val node =
+            nodes().firstOrNull { node ->
+                node.reads(SemanticsActions.OnClick) != null &&
+                    node.writtenWords().any { text in it }
+            } ?: return false
+        val done = node.reads(SemanticsActions.OnClick)?.action?.invoke() == true
+        render()
+        return done
+    }
+
+    private fun SemanticsNode.writtenWords(): List<String> =
+        reads(SemanticsProperties.Text).orEmpty().map { it.text } + children.flatMap { it.writtenWords() }
+
     /** Clicks a node the way a pointer would, through its own click action. */
     fun click(description: String): Boolean {
         val node = spokenNodes().firstOrNull { description in it.contentDescriptions() } ?: return false

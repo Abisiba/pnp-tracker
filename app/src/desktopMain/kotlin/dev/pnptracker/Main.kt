@@ -36,6 +36,7 @@ import dev.pnptracker.domain.backup.retention.AutomaticBackupRotation
 import dev.pnptracker.domain.backup.retention.SettingsDrivenHousekeeping
 import dev.pnptracker.domain.diagnostics.Diagnostics
 import dev.pnptracker.domain.diagnostics.recordSafely
+import dev.pnptracker.domain.settings.ThemeMode
 import dev.pnptracker.domain.time.localMomentOf
 import dev.pnptracker.platform.awt.applyLinuxFileDialogPolicy
 import dev.pnptracker.platform.backupfiles.AwtBackupFilePicker
@@ -54,6 +55,7 @@ import dev.pnptracker.platform.files.AppDirectoryInitializer
 import dev.pnptracker.platform.files.AppPathsResolver
 import dev.pnptracker.platform.importfiles.AwtImportFilePicker
 import dev.pnptracker.platform.importfiles.DesktopImportFileGateway
+import dev.pnptracker.platform.settings.DesktopAppearanceStore
 import dev.pnptracker.platform.settings.DesktopSettingsStore
 import dev.pnptracker.platform.settings.DesktopTableSizesStore
 import dev.pnptracker.platform.startup.MigrationSnapshotSetWriter
@@ -71,12 +73,13 @@ import dev.pnptracker.ui.feature.importworkspace.ImportReviewController
 import dev.pnptracker.ui.feature.importworkspace.ImportRollbackController
 import dev.pnptracker.ui.feature.importworkspace.UnfinishedImportsController
 import dev.pnptracker.ui.feature.pools.PoolControllers
+import dev.pnptracker.ui.feature.settings.AppearanceController
 import dev.pnptracker.ui.feature.settings.BackupController
 import dev.pnptracker.ui.feature.settings.RestoreController
 import dev.pnptracker.ui.feature.settings.RetentionController
 import dev.pnptracker.ui.feature.startup.StartupErrorScreen
 import dev.pnptracker.ui.theme.PnpTrackerTheme
-import dev.pnptracker.ui.theme.ThemeMode
+import kotlinx.coroutines.runBlocking
 import org.jetbrains.compose.resources.stringResource
 import java.awt.Dimension
 import kotlin.time.Clock
@@ -268,6 +271,11 @@ fun main() {
             diagnostics = diagnostics,
         )
     val retentionController = RetentionController(settingsStore)
+    // Read before the window is built, not after: a machine that chose dark opens
+    // dark instead of opening light and blinking (PLAN 12.16). It is one small file
+    // and this is the one moment it is read.
+    val appearanceStore = DesktopAppearanceStore(paths.appearanceFile, diagnostics = diagnostics)
+    val appearanceController = AppearanceController(appearanceStore, runBlocking { appearanceStore.read() })
     val colorCatalogueController = ColorCatalogueController(colorCatalogue, diagnostics = diagnostics)
     // The pools read the same tasks the table reads and write through the same
     // editing transaction, so they are given the very same store rather than one
@@ -299,11 +307,12 @@ fun main() {
                 state = rememberWindowState(size = DpSize(1100.dp, 720.dp)),
                 title = stringResource(Strings.App.windowTitle),
             ) {
-                // Below this the sidebar and the open section stop being usable
+                // Below this the navigation and the open section stop being usable
                 // together, so the window manager is not allowed to go smaller.
                 window.minimumSize = Dimension(MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT)
                 PnpTrackerApp(
                     AppInfo.Current,
+                    appearanceController,
                     importController,
                     reviewController,
                     confirmationController,

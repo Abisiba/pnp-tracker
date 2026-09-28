@@ -57,6 +57,7 @@ class AppPathsResolverTest {
         assertEquals(absolute("srv", "data", "pnp-tracker", "backups"), paths.backupsDirectory)
         assertEquals(absolute("srv", "config", "pnp-tracker"), paths.configDirectory)
         assertEquals(absolute("srv", "config", "pnp-tracker", "settings.json"), paths.settingsFile)
+        assertEquals(absolute("srv", "config", "pnp-tracker", "appearance.json"), paths.appearanceFile)
         assertEquals(absolute("srv", "state", "pnp-tracker"), paths.stateDirectory)
         assertEquals(absolute("srv", "state", "pnp-tracker", "logs"), paths.logsDirectory)
         assertEquals(absolute("srv", "state", "pnp-tracker", "table-sizes.json"), paths.tableSizesFile)
@@ -71,6 +72,7 @@ class AppPathsResolverTest {
         assertEquals(home(".local", "share", "pnp-tracker", "backups"), paths.backupsDirectory)
         assertEquals(home(".config", "pnp-tracker"), paths.configDirectory)
         assertEquals(home(".config", "pnp-tracker", "settings.json"), paths.settingsFile)
+        assertEquals(home(".config", "pnp-tracker", "appearance.json"), paths.appearanceFile)
         assertEquals(home(".local", "state", "pnp-tracker"), paths.stateDirectory)
         assertEquals(home(".local", "state", "pnp-tracker", "logs"), paths.logsDirectory)
     }
@@ -217,6 +219,7 @@ class AppPathsResolverTest {
         )
         assertEquals(absolute("Users", "tester", "AppData", "Roaming", "pnp-tracker"), paths.configDirectory)
         assertEquals(absolute("Users", "tester", "AppData", "Roaming", "pnp-tracker", "settings.json"), paths.settingsFile)
+        assertEquals(absolute("Users", "tester", "AppData", "Roaming", "pnp-tracker", "appearance.json"), paths.appearanceFile)
     }
 
     @Test
@@ -332,6 +335,7 @@ class AppPathsResolverTest {
             linux.databaseFile to windows.databaseFile,
             linux.backupsDirectory to windows.backupsDirectory,
             linux.settingsFile to windows.settingsFile,
+            linux.appearanceFile to windows.appearanceFile,
             linux.logsDirectory to windows.logsDirectory,
             linux.tableSizesFile to windows.tableSizesFile,
         ).forEach { (onLinux, onWindows) ->

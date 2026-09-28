@@ -6,10 +6,10 @@ import dev.pnptracker.domain.backup.BackupFailure
 import dev.pnptracker.domain.backup.restore.BackupProblem
 import dev.pnptracker.domain.backup.restore.RestoreProblem
 import dev.pnptracker.domain.backup.restore.fileOf
+import dev.pnptracker.domain.settings.ThemeMode
 import dev.pnptracker.ui.ComposeSceneHarness
 import dev.pnptracker.ui.contentDescriptions
 import dev.pnptracker.ui.theme.PnpTrackerTheme
-import dev.pnptracker.ui.theme.ThemeMode
 import kotlinx.coroutines.CompletableDeferred
 import kotlin.test.Test
 import kotlin.test.assertEquals

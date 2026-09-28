@@ -24,6 +24,18 @@
     <string name="theme_section_label">Görünüm</string>
     <string name="theme_switch_to_dark">Koyu temaya geç</string>
     <string name="theme_switch_to_light">Açık temaya geç</string>
+    <string name="theme_accent_label">Vurgu rengi</string>
+    <string name="theme_accent_note">Yalnız arayüzü boyar: seçili sekmeler, düğmeler ve benzeri vurgular. 3D görevlerine verdiğiniz renkleri değiştirmez.</string>
+    <string name="theme_accent_choice">%1$s vurgu rengini kullan</string>
+    <string name="theme_kept_note">Seçtiğiniz tema ve vurgu rengi bir sonraki açılışta da geçerli olur.</string>
+    <string name="theme_not_saved">Görünüm bu makinede saklanamadı; uygulama şimdilik seçtiğiniz gibi görünüyor ama bir sonraki açılışta varsayılana dönebilir.</string>
+    <string name="theme_file_not_understood">Görünüm dosyası okunamadı, bu yüzden varsayılan görünüm kullanılıyor. Dosyanın üzerine yazılmadı; bir seçim yapmanız onu düzeltir.</string>
+    <string name="theme_accent_purple">Mor</string>
+    <string name="theme_accent_blue">Mavi</string>
+    <string name="theme_accent_teal">Turkuaz</string>
+    <string name="theme_accent_green">Yeşil</string>
+    <string name="theme_accent_amber">Turuncu</string>
+    <string name="theme_accent_rose">Gül kurusu</string>
 
     <!-- Accessibility descriptions -->
     <string name="navigation_accessibility_label">Ana bölüm gezinmesi</string>

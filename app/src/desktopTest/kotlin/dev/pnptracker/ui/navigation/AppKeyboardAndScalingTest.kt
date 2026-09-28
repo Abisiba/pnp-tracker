@@ -51,6 +51,8 @@ import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.settings.AppearanceStore
+import dev.pnptracker.domain.settings.ThemeMode
 import dev.pnptracker.platform.backupfiles.DesktopBackupDirectory
 import dev.pnptracker.platform.backupfiles.DesktopImportSnapshotWriter
 import dev.pnptracker.platform.backupfiles.DesktopSafetyBackupWriter
@@ -72,13 +74,13 @@ import dev.pnptracker.ui.feature.importworkspace.UnfinishedImportsController
 import dev.pnptracker.ui.feature.pools.PoolCardKey
 import dev.pnptracker.ui.feature.pools.PoolControllers
 import dev.pnptracker.ui.feature.pools.PoolWork
+import dev.pnptracker.ui.feature.settings.AppearanceController
 import dev.pnptracker.ui.feature.settings.BackupController
 import dev.pnptracker.ui.feature.settings.RestoreController
 import dev.pnptracker.ui.feature.settings.RetentionController
 import dev.pnptracker.ui.reads
 import dev.pnptracker.ui.textsOf
 import dev.pnptracker.ui.theme.PnpTrackerTheme
-import dev.pnptracker.ui.theme.ThemeMode
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.getString
@@ -293,8 +295,7 @@ class AppKeyboardAndScalingTest {
                 AppScaffold(
                     appInfo = AppInfo.Current,
                     navigation = wiring.navigation,
-                    themeMode = ThemeMode.LIGHT,
-                    onToggleTheme = {},
+                    appearanceController = AppearanceController(AppearanceStore.Forgetful),
                     importController = wiring.importController,
                     reviewController = wiring.reviewController,
                     confirmationController = wiring.confirmationController,
