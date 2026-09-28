@@ -147,4 +147,75 @@ class TableSizesTest {
         assertEquals(MINIMUM_COLUMN_WIDTH_DP, read.widthOf(TableColumn.CARD))
         assertEquals(MINIMUM_ROW_HEIGHT_DP, read.heightOf(harmonies))
     }
+
+    private val defaults: Map<TableColumn, Float> = TableColumn.entries.associateWith(::defaultWidthOf)
+
+    @Test
+    fun `a column whose content fits keeps the width it was given`() {
+        val needed = mapOf(TableColumn.THREE_D to 150f, TableColumn.NOTES to 200f)
+
+        assertEquals(defaults, fittedWidths(defaults, needed, available = 2000f))
+    }
+
+    @Test
+    fun `a column whose content does not fit grows to what it needs when there is room`() {
+        val drawn = fittedWidths(defaults, mapOf(TableColumn.NOTES to 330f), available = 2000f)
+
+        assertEquals(330f, drawn.getValue(TableColumn.NOTES))
+        assertEquals(defaults - TableColumn.NOTES, drawn - TableColumn.NOTES, "a column that did not need it grew")
+    }
+
+    @Test
+    fun `growing stops at the automatic bound and the rest of the text wraps`() {
+        val drawn = fittedWidths(defaults, mapOf(TableColumn.NOTES to 5000f), available = 5000f)
+
+        assertEquals(AUTOMATIC_WIDTH_LIMIT_DP, drawn.getValue(TableColumn.NOTES))
+    }
+
+    @Test
+    fun `the columns share the room the window has, and never take more than it`() {
+        // 1240 chosen, 1400 available: 160 to share between two columns that
+        // want 30 and 280. The small one is given all of its 30 and the big one
+        // what is left, so neither is starved and the table still fits.
+        val drawn =
+            fittedWidths(defaults, mapOf(TableColumn.CARD to 230f, TableColumn.NOTES to 480f), available = 1400f)
+
+        assertEquals(230f, drawn.getValue(TableColumn.CARD))
+        assertEquals(330f, drawn.getValue(TableColumn.NOTES))
+        assertEquals(1400f, drawn.values.sum())
+    }
+
+    @Test
+    fun `columns that all want a lot split the room evenly`() {
+        val drawn =
+            fittedWidths(defaults, mapOf(TableColumn.CARD to 480f, TableColumn.NOTES to 480f), available = 1300f)
+
+        assertEquals(230f, drawn.getValue(TableColumn.CARD))
+        assertEquals(230f, drawn.getValue(TableColumn.NOTES))
+    }
+
+    @Test
+    fun `a window narrower than the chosen widths grows nothing and shrinks nothing`() {
+        val chosen = defaults + (TableColumn.CARD to MINIMUM_COLUMN_WIDTH_DP)
+
+        assertEquals(chosen, fittedWidths(chosen, mapOf(TableColumn.CARD to 480f), available = 600f))
+    }
+
+    @Test
+    fun `a width the user chose wider than the content is kept as it is`() {
+        val chosen = defaults + (TableColumn.NOTES to 700f)
+
+        assertEquals(700f, fittedWidths(chosen, mapOf(TableColumn.NOTES to 300f), available = 3000f).getValue(TableColumn.NOTES))
+    }
+
+    @Test
+    fun `fitting to the content changes nothing the sizes remember`() {
+        val sizes = TableSizes.Default.withColumn(TableColumn.CARD, 120f)
+        val chosen = TableColumn.entries.associateWith(sizes::widthOf)
+
+        fittedWidths(chosen, mapOf(TableColumn.CARD to 400f), available = 3000f)
+
+        assertEquals(120f, sizes.widthOf(TableColumn.CARD))
+        assertEquals(tableSizesDocumentFor(TableSizes.Default.withColumn(TableColumn.CARD, 120f)), tableSizesDocumentFor(sizes))
+    }
 }

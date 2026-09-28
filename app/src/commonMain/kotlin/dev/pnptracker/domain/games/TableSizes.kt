@@ -216,3 +216,41 @@ fun tableSizesDocumentFor(sizes: TableSizes): String =
             rowHeights = sizes.rowHeights.entries.associate { (gameId, height) -> gameId.toString() to height },
         ),
     )
+
+/**
+ * How wide each column is drawn when its content is taken into account (PLAN 12.17).
+ *
+ * [chosen] is the width the user gave a column, or its default; [needed] is how
+ * wide the column would have to be for its longest line to sit on one line. A
+ * column is never drawn narrower than what was chosen, and it grows towards what
+ * it needs — but only into room the window has left over, [available] wide in
+ * all. That room is shared out fairly: a column that needs a little gets all of
+ * it, and whatever the columns that need a lot are left with is split evenly
+ * between them. So one very long note cannot push every other column off the
+ * screen, and when the chosen widths alone are wider than the window nothing
+ * grows at all and the table scrolls sideways as it always has.
+ *
+ * Nothing here is written down. It is recomputed from the content, the window
+ * and the text size every time one of them changes.
+ */
+fun fittedWidths(
+    chosen: Map<TableColumn, Float>,
+    needed: Map<TableColumn, Float>,
+    available: Float,
+): Map<TableColumn, Float> {
+    val wants =
+        chosen
+            .mapValues { (column, width) -> (minOf(needed[column] ?: 0f, AUTOMATIC_WIDTH_LIMIT_DP) - width).coerceAtLeast(0f) }
+            .filterValues { it > 0f }
+    var room = (available - chosen.values.sum()).coerceAtLeast(0f)
+    val given = mutableMapOf<TableColumn, Float>()
+    val waiting = wants.entries.sortedBy { it.value }.toMutableList()
+    while (waiting.isNotEmpty() && room > 0f) {
+        val share = room / waiting.size
+        val (column, want) = waiting.removeAt(0)
+        val granted = minOf(want, share)
+        given[column] = granted
+        room -= granted
+    }
+    return chosen.mapValues { (column, width) -> width + (given[column] ?: 0f) }
+}

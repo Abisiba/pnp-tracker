@@ -789,7 +789,6 @@ import dev.pnptracker.resources.table_arrangement_mine
 import dev.pnptracker.resources.table_cell_description
 import dev.pnptracker.resources.table_cell_empty
 import dev.pnptracker.resources.table_cell_empty_description
-import dev.pnptracker.resources.table_cell_more
 import dev.pnptracker.resources.table_column_game
 import dev.pnptracker.resources.table_complete_game
 import dev.pnptracker.resources.table_complete_game_error_general
@@ -1433,7 +1432,6 @@ object Strings {
         val cellEmpty = Res.string.table_cell_empty
         val cellEmptyDescription = Res.string.table_cell_empty_description
         val cellDescription = Res.string.table_cell_description
-        val cellMore = Res.string.table_cell_more
         val fitColumn = Res.string.table_fit_column
         val resetSizes = Res.string.table_reset_sizes
 
