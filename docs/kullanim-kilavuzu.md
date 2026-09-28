@@ -59,9 +59,10 @@ değiştirmez.
 
 ## Hücre ve görev yapısı
 
-Her oyunun beş sütunu (hücresi) vardır: **3D Baskı**, **Kart**, **Mukavva**,
-**Özel** ve **Notlar**. İlk dördü aynı adlı havuzları besler; **Notlar** sütunu
-serbest metindir ve görev tutmaz. Hücrenin içi yazıdır; o yazının içinde bazı
+Her oyunun altı sütunu (hücresi) vardır: **3D Baskı**, **Kart**, **Mukavva**,
+**Özel**, **Ödünç Parçalar** ve **Notlar**. İlk dördü aynı adlı havuzları
+besler. **Ödünç Parçalar** başka bir oyundan ödünç alınan parçalar için,
+**Notlar** her türlü not için serbest metindir; ikisi de görev tutmaz. Hücrenin içi yazıdır; o yazının içinde bazı
 kelimeler **görev** olarak işaretlenir.
 
 (Excel dosyasındaki başlıklar farklıdır: orada aynı sütunlar *3D Print*,

@@ -181,6 +181,7 @@ import dev.pnptracker.resources.colors_value
 import dev.pnptracker.resources.colors_wheel_hint
 import dev.pnptracker.resources.colors_wheel_label
 import dev.pnptracker.resources.colors_wheel_state
+import dev.pnptracker.resources.column_borrowed
 import dev.pnptracker.resources.column_notes
 import dev.pnptracker.resources.confirm_action
 import dev.pnptracker.resources.confirm_dialog_accept
@@ -1387,6 +1388,9 @@ object Strings {
     /** The columns of the game table. */
     object Columns {
         val notes = Res.string.column_notes
+
+        /** Where the pieces a game borrows from another one are written down. */
+        val borrowed = Res.string.column_borrowed
 
         /** The first column, which holds the game's name rather than a cell. */
         val game = Res.string.table_column_game

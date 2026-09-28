@@ -1219,13 +1219,14 @@ Sütunlar:
 | Kart | Kart hücresi |
 | Mukavva | Mukavva hücresi |
 | Özel | Özel hücresi |
+| Ödünç Parçalar | Başka oyundan ödünç alınan parçalar için serbest not hücresi (`12.19`) |
 | Notlar | Serbest not hücresi |
 
-3D, Kart, Mukavva, Özel ve Notlar ayrı hücrelerdir ve her biri kendi `GameCell`
+3D, Kart, Mukavva, Özel, Ödünç Parçalar ve Notlar ayrı hücrelerdir ve her biri kendi `GameCell`
 kaydına sahiptir.
 
-`Notlar` hücresi serbest içeriktir; üretim görevi veya havuz kaydı **üretmez** ve
-içinde görev bulunamaz.
+`Notlar` ve `Ödünç Parçalar` hücreleri serbest içeriktir; üretim görevi veya
+havuz kaydı **üretmez** ve içlerinde görev bulunamaz.
 
 Tablo eylemleri:
 
@@ -1699,8 +1700,8 @@ sütun genişlikleri ve satır yükseklikleri kullanıcının kendi ölçülerid
 
 **Ne ayarlanır**
 
-- Altı sütunun her biri ayrı ayrı: `Oyun adı`, `3D`, `Kart`, `Mukavva`, `Özel`,
-  `Notlar`. Sütun ölçüsü o sütunun **tamamına** uygulanır.
+- Her sütun ayrı ayrı: `Oyun adı`, `3D`, `Kart`, `Mukavva`, `Özel`,
+  `Ödünç Parçalar`, `Notlar`. Sütun ölçüsü o sütunun **tamamına** uygulanır.
 - Her oyun satırının yüksekliği **yalnız o satıra** uygulanır; ölçü oyunun
   kimliğine bağlanır.
 
@@ -1848,6 +1849,26 @@ Kullanıcı oyunlarını oyun tablosunda **elle sıralar** ve bu sıra korunur.
 - Taşırken tablonun kenarına gelince kendiliğinden kaydırma bu işin kapsamında
   değildir: fare yalnız ekranda görünen bir satırın üstüne bırakır, uzak bir yer
   için klavye veya birkaç adım kullanılır.
+
+### 12.19 Ödünç Parçalar
+
+Bir oyunun başka bir oyundan ödünç aldığı parçaları (zar, jeton, kutu…) yazmak
+için oyun başına bir not alanıdır.
+
+- Tabloda `Özel` ile `Notlar` arasında kendi sütunudur. `Notlar` ayrı kalır;
+  ikisi birbirine karışmaz.
+- Hücre `CellColumnType.BORROWED` türünde sıradan bir `GameCell`'dir ve yazı
+  diğer hücrelerdeki gibi düzenlenir (çift tıklama, Enter veya F2).
+- Görev oluşturmaz: içinde görev seçilemez, havuz kaydı veya geçmiş satırı
+  üretmez (`TaskFromTextFailure.CELL_DOES_NOT_HOLD_TASKS`). Görev dışa aktarımı
+  (`CSV`) bu sütunu adlandırmaz, çünkü içinde görev bulunmaz.
+- Veritabanında saklanır; uygulama yeniden açıldığında korunur. Yedek bütün
+  hücreleri taşıdığı için yedekten geri yüklemede de geri gelir.
+- Room şeması değişmez: hücre türü metin olarak saklanır ve hücre ilk
+  yazıldığında oluşturulur. Eski oyunların bu hücresi, ilk yazılana kadar yoktur
+  ve boş görünür.
+- Bu sürümü bilmeyen daha eski bir uygulama, `BORROWED` hücresi içeren bir
+  yedeği tanımadığı bir sütun türü olarak geri çevirir.
 
 ## 13. Arama, filtreleme ve sıralama
 

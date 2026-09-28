@@ -32,7 +32,11 @@ data class TaskExportNames(
 ) {
     init {
         require(PoolType.entries.all { it in pools }) { "Every pool needs a word before a file can name it" }
-        require(CellColumnType.entries.all { it in columns }) { "Every column needs a word before a file can name it" }
+        // Only the columns a task can be in: the file names a task's column, and
+        // the borrowed parts and the notes never hold one.
+        require(CellColumnType.entries.filter { it.holdsTasks }.all { it in columns }) {
+            "Every column needs a word before a file can name it"
+        }
     }
 }
 

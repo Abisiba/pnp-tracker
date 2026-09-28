@@ -32,11 +32,13 @@ fun poolNameOf(poolType: PoolType): StringResource =
  *
  * The four production columns borrow the names of the pools they feed, so a user
  * reading `Mukavva` in the table and `Mukavva` in the pool is reading about the
- * same thing. Notes is the one column with no pool behind it.
+ * same thing. The borrowed parts and the notes are the columns with no pool
+ * behind them.
  */
 fun columnNameOf(columnType: CellColumnType): StringResource =
     when (columnType) {
         CellColumnType.NOTES -> Strings.Columns.notes
+        CellColumnType.BORROWED -> Strings.Columns.borrowed
         else -> poolNameOf(requireNotNull(columnType.poolType))
     }
 

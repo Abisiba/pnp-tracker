@@ -174,21 +174,26 @@ class TableSizesTest {
 
     @Test
     fun `the columns share the room the window has, and never take more than it`() {
-        // 1240 chosen, 1400 available: 160 to share between two columns that
-        // want 30 and 280. The small one is given all of its 30 and the big one
-        // what is left, so neither is starved and the table still fits.
+        // 160 dp to share between two columns that want 30 and 280. The small
+        // one is given all of its 30 and the big one what is left, so neither is
+        // starved and the table still fits.
+        val available = defaults.values.sum() + 160f
         val drawn =
-            fittedWidths(defaults, mapOf(TableColumn.CARD to 230f, TableColumn.NOTES to 480f), available = 1400f)
+            fittedWidths(defaults, mapOf(TableColumn.CARD to 230f, TableColumn.NOTES to 480f), available = available)
 
         assertEquals(230f, drawn.getValue(TableColumn.CARD))
         assertEquals(330f, drawn.getValue(TableColumn.NOTES))
-        assertEquals(1400f, drawn.values.sum())
+        assertEquals(available, drawn.values.sum())
     }
 
     @Test
     fun `columns that all want a lot split the room evenly`() {
         val drawn =
-            fittedWidths(defaults, mapOf(TableColumn.CARD to 480f, TableColumn.NOTES to 480f), available = 1300f)
+            fittedWidths(
+                defaults,
+                mapOf(TableColumn.CARD to 480f, TableColumn.NOTES to 480f),
+                available = defaults.values.sum() + 60f,
+            )
 
         assertEquals(230f, drawn.getValue(TableColumn.CARD))
         assertEquals(230f, drawn.getValue(TableColumn.NOTES))

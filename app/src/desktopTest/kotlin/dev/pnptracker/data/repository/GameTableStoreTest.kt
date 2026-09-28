@@ -171,6 +171,7 @@ class GameTableStoreTest {
                     CellColumnType.CARD,
                     CellColumnType.BOARD,
                     CellColumnType.SPECIAL,
+                    CellColumnType.BORROWED,
                     CellColumnType.NOTES,
                 ),
                 rowNamed("Harmonies").cells.map { it.columnType },
