@@ -6843,9 +6843,18 @@ boyut         90 929 152 bayt  (~86,7 MiB)
 SHA-256       ad2c5b17cbcdf0455143192decaa283eeb0335f608a02d752cdcf27d39405c96
               (koşucunun kendi Get-FileHash'i ile birebir aynı)
 biçim         PE32+ executable, MS Windows GUI, x86-64
-çalışma ort.  gömülü, 13 modül, jvm.dll paketin içinde; JDK: Temurin 21.0.12
+çalışma ort.  gömülü, JAVA_VERSION="21.0.12.1", jvm.dll paketin içinde, 13 modül:
+              java.base java.datatransfer java.desktop java.instrument
+              java.logging java.naming java.prefs java.security.jgss
+              java.security.sasl java.xml java.xml.crypto jdk.crypto.ec
+              jdk.unsupported
 artifact      windows-installer, 14 gün, if-no-files-found: error
 WindowsPkgChk PACKAGE: PASSED
+üreten araç   WiX 3.11.2.4516 (build\wix311\candle.exe) — Compose eklentisinin
+              kendisi için indirdiği sürüm; koşucudaki WiX 3.14.1.8722 DEĞİL
+belirlenimci  HAYIR. İki koşu aynı boyutta ama farklı SHA-256 verdi
+              (ad2c5b17… / ecaced72…); fark yalnız pakete girmeyen dosyalarda
+              olduğu hâlde. MSI/PE metadata'sının beklenen sonucu, yalıtılmadı
 Windows testi 282 sınıf / 3814 test, 0 atlanan, 0 düşen
 ```
 
