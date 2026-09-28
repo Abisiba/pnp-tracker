@@ -377,7 +377,10 @@ class StartupGateTest {
         aVersion3Database()
         val holder = startALockHolder()
         assertFailsWith<StartupRefused> { gate().open() }
-        holder.destroyForcibly().waitFor(20, TimeUnit.SECONDS)
+        // Asserted rather than assumed: if the holder were still alive the next
+        // start would be refused for the true reason, and the failure has to say
+        // so instead of looking like a lock the system never gave back.
+        assertTrue(holder.destroyForcibly().waitFor(20, TimeUnit.SECONDS), "the copy holding the lock did not die")
 
         val opened = openThrough(gate())
 

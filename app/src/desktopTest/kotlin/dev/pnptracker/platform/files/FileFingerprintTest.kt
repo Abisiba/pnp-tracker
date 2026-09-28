@@ -1,8 +1,8 @@
 package dev.pnptracker.platform.files
 
 import dev.pnptracker.platform.xlsx.FIXTURE_NAME
+import dev.pnptracker.platform.xlsx.assertNothingHasOpen
 import dev.pnptracker.platform.xlsx.copyFixtureInto
-import dev.pnptracker.platform.xlsx.openHandlesTo
 import java.nio.file.Files
 import java.nio.file.NoSuchFileException
 import java.nio.file.Path
@@ -95,7 +95,7 @@ class FileFingerprintTest {
 
         fingerprint.of(file)
 
-        assertEquals(emptyList(), openHandlesTo(file), "the fingerprint left the file open")
+        assertNothingHasOpen(file, "the fingerprint left the file open")
         // Nothing was written beside it either.
         assertEquals(
             setOf(FIXTURE_NAME),

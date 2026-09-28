@@ -1,5 +1,6 @@
 package dev.pnptracker.platform.awt
 
+import dev.pnptracker.platform.files.PlatformFileRules
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.AfterTest
@@ -110,12 +111,16 @@ class FileDialogCompatibilityTest {
     }
 
     @Test
-    fun `the real property is set on this linux machine`() {
+    fun `the policy does to this machine what this machine needs`() {
+        // Asked of the system the suite is running on, which is a question both
+        // supported systems have an answer to: Linux needs the property set,
+        // Windows has a dialog of its own and must be left alone.
         System.clearProperty(DISABLE_GTK_FILE_DIALOGS)
 
         applyLinuxFileDialogPolicy()
 
-        assertEquals("true", System.getProperty(DISABLE_GTK_FILE_DIALOGS))
+        val expected = if (PlatformFileRules.onWindows) null else "true"
+        assertEquals(expected, System.getProperty(DISABLE_GTK_FILE_DIALOGS))
     }
 
     @Test

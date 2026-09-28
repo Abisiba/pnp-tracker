@@ -3257,6 +3257,21 @@ olduğu için sessizce oluşamaz:
   **değişmez**: yedek JSON'u, tanılama satırları ve CSV dışa aktarma
   `14.4.1`, `14.7.1` ve CSV sözleşmesinin dediği baytları yazar. CSV'nin CRLF'i
   bir Windows uyarlaması değil, RFC 4180 kuralıdır ve Linux'ta da öyleydi.
+  Deponun kendisi de aynı kuralla çalışır: izlenen metin dosyaları her iki
+  sistemde **LF** olarak saklanır ve LF olarak çıkarılır; bilinçli olarak LF
+  olmayan iki dosya (örnek CSV ve Gradle sarmalayıcısının toplu iş dosyası)
+  hiçbir dönüştürmeye sokulmaz. Bu bir Windows uyarlaması değil, baytına kadar
+  karşılaştırılan belge testlerinin dayandığı koşuldur.
+- **Sürücünün açtığı native kütüphane.** Gömülü SQLite sürücüsü kendi native
+  kütüphanesini geçici dizine açar. Linux çıkışta onu siler; Windows, çıkmakta
+  olan sürecin belleğine eşlenmiş bir kütüphaneyi silemez, bu yüzden normal
+  kapanıştan sonra o **tek dosya geçici dizinde kalır**. Kullanıcı verisi
+  taşımaz, kullanıcı alanında değildir ve uygulama onu hiçbir şeyin işareti
+  olarak okumaz; öldürülen bir süreç iki sistemde de aynı dosyayı bırakır.
+- **Bir adın yasak olması.** NTFS bazı karakterleri ada hiç almaz — `?` bunların
+  başında gelir. Bu karakterleri konu edinen bir doğrulama, sorusunu o sistemde
+  **yasal olan** karakterlerle aynen sorar; soruyu düşürmek veya testi silmek
+  yerine adı platformun kabul ettiği biçimde kurar.
 
 #### 14.8.5 Testlerin platform sözleşmesi
 
@@ -3274,7 +3289,18 @@ Windows desteği, bir testin platform yüzünden **atlanmasıyla** kurulmaz. Ayr
 - **Genel bir "bu platformda atla" bayrağı eklenmez.** Bir testin nerede
   koşmadığı, o testin kendi konusundan okunabilir olmalıdır.
 - Her turda **kapsam kaybı raporlanır**: hangi sözleşme hangi platformda
-  kanıtsız kaldı ve niçin.
+  kanıtsız kaldı ve niçin. Bilinen ilk kalem şudur: "okunan dosyanın hiçbir
+  tanıtıcısı açık kalmadı" iddiası Linux'ta `/proc/self/fd` ile doğrudan
+  kanıtlanır; Windows'ta bir Java testinin okuyabileceği karşılığı yoktur ve
+  yeniden adlandırma denemesi yanıt vermez, çünkü Java tanıtıcısı silmeye ve
+  yeniden adlandırmaya açık olarak alınır. Bu tek iddia bu yüzden Linux'a
+  aittir; onu kullanan testlerin geri kalan bütün iddiaları iki sistemde de
+  koşar ve Windows'ta kanıtsız kalan şey "okuyucu dosyayı kapattı" değil,
+  "hiçbir tanıtıcı kalmadı"dır.
+- **Öldürülen bir çocuk sürecin çıkış kodu** sistemin kendi cevabıdır: Linux
+  `128 + sinyal` verir, Windows'ta sinyal yoktur ve `TerminateProcess` JVM'in
+  istediği kodu bırakır. Testin aradığı ortak nokta ikisinde de aynıdır —
+  bu, kendi kendine kapanan bir sürecin sıfırı değildir.
 - Windows'ta pencere açan bir doğrulama, pencereyi **süreç kimliğiyle**
   doğrulayarak kapatır. Pencere başlığının bir parçasına göre süreç kapatmak
   hiçbir platformda yapılmaz; bu kural Linux tarafında da yürürlüktedir.

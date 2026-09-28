@@ -248,7 +248,7 @@ class XlsxWorkbookReaderTest {
 
         XlsxWorkbookReader().read(copy)
 
-        assertEquals(emptyList(), openHandlesTo(copy), "the reader is still holding the file open")
+        assertNothingHasOpen(copy, "the reader is still holding the file open")
         // A file nothing holds open can be renamed and removed straight away.
         val renamed = fresh.resolve("renamed.xlsx")
         Files.move(copy, renamed)

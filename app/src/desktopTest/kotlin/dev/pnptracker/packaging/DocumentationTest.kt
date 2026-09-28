@@ -181,6 +181,21 @@ class DocumentationTest {
     }
 
     @Test
+    fun `the files these tests read byte for byte are stored with one line ending`() {
+        // The test above compares a block of a guide with the example file, and two
+        // others hold LICENSE and a test's own source to their exact bytes. All of
+        // that turns on how the repository is checked out, which is decided in one
+        // file — without it, a Windows checkout would convert the guides and the
+        // three would fail for a reason that is not in the application at all.
+        val attributes = Files.readString(repository().resolve(".gitattributes"))
+        assertTrue("* text=auto eol=lf" in attributes, "metin dosyaları için LF kuralı yok")
+        // And the two files that are deliberately not LF stay out of it: a CSV is
+        // CRLF by RFC 4180, and Windows' command interpreter wants CRLF.
+        assertTrue("*.csv -text" in attributes, "CSV dönüştürmenin dışında tutulmamış")
+        assertTrue("*.bat -text" in attributes, "toplu iş dosyası dönüştürmenin dışında tutulmamış")
+    }
+
+    @Test
     fun `the guides carry no version number, no absolute home path and no name of this machine`() {
         documents.forEach { document ->
             val text = Files.readString(document)

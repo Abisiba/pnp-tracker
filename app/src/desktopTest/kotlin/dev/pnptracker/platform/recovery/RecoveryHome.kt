@@ -94,6 +94,12 @@ class RecoveryHome : AutoCloseable {
                 // No hsperfdata file for a killed process to leave behind.
                 "-XX:-UsePerfData",
                 "-Djava.io.tmpdir=$temporary",
+                // The child's protocol lines carry Turkish letters and the parent
+                // reads them as UTF-8. Left alone, a Windows JVM would write them
+                // in the console's own code page and `figür` would arrive broken.
+                "-Dfile.encoding=UTF-8",
+                "-Dstdout.encoding=UTF-8",
+                "-Dstderr.encoding=UTF-8",
                 "-cp",
                 System.getProperty("java.class.path"),
                 "dev.pnptracker.platform.recovery.InterruptedWriterKt",
@@ -114,7 +120,10 @@ class RecoveryHome : AutoCloseable {
                 Files.walk(top).use { entries ->
                     entries
                         .filter { it != top }
-                        .map { it.relativeTo(root).toString() + if (Files.isDirectory(it)) "/" else "" }
+                        // Joined with `/` rather than the system's separator: these
+                        // names are what the tests compare against, and a file's
+                        // place in this home is the same fact on both systems.
+                        .map { it.relativeTo(root).joinToString("/") + if (Files.isDirectory(it)) "/" else "" }
                         .toList()
                 }
             }.sorted()
@@ -204,7 +213,7 @@ class WriterProcess(
 
     init {
         Thread {
-            process.inputStream.bufferedReader().useLines { all ->
+            process.inputStream.bufferedReader(Charsets.UTF_8).useLines { all ->
                 all.forEach { line ->
                     synchronized(transcript) { transcript.appendLine(line) }
                     if (line.startsWith(PROTOCOL)) lines.put(line.removePrefix(PROTOCOL))
@@ -239,7 +248,17 @@ class WriterProcess(
         return process.exitValue()
     }
 
-    val exitedBySignal: Boolean get() = !process.isAlive && process.exitValue() == SIGKILL_EXIT
+    /**
+     * Whether the child was ended by the system rather than ending itself.
+     *
+     * Linux reports a signalled death as 128 plus the signal. Windows has no
+     * signals: `destroyForcibly` calls `TerminateProcess` and the exit code is
+     * the one the JVM asks it to use. What both answers have in common is the
+     * one that matters — it is not the zero of a process that closed itself —
+     * and these children are killed while standing inside a transaction, so
+     * they have no path of their own to any exit at all (PLAN 14.8.5).
+     */
+    val wasKilled: Boolean get() = !process.isAlive && process.exitValue() == killedExitCode
 
     val pid: Long get() = process.pid()
 
@@ -251,8 +270,27 @@ class WriterProcess(
 
         /** 128 + 9: how the JVM reports a child that `SIGKILL` ended. */
         const val SIGKILL_EXIT = 137
+
+        /** What `TerminateProcess` leaves behind, which is what Java asks it for. */
+        const val TERMINATED_EXIT = 1
+
+        val killedExitCode: Int get() = if (PlatformFileRules.onWindows) TERMINATED_EXIT else SIGKILL_EXIT
     }
 }
+
+/** The name the bundled SQLite driver unpacks its native library under. */
+val DRIVERS_UNPACKED_NATIVE: Regex = Regex("androidx_sqliteJni\\d+\\.tmp")
+
+/**
+ * How many files the driver's own exit handling leaves behind on a normal close.
+ *
+ * Linux deletes the unpacked native library as the process goes. Windows cannot
+ * delete a library that is still mapped into the process that is exiting, so
+ * that one file stays: it sits in the temporary directory, holds no user data,
+ * and nothing in the application reads it as a sign of anything. It is the same
+ * single file a killed process leaves on either system (PLAN 14.8.4).
+ */
+fun nativesLeftByANormalExit(): Int = if (PlatformFileRules.onWindows) 1 else 0
 
 /** Only the names, for asserting on what a folder holds. */
 fun Path.namesInside(): List<String> = Files.list(this).use { entries -> entries.map { it.name }.sorted().toList() }
