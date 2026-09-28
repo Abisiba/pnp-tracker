@@ -66,6 +66,8 @@ class DiagnosticOwnershipTest {
             // And how the application looks, in a file of its own (PLAN 12.16),
             // recorded the same way: the disk refusing a read, and refusing a write.
             "DesktopAppearanceStore.kt",
+            // The order the games are laid out in, beside their sizes (PLAN 12.18).
+            "DesktopGameOrderStore.kt",
             "GameSetupStore.kt",
             "ImportConfirmationStore.kt",
             "ImportDraftRemovalStore.kt",

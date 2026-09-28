@@ -61,6 +61,7 @@ class AppPathsResolverTest {
         assertEquals(absolute("srv", "state", "pnp-tracker"), paths.stateDirectory)
         assertEquals(absolute("srv", "state", "pnp-tracker", "logs"), paths.logsDirectory)
         assertEquals(absolute("srv", "state", "pnp-tracker", "table-sizes.json"), paths.tableSizesFile)
+        assertEquals(absolute("srv", "state", "pnp-tracker", "game-order.json"), paths.gameOrderFile)
     }
 
     @Test
@@ -338,6 +339,7 @@ class AppPathsResolverTest {
             linux.appearanceFile to windows.appearanceFile,
             linux.logsDirectory to windows.logsDirectory,
             linux.tableSizesFile to windows.tableSizesFile,
+            linux.gameOrderFile to windows.gameOrderFile,
         ).forEach { (onLinux, onWindows) ->
             assertEquals(onLinux.fileName, onWindows.fileName)
         }

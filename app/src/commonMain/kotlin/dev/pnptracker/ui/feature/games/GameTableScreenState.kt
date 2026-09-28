@@ -4,7 +4,9 @@ import dev.pnptracker.domain.colors.ColorSetupFailure
 import dev.pnptracker.domain.colors.ColorSummary
 import dev.pnptracker.domain.games.CellTextFailure
 import dev.pnptracker.domain.games.DocumentRun
+import dev.pnptracker.domain.games.GameArrangement
 import dev.pnptracker.domain.games.GameCompletionSnapshot
+import dev.pnptracker.domain.games.GameOrder
 import dev.pnptracker.domain.games.GameSetupFailure
 import dev.pnptracker.domain.games.GameTableRow
 import dev.pnptracker.domain.games.GameTableView
@@ -884,6 +886,17 @@ data class GameTableScreenState(
      * somebody is dragging must not take their measurement away.
      */
     val sizes: TableSizes = TableSizes.Default,
+    /**
+     * The order the user put the games in, as it was last written down (PLAN 12.18).
+     *
+     * State of the screen for the same reason the sizes are: it is how the table is
+     * laid out, and a reading of the rows arriving must not take it away.
+     */
+    val order: GameOrder = GameOrder(),
+    /** Whether the games are laid out in the user's order or by name. */
+    val arrangement: GameArrangement = GameArrangement.MINE,
+    /** Each game's number: its place in the user's order, whatever the layout. */
+    val numbers: Map<EntityId, Int> = emptyMap(),
     /** True when something was refused because a cell is still being worked in. */
     val blockedByEditor: Boolean = false,
     /** The task the last save made, until the user has been told about it. */

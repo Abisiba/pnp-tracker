@@ -782,6 +782,10 @@ import dev.pnptracker.resources.startup_title
 import dev.pnptracker.resources.startup_too_new
 import dev.pnptracker.resources.table_add_game
 import dev.pnptracker.resources.table_add_game_hint
+import dev.pnptracker.resources.table_arrangement_alphabetical
+import dev.pnptracker.resources.table_arrangement_alphabetical_note
+import dev.pnptracker.resources.table_arrangement_label
+import dev.pnptracker.resources.table_arrangement_mine
 import dev.pnptracker.resources.table_cell_description
 import dev.pnptracker.resources.table_cell_empty
 import dev.pnptracker.resources.table_cell_empty_description
@@ -807,6 +811,7 @@ import dev.pnptracker.resources.table_empty_tick
 import dev.pnptracker.resources.table_fit_column
 import dev.pnptracker.resources.table_label
 import dev.pnptracker.resources.table_loading
+import dev.pnptracker.resources.table_move_game_description
 import dev.pnptracker.resources.table_open_special
 import dev.pnptracker.resources.table_rename_game
 import dev.pnptracker.resources.table_rename_saving
@@ -1399,6 +1404,15 @@ object Strings {
          * is how it is reached; it is drawn only while there is special work.
          */
         val openSpecial = Res.string.table_open_special
+
+        /** The two layouts of the games (PLAN 12.18). */
+        val arrangementLabel = Res.string.table_arrangement_label
+        val arrangementMine = Res.string.table_arrangement_mine
+        val arrangementAlphabetical = Res.string.table_arrangement_alphabetical
+        val arrangementAlphabeticalNote = Res.string.table_arrangement_alphabetical_note
+
+        /** Takes the game's number and its name. */
+        val moveGameDescription = Res.string.table_move_game_description
         val loading = Res.string.table_loading
 
         /** Said when storage would not answer the table; never that it is empty. */

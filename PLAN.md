@@ -1777,8 +1777,58 @@ sütun genişlikleri ve satır yükseklikleri kullanıcının kendi ölçülerid
 
 **Kapsam dışı**
 
-- Sütun sırasını değiştirme, sütun gizleme, satır sıralamasını elle değiştirme
-  ve ölçülerin makineler arasında taşınması bu işin kapsamında değildir.
+- Sütun sırasını değiştirme, sütun gizleme ve ölçülerin makineler arasında
+  taşınması bu işin kapsamında değildir. Satırların elle sıralanması `12.18`'dedir.
+
+### 12.18 Oyunların sırası
+
+Kullanıcı oyunlarını oyun tablosunda **elle sıralar** ve bu sıra korunur.
+
+- Her oyun satırının solunda, ad sütununun başında, oyunun **kendi sırasındaki
+  yerini** gösteren bir numara bulunur. Numara 1'den başlar ve boşluksuz ilerler;
+  bir oyun kaldırıldığında altındakiler bir yukarı çıkar.
+- Tablonun üstünde iki düzen seçeneği vardır: **Benim sıram** ve **A–Z**.
+  Varsayılan `Benim sıram`dır.
+  - `A–Z` yalnız oyunların **ekrandaki dizilişini** değiştirir. Numaralar ve
+    kaydedilmiş sıra **değişmez**; `Benim sıram`a dönünce önceki diziliş aynen
+    geri gelir. Örnek: sıra `1 Harmonies, 2 Catan, 3 Sky Team` iken `A–Z`
+    görünümü `2 Catan, 1 Harmonies, 3 Sky Team` gösterir.
+  - Alfabetik sıra **Türkçe alfabeye** göredir (`Çay`, `Catan`'dan sonra ve
+    `Dixit`'ten önce gelir; `I` ile `ı`, `İ` ile `i` eştir), karakter kodlarına
+    göre değil.
+- Sıra yalnız `Benim sıram` düzeninde değiştirilir. `A–Z`'de bir yer oyunun adına
+  aittir; tutamaklar gösterilmez ve ekran bunu bir cümleyle söyler.
+  - **Fare:** numara aynı zamanda tutamaktır. Satır ondan tutulup yukarı veya
+    aşağı taşınır; taşınan satır imleci izler ve diğerlerinin üstünde çizilir.
+    Başka bir satırın üstünde bırakılınca oyun o satırın yerine geçer; aradaki
+    oyunlar birbirine göre sıralarını korur.
+  - **Klavye:** tutamak Tab ile odaklanır; yukarı ve aşağı ok tuşları oyunu bir
+    yer taşır. "Bir yer", ekranda görünen komşuya göredir: bir filtre açıkken
+    görünmeyen bir oyunla yer değiştirmek hiçbir şey olmamış gibi görünürdü.
+- Sıra görünümlerden (`Devam Eden`, `Tamamlanan`, `Tümü`) ve filtrelerden
+  bağımsızdır: numara oyunun bütün kütüphanedeki yeridir, filtre onu değiştirmez.
+- Sıra ilk kez oluşurken — ya da sıraya hiç girmemiş yeni oyunlar için — oyunlar
+  adlarına göre sonra eklenir. İlk açılışta tablo, bu özellikten önce çizildiği
+  gibi, ada göre numaralanır; sonradan eklenen bir oyun birinin düzeninin
+  ortasına değil **sonuna** gelir.
+- Sıralamak **yalnız sırayı** değiştirir. Oyunun adı, görevleri, hücre içerikleri
+  ve geçmişi değişmez; veritabanına hiçbir şey yazılmaz.
+- Sıra `$XDG_STATE_HOME/pnp-tracker/game-order.json` içinde oyun kimlikleriyle
+  tutulur (Windows'ta durum alanında aynı ad, `14.8.1`). `12.17`'deki ölçülerle
+  aynı sözleşmeye uyar: okumak dosyayı oluşturmaz, anlaşılamayan dosya olduğu gibi
+  bırakılır ve oyunlar ada göre numaralanır, yazımlar sıralanır, yazılamayan bir
+  sıra kaydedilir ve kullanıcıya hata olarak gösterilmez — tablo zaten istenen
+  sıradadır, kayıp yalnız bir sonraki açılışın hatırlamamasıdır.
+- Sıra **Room'a girmez** (yeni tablo, sütun veya migration yoktur) ve **yedeğin
+  kapsamına girmez**. Bunun bilinen sonucu şudur: aynı makinede geri yüklenen bir
+  yedek, oyun kimlikleri korunduğu için sırayı yeniden bulur; **başka bir
+  makineye** taşınan yedekte sıra yoktur ve oyunlar ada göre numaralanır. Bu,
+  `12.17`'nin ölçüler için verdiği aynı karardır.
+- Düzen seçimi (`Benim sıram` / `A–Z`) saklanmaz; tablo her açılışta
+  `Benim sıram` ile açılır.
+- Taşırken tablonun kenarına gelince kendiliğinden kaydırma bu işin kapsamında
+  değildir: fare yalnız ekranda görünen bir satırın üstüne bırakır, uzak bir yer
+  için klavye veya birkaç adım kullanılır.
 
 ## 13. Arama, filtreleme ve sıralama
 
@@ -1798,7 +1848,8 @@ bulunmalıdır.
 
 Varsayılan sıralama:
 
-- Oyun tablosunda oyun adı
+- Oyun tablosunda kullanıcının kendi sırası; `A–Z` seçeneğiyle Türkçe alfabetik
+  oyun adı (`12.18`)
 - Renk grupları kullanıcının renk sırasına (`sortOrder`) göre
 - Grup içinde önce eksik/hatalı baskılar, sonra oyun adı ve görev adı
 - Kart/mukavvada üretim hattında daha ileride olan görevler değil, sıradaki işi yapılabilir olan görevler öne çıkar
@@ -3201,7 +3252,7 @@ dizinleri kullanılır:
 
 ```text
 %LOCALAPPDATA%\pnp-tracker\data\           pnp.db  ve  backups/
-%LOCALAPPDATA%\pnp-tracker\state\          logs/  ve  table-sizes.json
+%LOCALAPPDATA%\pnp-tracker\state\          logs/, table-sizes.json  ve  game-order.json
 %APPDATA%\pnp-tracker\                     settings.json  ve  appearance.json
 ```
 

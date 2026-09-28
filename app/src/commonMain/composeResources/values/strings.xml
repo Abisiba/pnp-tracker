@@ -285,6 +285,11 @@
     <!-- Game table: the three global views -->
     <string name="table_view_label">Görünüm</string>
     <string name="table_open_special">Özel görevler</string>
+    <string name="table_arrangement_label">Sıralama</string>
+    <string name="table_arrangement_mine">Benim sıram</string>
+    <string name="table_arrangement_alphabetical">A–Z</string>
+    <string name="table_arrangement_alphabetical_note">A–Z görünümünde oyunlar yalnız adlarına göre dizilir; numaralar ve kendi sıranız değişmez. Taşımak için Benim sıram'a dönün.</string>
+    <string name="table_move_game_description">%1$s. sıradaki %2$s oyununu taşı: sürükleyin ya da yukarı ve aşağı ok tuşlarını kullanın</string>
     <string name="table_view_ongoing">Devam Eden</string>
     <string name="table_view_completed">Tamamlanan</string>
     <string name="table_view_all">Tümü</string>

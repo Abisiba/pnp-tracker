@@ -38,4 +38,12 @@ data class AppPaths(
      * a layout rather than a setting. Made only when somebody resizes something.
      */
     val tableSizesFile: Path,
+    /**
+     * The order the user put their games in, on this machine (PLAN 12.18).
+     *
+     * State beside the table's sizes, for the same reason they are state: it is
+     * how this machine lays the games out, not a fact about the games, so it is not
+     * in the database and does not travel in a backup.
+     */
+    val gameOrderFile: Path,
 )

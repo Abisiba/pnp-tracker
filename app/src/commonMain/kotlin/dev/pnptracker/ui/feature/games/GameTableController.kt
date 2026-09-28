@@ -23,13 +23,16 @@ import dev.pnptracker.domain.games.CellTextException
 import dev.pnptracker.domain.games.CellTextFailure
 import dev.pnptracker.domain.games.DocumentChange
 import dev.pnptracker.domain.games.DocumentEditRefusal
+import dev.pnptracker.domain.games.GameArrangement
 import dev.pnptracker.domain.games.GameCompletionSnapshot
+import dev.pnptracker.domain.games.GameOrderStore
 import dev.pnptracker.domain.games.GameSetupException
 import dev.pnptracker.domain.games.GameTableRow
 import dev.pnptracker.domain.games.GameTableView
 import dev.pnptracker.domain.games.TableColumn
 import dev.pnptracker.domain.games.TableSizes
 import dev.pnptracker.domain.games.TableSizesStore
+import dev.pnptracker.domain.games.alphabetically
 import dev.pnptracker.domain.games.automaticWidthFor
 import dev.pnptracker.domain.games.planDocumentChange
 import dev.pnptracker.domain.games.runsFrom
@@ -87,6 +90,8 @@ class GameTableController(
     private val taskProgress: TaskProgressing,
     /** Where the table's own sizes are remembered (PLAN 12.17). */
     private val tableSizes: TableSizesStore = TableSizesStore.Forgetful,
+    /** Where the order the user put the games in is remembered (PLAN 12.18). */
+    private val gameOrder: GameOrderStore = GameOrderStore.Forgetful,
     private val idGenerator: IdGenerator = IdGenerator.Random,
     private val diagnostics: Diagnostics = Diagnostics.None,
 ) : TaskEditingHost,
@@ -147,6 +152,78 @@ class GameTableController(
     /** Asks for the screen to be read again, after a reading storage refused. */
     fun readAgain() {
         readAttempt += 1
+    }
+
+    // ------------------------------------------------ the order the games are in
+
+    /**
+     * Reads the order this machine lays the games out in, once, as the screen opens.
+     *
+     * Never fails and never blocks the table, like the sizes: an unreadable file
+     * answers with no order, and the games are numbered by name (PLAN 12.18).
+     */
+    suspend fun readOrder() {
+        // Read first and applied afterwards, for the reason [readSizes] gives.
+        val read = gameOrder.read()
+        state = state.copy(order = read).redrawn()
+    }
+
+    /**
+     * Lays the games out by the user's order or by name.
+     *
+     * Only the layout changes. The numbers stay each game's place in the user's
+     * order, and that order is untouched, so coming back to [GameArrangement.MINE]
+     * brings back exactly what was there (PLAN 12.18).
+     */
+    fun arrange(arrangement: GameArrangement) {
+        if (arrangement == state.arrangement) return
+        state = state.copy(arrangement = arrangement).redrawn()
+    }
+
+    /** True when a game can be moved: only while the table is in the user's own order. */
+    val canReorder: Boolean
+        get() = state.arrangement == GameArrangement.MINE
+
+    /**
+     * Moves [gameId] to where [target] is, as dropping one row onto another does.
+     *
+     * Refused in the alphabetical layout, where a place in the list is the name's
+     * and not the user's; the control that would do it is not offered there.
+     */
+    suspend fun moveGame(
+        gameId: EntityId,
+        target: EntityId,
+    ) {
+        if (!canReorder) return
+        val moved = state.order.moved(gameId, target, allRows)
+        // Nothing moved — dropped on itself, or onto a row that has gone — so
+        // nothing is written either.
+        if (moved.gameIds == state.order.sequenceFor(allRows)) return
+        state = state.copy(order = moved).redrawn()
+        gameOrder.write(moved)
+    }
+
+    /**
+     * Moves [gameId] one place up among the games on screen — the keyboard's way.
+     *
+     * One place among the rows the user can see, not in the whole library: with a
+     * filter on, the game above is the one they are looking at, and swapping with
+     * a game they cannot see would look like nothing happened.
+     */
+    suspend fun moveGameUp(gameId: EntityId) = moveBeside(gameId, step = -1)
+
+    /** The same, one place down. */
+    suspend fun moveGameDown(gameId: EntityId) = moveBeside(gameId, step = 1)
+
+    private suspend fun moveBeside(
+        gameId: EntityId,
+        step: Int,
+    ) {
+        val visible = (state.rows as? GameTableRowsState.Content)?.rows ?: return
+        val at = visible.indexOfFirst { it.gameId == gameId }
+        val neighbour = visible.getOrNull(at + step) ?: return
+        if (at < 0) return
+        moveGame(gameId, neighbour.gameId)
     }
 
     // --------------------------------------------- the sizes the table is drawn at
@@ -2003,11 +2080,20 @@ class GameTableController(
         view: GameTableView,
         filter: GameTableFilter,
         busyWith: Set<EntityId>,
+        numbers: Map<EntityId, Int>,
+        arrangement: GameArrangement,
     ): GameTableRowsState {
         // The row a surface is standing on is kept whatever the filter says, for
         // the same reason it is kept whatever the view says.
         val inView = allRows.filter { view.includes(it) || it.gameId in busyWith }
-        val visible = inView.filter { filter.matches(it) || it.gameId in busyWith }
+        val filtered = inView.filter { filter.matches(it) || it.gameId in busyWith }
+        // The layout is the last thing decided and the only thing it decides is
+        // where each row goes: the numbers came from the user's order either way.
+        val visible =
+            when (arrangement) {
+                GameArrangement.MINE -> filtered.sortedBy { numbers[it.gameId] ?: Int.MAX_VALUE }
+                GameArrangement.ALPHABETICAL -> filtered.sortedWith(alphabetically)
+            }
         return if (visible.isEmpty()) {
             GameTableRowsState.Empty(
                 view = view,
@@ -2032,7 +2118,12 @@ class GameTableController(
         if (tableWasRefused) {
             copy(rows = GameTableRowsState.Failed)
         } else {
-            copy(rows = rowsFor(view, filter, setOfNotNull(work?.gameId, rowWork?.gameId)))
+            order.numbersFor(allRows).let { numbered ->
+                copy(
+                    rows = rowsFor(view, filter, setOfNotNull(work?.gameId, rowWork?.gameId), numbered, arrangement),
+                    numbers = numbered,
+                )
+            }
         }
 }
 
