@@ -255,7 +255,10 @@ fun normaliseRepackedJars(appDirectory: File) {
         val renamed = appDirectory.resolve("$stem-$digest.jar")
         jar.delete()
         renamed.writeBytes(bytes.toByteArray())
-        cfg.writeText(cfg.readText().replace("\$APPDIR/${jar.name}\n", "\$APPDIR/${renamed.name}\n"))
+        // The jar's name carries its own digest, so it is distinctive enough to
+        // replace on its own — and it has to be, because the launcher writes its
+        // class path with the separator of whichever system made it.
+        cfg.writeText(cfg.readText().replace(jar.name, renamed.name))
         check(renamed.name in cfg.readText() && jar.name !in cfg.readText()) { "the launcher does not name ${renamed.name}" }
         val again =
             ZipFile(renamed).use { zip ->
