@@ -237,6 +237,13 @@ class TableResizeTest {
                 first.dragFrom(boundary, boundary + Offset(120f, 0f))
                 first.dragFrom(first.rowBottom("Kart"), first.rowBottom("Kart") + Offset(0f, 90f))
                 first.render()
+                // Each drag's write runs off the screen's thread and one after
+                // the other. Closing the screen cancels a write still waiting its
+                // turn, which on a slow disk left the file with the width and
+                // without the height, so the file is waited on before the close.
+                first.settle("both drags are on disk") {
+                    runBlocking { DesktopTableSizesStore(sizesFile).read() } == table.state.sizes
+                }
             }
 
             // A new controller over the same file, which is what a restart is.
