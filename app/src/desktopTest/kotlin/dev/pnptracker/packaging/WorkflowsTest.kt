@@ -54,7 +54,7 @@ class WorkflowsTest {
     fun `both workflows parse and say what they are for`() {
         assertEquals("verify", ci["name"])
         assertEquals("release", release["name"])
-        assertEquals(listOf("check"), jobs(ci).keys.toList())
+        assertEquals(listOf("check", "windows"), jobs(ci).keys.toList())
         assertEquals(listOf("verify", "package", "publish"), jobs(release).keys.toList())
         assertTrue(everyStep(ci).all { "name" in it }, "adı olmayan adım var")
         assertTrue(everyStep(release).all { "name" in it }, "adı olmayan adım var")
@@ -155,9 +155,12 @@ class WorkflowsTest {
                 val days = step.getValue("with").asMap()["retention-days"]
                 assertTrue(days != null && days.toString().toInt() in 1..90, "saklama süresi belirtilmemiş: ${step["name"]}")
             }
-        // Test reports are kept even when the run failed.
-        val reports = everyStep(ci).single { (it["uses"] as String?)?.contains("upload-artifact") == true }
-        assertEquals("\${{ always() }}", reports["if"], "test raporları yalnız başarıda yükleniyor")
+        // Test reports are kept even when the run failed — on both platforms.
+        val reports = everyStep(ci).filter { (it["with"] as? Map<*, *>)?.get("name").toString().endsWith("test-reports") }
+        assertEquals(2, reports.size, "her platform için test raporu yüklenmiyor")
+        reports.forEach { step ->
+            assertEquals("\${{ always() }}", step["if"], "test raporları yalnız başarıda yükleniyor: ${step["name"]}")
+        }
     }
 
     // -------------------------------------------------------------- the commands
@@ -165,7 +168,7 @@ class WorkflowsTest {
     @Test
     fun `every gradle command names a task this repository has`() {
         val build = Files.readString(repository().resolve("app/build.gradle.kts"))
-        val named = Regex("\\./gradlew ((?::app:)?[A-Za-z]+(?: (?::app:)?[A-Za-z]+)*)")
+        val named = Regex("\\.[/\\\\]gradlew(?:\\.bat)? ((?::app:)?[A-Za-z]+(?: (?::app:)?[A-Za-z]+)*)")
         val tasks =
             (commandsOf(ci) + commandsOf(release))
                 .flatMap { named.findAll(it).map { match -> match.groupValues[1] }.toList() }
@@ -179,23 +182,47 @@ class WorkflowsTest {
         }
         assertTrue("checkReleaseTag" in tasks && "packageRelease" in tasks, "yayın akışı sürüm ve paket görevlerini çağırmıyor")
         assertTrue("verifyLinuxPackage" in tasks && "verifyArchPackage" in tasks, "paket doğrulama görevleri çağrılmıyor")
+        assertTrue("verifyWindowsPackage" in tasks, "Windows paket doğrulaması çağrılmıyor")
     }
 
     @Test
     fun `the verification runs the memory-limited command the project uses`() {
-        val check = commandsOf(ci).single { "clean check" in it }
-        listOf(
-            "--rerun-tasks",
-            "--no-daemon",
-            "--no-parallel",
-            "--max-workers=1",
-            "-Pkotlin.compiler.execution.strategy=in-process",
-            "-Xmx1536m",
-            "-XX:MaxMetaspaceSize=512m",
-        ).forEach { flag -> assertTrue(flag in check, "check komutunda $flag yok") }
-        // The suite needs a display; it is given one rather than skipped.
-        assertTrue("xvfb-run" in check, "pencere isteyen testler ekransız koşturuluyor")
-        assertFalse(Regex("-x\\s|--exclude-task|-PskipTests").containsMatchIn(check), "check komutu test dışlıyor")
+        // One per supported platform, and both the same command (PLAN 14.8.6).
+        val checks = commandsOf(ci).filter { "clean check" in it }
+        assertEquals(2, checks.size, "her desteklenen platform için bir tam koşu yok")
+        checks.forEach { check ->
+            listOf(
+                "--rerun-tasks",
+                "--no-daemon",
+                "--no-parallel",
+                "--max-workers=1",
+                "-Pkotlin.compiler.execution.strategy=in-process",
+                "-Xmx1536m",
+                "-XX:MaxMetaspaceSize=512m",
+            ).forEach { flag -> assertTrue(flag in check, "check komutunda $flag yok") }
+            assertFalse(Regex("-x\\s|--exclude-task|-PskipTests").containsMatchIn(check), "check komutu test dışlıyor")
+        }
+        // Linux has no desktop session of its own, so the suite is given a display
+        // rather than skipped; a Windows runner already has one.
+        assertTrue(checks.any { "xvfb-run" in it }, "pencere isteyen testler ekransız koşturuluyor")
+    }
+
+    @Test
+    fun `the windows job proves the installer and never reaches a real user's folders`() {
+        val windows = jobs(ci).getValue("windows")
+        assertEquals("windows-2025", windows["runs-on"], "Windows koşucusu sabit değil")
+        assertEquals(mapOf("contents" to "read"), windows.getValue("permissions").asMap(), "Windows işi yazma izni istiyor")
+        val commands = steps(windows).mapNotNull { it["run"] as String? }
+        // The installer tool is pinned rather than taken from the image.
+        assertTrue(commands.any { "wixtoolset --version 3.14.1" in it }, "WiX sürümü sabitlenmemiş")
+        assertTrue(commands.any { "verifyWindowsPackage" in it }, "kurucu doğrulanmıyor")
+        // The Windows counterpart of the Linux job's last step.
+        val guard = commands.single { "pnp-tracker\"" in it && "Test-Path" in it }
+        listOf("LOCALAPPDATA", "APPDATA").forEach { variable ->
+            assertTrue("\$env:$variable" in guard, "$variable altındaki gerçek klasör denetlenmiyor")
+        }
+        val installer = steps(windows).single { (it["with"] as? Map<*, *>)?.get("name") == "windows-installer" }
+        assertEquals("14", (installer["with"] as Map<*, *>)["retention-days"].toString(), "kurucu artifact'i saklama süresi vermiyor")
     }
 
     @Test
