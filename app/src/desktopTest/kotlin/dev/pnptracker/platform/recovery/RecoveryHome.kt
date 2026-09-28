@@ -11,6 +11,7 @@ import dev.pnptracker.platform.files.AppPathsResolver
 import dev.pnptracker.platform.files.PlatformFileRules
 import dev.pnptracker.platform.files.XDG_LAYOUT
 import dev.pnptracker.platform.startup.INSTANCE_LOCK_NAME
+import dev.pnptracker.platform.startup.InstanceLock
 import dev.pnptracker.platform.startup.deleteTemporaryTree
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
@@ -110,7 +111,7 @@ class RecoveryHome : AutoCloseable {
             put("XDG_DATA_HOME", root.resolve("data").toString())
             put("XDG_CONFIG_HOME", root.resolve("config").toString())
         }
-        return WriterProcess(builder.start()).also(children::add)
+        return WriterProcess(builder.start(), paths.dataDirectory.resolve(INSTANCE_LOCK_NAME)).also(children::add)
     }
 
     /** Every file and directory under the data and config directories, relative to this home. */
@@ -207,6 +208,7 @@ data class Reopened(
  */
 class WriterProcess(
     private val process: Process,
+    private val instanceLock: Path,
 ) {
     private val lines = LinkedBlockingQueue<String>()
     private val transcript = StringBuilder()
@@ -255,6 +257,31 @@ class WriterProcess(
             left.isEmpty(),
             "the child left processes of its own behind: ${left.map { it.info().command().orElse(it.pid().toString()) }}",
         )
+        awaitTheSystemLettingGo()
+    }
+
+    /**
+     * Waits until the system has given back what the killed child was holding.
+     *
+     * Linux gives it all back with the process. Windows releases a dead process's
+     * handles a moment after the process itself is reported gone, and a start that
+     * came inside that moment was refused — once as "another copy is running" and
+     * once, further in, as a migration that failed. Asked here with the
+     * application's own lock, which is the same handle question, and counted
+     * rather than slept through, so what a test asserts afterwards is the recovery
+     * and not the timing (PLAN 14.8.4).
+     */
+    private fun awaitTheSystemLettingGo() {
+        fun letGo(): Boolean = runCatching { InstanceLock(instanceLock).withLock { true } == true }.getOrDefault(false)
+
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(REAPING_SECONDS)
+        var waits = 0
+        while (!letGo()) {
+            assertTrue(System.nanoTime() < deadline, "the system never gave back what the killed child held")
+            waits += 1
+            Thread.sleep(REAPING_POLL_MILLISECONDS)
+        }
+        if (waits > 0) println("KILL: the system let go after $waits wait(s) of $REAPING_POLL_MILLISECONDS ms")
     }
 
     /** Waits for a process that exits by itself, and gives its exit code. */

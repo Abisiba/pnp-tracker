@@ -3260,6 +3260,11 @@ olduğu için sessizce oluşamaz:
   **ne kadar sürdüğünü yazar**. `windows-2025` koşucusunda ölçülen: kilit
   **ikinci denemede** geri gelmişti, yani bırakılma tek bir 50 ms'lik yoklama
   aralığı içinde oldu; gecikme saniyeler değil, milisaniyeler mertebesindedir.
+  Aynı gecikme ikinci bir yerde de görüldü: öldürülen bir kopyanın hemen ardından
+  yapılan açılış, kilit yüzünden değil **veritabanı yüzünden** reddedildi
+  (`MIGRATION_FAILED`). İkisi de tek bir olgunun görünümüdür — ölü sürecin dosya
+  tutuşu, sürecin öldüğü bildirildikten biraz sonra bırakılıyor — ve doğrulama
+  bunu uygulamanın kendi kilidiyle bekleyip sayarak geçer.
   Uygulamanın davranışı bu turda **değişmemiştir**: `14.4.10` gereği ikinci
   kopya beklemez, reddeder ve söyler. Çökmenin hemen ardından yeniden açan bir
   Windows kullanıcısının bu yüzden haksız bir ret görüp görmeyeceği ve buna
@@ -3830,7 +3835,11 @@ Kişisel kullanımda veri kaybı riski düşük, test edilmiş ve Garuda Linux�
     açılış ekranında "birkaç saniye sonra yeniden deneyin" diyen bir metin, ya
     da bugünkü davranışın bilinçli olarak korunması. Karar verilmeden
     `14.4.10`'un "ikinci kopya beklemez" kuralı **değiştirilmez** ve bu sınır
-    kullanıcı belgesinde dürüstçe yazılır.
+    kullanıcı belgesinde dürüstçe yazılır. Kararın kapsamı yalnız kilit değildir:
+    aynı gecikme, çöküşün hemen ardından yapılan açılışta veritabanının
+    okunamamasına ve `MIGRATION_FAILED` ile reddedilmeye de yol açtı. Bu, bir
+    kullanıcının göreceği en sert ret metnidir ve karar bunu da kapsamak
+    zorundadır.
 19. `close` dönmüş bir veritabanının `-wal` ve `-shm` dosyalarını neden açık
     tuttuğunu araştır (`14.8.4`, İş 17'de ölçüldü). Ölçülen iki durum: sürücünün
     içinde düşürülen bir ifade ve sahnesi yaşarken okumayı sürdüren bir ekran.
