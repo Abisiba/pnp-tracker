@@ -47,7 +47,7 @@ import kotlin.time.Clock
  * log — which is what a copy that was killed rather than closed leaves — and
  * then one start through the very code `Main` runs.
  *
- * Nothing is substituted. The paths come from [XdgAppPathsResolver], the folders
+ * Nothing is substituted. The paths come from [AppPathsResolver], the folders
  * from [AppDirectoryInitializer], the version is read without Room, the clone is
  * the read-only `VACUUM INTO`, the working copy is migrated by the real chain,
  * the document is written by the real atomic writer and read back by the real
@@ -61,7 +61,7 @@ import kotlin.time.Clock
  */
 class MigrationStartupSmokeTest {
     private lateinit var home: Path
-    private lateinit var paths: XdgAppPaths
+    private lateinit var paths: AppPaths
     private var realDatabaseExisted = false
     private var oldConnection: SQLiteConnection? = null
     private var database: AppDatabase? = null
@@ -72,7 +72,8 @@ class MigrationStartupSmokeTest {
         realDatabaseExisted = Files.exists(TemporaryDatabaseDirectory.realApplicationDatabaseFile())
         home = Files.createTempDirectory("pnp-tracker-migration-smoke")
         paths =
-            XdgAppPathsResolver(
+            AppPathsResolver(
+                systemProperty = XDG_LAYOUT,
                 environment = { name ->
                     when (name) {
                         "XDG_DATA_HOME" -> home.resolve("data").toString()

@@ -92,7 +92,7 @@ private class ChosenFile(
  *
  * One thing is substituted and only one: the system file dialog, which cannot be
  * clicked through by a test. Everything on either side of it is production — the
- * paths from [XdgAppPathsResolver], the directories from [AppDirectoryInitializer],
+ * paths from [AppPathsResolver], the directories from [AppDirectoryInitializer],
  * the database from [DatabaseFactory], the reader with its throwaway database, the
  * safety writer with its atomic write, and the transaction itself. What the
  * dialog would have answered with is a real file this application really wrote.
@@ -140,7 +140,8 @@ class RestoreSmokeTest {
             val data = home.resolve("data")
             val config = home.resolve("config")
             val paths =
-                XdgAppPathsResolver(
+                AppPathsResolver(
+                    systemProperty = XDG_LAYOUT,
                     environment = { name ->
                         when (name) {
                             "XDG_DATA_HOME" -> data.toString()
@@ -265,7 +266,8 @@ class RestoreSmokeTest {
             val data = home.resolve("data")
             val config = home.resolve("config")
             val paths =
-                XdgAppPathsResolver(
+                AppPathsResolver(
+                    systemProperty = XDG_LAYOUT,
                     environment = { name ->
                         when (name) {
                             "XDG_DATA_HOME" -> data.toString()
@@ -323,7 +325,7 @@ class RestoreSmokeTest {
      */
     private fun controllerFor(
         file: Path,
-        paths: XdgAppPaths,
+        paths: AppPaths,
         database: AppDatabase,
     ) = RestoreController(
         sources =

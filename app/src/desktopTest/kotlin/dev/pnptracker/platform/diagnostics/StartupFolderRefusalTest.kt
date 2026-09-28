@@ -8,8 +8,9 @@ import dev.pnptracker.domain.diagnostics.DiagnosticEvent
 import dev.pnptracker.domain.diagnostics.DiagnosticLevel
 import dev.pnptracker.domain.diagnostics.recordSafely
 import dev.pnptracker.platform.files.AppDirectoryInitializer
-import dev.pnptracker.platform.files.XdgAppPaths
-import dev.pnptracker.platform.files.XdgAppPathsResolver
+import dev.pnptracker.platform.files.AppPaths
+import dev.pnptracker.platform.files.AppPathsResolver
+import dev.pnptracker.platform.files.XDG_LAYOUT
 import dev.pnptracker.platform.startup.deleteTemporaryTree
 import java.nio.file.Files
 import java.nio.file.Path
@@ -59,8 +60,9 @@ class StartupFolderRefusalTest {
         deleteTemporaryTree(home)
     }
 
-    private fun pathsUnder(root: Path): XdgAppPaths =
-        XdgAppPathsResolver(
+    private fun pathsUnder(root: Path): AppPaths =
+        AppPathsResolver(
+            systemProperty = XDG_LAYOUT,
             environment = { name ->
                 when (name) {
                     "XDG_DATA_HOME" -> root.resolve("data").toString()

@@ -43,9 +43,10 @@ import dev.pnptracker.platform.backupfiles.DesktopBackupDirectory
 import dev.pnptracker.platform.backupfiles.DesktopImportSnapshotWriter
 import dev.pnptracker.platform.backupfiles.PathBackupInput
 import dev.pnptracker.platform.files.AppDirectoryInitializer
+import dev.pnptracker.platform.files.AppPaths
+import dev.pnptracker.platform.files.AppPathsResolver
 import dev.pnptracker.platform.files.AtomicFileWriter
-import dev.pnptracker.platform.files.XdgAppPaths
-import dev.pnptracker.platform.files.XdgAppPathsResolver
+import dev.pnptracker.platform.files.XDG_LAYOUT
 import dev.pnptracker.platform.settings.DesktopSettingsStore
 import dev.pnptracker.ui.feature.importworkspace.ImportConfirmationController
 import kotlinx.coroutines.CompletableDeferred
@@ -147,7 +148,7 @@ private class GatedWriter(
  */
 class ImportSnapshotBeforeConfirmationTest {
     private lateinit var home: Path
-    private lateinit var paths: XdgAppPaths
+    private lateinit var paths: AppPaths
     private lateinit var database: AppDatabase
     private var realDatabaseExisted = false
     private val probeRoots = mutableListOf<Path>()
@@ -157,7 +158,8 @@ class ImportSnapshotBeforeConfirmationTest {
         realDatabaseExisted = Files.exists(TemporaryDatabaseDirectory.realApplicationDatabaseFile())
         home = Files.createTempDirectory("pnp-tracker-import-snapshot")
         paths =
-            XdgAppPathsResolver(
+            AppPathsResolver(
+                systemProperty = XDG_LAYOUT,
                 environment = { name ->
                     when (name) {
                         "XDG_DATA_HOME" -> home.resolve("data").toString()

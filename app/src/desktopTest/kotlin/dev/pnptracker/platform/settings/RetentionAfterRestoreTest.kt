@@ -31,9 +31,10 @@ import dev.pnptracker.platform.backupfiles.DesktopBackupDirectory
 import dev.pnptracker.platform.backupfiles.DesktopBackupSourceGateway
 import dev.pnptracker.platform.backupfiles.DesktopSafetyBackupWriter
 import dev.pnptracker.platform.files.AppDirectoryInitializer
+import dev.pnptracker.platform.files.AppPaths
+import dev.pnptracker.platform.files.AppPathsResolver
 import dev.pnptracker.platform.files.AtomicFileWriter
-import dev.pnptracker.platform.files.XdgAppPaths
-import dev.pnptracker.platform.files.XdgAppPathsResolver
+import dev.pnptracker.platform.files.XDG_LAYOUT
 import dev.pnptracker.platform.startup.MigrationSnapshotSetWriter
 import dev.pnptracker.platform.startup.StartupGate
 import dev.pnptracker.ui.feature.importworkspace.ImportConfirmationController
@@ -91,7 +92,7 @@ private class NeverDeletes(
  */
 class RetentionAfterRestoreTest {
     private lateinit var home: Path
-    private lateinit var paths: XdgAppPaths
+    private lateinit var paths: AppPaths
     private var realDatabaseExisted = false
     private var database: AppDatabase? = null
     private val probeRoots = mutableListOf<Path>()
@@ -101,7 +102,8 @@ class RetentionAfterRestoreTest {
         realDatabaseExisted = Files.exists(TemporaryDatabaseDirectory.realApplicationDatabaseFile())
         home = Files.createTempDirectory("pnp-tracker-retention-restore")
         paths =
-            XdgAppPathsResolver(
+            AppPathsResolver(
+                systemProperty = XDG_LAYOUT,
                 environment = { name ->
                     when (name) {
                         "XDG_DATA_HOME" -> home.resolve("data").toString()

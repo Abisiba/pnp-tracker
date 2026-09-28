@@ -6,8 +6,9 @@ import dev.pnptracker.data.repository.ImportDraftStore
 import dev.pnptracker.data.repository.ImportReviewStore
 import dev.pnptracker.data.repository.ImportRollbackStore
 import dev.pnptracker.domain.model.ImportBatchStatus
-import dev.pnptracker.platform.files.XdgAppPaths
-import dev.pnptracker.platform.files.XdgAppPathsResolver
+import dev.pnptracker.platform.files.AppPaths
+import dev.pnptracker.platform.files.AppPathsResolver
+import dev.pnptracker.platform.files.XDG_LAYOUT
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.util.concurrent.CountDownLatch
@@ -111,7 +112,10 @@ enum class Ending {
 fun main(args: Array<String>) {
     val write = InterruptedWrite.valueOf(args[0])
     val ending = Ending.valueOf(args[1])
-    val paths = XdgAppPathsResolver().resolve()
+    val paths =
+        AppPathsResolver(
+            systemProperty = XDG_LAYOUT,
+        ).resolve()
 
     val driver =
         StoppingSqliteDriver(
@@ -151,7 +155,7 @@ fun main(args: Array<String>) {
 private suspend fun make(
     write: InterruptedWrite,
     database: AppDatabase,
-    paths: XdgAppPaths,
+    paths: AppPaths,
 ) {
     val importDao = database.importDao()
     when (write) {

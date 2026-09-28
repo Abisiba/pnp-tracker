@@ -20,9 +20,10 @@ import dev.pnptracker.domain.backup.retention.SettingsDrivenHousekeeping
 import dev.pnptracker.domain.time.LocalMoment
 import dev.pnptracker.platform.backupfiles.DesktopBackupDirectory
 import dev.pnptracker.platform.files.AppDirectoryInitializer
+import dev.pnptracker.platform.files.AppPaths
+import dev.pnptracker.platform.files.AppPathsResolver
 import dev.pnptracker.platform.files.AtomicFileWriter
-import dev.pnptracker.platform.files.XdgAppPaths
-import dev.pnptracker.platform.files.XdgAppPathsResolver
+import dev.pnptracker.platform.files.XDG_LAYOUT
 import dev.pnptracker.platform.settings.DesktopSettingsStore
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
@@ -57,7 +58,7 @@ private class NoRoomAllowed : SQLiteDriver {
  */
 class DamagedDatabaseStartupTest {
     private lateinit var home: Path
-    private lateinit var paths: XdgAppPaths
+    private lateinit var paths: AppPaths
     private var realDatabaseExisted = false
     private val open = mutableListOf<SQLiteConnection>()
     private val databases = mutableListOf<AppDatabase>()
@@ -68,7 +69,8 @@ class DamagedDatabaseStartupTest {
         realDatabaseExisted = Files.exists(TemporaryDatabaseDirectory.realApplicationDatabaseFile())
         home = Files.createTempDirectory("pnp-tracker-damaged-startup")
         paths =
-            XdgAppPathsResolver(
+            AppPathsResolver(
+                systemProperty = XDG_LAYOUT,
                 environment = { name ->
                     when (name) {
                         "XDG_DATA_HOME" -> home.resolve("data").toString()
@@ -271,7 +273,8 @@ class DamagedDatabaseStartupTest {
     fun `a home whose path holds what a SQLite URI reads as syntax is still the database that is checked`() {
         val odd = home.resolve("veri ?#% ğüşİ")
         paths =
-            XdgAppPathsResolver(
+            AppPathsResolver(
+                systemProperty = XDG_LAYOUT,
                 environment = { name ->
                     when (name) {
                         "XDG_DATA_HOME" -> odd.toString()

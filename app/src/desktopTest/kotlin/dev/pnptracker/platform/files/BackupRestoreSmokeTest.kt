@@ -60,7 +60,7 @@ private val TABLES =
  * database of the current schema.
  *
  * Nothing here is a double and nothing here is the user's. The paths come from
- * [XdgAppPathsResolver], the directories from [AppDirectoryInitializer], the
+ * [AppPathsResolver], the directories from [AppDirectoryInitializer], the
  * database from [DatabaseFactory]; only the environment variables are the test's,
  * and they point at a directory it made and will delete. The data is the
  * anonymous fixture.
@@ -116,7 +116,8 @@ class BackupRestoreSmokeTest {
             val data = home.resolve("data")
             val config = home.resolve("config")
             val paths =
-                XdgAppPathsResolver(
+                AppPathsResolver(
+                    systemProperty = XDG_LAYOUT,
                     environment = { name ->
                         when (name) {
                             "XDG_DATA_HOME" -> data.toString()

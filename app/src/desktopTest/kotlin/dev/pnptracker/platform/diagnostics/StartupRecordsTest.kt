@@ -22,9 +22,10 @@ import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.time.LocalMoment
 import dev.pnptracker.platform.backupfiles.DesktopBackupDirectory
 import dev.pnptracker.platform.files.AppDirectoryInitializer
+import dev.pnptracker.platform.files.AppPaths
+import dev.pnptracker.platform.files.AppPathsResolver
 import dev.pnptracker.platform.files.AtomicFileWriter
-import dev.pnptracker.platform.files.XdgAppPaths
-import dev.pnptracker.platform.files.XdgAppPathsResolver
+import dev.pnptracker.platform.files.XDG_LAYOUT
 import dev.pnptracker.platform.settings.DesktopSettingsStore
 import dev.pnptracker.platform.startup.DatabaseDamage
 import dev.pnptracker.platform.startup.MigrationSnapshotSetWriter
@@ -50,7 +51,7 @@ import kotlin.test.assertNotNull
  */
 class StartupRecordsTest {
     private lateinit var home: Path
-    private lateinit var paths: XdgAppPaths
+    private lateinit var paths: AppPaths
     private val diagnostics = RecordingDiagnostics()
     private var realDatabaseExisted = false
     private val open = mutableListOf<SQLiteConnection>()
@@ -62,7 +63,8 @@ class StartupRecordsTest {
         realDatabaseExisted = Files.exists(TemporaryDatabaseDirectory.realApplicationDatabaseFile())
         home = Files.createTempDirectory("pnp-tracker-startup-records")
         paths =
-            XdgAppPathsResolver(
+            AppPathsResolver(
+                systemProperty = XDG_LAYOUT,
                 environment = { name ->
                     when (name) {
                         "XDG_DATA_HOME" -> home.resolve("data").toString()

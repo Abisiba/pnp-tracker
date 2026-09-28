@@ -74,7 +74,7 @@ private val ARRAYS =
  * a backup, and see whether what comes out is a JSON document that says what it
  * ought to about the database it came from.
  *
- * Nothing here is a double. The paths come from [XdgAppPathsResolver], the
+ * Nothing here is a double. The paths come from [AppPathsResolver], the
  * directories from [AppDirectoryInitializer], the database from
  * [DatabaseFactory]; only the environment variables are the test's, and they
  * point at a directory it made and will delete.
@@ -114,7 +114,8 @@ class BackupSmokeTest {
             val data = home.resolve("data")
             val config = home.resolve("config")
             val paths =
-                XdgAppPathsResolver(
+                AppPathsResolver(
+                    systemProperty = XDG_LAYOUT,
                     environment = { name ->
                         when (name) {
                             "XDG_DATA_HOME" -> data.toString()

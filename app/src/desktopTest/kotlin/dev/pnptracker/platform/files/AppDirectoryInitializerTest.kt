@@ -38,8 +38,8 @@ class AppDirectoryInitializerTest {
         }
     }
 
-    private fun pathsBelowTemporaryRoot(): XdgAppPaths =
-        XdgAppPathsResolver(
+    private fun pathsBelowTemporaryRoot(): AppPaths =
+        AppPathsResolver(
             appId = "pnp-tracker",
             environment =
                 mapOf(
@@ -47,7 +47,26 @@ class AppDirectoryInitializerTest {
                     "XDG_CONFIG_HOME" to temporaryRoot.resolve("config").toString(),
                     "XDG_STATE_HOME" to temporaryRoot.resolve("state").toString(),
                 )::get,
-            userHome = { error("the home directory must not be needed in this test") },
+            // The layout is named rather than taken from the host, so this test
+            // asks about the initializer and about nothing else — and so it can
+            // never resolve to a real user's folders (PLAN 14.8.5).
+            systemProperty = { name ->
+                if (name == "os.name") "Linux" else error("the home directory must not be needed in this test")
+            },
+        ).resolve()
+
+    /** The same three areas as PLAN 14.8.1 puts them, still under the temporary root. */
+    private fun windowsPathsBelowTemporaryRoot(): AppPaths =
+        AppPathsResolver(
+            appId = "pnp-tracker",
+            environment =
+                mapOf(
+                    "LOCALAPPDATA" to temporaryRoot.resolve("Local").toString(),
+                    "APPDATA" to temporaryRoot.resolve("Roaming").toString(),
+                )::get,
+            systemProperty = { name ->
+                if (name == "os.name") "Windows 11" else error("the home directory is not Windows' answer")
+            },
         ).resolve()
 
     @Test
@@ -147,5 +166,21 @@ class AppDirectoryInitializerTest {
                 PosixFilePermission.OWNER_WRITE,
                 PosixFilePermission.OWNER_EXECUTE,
             )
+    }
+
+    @Test
+    fun `the windows layout gets the same three directories and no others`() {
+        val paths = windowsPathsBelowTemporaryRoot()
+
+        initializer.ensureDirectories(paths)
+
+        assertTrue(Files.isDirectory(paths.dataDirectory), "data")
+        assertTrue(Files.isDirectory(paths.backupsDirectory), "backups")
+        assertTrue(Files.isDirectory(paths.configDirectory), "config")
+        // State is made by whoever first writes into it, on either layout
+        // (PLAN 14.7.1): a run with no failures leaves it absent.
+        assertFalse(Files.exists(paths.stateDirectory), "state must not be made here")
+        assertFalse(Files.exists(paths.databaseFile), "pnp.db belongs to the database")
+        assertFalse(Files.exists(paths.settingsFile), "settings.json belongs to the settings")
     }
 }

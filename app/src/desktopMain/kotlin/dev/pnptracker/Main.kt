@@ -34,6 +34,7 @@ import dev.pnptracker.domain.backup.automatic.VerifiedSnapshotTaker
 import dev.pnptracker.domain.backup.restore.UntrustedBackupReader
 import dev.pnptracker.domain.backup.retention.AutomaticBackupRotation
 import dev.pnptracker.domain.backup.retention.SettingsDrivenHousekeeping
+import dev.pnptracker.domain.diagnostics.Diagnostics
 import dev.pnptracker.domain.diagnostics.recordSafely
 import dev.pnptracker.domain.time.localMomentOf
 import dev.pnptracker.platform.awt.applyLinuxFileDialogPolicy
@@ -50,7 +51,7 @@ import dev.pnptracker.platform.diagnostics.startupRefusalRecord
 import dev.pnptracker.platform.exportfiles.AwtExportFilePicker
 import dev.pnptracker.platform.exportfiles.DesktopExportFileGateway
 import dev.pnptracker.platform.files.AppDirectoryInitializer
-import dev.pnptracker.platform.files.XdgAppPathsResolver
+import dev.pnptracker.platform.files.AppPathsResolver
 import dev.pnptracker.platform.importfiles.AwtImportFilePicker
 import dev.pnptracker.platform.importfiles.DesktopImportFileGateway
 import dev.pnptracker.platform.settings.DesktopSettingsStore
@@ -103,7 +104,17 @@ fun main() {
 
     // Where everything lives, worked out and nothing more: this reads the
     // environment and makes no folder and no file.
-    val paths = XdgAppPathsResolver().resolve()
+    val paths =
+        try {
+            AppPathsResolver().resolve()
+        } catch (refused: StartupRefused) {
+            // Without the paths there is nowhere for the diagnostic log to live
+            // either — PLAN 14.7.1 puts it under the state directory — so this
+            // one refusal is the only one shown without a record. Nothing of the
+            // user's has been read or written at this point (PLAN 14.8.1).
+            showTheStartupProblem(refused.problem, Diagnostics.None) { }
+            return
+        }
     // The diagnostic log (PLAN 14.7.1), built before the first thing that can
     // fail. Until a first line is written it makes no folder, no file and no
     // lock, and closing it hands whatever is queued to the disk for at most half
@@ -152,7 +163,7 @@ fun main() {
             // The refusal is decided by the folders or inside the gate and
             // becomes what the user sees here, so this is its one record.
             diagnostics.recordSafely { startupRefusalRecord(refused) }
-            showTheStartupProblem(refused.problem, diagnostics)
+            showTheStartupProblem(refused.problem, diagnostics, diagnostics::close)
             return
         }
     val database = opened.database
@@ -323,11 +334,12 @@ fun main() {
 @OptIn(ExperimentalComposeUiApi::class)
 private fun showTheStartupProblem(
     problem: StartupProblem,
-    diagnostics: QueuedDiagnostics,
+    diagnostics: Diagnostics,
+    closeDiagnostics: () -> Unit,
 ) {
     application {
         val exit = {
-            diagnostics.close()
+            closeDiagnostics()
             exitApplication()
         }
         CompositionLocalProvider(LocalWindowExceptionHandlerFactory provides RecordingWindowExceptionHandlerFactory(diagnostics)) {

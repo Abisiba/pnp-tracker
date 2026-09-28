@@ -32,8 +32,9 @@ import dev.pnptracker.platform.backupfiles.DesktopBackupFileGateway
 import dev.pnptracker.platform.backupfiles.DesktopImportSnapshotWriter
 import dev.pnptracker.platform.exportfiles.DesktopExportFileGateway
 import dev.pnptracker.platform.files.AppDirectoryInitializer
-import dev.pnptracker.platform.files.XdgAppPaths
-import dev.pnptracker.platform.files.XdgAppPathsResolver
+import dev.pnptracker.platform.files.AppPaths
+import dev.pnptracker.platform.files.AppPathsResolver
+import dev.pnptracker.platform.files.XDG_LAYOUT
 import dev.pnptracker.platform.importfiles.DesktopImportFileGateway
 import dev.pnptracker.platform.settings.DesktopSettingsStore
 import dev.pnptracker.platform.startup.deleteTemporaryTree
@@ -77,7 +78,7 @@ import kotlin.time.Clock
  */
 class DiagnosticsSmokeTest {
     private lateinit var home: Path
-    private lateinit var paths: XdgAppPaths
+    private lateinit var paths: AppPaths
     private lateinit var database: AppDatabase
     private var realDatabaseExisted = false
     private var realStateExisted = false
@@ -94,7 +95,8 @@ class DiagnosticsSmokeTest {
         realStateExisted = Files.exists(realStateDirectory)
         home = Files.createTempDirectory("pnp-tracker-diagnostics-smoke")
         paths =
-            XdgAppPathsResolver(
+            AppPathsResolver(
+                systemProperty = XDG_LAYOUT,
                 environment = { name ->
                     when (name) {
                         "XDG_DATA_HOME" -> home.resolve("data").toString()
