@@ -8,6 +8,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -109,14 +110,14 @@ class GameTableLayoutTest {
     @Test
     fun `the table is as wide as its columns and no wider`() {
         // A width worked out from the columns cannot drift from them, and cannot
-        // go negative when the window is made small: it does not depend on the
-        // window at all.
+        // go negative when the window is made small: the window only ever adds
+        // room a column may grow into (PLAN 12.17), never takes away a width.
         assertTrue(
-            source.contains("TableColumn.entries.fold(0.dp) { total, column -> total + dpOf(column) }"),
+            source.contains("val table: Dp = widths.values.sum().dp"),
             "the table's width is not derived from the columns it holds",
         )
         assertTrue(
-            Regex("""\.width\(state\.sizes\.tableWidth\(\)\)""").findAll(source).count() >= 3,
+            Regex("""\.width\(widths\.table\)""").findAll(source).count() >= 3,
             "something in the table is given a width of its own instead of the columns'",
         )
     }
@@ -129,9 +130,11 @@ class GameTableLayoutTest {
         // the user saying so — and even then the least a row may be is a floor,
         // not a number somebody typed into the layout.
         val row = source.substringAfter("private fun TableRow(").substringBefore("private fun GameNameCell(")
+        // What the content needs, with the user's height as a floor under it:
+        // a chosen height that is smaller than the writing never cuts it.
         assertTrue(
-            "Modifier.height(IntrinsicSize.Min) else Modifier.height(height)" in row,
-            "a row is given a height that is neither the user's nor its content's",
+            "if (height == null) Modifier else Modifier.heightIn(min = height))\n                .height(IntrinsicSize.Min)" in row,
+            "a row is given a height that is not at least what its content needs",
         )
         assertTrue(source.contains("heightIn(min ="), "rows have no minimum height to keep them tappable")
         // Every other fixed height in the file is a grip or the user's own number.
@@ -143,16 +146,20 @@ class GameTableLayoutTest {
     }
 
     @Test
-    fun `long cell content is cut rather than allowed to grow without end`() {
-        assertTrue(source.contains("maxLines = visibleLines"), "a cell can grow to any height")
-        assertTrue(
-            source.contains("if (height == null) return CELL_PREVIEW_LINES"),
-            "a row nobody resized lost the preview it has always had",
-        )
-        assertTrue(
-            source.contains("overflow = TextOverflow.Ellipsis"),
-            "nothing tells the user a cell has more in it than is shown",
-        )
+    fun `the whole of every cell, name and heading is shown, never a cut preview`() {
+        // PLAN 12.17: no three line preview, no ellipsis and no "there is more"
+        // line. The row grows to hold the writing and a long word is broken.
+        listOf(
+            "private fun CellSlot(" to "private fun tickContentOf(",
+            "private fun GameNameCell(" to "private class RowDrag",
+            "private fun HeaderCell(" to "private fun TableRow(",
+        ).forEach { (from, to) ->
+            val part = source.substringAfter(from).substringBefore(to)
+            assertFalse("maxLines" in part, "`$from` limits how many lines are drawn")
+            assertFalse("TextOverflow.Ellipsis" in part, "`$from` cuts its text with an ellipsis")
+        }
+        assertFalse("CELL_PREVIEW_LINES" in source, "a cell still has a preview budget")
+        assertFalse("cellMore" in source, "a cell still says there is more than is shown")
     }
 
     @Test
@@ -891,7 +898,7 @@ class GameTableLayoutTest {
         // Still five cell columns beside the name, so the tick cost the table no
         // width and nothing moved out of reach in a narrow window.
         assertTrue(
-            "TableColumn.entries.fold(0.dp)" in source && "CellColumnType.entries.forEach" in source,
+            "widths.values.sum()" in source && "CellColumnType.entries.forEach" in source,
             "the table grew a column of its own for the tick",
         )
         val tick = source.substringAfter("private fun GameCompletionTick(").substringBefore("private fun GameCompletionPopover(")

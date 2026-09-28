@@ -58,11 +58,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -152,7 +154,7 @@ import dev.pnptracker.domain.games.GameSetupFailure
 import dev.pnptracker.domain.games.GameTableRow
 import dev.pnptracker.domain.games.GameTableView
 import dev.pnptracker.domain.games.TableColumn
-import dev.pnptracker.domain.games.TableSizes
+import dev.pnptracker.domain.games.fittedWidths
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.PoolType
@@ -197,43 +199,29 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * How wide this machine draws [column] (PLAN 12.17).
+ * How wide every column is drawn right now (PLAN 12.17).
  *
- * The widths used to be two constants. They are now the user's own measurements,
- * and the defaults they fall back to are the two numbers the table has always
- * used — so a machine that has dragged nothing is laid out exactly as before.
+ * The user's own width, or the default, grown towards what the content needs
+ * into whatever room the window has left ([fittedWidths]). Only ever held here,
+ * on the screen: it is worked out again whenever the content, the window or the
+ * text size changes, and it is never written down as a size somebody chose.
  */
-private fun TableSizes.dpOf(column: TableColumn): Dp = widthOf(column).dp
+@Immutable
+private class DrawnWidths(
+    private val widths: Map<TableColumn, Float>,
+) {
+    /** How wide [column] is drawn. */
+    fun of(column: TableColumn): Dp = widths.getValue(column).dp
 
-/** The whole table at these sizes: the name column and every cell column. */
-private fun TableSizes.tableWidth(): Dp = TableColumn.entries.fold(0.dp) { total, column -> total + dpOf(column) }
+    /** How wide [column] is drawn, as the number a drag starts from. */
+    fun valueOf(column: TableColumn): Float = widths.getValue(column)
+
+    /** The whole table: the name column and every cell column. */
+    val table: Dp = widths.values.sum().dp
+}
 
 /** How wide a boundary is to grab. Wide enough to hit, narrow enough not to be in the way. */
 private val BoundaryGrip = 8.dp
-
-/** How much of a cell is previewed when the row is left at its own height. */
-private const val CELL_PREVIEW_LINES = 3
-
-/** The room a cell keeps above and below its text, and for the line that says there is more. */
-private val CellVerticalRoom = 34.dp
-
-/**
- * How many lines of a cell fit a row of [height] (PLAN 12.17).
- *
- * A row nobody has resized keeps the preview it has always had. A row the user
- * made taller shows as much as fits in it, which is the whole point of having
- * made it taller, and one line is the least it can come to.
- */
-private fun linesThatFit(
-    height: Dp?,
-    style: TextStyle,
-    density: Density,
-): Int {
-    if (height == null) return CELL_PREVIEW_LINES
-    val lineHeight = with(density) { style.lineHeight.toDp() }
-    if (lineHeight <= 0.dp) return CELL_PREVIEW_LINES
-    return maxOf(1, ((height - CellVerticalRoom) / lineHeight).toInt())
-}
 
 /** How tall the editor grows before it scrolls inside itself. */
 private const val EDITOR_LINES = 8
@@ -860,7 +848,14 @@ private fun Table(
 ) {
     val horizontal = rememberScrollState()
     val label = stringResource(Strings.Table.label)
-    Box(modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val needed = rememberNeededWidths(rows)
+        val sizes = state.sizes
+        val available = maxWidth.value
+        val widths =
+            remember(sizes, needed, available) {
+                DrawnWidths(fittedWidths(TableColumn.entries.associateWith(sizes::widthOf), needed, available))
+            }
         Column(
             modifier =
                 Modifier
@@ -868,13 +863,39 @@ private fun Table(
                     .horizontalScroll(horizontal)
                     .semantics { contentDescription = label },
         ) {
-            TableHeader(sizes = state.sizes, controller = controller, rows = rows)
-            HorizontalDivider(modifier = Modifier.width(state.sizes.tableWidth()))
+            TableHeader(widths = widths, controller = controller, rows = rows)
+            HorizontalDivider(modifier = Modifier.width(widths.table))
             val drag = remember { RowDrag() }
-            LazyColumn(modifier = Modifier.width(state.sizes.tableWidth()).fillMaxHeight()) {
+            LazyColumn(modifier = Modifier.width(widths.table).fillMaxHeight()) {
                 items(rows, key = { it.gameId.value }) { row ->
-                    RowWithItsOwnHeight(row = row, controller = controller, state = state, drag = drag)
-                    HorizontalDivider(modifier = Modifier.width(state.sizes.tableWidth()))
+                    RowWithItsOwnHeight(row = row, controller = controller, state = state, widths = widths, drag = drag)
+                    HorizontalDivider(modifier = Modifier.width(widths.table))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * How wide each column would have to be for its longest line to sit on one line.
+ *
+ * Measured over the rows on screen, with the text size the window is using, so a
+ * bigger text size asks for more room on the next frame. Lines already measured
+ * are remembered while the style and the density stay the same: a table redraws
+ * on every keystroke and most of its lines have not changed.
+ */
+@Composable
+private fun rememberNeededWidths(rows: List<GameTableRow>): Map<TableColumn, Float> {
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val cellStyle = MaterialTheme.typography.bodyMedium
+    val nameStyle = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium)
+    val measured = remember(density, cellStyle, nameStyle) { HashMap<Pair<Boolean, String>, Int>() }
+    return remember(rows, density, cellStyle, nameStyle) {
+        TableColumn.entries.associateWith { column ->
+            widthThatFits(column, rows, density) { text, isName ->
+                measured.getOrPut(isName to text) {
+                    measurer.measure(text, if (isName) nameStyle else cellStyle, softWrap = false).size.width
                 }
             }
         }
@@ -883,7 +904,7 @@ private fun Table(
 
 @Composable
 private fun TableHeader(
-    sizes: TableSizes,
+    widths: DrawnWidths,
     controller: GameTableController,
     rows: List<GameTableRow>,
 ) {
@@ -891,13 +912,14 @@ private fun TableHeader(
     val density = LocalDensity.current
     val cellStyle = MaterialTheme.typography.bodyMedium
     val nameStyle = MaterialTheme.typography.bodyMedium
-    Box(modifier = Modifier.width(sizes.tableWidth())) {
+    val drawn by rememberUpdatedState(widths)
+    Box(modifier = Modifier.width(widths.table)) {
         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-            HeaderCell(text = stringResource(Strings.Columns.game), width = sizes.dpOf(TableColumn.GAME_NAME))
+            HeaderCell(text = stringResource(Strings.Columns.game), width = widths.of(TableColumn.GAME_NAME))
             CellColumnType.entries.forEach { columnType ->
                 HeaderCell(
                     text = stringResource(columnNameOf(columnType)),
-                    width = sizes.dpOf(TableColumn.of(columnType)),
+                    width = widths.of(TableColumn.of(columnType)),
                 )
             }
         }
@@ -909,10 +931,11 @@ private fun TableHeader(
         Box(modifier = Modifier.matchParentSize()) {
             var edge = 0.dp
             TableColumn.entries.forEach { column ->
-                edge += sizes.dpOf(column)
+                edge += widths.of(column)
                 ColumnBoundary(
                     column = column,
                     edge = edge,
+                    widthNow = { drawn.valueOf(column) },
                     controller = controller,
                     onFitToContent = {
                         controller.fitColumn(column, widthThatFits(column, rows, measurer, cellStyle, nameStyle, density))
@@ -935,6 +958,7 @@ private fun TableHeader(
 private fun ColumnBoundary(
     column: TableColumn,
     edge: Dp,
+    widthNow: () -> Float,
     controller: GameTableController,
     onFitToContent: () -> Unit,
 ) {
@@ -952,11 +976,13 @@ private fun ColumnBoundary(
                     orientation = Orientation.Horizontal,
                     state =
                         rememberDraggableState { delta ->
-                            // Read through the controller rather than a captured
+                            // Read through the drawn widths rather than a captured
                             // value: a drag is a hundred of these, and each one
-                            // has to start from where the last one left off.
-                            val now = controller.state.sizes.widthOf(column)
-                            controller.resizeColumn(column, now + with(density) { delta.toDp().value })
+                            // has to start from where the last one left off. The
+                            // drawn width, not the chosen one, so a column the
+                            // content has already widened moves under the pointer
+                            // at once instead of after a stretch of nothing.
+                            controller.resizeColumn(column, widthNow() + with(density) { delta.toDp().value })
                         },
                     onDragStopped = { scope.launch { controller.rememberSizes() } },
                 ).clearAndSetSemantics { },
@@ -964,16 +990,18 @@ private fun ColumnBoundary(
 }
 
 /**
- * One row, at the height its own game was given, with an edge that can be pulled.
+ * One row, at least the height its own game was given, with an edge that can be pulled.
  *
- * The measured height is kept because a row nobody has resized has no number of
- * its own: the first drag has to start from what the content made it.
+ * The measured height is kept because what is drawn is never less than the
+ * content needs, whatever height was chosen: a drag has to start from what is on
+ * the screen.
  */
 @Composable
 private fun RowWithItsOwnHeight(
     row: GameTableRow,
     controller: GameTableController,
     state: GameTableScreenState,
+    widths: DrawnWidths,
     drag: RowDrag,
 ) {
     val density = LocalDensity.current
@@ -983,7 +1011,7 @@ private fun RowWithItsOwnHeight(
     Box(
         modifier =
             Modifier
-                .width(state.sizes.tableWidth())
+                .width(widths.table)
                 .onSizeChanged { measured = with(density) { it.height.toDp().value } }
                 .onGloballyPositioned { drag.place(row.gameId, it.boundsInRoot().top, it.boundsInRoot().bottom) }
                 // The row being carried follows the pointer and is drawn above the
@@ -993,10 +1021,10 @@ private fun RowWithItsOwnHeight(
                 .zIndex(if (carried) 1f else 0f)
                 .graphicsLayer { translationY = if (carried) drag.offset else 0f },
     ) {
-        TableRow(row = row, controller = controller, state = state, height = chosen?.dp, drag = drag)
+        TableRow(row = row, controller = controller, state = state, widths = widths, height = chosen?.dp, drag = drag)
         RowBoundary(
             gameId = row.gameId,
-            heightNow = { chosen ?: measured },
+            heightNow = { measured },
             controller = controller,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
@@ -1045,6 +1073,17 @@ private fun widthThatFits(
     cellStyle: TextStyle,
     nameStyle: TextStyle,
     density: Density,
+): Float =
+    widthThatFits(column, rows, density) { text, isName ->
+        measurer.measure(text, if (isName) nameStyle else cellStyle, softWrap = false).size.width
+    }
+
+/** [widthThatFits], with the measuring handed in so the table can remember it. */
+private fun widthThatFits(
+    column: TableColumn,
+    rows: List<GameTableRow>,
+    density: Density,
+    widthOf: (text: String, isName: Boolean) -> Int,
 ): Float {
     val texts =
         if (column == TableColumn.GAME_NAME) {
@@ -1059,11 +1098,10 @@ private fun widthThatFits(
                     .toList()
             }
         }
-    val style = if (column == TableColumn.GAME_NAME) nameStyle else cellStyle
     val widest =
         texts
             .filter { it.isNotBlank() }
-            .maxOfOrNull { text -> measurer.measure(text, style, softWrap = false).size.width }
+            .maxOfOrNull { text -> widthOf(text, column == TableColumn.GAME_NAME) }
             ?: 0
     // The room the cell keeps around its text, and the tick the name column
     // draws beside it, are part of what has to fit.
@@ -1086,8 +1124,8 @@ private fun HeaderCell(
         text = text,
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
+        // Wrapped rather than cut: a heading in a column dragged narrow still
+        // says which column it is (PLAN 12.17).
         modifier = Modifier.width(width).padding(horizontal = 12.dp),
     )
 }
@@ -1104,6 +1142,7 @@ private fun TableRow(
     row: GameTableRow,
     controller: GameTableController,
     state: GameTableScreenState,
+    widths: DrawnWidths,
     height: Dp?,
     drag: RowDrag,
 ) {
@@ -1119,12 +1158,14 @@ private fun TableRow(
     Row(
         modifier =
             Modifier
-                .width(state.sizes.tableWidth())
-                // Either the height the user gave the row, or the least the
-                // content needs. Either way it is a height the cells can fill, so
-                // a short cell in a tall row is drawn on its own ground instead of
-                // floating in the row's.
-                .then(if (height == null) Modifier.height(IntrinsicSize.Min) else Modifier.height(height))
+                .width(widths.table)
+                // What the content needs, and never less than the height the
+                // user gave the row: a height chosen smaller than the writing in
+                // it does not cut the writing (PLAN 12.17). Either way it is a
+                // height the cells can fill, so a short cell in a tall row is
+                // drawn on its own ground instead of floating in the row's.
+                .then(if (height == null) Modifier else Modifier.heightIn(min = height))
+                .height(IntrinsicSize.Min)
                 .background(background),
     ) {
         GameNameCell(
@@ -1133,7 +1174,7 @@ private fun TableRow(
             description = description,
             state = state,
             controller = controller,
-            width = state.sizes.dpOf(TableColumn.GAME_NAME),
+            width = widths.of(TableColumn.GAME_NAME),
             drag = drag,
         )
         CellColumnType.entries.forEach { columnType ->
@@ -1145,14 +1186,13 @@ private fun TableRow(
                     gameId = row.gameId,
                     state = state,
                     controller = controller,
-                    width = state.sizes.dpOf(TableColumn.of(columnType)),
-                    height = height,
+                    width = widths.of(TableColumn.of(columnType)),
                     onEdit = { controller.beginEditing(row.gameId, columnType) },
                 )
             } else {
                 CellEditorSlot(
                     cell = cell,
-                    width = state.sizes.dpOf(TableColumn.of(columnType)),
+                    width = widths.of(TableColumn.of(columnType)),
                     editor = writing,
                     composer = state.composingIn(row.gameId, columnType)?.composer,
                     creator = state.creatingColorIn(row.gameId, columnType),
@@ -1221,8 +1261,6 @@ private fun GameNameCell(
                     text = row.gameName,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
                     // Said by the tick, which also says how the game stands and
                     // what can be done about it. Drawn here, and heard there.
                     // The double click is on the drawn name, where the user
@@ -1996,12 +2034,10 @@ private fun CellSlot(
     state: GameTableScreenState,
     controller: GameTableController,
     width: Dp,
-    height: Dp?,
     onEdit: () -> Unit,
 ) {
     val columnName = stringResource(columnNameOf(cell.columnType))
     val drawn = drawnDocumentOf(cell, withCounts = true)
-    val visibleLines = linesThatFit(height, MaterialTheme.typography.bodyMedium, LocalDensity.current)
     val editLabel = stringResource(Strings.Cell.editAction, columnName)
     val description =
         if (cell.isEmpty) {
@@ -2077,8 +2113,9 @@ private fun CellSlot(
                 Text(
                     text = drawn.text,
                     style = MaterialTheme.typography.bodyMedium,
-                    maxLines = visibleLines,
-                    overflow = TextOverflow.Ellipsis,
+                    // Every line, always: the row grows to hold them and the
+                    // column to what the window can spare (PLAN 12.17). A word
+                    // longer than the column is broken inside itself.
                     inlineContent = tickContentOf(drawn.tasks, gameId, cell.columnType, controller),
                     onTextLayout = { layout = it },
                     modifier =
@@ -2105,19 +2142,6 @@ private fun CellSlot(
                         }
                     }
                 }
-            }
-            // A note broken into lines is cut at a line ending, where an
-            // ellipsis has nowhere to appear, so the cut is said in words
-            // instead. Without it a five line cell looks like a three line one.
-            if (drawn.text.text
-                    .lineSequence()
-                    .count() > visibleLines
-            ) {
-                Text(
-                    text = stringResource(Strings.Table.cellMore),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
         }
     }

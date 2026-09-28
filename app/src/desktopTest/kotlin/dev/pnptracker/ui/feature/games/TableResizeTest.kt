@@ -208,16 +208,20 @@ class TableResizeTest {
     }
 
     @Test
-    fun `a row cannot be dragged below the height the table has always given one`() {
+    fun `a row dragged shorter than its writing still shows all of it`() {
         RealStack().use { stack ->
             val (screen, table) = openTable(stack)
             screen.use {
-                makeHarmonies(screen, table, stack)
+                val gameId = makeHarmonies(screen, table, stack)
+                val natural = screen.rowHeight("Kart")
 
                 screen.dragFrom(from = screen.rowBottom("Kart"), to = screen.rowBottom("Kart") - Offset(0f, 400f))
                 screen.render()
 
-                assertEquals(MINIMUM_ROW_HEIGHT_DP, screen.rowHeight("Kart"), TOLERANCE)
+                // The smallest height is what was asked for and what is kept...
+                assertEquals(MINIMUM_ROW_HEIGHT_DP, table.state.sizes.heightOf(gameId) ?: 0f, TOLERANCE)
+                // ...and the row is still as tall as its four lines need (PLAN 12.17).
+                assertEquals(natural, screen.rowHeight("Kart"), TOLERANCE, "a small height cut the writing")
             }
         }
     }
@@ -292,23 +296,6 @@ class TableResizeTest {
     }
 
     @Test
-    fun `a taller row shows what a shorter one had to cut`() {
-        RealStack().use { stack ->
-            val (screen, table) = openTable(stack)
-            screen.use {
-                makeHarmonies(screen, table, stack)
-                // Four lines in a cell that shows three: the table says so in words.
-                assertTrue(MORE_TO_COME in screen.writtenText(), "a cut cell does not say there is more")
-
-                screen.dragFrom(from = screen.rowBottom("Kart"), to = screen.rowBottom("Kart") + Offset(0f, 120f))
-                screen.render()
-
-                assertTrue(MORE_TO_COME !in screen.writtenText(), "the taller row still says something is cut off")
-            }
-        }
-    }
-
-    @Test
     fun `resizing writes nothing to the database`() {
         RealStack().use { stack ->
             val (screen, table) = openTable(stack)
@@ -359,7 +346,6 @@ class TableResizeTest {
         const val AUTOMATIC_LIMIT = 480f
         const val FIT_COLUMN = "Sütunu içeriğe göre ayarla"
         const val RESET_SIZES = "Hücre boyutlarını sıfırla"
-        const val MORE_TO_COME = "devamı var"
         const val THREE_D_HEADING = "3D Baskı"
     }
 }

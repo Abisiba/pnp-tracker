@@ -73,7 +73,6 @@ class GameTablePresentationTest {
                     Strings.Table.emptyLibrary,
                     Strings.Table.emptyLibraryHint,
                     Strings.Table.cellEmpty,
-                    Strings.Table.cellMore,
                     Strings.Table.rowCompleted,
                     Strings.Table.rowOngoing,
                     Strings.Table.completedMark,

@@ -1706,17 +1706,36 @@ sütun genişlikleri ve satır yükseklikleri kullanıcının kendi ölçülerid
 
 **Ölçünün anlamı**
 
-- Kullanıcının verdiği yükseklik, hücrenin bugüne kadar sabit olan önizleme
-  bütçesinin yerine geçer: her hücre o yükseklikte **sığdığı kadar** satır
-  gösterir ve hücrenin devamı olduğunu söyleyen mevcut ipucu yerinde kalır.
-  Varsayılan ölçüde bugünkü görünüm aynen korunur. Ölçü hiçbir
-  belgeyi, görevi, rengi veya adedi değiştirmez; yalnız ne kadarının aynı anda
-  göründüğünü değiştirir.
+- Hücrenin, oyun adının ve sütun başlığının **tamamı** her zaman tabloda
+  görünür. Üç satırlık önizleme, üç nokta, "devamı var" satırı veya tıklayınca
+  açılan bir görünüm yoktur. Kullanıcının verdiği genişlik ve yükseklik bir
+  **taban**dır: içerik ona sığmıyorsa hücre yine de kesilmez.
+- **Yatayda (X):** bir sütunun en uzun satırı sütuna tek satırda sığmıyorsa
+  sütun, o satırın gerektirdiği genişliğe doğru büyür. Bu büyüme otomatik
+  genişlik üst sınırıyla (`480 dp`) ve pencerenin **artan** yeriyle sınırlıdır.
+  Artan yer, büyümek isteyen sütunlar arasında adil paylaştırılır: az isteyen
+  istediğinin tamamını alır, geri kalanı çok isteyenlere eşit bölünür. Böylece
+  tek bir uzun not bütün tabloyu pencereden taşırmaz. Seçilmiş genişliklerin
+  toplamı pencereden zaten genişse hiçbir sütun büyümez ve tablo bugünkü gibi
+  yana kaydırılır.
+- **Dikeyde (Y):** sütuna sığmayan metin alt satırlara geçer. Sütundan uzun
+  tek bir sözcük de kendi içinde kırılır. Satır, en uzun hücresinin tamamı
+  görünecek kadar uzar. Kullanıcının verdiği yükseklik, satırın en az o kadar
+  olacağı anlamına gelir; daha kısa bir yükseklik metni kesmez.
+- İçerik, pencere boyutu veya metin ölçeği değiştiğinde bu hesap bir sonraki
+  karede yeniden yapılır. Sonuç **hiçbir yere yazılmaz**: ne ölçü dosyasına
+  seçilmiş bir ölçü olarak, ne veritabanına. Kaydedilen yalnız kullanıcının
+  sürükleyerek, sığdırarak veya sıfırlayarak kendisinin seçtiği ölçüdür.
+- Sürükleme ekranda çizilen ölçüden başlar. İçeriğin genişlettiği bir sütunu
+  çekmek hemen etkili olur. İçeriğin gerektirdiğinden daha dara çekilen bir
+  sütun kaydedilir, ama yer oldukça içerik genişliğinde çizilmeye devam eder.
+- Ölçü hiçbir belgeyi, görevi, rengi veya adedi değiştirmez; yalnız tablonun
+  nasıl dizildiğini değiştirir.
 - Ölçü değiştirmek veri yazmaz: ne `updated_at`, ne bir geçmiş satırı, ne bir
   havuz kaydı. Tabloda açık bir hücre düzenleyicisi varsa ölçü değişikliği onu
   kapatmaz, içeriğini değiştirmez ve engellenmez — ölçü veri üzerinde iş değil,
   görünüm değişikliğidir.
-- Ölçü **önizlemenin** ölçüsüdür. Açık bir hücre düzenleyicisi, kendi
+- Açık bir hücre düzenleyicisi, kendi
   denetimlerinin (metin alanı, renk çarkı, adet) sığması için gereken genişliğin
   altına inmez: kullanıcı sütunu en küçük ölçüsüne çekmişse bile düzenleyici
   varsayılan sütun genişliği kadar yer alır, çünkü içindeki çark o genişliğe göre
@@ -1729,8 +1748,8 @@ sütun genişlikleri ve satır yükseklikleri kullanıcının kendi ölçülerid
   yerini ayırabileceği genişliğin altına indirilemez.
 - Bir satır, tablonun bugün de her satıra verdiği en küçük yüksekliğin — hücrenin
   kendi taban yüksekliğinin — altına indirilemez. Bu taban bir satır metinden
-  yüksektir ve bilerek öyledir: tik, çerçeve ve dolgu o yerde durur. Varsayılan
-  ölçüde bugünkü satır yüksekliği aynen korunur.
+  yüksektir ve bilerek öyledir: tik, çerçeve ve dolgu o yerde durur. Kimsenin
+  ölçmediği bir satır, içeriği ne kadar gerektiriyorsa o kadar uzundur.
 - Kullanıcının **elle büyütmesinin üst sınırı yoktur**; tablo yana kaydırılır.
   Üst sınır yalnız otomatik genişliğe uygulanır (aşağıda).
 

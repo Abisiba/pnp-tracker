@@ -353,7 +353,7 @@ class CompactCompletedTaskTest {
         /**
          * A name long enough to leave a line with no room for a label.
          *
-         * A cell is 200 dp wide and shows three lines (`GameTableScreen`), so a
+         * A cell is 200 dp wide by default (`GameTableScreen`), so a
          * name of this length and its count fill the first line and reach into
          * the second — which is where the twelve characters of `✓ Tamamlandı`
          * used to land.
