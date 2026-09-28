@@ -7,8 +7,25 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** **v0.1.7 yayımlandı — ve yayımlanabilmesi için testlerin
-> zamana dayalı üç varsayımı ayıklandı.** Tamamlanan görevin kompakt görünümü
+> **Son güncelleme:** **v0.1.8 yayımlandı: oyun tablosunun hücre ölçüleri artık
+> kullanıcının.** Altı sütun (oyun adı, 3D Baskı, Kart, Mukavva, Özel, Notlar)
+> başlık ayırıcısından sürüklenerek, her satır kendi alt kenarından
+> sürüklenerek ölçülendiriliyor: sütun ölçüsü sütunun tamamına, satır ölçüsü
+> yalnız o **oyun kimliğine** uygulanıyor. Başlık ayırıcısına çift tıklama
+> sütunu görünür içeriğe göre ayarlıyor (üst sınırlı), kullanıcının elle
+> büyütmesinin üst sınırı yok, `Hücre boyutlarını sıfırla` varsayılana
+> döndürüyor. Ölçüler `$XDG_STATE_HOME/pnp-tracker/table-sizes.json` içinde
+> duruyor — **Room'un, domain verisinin ve yedeklerin dışında** — ve uygulama
+> yeniden açıldığında korunuyor. Varsayılanlarda tablo eski görünümle piksel
+> piksel aynı. Room şeması **8** olarak kaldı; `1.json`–`8.json` ve
+> `sample-import.xlsx` bayt bayt aynı. Tam koşu 3843 / 0 / 0 / 0 (285 sınıf);
+> izole pencerede elle de denendi ve ölçüler ikinci açılışta yerinde bulundu.
+> Etiketten önce yayın yolu yine `workflow_dispatch` ile denendi (`publish`
+> atlandı, hiçbir şey yayımlanmadı); gerçek yayın ve varlıkların depo dışı
+> doğrulaması §25.14'tedir.
+>
+> Daha önce: **v0.1.7 yayımlandı — ve yayımlanabilmesi için testlerin zamana
+> dayalı üç varsayımı ayıklandı.** Tamamlanan görevin kompakt görünümü
 > (§25.12) `0.1.5` olarak etiketlendi, ama yayın koşusu iki kez düştü; `0.1.6`
 > olarak etiketlendi, bir kez daha düştü. Üç düşüşün hiçbiri üretimde değildi:
 > üçü de **testin kendi denetiminde olmayan bir olayın zamanını, sayısını ya da
@@ -215,55 +232,56 @@ Aşağıdaki değerler bu dosya commit edilmeden hemen önce repo üzerinde
 doğrulanmıştır.
 
 ```text
-branch                : docs/record-0-1-7 → main (korumalı: PR + check zorunlu)
-başlangıç HEAD        : e51d173 (docs: record how the import colour gap was closed)
-0.1.5 turunun işi     : 3c186b6 docs(plan): write down the finished task without its word
-                        6943573 feat(games): show a finished task without spending a line on it
-                        cf67ba0 build: raise the version to 0.1.5
-                        4906b52 docs: record the compact finished task and the 0.1.5 checkpoint
-test kararlılığı      : 3ea1cae test(ui): wait on what the screen did, not on a number of frames        (PR #8)
-                        538ef5c test(ui): expose task editor state when synchronization fails           (PR #10)
-                        67dd7e1 test(ui): run scene interactions on one UI dispatcher                   (PR #10)
-                        3fa5de3 test(backup): ignore Room bookkeeping in statement shape checks         (PR #12)
-                        cb116c6 test(backup): count the queries written across several lines too        (PR #12)
-                        f4083dc test(games): wait for the rename to come back before reading the row    (PR #12)
-sürüm commit'leri     : 890b04f build: raise the version to 0.1.6   (etiketlendi, yayın koşusu düştü)
-                        5a166d2 build: raise the version to 0.1.7   (YAYIMLANDI)
+branch                : docs/record-0-1-8 → main (korumalı: PR + check zorunlu)
+başlangıç HEAD        : 0bd0b34 (docs: record the two failed releases, the scan and v0.1.7)
+ayarlanabilir ölçüler : c4cc448 docs(plan): define adjustable game table dimensions     (PR #15)
+                        e2c206d feat(games): let users resize the game table            (PR #15)
+sürüm commit'i        : 293d4b9 build: raise the version to 0.1.8   (YAYIMLANDI, PR #16)
                         (+ bu belge commit'i)
-sürüm                 : 0.1.7   (tek kaynak app/build.gradle.kts)
-yayınlar              : v0.1.7 → 5a166d2 YAYIMLANDI ve **latest**
-                        v0.1.4 → 7ae6287 YAYIMLANDI (dokunulmadı; 8 varlığın adı,
-                        boyutu, SHA-256'sı ve zaman damgası bu turdan önce
-                        kaydedilip sonra birebir doğrulandı)
+sürüm                 : 0.1.8   (tek kaynak app/build.gradle.kts)
+yayınlar              : v0.1.8 → 293d4b9 YAYIMLANDI ve **latest**
+                        v0.1.7 → 5a166d2 YAYIMLANDI (dokunulmadı; 8 varlığın adı,
+                        boyutu ve zaman damgası bu turdan önce kaydedilip sonra
+                        birebir doğrulandı — diff boş)
+                        v0.1.4 → 7ae6287 YAYIMLANDI (dokunulmadı)
                         v0.1.5 → 4906b52 ve v0.1.6 → 890b04f: etiket var, yayın
                         ve asset YOK — yayımlanmamış tarihsel etiketler
                         (v0.1.0 ve v0.1.2 gibi); taşınmadı, silinmedi
-yayın provası         : run 36301981842 (workflow_dispatch, main 5a166d2):
+PR check'leri         : PR #15 run 36318878195 (verify, 6m04s) yeşil
+                        PR #16 run 36386393443 (verify, 5m44s) yeşil
+                        ikisi de yalnız **rebase** merge ile birleşti
+yayın provası         : run 36387007833 (workflow_dispatch, main 293d4b9):
                         verify + package yeşil, publish ATLANDI, release/asset
                         oluşmadı — etiket ondan sonra atıldı
-gerçek yayın koşusu   : run 36302651254 (push v0.1.7): üç iş de yeşil
+gerçek yayın koşusu   : run 36388091075 (push v0.1.8): üç iş de yeşil
+                        https://github.com/Abisiba/pnp-tracker/releases/tag/v0.1.8
 Room şema sürümü      : 8   (DEĞİŞMEDİ)
 şema dosyaları        : 1.json … 8.json ve sample-import.xlsx bayt bayt aynı
-PLAN.md               : DEĞİŞMEDİ (e3d6c995…) — bu turda yalnız test kodu ve
-                        sürüm satırı değişti
-test durumu           : tam koşu 3811 / 0 / 0 / 0 (282 sınıf); ktlintCheck temiz;
+PLAN.md               : §12.17 EKLENDİ (0d7cfc64…) — ayarlanabilir ölçülerin
+                        kuralları koddan ÖNCE yazıldı; bu belge turunda PLAN
+                        değişmedi
+test durumu           : tam koşu 3843 / 0 / 0 / 0 (285 sınıf); ktlintCheck temiz;
                         git diff --check temiz
-smoke                 : desktopWindowSmoke bu turda KOŞULMADI ve gerekmiyordu —
-                        test turlarının tamamı yalnız app/src/desktopTest altında
-                        kaldı, üretim baytları değişmedi (§25.13)
-paket doğrulaması     : yayımlanmış Arch paketine karşı verifyArchPackage geçti
-                        (29 ELF, 26 kütüphane, 172 paketlik bağımlılık kapanışı)
+elle doğrulama        : izole XDG diziniyle gerçek pencere: sütun genişliği ve
+                        oyun bazlı satır yüksekliği değişti, ölçüler ikinci
+                        açılışta korundu, geçici alan kapanışta silindi, gerçek
+                        kullanıcı verisine dokunulmadı
+varlık doğrulaması    : 8 varlık depo dışı geçici dizine indirildi, SHA256SUMS
+                        doğrulandı, 12 yapısal denetim geçti, dizin silindi
+                        (§25.14)
 gerçek sistem         : kurulum yapılmadı, sudo kullanılmadı; bütün testler geçici
-                        veritabanlarında koştu ve gerçek uygulama dosyasının
-                        dokunulmadığını doğruladı
+                        HOME ve dört XDG dizini altında koştu
 ```
 
-**Bu commit iki düşen yayını, kök nedenlerini, paketin sistematik taramasını,
-etiketten önceki yayın provasını ve gerçek `v0.1.7` yayınını kaydeder (§25.13).**
-İş 13 **TAMAMLANMADI**: temiz Garuda turu hâlâ yapılmadı ve projenin kalan tek
-bağlayıcı işi odur (§25.9, §33 R6). Hangi paketle yapılacağı kullanıcının
-kararıdır: eski not **`v0.1.3`** diyordu, bugün yayımlanmış en yeni paket
-**`v0.1.7`**'dir.
+**Bu commit ayarlanabilir tablo ölçülerini ve gerçek `v0.1.8` yayınını kaydeder
+(§25.14).** İş 13 **TAMAMLANMADI**: temiz Garuda turu hâlâ yapılmadı ve projenin
+kalan tek bağlayıcı işi odur (§25.9, §33 R6). Kullanıcının bağlayıcı kararı:
+**tur yalnız `v0.1.7` Arch paketiyle yapılacaktı**; bugün yayımlanmış en yeni
+paket **`v0.1.8`**'dir, hangisiyle koşulacağı yine kullanıcının kararıdır.
+
+**Önceki belge commit'i (`0bd0b34`) iki düşen yayını, kök nedenlerini, paketin
+sistematik taramasını, etiketten önceki ilk yayın provasını ve gerçek `v0.1.7`
+yayınını kaydediyordu (§25.13).**
 
 **Önceki belge commit'i (`3b1524d` + düzeltmesi `e6d1641`) İş 14'ü kapatıyor ve
 İş 13'ün hazır olduğunu kaydediyordu.** İş 13 hâlâ **TAMAMLANMADI**: doğrulama
@@ -6436,6 +6454,189 @@ etiketlerdir**. Taşınmadılar, silinmediler ve silinmeyecekler.
 
 ---
 
+# 25.14 AYARLANABİLİR TABLO ÖLÇÜLERİ VE v0.1.8  *(v0.1.8)*
+
+Oyun tablosunun hücre ölçüleri bugüne kadar iki sabitti: sütun genişlikleri
+kodda yazılıydı ve her hücre üç satırlık bir önizleme bütçesiyle çiziliyordu.
+Bu tur o iki sabiti **varsayılan** yaptı ve ölçüyü kullanıcıya verdi (PLAN
+`12.17`, PR #15).
+
+## Kullanıcının elindeki ölçü
+
+- **Altı sütun** ayarlanabilir: oyun adı, 3D Baskı, Kart, Mukavva, Özel,
+  Notlar. Başlık ayırıcısı sürüklenince **sütunun tamamı** yeni genişliğe
+  geçer.
+- **Satır yüksekliği oyuna aittir.** Bir satırın alt kenarı sürüklenince yalnız
+  o oyunun satırı değişir; ölçü **oyun kimliğine** (`EntityId`) bağlanır, ekran
+  sırasına değil — satırlar süzülse, sıralansa veya yeni oyun eklense ölçü
+  doğru satırda kalır.
+- **Başlık ayırıcısına çift tıklama** sütunu o anda görünür satırların en geniş
+  içeriğine oturtur. Bu otomatik ölçünün **üst sınırı vardır**
+  (`AUTOMATIC_WIDTH_LIMIT_DP = 480`), çünkü otomatik karar kullanıcının kararı
+  değildir; kullanıcının **elle** büyütmesinin üst sınırı yoktur.
+- **Aşağı sınırlar:** sütun `MINIMUM_COLUMN_WIDTH_DP = 96`, satır
+  `MINIMUM_ROW_HEIGHT_DP = 64` — tablonun bugün de her satıra verdiği en küçük
+  yükseklik.
+- **Klavye yolu** `TableControls` içindedir: `Sütunu içeriğe göre ayarla` (altı
+  sütunu listeleyen menü) ve `Hücre boyutlarını sıfırla` (yalnız ölçü
+  varsayılandan farklıysa etkin). Fare tutamakları **yeni Tab durağı açmaz** ve
+  ekran okuyucuya sessizdir (`clearAndSetSemantics {}`); ölçü yolu erişilebilir
+  olsun diye menüde ikinci kez veriliyor.
+- **Satır yüksekliği önizleme bütçesinin yerine geçer:** hücre sığdığı kadar
+  satır gösterir (`linesThatFit`), mevcut "devamı var" ipucu korunur. Ölçü
+  **önizlemenin** ölçüsüdür: açık bir hücre düzenleyicisi kendi denetimlerinin
+  (metin alanı, renk çarkı, adet) gerektirdiği genişliğin altına inmez
+  (`maxOf(width, DEFAULT_CELL_COLUMN_WIDTH_DP.dp)`).
+- **Varsayılanlarda tablo eskisiyle piksel piksel aynıdır**: varsayılanlar
+  zaten o iki eski sabit (`240` / `200` dp).
+- Ölçü değiştirmek düzenleyici açmaz, odağı çalmaz, veriye ve görevlere
+  dokunmaz.
+
+## Ölçüler nerede duruyor
+
+`$XDG_STATE_HOME/pnp-tracker/table-sizes.json` — görünüm durumudur, veri
+değildir:
+
+- **Room'a girmez, domain verisine girmez, yedeğe girmez.** Room şeması `8`
+  olarak kaldı; `1.json`–`8.json` ve `sample-import.xlsx` bayt bayt aynı.
+- Belge **sürümlüdür** (`TABLE_SIZES_FORMAT_VERSION = 1`) ve `AtomicFileWriter`
+  ile yazılır.
+- **Okumakla oluşmaz.** Dosya yoksa varsayılan ölçüler kullanılır ve hiçbir şey
+  yazılmaz.
+- **Okunamayan belge kendiliğinden onarılmaz veya üzerine yazılmaz.**
+  Varsayılanlara dönülür ve tanılamaya **yalnız bir kez** yazılır
+  (`DiagnosticArea.GAME_TABLE`, sahiplik `RecordSafely.kt`'de kalır).
+  Kullanıcı bundan sonra bir ölçü değiştirirse bu onun açık talimatıdır: belge
+  o zaman baştan yazılır.
+- **Yazma başarısızlığı kullanıcıyı rahatsız etmez:** tanılamaya yazılır ve
+  yutulur — bir görünüm ölçüsü kaydedilemediği için iş akışı durmaz.
+- Artık tabloda bulunmayan oyunların satır ölçüleri **sonraki yazımda budanır**
+  (`prunedTo(allRows)`), silinen oyun için dosyada ölü kayıt kalmaz.
+
+## Ölçümün bulduğu üç kusur
+
+Hiçbiri tahminle değil, kendi testleriyle bulundu:
+
+1. **`readSizes()` askıya alma üzerinden okuma-değiştirme-yazma yapıyordu.**
+   `state = state.copy(sizes = tableSizes.read())` `state`'i **askıya almadan
+   önce** okuyup dosya döndükten **sonra** yazıyordu; dosya okunurken gelen
+   tablo siliniyor ve satırlar sonsuza kadar `Loading`'de kalıyordu. Kusur
+   iş parçacığı değil, Kotlin'in değerlendirme sırasıydı — §25.13'ün kusur
+   sınıfının aynısı. Önce oku, sonra `state`'e dokun.
+2. **Kısa hücreler uzun satırın zemininde yüzüyordu.** Satır artık içeriğinin
+   ya da kullanıcının ölçüsünde (`IntrinsicSize.Min` ya da verilen yükseklik),
+   hücreler `fillMaxHeight()` ile onu doldurur.
+3. **96 dp'ye inen sütun açık düzenleyicideki renk çarkını kırpacaktı.** Önce
+   PLAN kuralı yazıldı (ölçü önizlemenin ölçüsüdür), sonra kod; iki yerleşim
+   testi de yeni sözleşmeye göre güncellendi.
+
+Ayrıca başlık tutamakları ilk halinde `fillMaxHeight()` ile bütün yüksekliği
+tüketiyor ve `LazyColumn`'a hiç yer bırakmıyordu (bütün satır içeriği sıfır
+sınırla ölçülüyordu); tutamaklar `Box(Modifier.matchParentSize())` içine
+alınarak ölçmeye katılmaz oldu.
+
+## Doğrulama
+
+```text
+TableSizesTest              12/12  (commonTest, değer modeli ve belge biçimi)
+DesktopTableSizesStoreTest  10/10  (gerçek dosya; kırmızısı 7/10 ölçüldü)
+TableResizeTest             10/10  (gerçek yığın + gerçek dosya; kırmızısı 8/10)
+GameTableLayoutTest         73/73  (yerleşim iddiaları yeni sözleşmeye göre)
+ColorPickerLayoutTest       17/17
+tanılama sahiplik/yüzey      4/4
+tam koşu                    3843 test / 285 sınıf / 0 düşüş / 0 hata
+ktlintCheck                 temiz
+```
+
+Bütün testler ayrı `HOME` ve dört geçici XDG dizini (`XDG_DATA_HOME`,
+`XDG_CONFIG_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME`) altında koştu.
+
+**Elle doğrulama (izole pencere):** sütun genişliği değişti, oyun bazlı satır
+yüksekliği değişti, ölçüler **ikinci açılışta korundu**, geçici test alanı
+kapanışta silindi, gerçek kullanıcı verisine dokunulmadı.
+
+## Yayın yolu
+
+```text
+PR #15  feat(games): let users resize the game table   run 36318878195  yeşil
+        rebase merge → c4cc448 + e2c206d
+PR #16  build: raise the version to 0.1.8              run 36386393443  yeşil
+        rebase merge → 293d4b9
+prova   run 36387007833  workflow_dispatch, main 293d4b9
+        tag and tests: success | packages: success | github release: SKIPPED
+        (release ve asset oluşmadı, latest v0.1.7 kaldı)
+etiket  v0.1.8 (annotated) → 293d4b9, provadan SONRA atıldı
+yayın   run 36388091075  push v0.1.8 — üç iş de success
+        https://github.com/Abisiba/pnp-tracker/releases/tag/v0.1.8
+```
+
+## Yayımlanmış varlıklar  *(depo dışında bağımsız doğrulandı)*
+
+```text
+bdb92a728976766e205a914b71d2d0b3c0156dea8d4f8130476037e45d523395  94 193 016  pnp-tracker-0.1.8-linux-x86_64.tar.gz
+f72f34d465a2a8e798eeff6f1f4bac1f399655f1cc12806ecd07d01d4bac62ce  92 313 246  pnp-tracker-0.1.8-1-x86_64.pkg.tar.zst
+2cf9cd14d94e8b8de10c3b39de504c82393ccf20c36508c00d651be2a46e8847         209  SHA256SUMS
+1cd6c1c030b41444c27884550ced8a5fb4c083b011f22427ef4069fd4451793e      14 684  kullanim-kilavuzu.md
+862869d40e7285e460c743d4078e7c58578e853be2799d5404ebbcfc9197fcf0       6 636  ornek-ice-aktarma.md
+da6b3a700fb163091274d88a4b2550bf92abd488c70f2420a86224879dd14591         448  ornek-ice-aktarma.csv
+a94b02412a6dd4dd6fdf46ad10e0d3f724fed8a5128441e8b0f1f85f7b4149bb       4 919  THIRD_PARTY_NOTICES.md
+317753ddbc178bacfb2227197b4724400a91c9be44ea13c4019b6e0207b51455       1 081  LICENSE
+```
+
+`SHA256SUMS` yalnız iki pakete kefildir (sürümü olan iki dosya); yukarıdaki
+diğer altı özet bu turda varlıkların kendisinden ayrıca alınmıştır.
+
+Depo dışı geçici dizinde geçen denetimler:
+
+```text
+sha256sum -c SHA256SUMS            iki paket de Tamam
+arşiv sürümü                       pnp-tracker-0.1.8/ ve app-desktop-0.1.8-*.jar
+VERSION                            name=pnp-tracker version=0.1.8 arch=x86_64
+Arch sürümü                        pkgver = 0.1.8-1, arch = x86_64, license = MIT
+tek üst dizin                      tar'ın bütün yolları pnp-tracker-0.1.8/ altında
+yol kaçışı                         iki arşivde de mutlak yol ve '..' YOK
+boş dosya                          varlıklarda ve iki arşivin içinde YOK
+LICENSE / THIRD_PARTY_NOTICES.md   arşivin kökünde; Arch'ta
+                                   /usr/share/licenses/pnp-tracker/ altında
+Arch üst düzey yolları             yalnız opt/ ve usr/
+ELF / DT_NEEDED                    29 ELF, 25 gömülü kütüphane, 20 dış ad;
+                                   hepsi depends listesindeki bir paketten ya da
+                                   onun kendi bağımlılığından geliyor
+                                   (freetype2/libpng/zlib ← fontconfig,
+                                   libgcc ← libstdc++)
+sistem Java'sı                     gömülü runtime (lib/runtime, libjvm.so);
+                                   başlatıcıda JAVA_HOME/usr/lib/jvm/which java
+                                   araması YOK
+kişisel iz                         8 varlığın metinlerinde, iki arşivin yol
+                                   listelerinde, 29 ELF'in ve uygulama jar'ının
+                                   string'lerinde, .PKGINFO/.BUILDINFO içinde
+                                   kullanıcı adı, ev yolu, 'Projeler' veya
+                                   koşucu yolu YOK
+latest                             releases/latest → v0.1.8
+v0.1.7                             etiket 813b5e6 → 5a166d2; yayın ve 8 varlığın
+                                   adı/boyutu/zaman damgası bu turdan önce
+                                   kaydedilenle **birebir aynı** (diff boş)
+```
+
+Doğrulama dizini iş bitince silindi.
+
+## Bu turda bilinmesi gerekenler
+
+- **Ölçü veri değildir.** Yeni bir ölçü ihtiyacı çıkarsa Room'a alan EKLEME ve
+  yedeğe koyma; `table-sizes.json` görünüm durumudur ve yedekten geri
+  yüklenmez.
+- **Satır ölçüsünü ekran sırasına bağlama**: oyun kimliğine bağlıdır, yoksa
+  süzgeç veya sıralama ölçüyü yanlış satıra taşır.
+- **Otomatik genişlik sınırlı, elle büyütme sınırsız.** Bu ayrımı kaldırma:
+  üst sınır otomatik kararı korur, kullanıcının kararını kısıtlamaz.
+- Tutamaklara semantik EKLEME ve Tab durağı yapma; klavye yolu menüdedir.
+- **Etiketten önce prova, düşen koşuyu yeniden çalıştırmama** kuralları bu
+  turda ikinci kez uygulandı ve yine işe yaradı (§35).
+- İş 13 (temiz Garuda turu) — projenin kalan tek bağlayıcı işi; bu turda ona
+  dönülmedi.
+
+---
+
 # 26. DB / ŞEMA KORUMA
 
 ```text
@@ -7832,6 +8033,13 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   İŞ 9 TAMAMLANDI: kabul makineden bağımsızdır (doğru sonuç, 42/1.000+ aynı ifade
   yapısı, N+1 yok, arama/süzgeç 0 ifade, tekrarda aynı sonuç); süre/bellek EŞİK
   EKLEME, yalnız ortamla kayıt; aynı yöntemde 2 kat kötüleşmeyi raporla.
+- AYARLANABİLİR TABLO ÖLÇÜLERİ (v0.1.8, §25.14): sütun genişliği ve satır
+  yüksekliği kullanıcının; satır ölçüsü **oyun kimliğine** bağlıdır, ekran
+  sırasına DEĞİL. Ölçü görünüm durumudur: `table-sizes.json` içinde durur,
+  Room'a ve yedeğe GİRMEZ, okunamayan belge onarılmaz. Otomatik genişlik
+  sınırlı, kullanıcının elle büyütmesi sınırsızdır; bu ayrımı kaldırma.
+  Tutamaklara semantik EKLEME ve Tab durağı yapma — klavye yolu
+  `TableControls` menüsündedir.
 - TAMAMLANAN GÖREV (v0.1.5, §25.12): hücrede YAZILI bir `Tamamlandı` çizme —
   etiket dar hücrede satır kırıyordu. Durum, görevin zaten taşıdığı tamamlanma
   kutusunda (işaretli çizilir) ve `TaskHandle`'ın `stateDescription`'ındadır;
@@ -7849,7 +8057,9 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   harcanmadan sınanır. **Düşen bir yayın koşusunu yeniden çalıştırma:** şansla
   yeşile dönmesi kusuru düzeltmez, etiketi harcar; kök nedeni bul, düzelt,
   sürümü kullanıcının kararıyla yükselt.
-  İŞ 13 TURU **v0.1.3** PAKETİYLE YAPILIR. Kuralı bozma: etiketi taşıma/silme, force push yapma, mevcut
+  İŞ 13 TURUNUN PAKETİ KULLANICININ KARARIDIR: eski not `v0.1.3` diyordu,
+  kullanıcının bağlayıcı kararı `v0.1.7` oldu, bugün yayımlanmış en yeni paket
+  `v0.1.8`'dir (§25.14). Kuralı bozma: etiketi taşıma/silme, force push yapma, mevcut
   bir yayını ezme; yayın yalnız `v<Gradle sürümü>` etiketiyle çıkar ve sürüm
   yükseltmek kullanıcının kararıdır. CI'da bir şey düşerse testi atlatma,
   `continue-on-error` ekleme, izin genişletme — kök nedeni bul. Paket içeriği
