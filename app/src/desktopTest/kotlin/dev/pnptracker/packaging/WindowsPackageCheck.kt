@@ -128,8 +128,12 @@ fun main(arguments: Array<String>) {
 
     if (problems.isEmpty()) {
         println("PACKAGE: installer ${installer.name}, ${installer.length()} bytes")
-        val modules = runtime.resolve("legal").list()?.size ?: 0
-        println("PACKAGE: runtime modules $modules, virtual machine ${virtualMachine?.name ?: "?"}")
+        val said = if (release.isFile) release.readLines() else emptyList()
+        val java = said.firstOrNull { it.startsWith("JAVA_VERSION") } ?: "JAVA_VERSION=?"
+        println("PACKAGE: runtime $java, virtual machine ${virtualMachine?.name ?: "?"}")
+        val legal = runtime.resolve("legal").list()
+        val modules = legal?.sorted() ?: emptyList()
+        println("PACKAGE: runtime modules ${modules.size}: ${modules.joinToString(" ")}")
         println("PACKAGE: PASSED")
     } else {
         problems.forEach { println("PACKAGE: $it") }
