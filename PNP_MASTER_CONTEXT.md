@@ -7,8 +7,25 @@
 > **PLAN.md tek yetkili kaynaktır.** Bu dosya PLAN.md'nin yerine geçmez, onu özetler ve
 > repo durumuyla ilişkilendirir. Çelişki hâlinde PLAN.md kazanır.
 >
-> **Son güncelleme:** **v0.1.8 yayımlandı: oyun tablosunun hücre ölçüleri artık
-> kullanıcının.** Altı sütun (oyun adı, 3D Baskı, Kart, Mukavva, Özel, Notlar)
+> **Son güncelleme:** **Windows 11 x86_64 ikinci desteklenen hedef oldu.** PLAN
+> `3.1` bunu üç yerde tersini söylediği hâlden çevirdi, sözleşmesi `14.8`'e koddan
+> önce yazıldı, ve Faz 3 iki iş kazandı: İş 17 (kurucu) ve İş 18 (temiz Windows 11
+> turu). Çıktı, gömülü Java 21 taşıyan tek dosyalık
+> `pnp-tracker-<sürüm>-windows-x86_64.exe`; kullanıcı başına kurulur, Başlat
+> menüsüne girer, **imzasızdır** (SmartScreen uyarısı açık sınır olarak yazılı) ve
+> kaldırılınca kullanıcının verisini bırakır. Veri yerleşimi
+> `%LOCALAPPDATA%\pnp-tracker\data\` ile `…\state\` **kardeş**, ayar
+> `%APPDATA%\pnp-tracker\` altında. Yolu seçen tek yer `AppPathsResolver`'dır
+> (eski `XdgAppPathsResolver`); Linux'ta XDG davranışı, paketler ve testler
+> **değişmedi**. Testler platform yüzünden atlanmadı: anlamı platformdan bağımsız
+> olanlara Windows karşılığı yazıldı (ACL ile yazılamaz dizin, `java.exe`), konusu
+> POSIX olan üç sınıf build'de adıyla listelendi ve kapsam kaybı raporlanıyor
+> (`14.8.5`). CI'da ikinci bir iş var: `windows-2025`, sabitlenmiş WiX 3.14, aynı
+> bellek sınırlı tam koşu, `verifyWindowsPackage` ve kurucunun PR artifact'i olarak
+> yayımlanması. Sürüm `0.1.8`'de kaldı; etiket ve yayın yapılmadı. Ayrıntı §25.15.
+>
+> Daha önce: **v0.1.8 yayımlandı: oyun tablosunun hücre ölçüleri kullanıcının
+> oldu.** Altı sütun (oyun adı, 3D Baskı, Kart, Mukavva, Özel, Notlar)
 > başlık ayırıcısından sürüklenerek, her satır kendi alt kenarından
 > sürüklenerek ölçülendiriliyor: sütun ölçüsü sütunun tamamına, satır ölçüsü
 > yalnız o **oyun kimliğine** uygulanıyor. Başlık ayırıcısına çift tıklama
@@ -232,49 +249,31 @@ Aşağıdaki değerler bu dosya commit edilmeden hemen önce repo üzerinde
 doğrulanmıştır.
 
 ```text
-branch                : docs/record-0-1-8 → main (korumalı: PR + check zorunlu)
-başlangıç HEAD        : 0bd0b34 (docs: record the two failed releases, the scan and v0.1.7)
-ayarlanabilir ölçüler : c4cc448 docs(plan): define adjustable game table dimensions     (PR #15)
-                        e2c206d feat(games): let users resize the game table            (PR #15)
-sürüm commit'i        : 293d4b9 build: raise the version to 0.1.8   (YAYIMLANDI, PR #16)
+branch                : feat/windows-distribution → main (korumalı: PR + check zorunlu)
+başlangıç HEAD        : 8670ab9 (docs: record the adjustable table sizes and v0.1.8)
+bu turun commit'leri  : b12e7b6 docs(plan): define the Windows distribution contract
+                        d2c8926 feat(paths): keep the application's folders where each system puts them
+                        fa7548c test(desktop): run the platform-independent checks on Windows too
+                        8b1d190 feat(windows): build a single installer that carries its own Java
+                        78b4f65 ci(windows): verify and package on a windows runner
                         (+ bu belge commit'i)
-sürüm                 : 0.1.8   (tek kaynak app/build.gradle.kts)
-yayınlar              : v0.1.8 → 293d4b9 YAYIMLANDI ve **latest**
-                        v0.1.7 → 5a166d2 YAYIMLANDI (dokunulmadı; 8 varlığın adı,
-                        boyutu ve zaman damgası bu turdan önce kaydedilip sonra
-                        birebir doğrulandı — diff boş)
-                        v0.1.4 → 7ae6287 YAYIMLANDI (dokunulmadı)
-                        v0.1.5 → 4906b52 ve v0.1.6 → 890b04f: etiket var, yayın
-                        ve asset YOK — yayımlanmamış tarihsel etiketler
-                        (v0.1.0 ve v0.1.2 gibi); taşınmadı, silinmedi
-PR check'leri         : PR #15 run 36318878195 (verify, 6m04s) yeşil
-                        PR #16 run 36386393443 (verify, 5m44s) yeşil
-                        ikisi de yalnız **rebase** merge ile birleşti
-yayın provası         : run 36387007833 (workflow_dispatch, main 293d4b9):
-                        verify + package yeşil, publish ATLANDI, release/asset
-                        oluşmadı — etiket ondan sonra atıldı
-gerçek yayın koşusu   : run 36388091075 (push v0.1.8): üç iş de yeşil
-                        https://github.com/Abisiba/pnp-tracker/releases/tag/v0.1.8
+sürüm                 : 0.1.8   (YÜKSELTİLMEDİ; etiket ve yayın YOK)
+yayınlar              : v0.1.8 → 293d4b9 YAYIMLANDI ve latest — dokunulmadı
 Room şema sürümü      : 8   (DEĞİŞMEDİ)
 şema dosyaları        : 1.json … 8.json ve sample-import.xlsx bayt bayt aynı
-PLAN.md               : §12.17 EKLENDİ (0d7cfc64…) — ayarlanabilir ölçülerin
-                        kuralları koddan ÖNCE yazıldı; bu belge turunda PLAN
-                        değişmedi
-test durumu           : tam koşu 3843 / 0 / 0 / 0 (285 sınıf); ktlintCheck temiz;
-                        git diff --check temiz
-elle doğrulama        : izole XDG diziniyle gerçek pencere: sütun genişliği ve
-                        oyun bazlı satır yüksekliği değişti, ölçüler ikinci
-                        açılışta korundu, geçici alan kapanışta silindi, gerçek
-                        kullanıcı verisine dokunulmadı
-varlık doğrulaması    : 8 varlık depo dışı geçici dizine indirildi, SHA256SUMS
-                        doğrulandı, 12 yapısal denetim geçti, dizin silindi
-                        (§25.14)
+PLAN.md               : §3.1, §4, §12.17, §14.2, §14.8 (YENİ), §18, §22, §23 değişti
+test durumu           : tam koşu (aşağıda); ktlintCheck temiz; git diff --check temiz
+Windows doğrulaması   : bu makinede KOŞULAMAZ. Kurucunun üretimi ve
+                        verifyWindowsPackage ilk kez Windows runner'ında koşar;
+                        buradan hiçbir Windows sonucu uydurulmadı
 gerçek sistem         : kurulum yapılmadı, sudo kullanılmadı; bütün testler geçici
                         HOME ve dört XDG dizini altında koştu
 ```
 
-**Bu commit ayarlanabilir tablo ölçülerini ve gerçek `v0.1.8` yayınını kaydeder
-(§25.14).** İş 13 **TAMAMLANMADI**: temiz Garuda turu hâlâ yapılmadı ve projenin
+**Bu commit Windows 11'in ikinci desteklenen hedef oluşunu kaydeder (§25.15).**
+
+**Önceki belge commit'i (`8670ab9`) ayarlanabilir tablo ölçülerini ve gerçek
+`v0.1.8` yayınını kaydediyordu (§25.14).** İş 13 **TAMAMLANMADI**: temiz Garuda turu hâlâ yapılmadı ve projenin
 kalan tek bağlayıcı işi odur (§25.9, §33 R6). Kullanıcının bağlayıcı kararı:
 **tur yalnız `v0.1.7` Arch paketiyle yapılacaktı**; bugün yayımlanmış en yeni
 paket **`v0.1.8`**'dir, hangisiyle koşulacağı yine kullanıcının kararıdır.
@@ -6637,6 +6636,193 @@ Doğrulama dizini iş bitince silindi.
 
 ---
 
+# 25.15 WINDOWS İKİNCİ DESTEKLENEN HEDEF  *(Faz 3 / İş 17 — kurucu hazır, İş 18 KOŞULMADI)*
+
+Bağlayıcı metin PLAN `14.8` (ve `3.1`, `4.`, `14.2`, `18.` Faz 3 / İş 17–18,
+`23.`). Bu bölüm kararların özetini, incelemenin **ölçülmüş** sonucunu ve bu
+turda yapılanı tutar. Sürüm yükseltilmedi, etiket atılmadı, yayın yapılmadı.
+
+## Önce inceleme  *(kod yazmadan)*
+
+En büyük iki riskin ikisi de kapalı çıktı ve varsayılmadı, bakıldı:
+
+```text
+Room / gömülü SQLite   sqlite-bundled-jvm-2.7.0 içinde natives/windows_x64/
+                       sqliteJni.dll VAR → blokaj yok
+üretimde X11/POSIX      YOK. wmctrl/xprop yalnız desktopTest altında; üretim
+                       kodunda ProcessBuilder hiç kullanılmıyor
+os.name okuması        tek yer FileDialogCompatibility ve zaten "yalnız Linux"
+                       diyor; diğer masaüstlerinin yerel diyalogunu bırakıyor
+POSIX izinleri         üretimde iki yerde (AppDirectoryInitializer,
+                       DiagnosticLogFileSystem) ve İKİSİ DE
+                       supportedFileAttributeViews().contains("posix") ile
+                       korumalı → Windows'ta patlamaz, yalnız izin güvencesi
+                       düşer (PLAN 14.8.4)
+atomik yazma           ATOMIC_MOVE + REPLACE_EXISTING NTFS'te çalışır; açık bir
+                       hedefte AccessDenied → mevcut WRITE_FAILED yoluna düşer
+instance kilidi        FileChannel.tryLock; dosya hiç silinmiyor → Windows'ta da
+                       süreç ölünce OS bırakır
+Compose / Skia         compose.desktop.currentOs derleme makinesine göre çözülür;
+                       Windows paketi Windows'ta üretilir (PLAN 14.8.6)
+```
+
+Windows'ta gerçekten çalışmayan yerler **yalnız test ve paketleme tarafındaydı**:
+POSIX moduyla kurulan "yazılamaz dizin / okunamaz dosya" (8 dosya), `mkfifo`
+(2 dosya), `bash -n` (1 sınıf), ve dört yerde `java.home/bin/java` — Windows'ta
+var olmayan bir dosya.
+
+## Kararlar  *(kullanıcı verdi; yeniden tartışılmaz)*
+
+```text
+1  Windows 11 x86_64 İKİNCİ DESTEKLENEN HEDEF; PLAN 3.1/4/22/23 buna göre
+   değişti ve Faz 3'e İş 17 ile İş 18 eklendi
+2  Yerleşim: %LOCALAPPDATA%\pnp-tracker\data\ ve …\state\ KARDEŞ,
+   %APPDATA%\pnp-tracker\ ayar. İç içe DEĞİL — PLAN 14.7.1'in "log, veri ve
+   ayar alanlarına dokunmaz" kuralı okunabilir kalsın
+3  Test ayrımı KARMA: konusu bir platforma ait olanlar adıyla ayrılır, anlamı
+   platformdan bağımsız olanlara Windows karşılığı YAZILIR; genel bir atlama
+   bayrağı YOK; kapsam kaybı raporlanır (PLAN 14.8.5)
+```
+
+## Yollar — tek seçim noktası  *(`d2c8926`)*
+
+```text
+AppPathsResolver  (eski XdgAppPathsResolver)   iki yerleşim, tek seçim; os.name
+                  burada okunur ve başka hiçbir yerde
+AppPaths          (eski XdgAppPaths)           adı artık yalan söylemiyor
+dosya adları      pnp.db, backups/, settings.json, logs/, table-sizes.json —
+                  iki sistemde AYNI (testli, iki listenin ayrışmaması için)
+StartupProblem    + FOLDERS_NOT_FOUND: ev dizini/%USERPROFILE% çözülemezse
+                  ham IllegalStateException değil, kendi Türkçe cümlesi. Kayıt
+                  YOK ve olamaz — log state dizininin altındadır ve henüz yol
+                  yoktur (PLAN 14.7.1); o ana kadar hiçbir şeye dokunulmamıştır
+15 test dosyası   artık hangi yerleşimi kastettiğini SÖYLÜYOR. Söylemeseydi bir
+                  Windows koşusu Windows dalını seçer, testin verdiği XDG
+                  değişkenlerini yok sayar ve GERÇEK kullanıcı klasörlerine
+                  çözerdi — o testlerin hepsinin var olma sebebi tam olarak bu
+Linux             değişmedi: aynı değişkenler, aynı fallback'ler, aynı dört yol
+```
+
+İki yerleşim de **her iki sistemde** test ediliyor, çünkü iddia edilen şey bir
+hesap: hangi değişken okunur, hangi klasör eklenir, kullanılamaz bir değer neye
+düşer, ve state'in data'nın içinde olmadığı. Taşınmayan tek şey "mutlak yol"un ne
+olduğu, bu yüzden her örnek kök host'tan üretiliyor. Gerçek `C:\Users\…` biçimi
+Windows runner'ında dosya açan testlerle kanıtlanır, **burada uydurulmaz**.
+
+## Testlerin platform sözleşmesi  *(`fa7548c`)*
+
+```text
+PlatformFileRules     "yazılamaz dizin" ve "okunamaz dosya"yı her sistemde kurar:
+                      mod olan yerde mod, erişim listesi olan yerde listenin
+                      BAŞINA bir DENY girdisi. Üretim kodunun sorduğu soruyu
+                      sorar (posix view var mı), yani test ile test ettiği kod
+                      dosya sistemi hakkında aynı şeyi düşünür
+                      → 5 sınıf artık iki sistemde de iddiasını kuruyor
+java.exe              kurtarma, açılış, tanılama ve pencere smoke'unun başlattığı
+                      çocuk süreçler launcher'ın adını yardımcıdan soruyor
+Linux'a ait üç sınıf  build.gradle.kts'te TEK ve görünür bir listede:
+                        GarudaVerificationScriptsTest      (bash, Arch scriptleri)
+                        DesktopBackupDirectoryTest         (FIFO, sembolik bağ)
+                        DiagnosticLogSinkTest              (0600/0700 ve FIFO)
+                      Windows koşusunun kanıtlamadığı şey bu üç sınıftır ve
+                      raporlanabilir olması bu yüzden mümkün
+AppDirectoryInitializerTest  POSIX iddiaları ZATEN üretim kodunun daldığı
+                      koşulun arkasındaydı; dokunulmadı
+```
+
+## Kurucu  *(`8b1d190`)*
+
+```text
+araç            Compose nativeDistributions + jpackage; ikinci bir hat YOK.
+                targetFormats(Exe) YALNIZ Windows'ta; Linux yapılandırması bayt
+                bayt eskisi
+çıktı           app/build/windows/dist/pnp-tracker-<sürüm>-windows-x86_64.exe
+üç görev        prepareWindowsApplication  imaja VERSION + LICENSE + README +
+                                           THIRD_PARTY_NOTICES.md koyar ve
+                                           skiko jar'ını normalize eder
+                packageWindows             jpackage'ın çıktısını yayın adına
+                                           çevirir
+                verifyWindowsPackage       aşağıdaki denetimler
+                (üçü de yalnız Windows'ta VAR; Linux'ta hiç tanımlanmaz)
+bildirimler     writeThirdPartyNotices artık iki dizin adını alıyor: jpackage
+                Windows'ta app/ ve runtime/'ı imajın köküne koyar, Linux'ta
+                lib/ altına. Linux çağrısı varsayılanlarla aynı davranıyor
+upgradeUuid     68A7A402-8CAB-4787-B3EE-F629442D58DA — Windows için ürünün
+                kimliği; DEĞİŞTİRİLMEZ, yoksa sonraki sürüm ikinci bir uygulama
+                olur. Bir kez yazıldı, üretilmiyor
+ikon            Linux paketinin 256×256 PNG'si .ico kabına alındı; ikinci bir
+                görsel çizilmedi
+```
+
+`verifyWindowsPackage` neyi kanıtlar: kurucunun gerçek bir Windows
+çalıştırılabiliri, kendi kendine yeten bir boyutta ve beklenen adda olduğu; imajın
+başlatıcıyı, `jvm.dll` taşıyan runtime'ı ve araç modülü **taşımadığını**,
+jar'ları, `VERSION`'ı, deponun LICENSE'ıyla **bayt bayt aynı** lisansı,
+bildirimleri ve README'yi taşıdığı; `pnp-tracker.cfg`'nin `JAVA_HOME`,
+`Program Files\Java`, mutlak yol ve `app.runtime` içermediği; ne imajın metninde
+ne kurucunun baytlarında derleyenin adı veya derleme yolunun bulunmadığı (ASCII
+**ve** UTF-16, çünkü Windows ikisini de yazar).
+
+**Neyi kanıtlamadığını kendisi söylüyor:** gerçek bir kurulumun kullanıcı başına
+olduğu, Başlat menüsü girdisi oluşturduğu ve kaldırıldığında kullanıcının verisini
+bıraktığı ancak kurarak kanıtlanır — o ayrı bir adımdır (İş 18).
+
+## CI  *(`78b4f65`)*
+
+```text
+iş              windows / windows-2025, 120 dk, contents: read
+eylemler        aynı commit SHA'larına sabitli (Linux işiyle birebir)
+WiX             jpackage --type exe WiX 3 ister; choco ile 3.14.1 SABİT sürüm,
+                yoksa kurulur, sürüm yazdırılır, PATH'e eklenir
+tam koşu        aynı bellek sınırlı `clean check --rerun-tasks`; test dışlanmıyor.
+                xvfb YOK — Windows runner'ında masaüstü oturumu var
+paket           verifyWindowsPackage; sonra .exe PR ARTIFACT'i olarak yükleniyor
+                (14 gün), ki gerçek bir Windows 11 makinesinde elle denenebilsin
+son denetim     $env:LOCALAPPDATA\pnp-tracker ve $env:APPDATA\pnp-tracker
+                OLUŞMAMIŞ olmalı — Linux işinin son adımının karşılığı
+WorkflowsTest   genişletildi, gevşetilmedi: iki iş, iki tam koşu, wrapper'ın iki
+                adı, Windows paket denetiminin çağrıldığı, ve yeni işin kendi
+                testi (sabit koşucu, salt okuma izni, sabit WiX, iki klasör
+                koruması, artifact saklama süresi)
+```
+
+## Bilinçli olarak YAPILMAYANLAR
+
+```text
+release.yml         DOKUNULMADI. Etiketli bir yayının üç paketi tek SHA256SUMS
+                    altında taşıması (PLAN 14.8.6), Linux paketleme işinin
+                    Windows kurucusunu başka bir runner'dan artifact olarak
+                    almasını ve packageRelease'in üçüncü bir dosya toplamasını
+                    gerektirir — ve bunun gerçek bir sonucu var: bir yayın
+                    bundan sonra iki işletim sistemine birden bağlanır. Yayın
+                    turuna aittir; o zamana kadar yayın yolu eskisiyle aynıdır
+sürüm / etiket      0.1.8 kaldı; etiket ve GitHub Release YOK
+imza                YOK ve uydurulmadı; SmartScreen uyarısı açık sınır
+İş 18               temiz Windows 11 turu KOŞULMADI — bu makinede koşulamaz
+İş 13               temiz Garuda turu; bu turda ona dönülmedi
+masaüstü smoke      Windows'a ait bir pencere kapatıcısı YAZILMADI: PLAN 14.8.5
+                    süreç kimliğiyle doğrulamayı şart koşuyor ve bunu yalnız
+                    gerçek bir Windows oturumunda ölçerek yazmak doğru olur
+Room şeması         8; migration, 1.json–8.json ve fixture dokunulmadı
+```
+
+## Bu turda bilinmesi gerekenler
+
+- **Yolu seçen tek yer `AppPathsResolver`'dır.** `os.name`'i başka hiçbir yerde
+  okuma; UI ve domain katmanı hangi sistemde olduğunu bilmez.
+- **Windows'ta XDG değişkenlerini varsayma.** Bir test resolver'a XDG değişkeni
+  veriyorsa hangi yerleşimi kastettiğini SÖYLEMEK zorundadır
+  (`XDG_LAYOUT` / `WINDOWS_LAYOUT`), yoksa gerçek kullanıcı klasörlerine çözer.
+- **`state` `data`'nın içinde değildir** ve olmamalıdır (PLAN 14.7.1, 14.8.1).
+- **Platform yüzünden test atlama.** Anlamı platformdan bağımsız bir sözleşme
+  için karşılığını `PlatformFileRules`'a ekle; konusu bir platform olan bir sınıf
+  build'deki listede adıyla durur ve kapsam kaybı raporlanır.
+- **`upgradeUuid` sabittir.** Değiştirmek, kurulu uygulamayı ikinci bir ürün
+  yapar ve güncelleme yolunu koparır.
+- **Linux'ta Windows paketi üretmeye çalışma**; görevler orada hiç tanımlı değil.
+
+---
+
 # 26. DB / ŞEMA KORUMA
 
 ```text
@@ -7241,7 +7427,7 @@ yardımcı işler
       yapılandırılmış görev CSV dışa aktarma
 ```
 
-## Faz 3 — 16 İŞTEN 15'İ BİTTİ (yalnız İş 13, temiz Garuda VM koşusunu bekliyor)
+## Faz 3 — 18 İŞTEN 16'SI BİTTİ (İş 13 temiz Garuda, İş 18 temiz Windows 11 turunu bekliyor)
 
 PLAN `18.` — Faz 3 işler listesi.
 
@@ -7278,6 +7464,14 @@ PLAN `18.` — Faz 3 işler listesi.
 15  Açık kaynak lisansı + LICENSE ....................... TAMAM (§25.7; MIT, iki
                                               pakette + /usr/share/licenses,
                                               THIRD_PARTY_NOTICES.md)
+17  Windows 11 kurucusu ................................. KURUCU HAZIR, WINDOWS'TA
+                                              İLK KEZ CI'DA KOŞAR (§25.15; PLAN
+                                              14.8, tek dosyalık .exe, gömülü
+                                              Java, verifyWindowsPackage, PR
+                                              artifact'i)
+18  Temiz Windows 11 ortamında kurulum testi ............ KOŞULMADI (§25.15; bu
+                                              makinede koşulamaz, İş 13'ün
+                                              Garuda turunun karşılığı)
 16  GitHub Actions ...................................... TAMAM (§25.8, §25.9; depo
                                               Abisiba/pnp-tracker, CI gerçekten
                                               koştu, düzeltilmiş v0.1.3 yayımlandı,
@@ -8033,6 +8227,18 @@ Faz 1 ve Faz 2 tamamlandı. Faz 3 başladı:
   İŞ 9 TAMAMLANDI: kabul makineden bağımsızdır (doğru sonuç, 42/1.000+ aynı ifade
   yapısı, N+1 yok, arama/süzgeç 0 ifade, tekrarda aynı sonuç); süre/bellek EŞİK
   EKLEME, yalnız ortamla kayıt; aynı yöntemde 2 kat kötüleşmeyi raporla.
+- WINDOWS İKİNCİ DESTEKLENEN HEDEF (§25.15, PLAN 14.8): yolu seçen TEK yer
+  `AppPathsResolver`'dır — `os.name`'i başka hiçbir yerde OKUMA. Windows'ta XDG
+  değişkenlerini VARSAYMA; yerleşim `%LOCALAPPDATA%\pnp-tracker\data\` ile
+  `…\state\` (KARDEŞ, iç içe DEĞİL) ve `%APPDATA%\pnp-tracker\`. Resolver'a XDG
+  değişkeni veren bir test hangi yerleşimi kastettiğini SÖYLEMELİ
+  (`XDG_LAYOUT`/`WINDOWS_LAYOUT`), yoksa Windows'ta gerçek kullanıcı klasörlerine
+  çözer. Platform yüzünden test ATLAMA: anlamı platformdan bağımsız bir sözleşmenin
+  karşılığını `PlatformFileRules`'a ekle, konusu bir platform olan sınıf
+  `build.gradle.kts`'teki listede adıyla durur ve kapsam kaybı raporlanır.
+  `upgradeUuid` SABİTTİR. Linux'ta Windows paketi üretmeye çalışma; kurucu görevleri
+  yalnız Windows'ta tanımlıdır. İmza YOK ve uydurulmaz; SmartScreen uyarısı açık
+  sınırdır.
 - AYARLANABİLİR TABLO ÖLÇÜLERİ (v0.1.8, §25.14): sütun genişliği ve satır
   yüksekliği kullanıcının; satır ölçüsü **oyun kimliğine** bağlıdır, ekran
   sırasına DEĞİL. Ölçü görünüm durumudur: `table-sizes.json` içinde durur,
