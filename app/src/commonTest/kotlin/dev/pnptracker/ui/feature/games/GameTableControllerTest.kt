@@ -981,7 +981,7 @@ class GameTableControllerTest {
             val composer = assertNotNull(controller.composerState())
             assertEquals("Knight", composer.name)
             assertEquals(CellColumnType.THREE_D, composer.columnType)
-            assertEquals("Basılacak: Knight, token", composer.selection.expectedText)
+            assertEquals("Basılacak: Knight, token", composer.selection?.expectedText)
             assertNotNull(controller.editorState(), "the cell was closed by opening the panel")
             collecting.cancelAndJoin()
         }

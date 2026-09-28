@@ -11,6 +11,7 @@ import dev.pnptracker.data.repository.GameTableStore
 import dev.pnptracker.data.repository.PoolStore
 import dev.pnptracker.data.repository.TaskCreationFromText
 import dev.pnptracker.data.repository.TaskEditStore
+import dev.pnptracker.data.repository.TaskFromNewTextStore
 import dev.pnptracker.data.repository.TaskFromTextStore
 import dev.pnptracker.data.repository.TaskProgressStore
 import dev.pnptracker.data.repository.TaskProgressing
@@ -74,6 +75,7 @@ class RealStack : AutoCloseable {
             taskProgress = taskProgress,
             tableSizes = sizes,
             gameOrder = order,
+            newTextTasks = TaskFromNewTextStore(database),
         )
 
     val pools =

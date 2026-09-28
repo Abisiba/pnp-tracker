@@ -45,6 +45,8 @@ import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.rules.normalizeColorTerm
 import dev.pnptracker.domain.search.GameTableFilter
 import dev.pnptracker.domain.search.SearchQuery
+import dev.pnptracker.domain.tasks.NewTaskText
+import dev.pnptracker.domain.tasks.TaskCreationFromNewText
 import dev.pnptracker.domain.tasks.TaskDraft
 import dev.pnptracker.domain.tasks.TaskEditException
 import dev.pnptracker.domain.tasks.TaskFlags
@@ -95,6 +97,8 @@ class GameTableController(
     private val tableSizes: TableSizesStore = TableSizesStore.Forgetful,
     /** Where the order the user put the games in is remembered (PLAN 12.18). */
     private val gameOrder: GameOrderStore = GameOrderStore.Forgetful,
+    /** Saves a name typed a moment ago together with the task made of it (PLAN 12.6). */
+    private val newTextTasks: TaskCreationFromNewText = TaskCreationFromNewText.Unavailable,
     private val idGenerator: IdGenerator = IdGenerator.Random,
     private val diagnostics: Diagnostics = Diagnostics.None,
 ) : TaskEditingHost,
@@ -771,6 +775,46 @@ class GameTableController(
             )
     }
 
+    /**
+     * Opens the task window over a name the user has just typed, on Enter (PLAN 12.6).
+     *
+     * Without saving the words and selecting them first: the name typed since the
+     * editor opened goes into the window, and nothing is written until the task
+     * is saved — and then the words and the task are written together. Leaving
+     * the window goes back to the editor with the words still in it.
+     *
+     * Only in a column that holds tasks, and only when what was typed is one new
+     * name added to the text and nothing taken away from it.
+     *
+     * @return false when there is no such name, so Enter does what it always did.
+     */
+    fun beginTaskFromTypedName(): Boolean {
+        val editor = state.work as? CellWork.WritingText ?: return false
+        if (editor.isSaving) return false
+        val poolType = editor.columnType.poolType ?: return false
+        val typed =
+            NewTaskText.typedInto(editor.gameId, editor.columnType, original = editor.originalText, draft = editor.draft)
+                ?: return false
+        state =
+            state.copy(
+                work =
+                    CellWork.MakingTask(
+                        from = editor.copy(selectionFailure = null),
+                        composer =
+                            TaskComposer(
+                                selection = null,
+                                newText = typed,
+                                columnType = editor.columnType,
+                                name = typed.name,
+                                single = emptyRowFor(poolType),
+                                rows = List(TaskComposer.LEAST_INDEPENDENT_TASKS) { emptyRowFor(poolType) },
+                            ),
+                    ),
+                blockedByEditor = false,
+            )
+        return true
+    }
+
     private fun composing(): CellWork.MakingTask? = state.work as? CellWork.MakingTask
 
     /** A row with only what the pool settles already filled in. */
@@ -1277,7 +1321,11 @@ class GameTableController(
                     ),
             )
         try {
-            val made = taskCreation.createTasks(selection = composer.selection, drafts = drafts)
+            // A name typed a moment ago is saved with its task; a name selected
+            // in text already saved is cut out of it, as it always was.
+            val made =
+                composer.newText?.let { typed -> newTextTasks.createTasksInNewText(typed, drafts) }
+                    ?: taskCreation.createTasks(selection = requireNotNull(composer.selection), drafts = drafts)
             // The cell has changed underneath the editor, so it closes rather
             // than going on with offsets into a document that has moved. The
             // user opens it again to write more, or picks the next word.

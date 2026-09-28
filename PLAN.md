@@ -1388,6 +1388,38 @@ bulunduktan sonra, onaylanmış):
   `Görevi görüntüle`, hata davranışları ve tek transaction sözleşmesi aynen
   korunur.
 
+Yeni yazılan addan görev (Enter):
+
+- 3D Baskı, Kart, Mukavva veya Özel hücresinin düzenleyicisinde yeni bir ad
+  yazılıp `Enter`'a basıldığında görev penceresi, metni önce kaydetmeye ve adı
+  seçmeye gerek kalmadan açılır. Yazılan ad pencereye taşınır (`Görev adı`).
+- Yeni ad, düzenleyici açıldığından beri metne **eklenen** tek parçadır; çevresindeki
+  boşluklar ve satır sonları ada dahil değildir. Metinden bir şey silinmişse,
+  yalnız boşluk yazılmışsa veya ad birden fazla satıra yayılıyorsa bu bir yeni
+  ad sayılmaz ve `Enter` eskisi gibi satır sonu ekler. `Shift+Enter` her zaman
+  satır sonudur. `Notlar` ve `Ödünç Parçalar` hücrelerinde `Enter` değişmez.
+- Pencerede adet ve görev notu girilir. Renk seçimi yalnız 3D Baskı'dadır.
+- Pencere açıkken hiçbir şey yazılmaz. `Görevi kaydet`, hücrenin yeni metnini ve
+  yeni addan görevi **tek transaction**'da yazar: metin hücre düzenleyicisinin
+  kendi kaydıyla kaydedilir, görev de aynı transaction içinde seçimden görev
+  oluşturmanın kendi yoluyla kesilir. Görev reddedilirse metin de yazılmaz ve
+  pencere hatayı söyleyerek açık kalır.
+- `Vazgeç` (veya `Escape`) düzenleyiciye döner; yazılan taslak orada olduğu gibi
+  durur, görev oluşmaz ve hiçbir şey kaydedilmez.
+- Hücrenin daha önce kaydedilmiş metni ve eski görevleri değişmez; yeni ad
+  onların yanına ayrı bir görev olarak girer.
+- Kaydedilen görev kendi sütununda ve `Eksik`'te (`12.20`) hemen görünür, notu
+  varsa yanında parantez içindedir (`12.5`).
+
+Renk seçenekleri (görev penceresinde):
+
+- Renk listesi pencerenin renk tarafının genişliğini kullanır: sığdığı kadar
+  sütunlu bir ızgaradır ve kendi yükseklik sınırı yoktur. Normal pencere
+  boyutunda temel renklerin tamamı kaydırmadan görünür.
+- Küçük pencerede pencerenin gövdesi kayar; başlık ve `Vazgeç` / `Görevi kaydet`
+  çubuğu sabit ve görünür kalır.
+- Görev düzenleme yüzeyindeki dar renk listesi değişmez.
+
 Teklif ve sonuç (gerçek kullanımda bulunan kusurdan sonra, v0.1.4):
 
 - `Görev oluştur` teklifi, kullanıcının seçtiği ifadeye bağlıdır; odağın metin

@@ -4,10 +4,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -469,12 +471,33 @@ internal fun ColorList(
     enabled: Boolean,
     emptyQuery: Boolean,
     onChoose: (EntityId) -> Unit,
+    spread: Boolean = false,
 ) {
     if (colors.isEmpty()) {
         NoteLine(
             text = stringResource(if (emptyQuery) Strings.CellTask.colorEmpty else Strings.CellTask.colorNone),
             isProblem = false,
         )
+        return
+    }
+    if (spread) {
+        // In the task window (PLAN 12.6) the list has the whole side of the
+        // window: as many columns as fit, and no scrolling of its own — the
+        // window's body scrolls when it has to, under a bar of actions that does
+        // not. So at an ordinary window size every colour is in sight at once.
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val columns = maxOf(1, (maxWidth / SpreadColorWidth).toInt())
+            Column(modifier = Modifier.fillMaxWidth().selectableGroup()) {
+                colors.chunked(columns).forEach { line ->
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        line.forEach { color ->
+                            ColorChoice(color, color.id in chosen, enabled, onChoose, Modifier.weight(1f))
+                        }
+                        repeat(columns - line.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            }
+        }
         return
     }
     Column(
@@ -485,38 +508,49 @@ internal fun ColorList(
                 .verticalScroll(rememberScrollState())
                 .selectableGroup(),
     ) {
-        colors.forEach { color ->
-            val isChosen = color.id in chosen
-            val stateText =
-                stringResource(if (isChosen) Strings.Accessibility.selected else Strings.Accessibility.notSelected)
-            val swatch = opaqueColorOf(color.hex)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .selectable(selected = isChosen, enabled = enabled, onClick = { onChoose(color.id) })
-                        .background(if (isChosen) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
-                        .padding(horizontal = 4.dp, vertical = 3.dp)
-                        .semantics { stateDescription = stateText },
-            ) {
-                Box(
-                    modifier =
-                        Modifier
-                            .size(14.dp)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(swatch)
-                            .border(1.dp, visibleEdgeOn(swatch), RoundedCornerShape(3.dp)),
-                )
-                Text(
-                    text = color.canonicalName,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
+        colors.forEach { color -> ColorChoice(color, color.id in chosen, enabled, onChoose, Modifier.fillMaxWidth()) }
+    }
+}
+
+/** How wide one colour is given in a spread list before another column is started. */
+private val SpreadColorWidth = 150.dp
+
+/** One colour to choose: its swatch and its name, chosen or not. */
+@Composable
+private fun ColorChoice(
+    color: ColorSummary,
+    isChosen: Boolean,
+    enabled: Boolean,
+    onChoose: (EntityId) -> Unit,
+    modifier: Modifier,
+) {
+    val stateText =
+        stringResource(if (isChosen) Strings.Accessibility.selected else Strings.Accessibility.notSelected)
+    val swatch = opaqueColorOf(color.hex)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier =
+            modifier
+                .selectable(selected = isChosen, enabled = enabled, onClick = { onChoose(color.id) })
+                .background(if (isChosen) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                .padding(horizontal = 4.dp, vertical = 3.dp)
+                .semantics { stateDescription = stateText },
+    ) {
+        Box(
+            modifier =
+                Modifier
+                    .size(14.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(swatch)
+                    .border(1.dp, visibleEdgeOn(swatch), RoundedCornerShape(3.dp)),
+        )
+        Text(
+            text = color.canonicalName,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
