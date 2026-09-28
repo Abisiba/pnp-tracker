@@ -55,6 +55,7 @@ class CellColumnPresentationTest {
                 CellColumnType.CARD to "Kart",
                 CellColumnType.BOARD to "Mukavva",
                 CellColumnType.SPECIAL to "Özel",
+                CellColumnType.BORROWED to "Ödünç Parçalar",
                 CellColumnType.NOTES to "Notlar",
             )
         assertEquals(

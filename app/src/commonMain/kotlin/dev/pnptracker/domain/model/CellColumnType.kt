@@ -4,7 +4,7 @@ package dev.pnptracker.domain.model
  * A column of the game table, which is to say one cell of a game row.
  *
  * Four of these carry production work and map one to one onto a [PoolType]; the
- * fifth is the notes column, which carries free text and nothing else. The four
+ * other two, the borrowed parts and the notes, carry free text and nothing else. The four
  * share their names with the pools they feed so the two can be read together
  * without a translation table in between.
  *
@@ -21,11 +21,19 @@ enum class CellColumnType {
     BOARD,
     SPECIAL,
 
+    /**
+     * Free text about the pieces this game borrows from another one (PLAN 12.19).
+     *
+     * A column of its own rather than a line in the notes, so it can be read down
+     * the table at a glance. Like the notes it never holds a task.
+     */
+    BORROWED,
+
     /** Free text. PLAN 5.4 keeps tasks out of it entirely. */
     NOTES,
     ;
 
-    /** The pool a task in this column belongs to, or null for [NOTES]. */
+    /** The pool a task in this column belongs to, or null for [BORROWED] and [NOTES]. */
     val poolType: PoolType?
         get() =
             when (this) {
@@ -33,6 +41,7 @@ enum class CellColumnType {
                 CARD -> PoolType.CARD
                 BOARD -> PoolType.BOARD
                 SPECIAL -> PoolType.SPECIAL
+                BORROWED -> null
                 NOTES -> null
             }
 

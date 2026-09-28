@@ -38,7 +38,7 @@ class GameTablePresentationTest {
         // stored text, which SQLite would sort into a different language's
         // alphabet, and not the order the cells happened to be created in.
         assertEquals(
-            listOf("3D Baskı", "Kart", "Mukavva", "Özel", "Notlar"),
+            listOf("3D Baskı", "Kart", "Mukavva", "Özel", "Ödünç Parçalar", "Notlar"),
             CellColumnType.entries.map { textOf(columnNameOf(it)) },
         )
     }

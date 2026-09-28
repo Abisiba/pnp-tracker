@@ -19,6 +19,7 @@ import dev.pnptracker.domain.games.AUTOMATIC_WIDTH_LIMIT_DP
 import dev.pnptracker.domain.games.DEFAULT_CELL_COLUMN_WIDTH_DP
 import dev.pnptracker.domain.games.MINIMUM_COLUMN_WIDTH_DP
 import dev.pnptracker.domain.games.TableColumn
+import dev.pnptracker.domain.games.defaultWidthOf
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.platform.settings.DesktopTableSizesStore
@@ -321,8 +322,18 @@ class TableAutoSizeTest {
             ?: fail("the heading `$name` is not drawn")
 
     private companion object {
-        const val WIDE = 1500
-        const val NARROW = 1400
+        /** The room the screen keeps either side of the table, in dp. */
+        const val SCREEN_MARGINS = 48
+
+        /**
+         * The table at its default widths, and 212 dp more for columns to grow
+         * into — worked out from the columns so adding one does not quietly take
+         * that room away.
+         */
+        val WIDE = SCREEN_MARGINS + TableColumn.entries.sumOf { defaultWidthOf(it).toInt() } + 212
+
+        /** A hundred dp less, which leaves 112 dp to grow into. */
+        val NARROW = WIDE - 100
         const val TOLERANCE = 2f
 
         /** One line of cell text: 14 sp at a line height of 20. */

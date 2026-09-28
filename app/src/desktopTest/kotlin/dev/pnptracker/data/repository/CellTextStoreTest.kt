@@ -208,7 +208,7 @@ class CellTextStoreTest {
         }
 
     @Test
-    fun `all five columns take text, the notes column included`() =
+    fun `every column takes text, the borrowed parts and the notes included`() =
         runBlocking<Unit> {
             val game = addGame()
 
@@ -216,7 +216,7 @@ class CellTextStoreTest {
                 assertTrue(store.setText(game.id, columnType, "metin ${columnType.ordinal}"))
                 assertEquals("metin ${columnType.ordinal}", textOf(game.id, columnType))
             }
-            assertEquals(5, rows("game_cells"))
+            assertEquals(CellColumnType.entries.size, rows("game_cells"))
         }
 
     @Test

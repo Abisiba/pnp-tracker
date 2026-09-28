@@ -21,5 +21,6 @@ internal const val CELL_COLUMN_DISPLAY_ORDER: String =
         "WHEN 'CARD' THEN 1 " +
         "WHEN 'BOARD' THEN 2 " +
         "WHEN 'SPECIAL' THEN 3 " +
-        "WHEN 'NOTES' THEN 4 " +
-        "ELSE 5 END"
+        "WHEN 'BORROWED' THEN 4 " +
+        "WHEN 'NOTES' THEN 5 " +
+        "ELSE 6 END"

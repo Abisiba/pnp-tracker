@@ -448,6 +448,7 @@ private fun headingOf(column: TableColumn) =
         TableColumn.CARD -> columnNameOf(CellColumnType.CARD)
         TableColumn.BOARD -> columnNameOf(CellColumnType.BOARD)
         TableColumn.SPECIAL -> columnNameOf(CellColumnType.SPECIAL)
+        TableColumn.BORROWED -> columnNameOf(CellColumnType.BORROWED)
         TableColumn.NOTES -> columnNameOf(CellColumnType.NOTES)
     }
 

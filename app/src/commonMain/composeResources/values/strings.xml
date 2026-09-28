@@ -608,6 +608,7 @@
     <string name="tasks_quantity_unusable">Adet sıfırdan büyük bir tam sayı olmalı.</string>
     <string name="tasks_notes_label">Not</string>
     <string name="column_notes">Notlar</string>
+    <string name="column_borrowed">Ödünç Parçalar</string>
     <string name="tasks_save">Görevi kaydet</string>
     <string name="tasks_row_column">Sütun: %1$s</string>
     <string name="tasks_row_quantity">Gerekli adet: %1$s</string>

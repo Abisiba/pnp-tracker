@@ -47,6 +47,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
@@ -59,6 +60,8 @@ private val TWO_HOURS_BEFORE_THE_IMPORT = Instant.fromEpochMilliseconds(EPOCH_MI
 
 /** What the cell reads before any import touches it, and must read again afterwards. */
 private const val DOCUMENT_BEFORE = "Önce yazdıklarım"
+private const val BORROWED_PARTS = "Kule zarları Wingspan'den"
+private const val NOTES_BESIDE = "Kutusu ezik"
 
 /**
  * A backup written to a real file and put back into a real database.
@@ -121,6 +124,39 @@ class BackupRestoreLifecycleTest {
             assertTrue(Files.exists(safety))
             assertEquals(stateB, dataOf(readBackup(safety)))
         }
+
+    @Test
+    fun `the borrowed parts of a game go out with a backup and come back with a restore`() =
+        runBlocking<Unit> {
+            // PLAN 12.19: the borrowed parts are a cell of their own, so they
+            // travel the way every cell does — and the notes beside them stay
+            // exactly what they were.
+            val database = openFilled()
+            val clock = StoppedClock(MOMENT)
+            val game = aGame(name = "Harmonies")
+            database.gameDao().insert(game)
+            val cells = database.cellSegmentDao()
+            cells.saveDocumentText(game.id, CellColumnType.BORROWED, "", BORROWED_PARTS, clock, IdGenerator.Random)
+            cells.saveDocumentText(game.id, CellColumnType.NOTES, "", NOTES_BESIDE, clock, IdGenerator.Random)
+            val file = writeBackup(database, "pnp-yedek-odunc.json")
+
+            cells.saveDocumentText(game.id, CellColumnType.BORROWED, BORROWED_PARTS, "Geri verildi", clock, IdGenerator.Random)
+            assertEquals("Geri verildi", documentOf(database, game.id, CellColumnType.BORROWED))
+
+            assertNull(restore(database, file).problem)
+
+            assertEquals(BORROWED_PARTS, documentOf(database, game.id, CellColumnType.BORROWED))
+            assertEquals(NOTES_BESIDE, documentOf(database, game.id, CellColumnType.NOTES))
+        }
+
+    private suspend fun documentOf(
+        database: AppDatabase,
+        gameId: EntityId,
+        columnType: CellColumnType,
+    ): String {
+        val cell = assertNotNull(database.cellSegmentDao().cellOfGame(gameId, columnType), "no $columnType cell")
+        return database.cellSegmentDao().segmentsOfCell(cell.id).joinToString("") { it.text.orEmpty() }
+    }
 
     @Test
     fun `the automatic safety backup can itself be restored, all the way back to B`() =

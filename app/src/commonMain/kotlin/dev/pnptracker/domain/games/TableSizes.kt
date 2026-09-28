@@ -30,6 +30,7 @@ enum class TableColumn {
     CARD,
     BOARD,
     SPECIAL,
+    BORROWED,
     NOTES,
     ;
 
@@ -41,6 +42,7 @@ enum class TableColumn {
                 CellColumnType.CARD -> CARD
                 CellColumnType.BOARD -> BOARD
                 CellColumnType.SPECIAL -> SPECIAL
+                CellColumnType.BORROWED -> BORROWED
                 CellColumnType.NOTES -> NOTES
             }
     }
