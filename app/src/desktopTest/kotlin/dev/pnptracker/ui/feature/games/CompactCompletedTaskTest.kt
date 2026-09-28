@@ -258,25 +258,25 @@ class CompactCompletedTaskTest {
         RealStack().use { stack ->
             ComposeSceneHarness(width = 1300, height = 900) { GameTableScreen(stack.table) }.use { screen ->
                 val (gameId, tasks) = screen.cellOf(stack, "$LONG_NAME ve Kuş", listOf(LONG_NAME, "Kuş"))
-                val before = screen.cellNode(LONG_NAME).boundsInRoot.height
 
                 finish(stack, gameId, tasks.first())
                 screen.settle("the task is finished") {
                     stack.piecesOf(gameId, CellColumnType.THREE_D).any { it.isCompletedTask }
                 }
 
+                // A cell is no longer cut after three lines (PLAN 12.17), so the
+                // height is not what is at stake here: moving the finished task
+                // to the end re-wraps the cell, and with some fonts that is a line
+                // more. What is at stake is that the work beside it is still drawn,
+                // inside the cell, where the pointer and the keyboard can reach it.
                 val drawn = screen.cellText(LONG_NAME).text
-                assertEquals(
-                    before,
-                    screen.cellNode(LONG_NAME).boundsInRoot.height,
-                    TOLERANCE,
-                    "the finished task took another line of the cell: $drawn",
-                )
-                // Both words are still reachable: a task whose name fell past
-                // the lines the cell shows has no drawn word and therefore no
-                // handle at all.
+                val cell = screen.cellNode(LONG_NAME).boundsInRoot
                 assertNotNull(screen.taskNode(LONG_NAME), "the finished task is not drawn any more")
-                assertNotNull(screen.taskNode("Kuş"), "the work beside the finished task was crowded out: $drawn")
+                val beside = assertNotNull(screen.taskNode("Kuş"), "the work beside the finished task was crowded out: $drawn")
+                assertTrue(
+                    beside.boundsInRoot.bottom <= cell.bottom + TOLERANCE,
+                    "the work beside the finished task fell out of the cell: ${beside.boundsInRoot} in $cell",
+                )
                 assertTrue("×14" in drawn, "the counts stopped being drawn: $drawn")
             }
         }

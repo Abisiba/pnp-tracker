@@ -243,7 +243,9 @@ class TableAutoSizeTest {
         RealStack().use { stack ->
             val (screen, table) = openTable(stack)
             screen.use {
-                write(screen, table, "Harmonies", CellColumnType.NOTES, LONG_LINE)
+                // Several lines' worth, so a hundred dp less is certainly a line
+                // more whatever font the machine draws with.
+                write(screen, table, "Harmonies", CellColumnType.NOTES, List(4) { LONG_LINE }.joinToString(" "))
                 val wide = screen.writtenCell("Notlar")
 
                 windowWidth = NARROW.dp
