@@ -3377,7 +3377,16 @@ Windows desteği, bir testin platform yüzünden **atlanmasıyla** kurulmaz. Ayr
   **eksik bir yayın yayımlanmaz**.
 - Belirlenimcilik: Windows kurucusu, aracın izin verdiği sınırlar içinde
   ölçülür. Kurucu veya PE metadata'sı bayt eşitliğini engelliyorsa bu **dürüstçe
-  raporlanır**; sahte bir belirlenimcilik iddiası yazılmaz.
+  raporlanır**; sahte bir belirlenimcilik iddiası yazılmaz. **Ölçülen sonuç:
+  kurucu bayt bayt yeniden üretilebilir DEĞİLDİR.** Aynı daldaki iki koşu —
+  aralarındaki fark yalnız pakete girmeyen dosyalarda: PLAN, bu bağlam belgesi,
+  CI dosyası ve bir test kaynağı — aynı boyutta (90 929 152 bayt) ama **farklı**
+  SHA-256 veren kurucular üretti (`ad2c5b17…` ve `ecaced72…`). Fark yalıtılmadı;
+  MSI/PE metadata'sının (zaman damgaları, üretilen kimlikler) beklenen sonucudur.
+  Bunun yayın için sonucu şudur: `SHA256SUMS`, yayımlanan **o** dosyanın özetini
+  taşır ve kullanıcı indirdiğini onunla doğrular; "aynı kaynaktan aynı bayt"
+  güvencesi Linux arşivi için verildiği biçimde Windows kurucusu için
+  **verilmez** ve verilmiş gibi yazılmaz.
 
 #### 14.8.7 Kapsam dışı
 
