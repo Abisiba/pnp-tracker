@@ -45,10 +45,17 @@ Uygulama şu problemleri çözer:
 
 ### 3.1 Platform ve dağıtım
 
-- İlk sürüm yalnızca Linux masaüstünde geliştirilecek ve doğrulanacak.
-- Birincil geliştirme/çalıştırma ortamı Garuda Linux’tur.
+- Uygulama Linux masaüstünde geliştirilir ve **birincil** olarak orada doğrulanır.
+  Birincil geliştirme/çalıştırma ortamı Garuda Linux’tur.
+- **Windows 11 x86_64 ikinci desteklenen hedeftir** (`14.8`). Desteklenmek şu
+  demektir: kullanıcı tek bir kurulum dosyası indirip çalıştırarak uygulamayı
+  kurabilir, sisteminde Java bulunması gerekmez, ve bu yol otomatik testlerle ve
+  temiz bir Windows 11 turuyla doğrulanır (`18.` Faz 3 / İş 17 ve İş 18).
+- Windows desteği Linux'un davranışını **değiştirmez**. Linux'ta XDG yolları,
+  paketler, testler ve yayın sözleşmesi olduğu gibi kalır; bir platformun
+  gereksinimi diğerinin sözleşmesini gevşetmez.
 - Uygulama çevrimdışı ve yerel veritabanıyla çalışacaktır.
-- Windows, macOS ve Android ilk sürüm kapsamı dışındadır.
+- macOS ve Android kapsam dışıdır.
 - Kod tabanı gelecekte Compose Multiplatform hedefleri eklenebilecek şekilde düzenlenecektir.
 
 ### 3.2 Veri kaynağı
@@ -99,7 +106,7 @@ Aşağıdakiler ilk sürüme eklenmeyecektir:
 - Backend, PostgreSQL veya FastAPI
 - Cihazlar arası eşitleme
 - Gerçek zamanlı ortak çalışma veya paylaşım bağlantıları
-- Android, Windows veya macOS dağıtımı
+- Android veya macOS dağıtımı  *(Windows `3.1` ile desteklenen hedef oldu)*
 - Filament stok, makara, gramaj, maliyet veya marka takibi
 - Yazıcıya doğrudan iş gönderme
 - STL dosyası yönetimi veya dilimleyici entegrasyonu
@@ -1719,7 +1726,8 @@ sütun genişlikleri ve satır yükseklikleri kullanıcının kendi ölçülerid
 
 - `$XDG_STATE_HOME/pnp-tracker/table-sizes.json`. XDG'nin uygulama durumu için
   tarif ettiği yer burasıdır: ölçüler kullanıcının düzenlediği bir ayar değil,
-  makinenin yerleşim durumudur. Bu yüzden `settings.json`'ın (`12.16`) içine
+  makinenin yerleşim durumudur. Windows'ta karşılığı aynı **durum** alanıdır
+  (`14.8.1`); dosyanın adı ve sözleşmesi değişmez. Bu yüzden `settings.json`'ın (`12.16`) içine
   girmez ve o dosyanın sözleşmesini değiştirmez.
 - Belge sürümlüdür ve atomik yazılır. `14.4.12`'nin üç kuralı burada da geçerlidir:
   dosya **okumayla oluşmaz**, okunamayan dosya **kendiliğinden onarılmaz veya
@@ -1783,7 +1791,10 @@ Varsayılan sıralama:
 - Room KMP
 - Bundled SQLite sürücüsü
 - Şema dışa aktarma ve migration testleri
-- Veritabanı yolu Linux XDG dizin kurallarına uymalıdır.
+- Veritabanı yolu, işletim sisteminin kullanıcıya ait yol kurallarına uymalıdır:
+  Linux'ta XDG, Windows'ta `14.8`'deki yerleşim. Yolu hesaplayan **tek** bir yer
+  vardır ve seçim orada yapılır; işletim sistemi denetimi arayüze veya domain
+  katmanına dağılmaz.
 - Geçici dizine veya proje klasörüne kullanıcı verisi yazılmamalıdır.
 
 Önerilen yerler:
@@ -1796,7 +1807,10 @@ $XDG_STATE_HOME/pnp-tracker/logs/          (tanılama kayıtları, 14.7.1)
 ```
 
 XDG değişkeni tanımlı değilse standart kullanıcı dizini fallback’i kullanılmalıdır
-(`XDG_STATE_HOME` için `~/.local/state`). Tanılama kayıtları veri, yedek ve ayar
+(`XDG_STATE_HOME` için `~/.local/state`). **Windows'ta XDG değişkenleri
+varsayılmaz**; yerleşim `14.8`'dedir ve aynı üç alanı (veri, ayar, durum) ayrı
+ayrı verir, dolayısıyla aşağıdaki bütün kurallar orada da aynen geçerlidir.
+Tanılama kayıtları veri, yedek ve ayar
 alanlarına **yazılmaz**; o alanlardaki hiçbir dosya log sistemi tarafından
 okunmaz, taşınmaz veya silinmez.
 
@@ -3142,6 +3156,172 @@ veya durum dizinine dokunmaz. Süre ve bellek eşik değildir (İş 9).
 - Commit: `feat(startup): refuse to open a damaged database`
 - Sonraki dilime temeli: İş 10 tamamlanır; sıradaki PLAN işi İş 11'dir.
 
+### 14.8 Windows dağıtımı
+
+`3.1` Windows 11 x86_64'ü ikinci desteklenen hedef yapar. Bu bölüm o desteğin
+bağlayıcı sözleşmesidir: kullanıcının eline ne geçer, verisi nereye yazılır,
+hangi platform farkları kabul edilir ve hangi kanıt aranır. Linux tarafındaki
+hiçbir kural bu bölüm yüzünden değişmez.
+
+#### 14.8.1 Kullanıcı yolları
+
+Windows'ta **XDG değişkenleri varsayılmaz**; işletim sisteminin kendi kullanıcı
+dizinleri kullanılır:
+
+```text
+%LOCALAPPDATA%\pnp-tracker\data\           pnp.db  ve  backups/
+%LOCALAPPDATA%\pnp-tracker\state\          logs/  ve  table-sizes.json
+%APPDATA%\pnp-tracker\                     settings.json
+```
+
+- Üç alan **kardeştir**, iç içe değildir: Linux'un `$XDG_DATA_HOME`,
+  `$XDG_STATE_HOME` ve `$XDG_CONFIG_HOME` ayrımının birebir karşılığıdır ve
+  `14.7.1`'in "tanılama, veri/yedek/ayar alanlarına dokunmaz" kuralı olduğu gibi
+  uygulanabilir kalır.
+- Veri ve durum `%LOCALAPPDATA%` altındadır çünkü ikisi de **bu makineye**
+  aittir: bir veritabanı ve bir yerleşim dosyası ağ üzerinden gezmemelidir.
+  Ayar `%APPDATA%` altındadır, Windows'un gezici ayar geleneği orasıdır ve ayar
+  `14.4.12` gereği zaten yedeğin kapsamı dışındadır.
+- `%LOCALAPPDATA%` veya `%APPDATA%` tanımsızsa `%USERPROFILE%` altındaki
+  standart karşılıkları kullanılır. Hiçbiri çözülemiyorsa uygulama **veri
+  dosyasına dokunmadan** `14.7.2`'nin açılış hata ekranını gösterir; tahminle
+  başka bir yere yazmaz.
+- Yol hesabı saf bir işlemdir: hiçbir şey okunmaz, hiçbir dizin oluşturulmaz.
+  Dizinleri oluşturan yer `14.4.10`'un açılış sırasındaki mevcut adımdır ve
+  Windows'ta da aynı adımdır.
+- Linux'ta **hiçbir şey değişmez.** XDG değişkenleri, fallback'ler ve
+  `14.2`'deki dört yol aynen korunur; bir Windows kuralı Linux'ta okunmaz ve
+  tersi.
+
+#### 14.8.2 Kurulum dosyası
+
+Windows çıktısı, gömülü Java çalışma ortamı taşıyan **tek bir kurulum
+dosyasıdır**:
+
+```text
+pnp-tracker-<sürüm>-windows-x86_64.exe
+```
+
+- Kurulum gerektirmeyen tek-dosya uygulama **değildir**: kullanıcı EXE'yi
+  çalıştırır ve uygulamayı kurar.
+- Java 21 çalışma ortamı pakete gömülüdür. Sistemde Java bulunması gerekmez ve
+  `JAVA_HOME` okunmaz; Linux paketlerinin taşıdığı aynı güvencedir.
+- Kurulum **kullanıcı başınadır**: normal kullanımda yönetici yetkisi istenmez
+  ve makinenin ortak alanlarına yazılmaz.
+- Başlat menüsünde bir girdi oluşur. Masaüstü kısayolu, paketleyicinin
+  desteklediği ölçüde kullanıcının seçimine bırakılır; desteklemiyorsa
+  eklenmez ve bu belgelenir.
+- Uygulama Windows'un `Uygulamalar` listesinden normal biçimde kaldırılabilir.
+- **Kurulum ve kaldırma kullanıcı verisini silmez.** `14.8.1`'deki üç alan
+  kaldırmadan sonra olduğu gibi kalır; kaldırma yalnız uygulamanın kendi
+  dosyalarını alır. Bu, Linux'taki `pacman -R` davranışının aynısıdır.
+- Uygulamanın adı ve pencere başlığı Türkçe addır (`PnP Üretim Takipçisi`);
+  dosya adı ve paket kimliği `pnp-tracker` olarak kalır ve sürümün tek kaynağı
+  yine Gradle `project.version`'dır. Kurulum dosyası biçiminin sürüm numarasını
+  kabul etmediği bir durumda uygulamanın sürümü **değiştirilmez**; yalnız
+  kurucunun kendi sürüm alanı ayrıca verilir ve bu belgelenir.
+- İkon, Linux paketinin kullandığı görselden üretilir; ikinci bir görsel
+  tasarlanmaz.
+
+#### 14.8.3 İmza yoktur
+
+Kod imzalama sertifikası olmadığı için kurucu **imzasızdır**.
+
+- Sahte imza, kendinden imzalı bir sertifikanın gerçek gibi sunulması veya
+  kullanıcıyı güven konusunda yanıltan herhangi bir metin **yazılmaz**.
+- Windows SmartScreen'in imzasız bir kurucu için uyarı göstermesi beklenen
+  davranıştır. Bu **açık bir sınırdır**: kullanıcı belgesinde ne göreceği ve
+  neden gördüğü dürüstçe anlatılır, "uyarı çıkmaz" veya "uyarı bastırıldı"
+  denmez.
+- Doğrulama yolu Linux'takiyle aynıdır: yayımlanan `SHA256SUMS` ile özet
+  karşılaştırması.
+
+#### 14.8.4 Kabul edilen platform farkları
+
+Aşağıdakiler kusur değil, işletim sistemi farkıdır; her biri burada yazılı
+olduğu için sessizce oluşamaz:
+
+- **Dosya izinleri.** Linux'ta veri, ayar ve durum dizinleri `0700`, tanılama
+  dosyaları `0600` oluşturulur (`14.7.1`). Windows'ta POSIX izin modeli yoktur;
+  dizinler ve dosyalar kullanıcının profilinden devralınan ACL ile oluşur.
+  Uygulama bunu **ayrıca daraltmaya çalışmaz** ve izinleri okunamayan bir yerde
+  hata üretmez; güvence "kullanıcının kendi profili altında" olmaktır.
+- **Atomik taşıma.** `14.4.5`'in atomik yazma sözleşmesi Windows'ta da
+  geçerlidir. Farkı şudur: hedef dosya başka bir süreç tarafından açık tutuluyorsa
+  taşıma reddedilir. Bu, mevcut tipli "yazılamadı" sonucuna düşer; veri
+  kaybettiren bir geri çekilme yolu **eklenmez**.
+- **Tek kopya kilidi.** `14.4.10`'un instance kilidi işletim sisteminin kilididir
+  ve Windows'ta da süreç ölünce bırakılır. Kilit dosyası hiçbir platformda
+  silinmez.
+- **Satır sonları.** Uygulamanın yazdığı dosyaların biçimi platforma göre
+  **değişmez**: yedek JSON'u, tanılama satırları ve CSV dışa aktarma
+  `14.4.1`, `14.7.1` ve CSV sözleşmesinin dediği baytları yazar. CSV'nin CRLF'i
+  bir Windows uyarlaması değil, RFC 4180 kuralıdır ve Linux'ta da öyleydi.
+
+#### 14.8.5 Testlerin platform sözleşmesi
+
+Windows desteği, bir testin platform yüzünden **atlanmasıyla** kurulmaz. Ayrım
+şudur:
+
+- **Konusu bir platforma ait olan testler** o platformda koşar ve diğerinde
+  koşmaz: Arch paketinin bağımlılıkları, ELF denetimi, temiz Garuda doğrulama
+  scriptleri, adlandırılmış boru (FIFO) gibi. Bunlar platform sözleşmesi
+  **adıyla** ayrılır; hangi testin nerede koştuğu ve ayrımın sebebi kayda geçer.
+- **Konusu platformdan bağımsız olan testler** her iki platformda da koşar. Aynı
+  sözleşmeyi farklı bir mekanizmayla kurmak gerekiyorsa **karşılığı yazılır**,
+  test silinmez veya zayıflatılmaz: yazılamayan bir dizin Windows'ta ACL ile,
+  çocuk süreç Windows'un çalıştırılabilir adıyla kurulur.
+- **Genel bir "bu platformda atla" bayrağı eklenmez.** Bir testin nerede
+  koşmadığı, o testin kendi konusundan okunabilir olmalıdır.
+- Her turda **kapsam kaybı raporlanır**: hangi sözleşme hangi platformda
+  kanıtsız kaldı ve niçin.
+- Windows'ta pencere açan bir doğrulama, pencereyi **süreç kimliğiyle**
+  doğrulayarak kapatır. Pencere başlığının bir parçasına göre süreç kapatmak
+  hiçbir platformda yapılmaz; bu kural Linux tarafında da yürürlüktedir.
+
+#### 14.8.6 Üretim, doğrulama ve yayın
+
+- Windows kurucusu **Windows üzerinde** üretilir. Linux'ta Windows EXE üretmeye
+  çalışılmaz.
+- Paketleme mevcut Gradle mimarisini genişletir; kabuk içinde ikinci ve bağımsız
+  bir derleme hattı kurulmaz. Linux ve Arch paketleme görevleri bozulmaz.
+- Otomatik doğrulama en az şunları kanıtlar: çıktının gerçekten `.exe` ve boş
+  olmadığı; dosya adındaki ve uygulamadaki sürümün aynı olduğu; gömülü çalışma
+  ortamının bulunduğu ve sistem Java'sına başvurulmadığı; kişisel kullanıcı adı,
+  geliştirme yolu veya koşucu yolu sızmadığı; lisans ve üçüncü taraf
+  bildirimlerinin kurulu uygulamada bulunduğu.
+- Gerçek kurulumun kanıtı şunları da kapsar: kullanıcı başına kurulumun yönetici
+  yetkisi istemediği; Başlat menüsü girdisinin oluştuğu; uygulamanın kurulu
+  başlatıcısıyla açıldığı; veritabanının `14.8.1`'deki yere oluştuğu;
+  kapanıştan sonra `-wal`/`-shm` yan dosyalarının kalmadığı; CSV ve XLSX
+  işlevlerinin çalıştığı; JSON yedeğin alınabildiği; tanılama kaydının doğru
+  alana yazıldığı ve kişisel yol ya da ham exception taşımadığı; ayarlanabilir
+  tablo ölçülerinin (`12.17`) Windows durum alanında saklandığı ve ikinci
+  açılışta korunduğu; kaldırmanın uygulama dosyalarını alıp kullanıcı verisini
+  **bırakmadığı**.
+- Bir adım koşucuda güvenle denenemiyorsa **statik doğrulama ile eksik kalan
+  gerçek adım açıkça ayrılır**; denenmiş gibi yazılmaz.
+- Kurulum ve kaldırma doğrulaması koşucunun gerçek kullanıcı alanını kirletmez;
+  bunun için ayrılmış bir kullanıcı bağlamı veya dizin kullanılır.
+- Yayımlanan `SHA256SUMS` üç paketi kapsar: Linux arşivi, Arch paketi ve Windows
+  kurucusu. Bunun bilinen sonucu, bir yayının artık iki işletim sisteminin
+  üretimine birden bağlı olmasıdır; Windows tarafı üretilemezse yayın çıkmaz ve
+  **eksik bir yayın yayımlanmaz**.
+- Belirlenimcilik: Windows kurucusu, aracın izin verdiği sınırlar içinde
+  ölçülür. Kurucu veya PE metadata'sı bayt eşitliğini engelliyorsa bu **dürüstçe
+  raporlanır**; sahte bir belirlenimcilik iddiası yazılmaz.
+
+#### 14.8.7 Kapsam dışı
+
+- macOS paketleme, imzalama ve notarization.
+- Kod imzalama sertifikası edinme, EV sertifikası, SmartScreen itibar süreci.
+- Microsoft Store, winget veya Chocolatey dağıtımı.
+- Otomatik güncelleme, güncelleme sunucusu veya sürüm kontrolü.
+- ARM64 Windows, 32-bit Windows ve Windows 10 veya öncesi için ayrı doğrulama.
+- Windows'a özgü yeni bir ürün davranışı: tepsi simgesi, kayıt defteri
+  ayarları, dosya türü ilişkilendirme, `winget` manifesti.
+- Linux'taki mevcut yolların, XDG davranışının veya paketlerinin değişmesi.
+
 ## 15. Önerilen modül/dizin yapısı
 
 ```text
@@ -3574,6 +3754,18 @@ Kişisel kullanımda veri kaybı riski düşük, test edilmiş ve Garuda Linux�
 14. README, kullanıcı kılavuzu, örnek içe aktarma belgesi ve katkı yönergelerini yaz.
 15. Açık kaynak lisansını sürüm kapısı olarak seç ve `LICENSE` ekle.
 16. GitHub Actions üzerinde Linux build, test ve sürüm artifact’i üretimini yapılandır.
+17. Windows 11 x86_64 için, gömülü Java çalışma ortamı taşıyan tek dosyalık `.exe`
+    kurucusunu üret ve doğrula (`14.8`). Sözleşme kesinleşmiştir; iş küçük atomik
+    dilimlere ayrılır: Windows kullanıcı yolları ve platform uyumluluğu, kurucunun
+    üretimi ve otomatik doğrulaması, Windows CI işi ve kurucunun PR artifact'i
+    olarak yayımlanması. Hiçbir ara commit: Linux'un yollarını veya paketlerini
+    değiştirmez, bir testi platform yüzünden atlatmaz, imzasız kurucuyu imzalı gibi
+    göstermez ve doğrulanmamış bir kurulum adımını doğrulanmış gibi yazmaz.
+18. Temiz bir Windows 11 x86_64 ortamında kurulum, ilk açılış, veri dizini,
+    ikinci açılışta kalıcılık, güncelleme ve kaldırma testi yap (`14.8.6`). İş 13'ün
+    Garuda turunun karşılığıdır ve aynı kuralla: bu geliştirme makinesi temiz ortam
+    sayılmaz, tur ayrı bir makinede veya sanal makinede koşulur ve sonuçları
+    matrisiyle kaydedilir.
 
 #### Faz 3 testleri
 
@@ -3669,11 +3861,33 @@ Kişisel kullanımda veri kaybı riski düşük, test edilmiş ve Garuda Linux�
 - Bozuk taslağın açılıştan sonra kendiliğinden silinmemesi ve açılışı engellememesi
 - Kaldırma ve bozuk taslak uyarısının Türkçe olması; ham tablo adı, predicate kodu, UUID, SQL, enum, yol veya exception metni göstermemesi
 - Programlama hatalarının bozuk içe aktarma veya depolama hatası olarak maskelenmemesi
+- Windows'ta kullanıcı yollarının `14.8.1`'deki üç kardeş alana çözülmesi; XDG
+  değişkenlerinin varsayılmaması; `%LOCALAPPDATA%`/`%APPDATA%` tanımsızken
+  `%USERPROFILE%` karşılıklarına düşülmesi ve hiçbiri çözülemezken veri dosyasına
+  dokunulmadan açılış hatası verilmesi
+- Linux'ta XDG davranışının gerilemediğinin ayrıca kanıtlanması: dört değişken,
+  fallback'ler ve `14.2`'deki yolların bayt bayt aynı kalması
+- Windows kurucusunun sözleşmesi: çıktının `.exe` ve boş olmadığı, dosya adındaki
+  ve uygulamadaki sürümün aynı olduğu, gömülü çalışma ortamının bulunduğu, sistem
+  Java'sına başvurulmadığı, kişisel kullanıcı adı / geliştirme yolu / koşucu yolu
+  sızmadığı, lisans ve üçüncü taraf bildirimlerinin kurulu uygulamada bulunduğu
+- Windows'ta açılış ve ikinci açılış: veritabanının `14.8.1`'deki yere oluştuğu,
+  kapanıştan sonra `-wal`/`-shm` kalmadığı, ayarlanabilir tablo ölçülerinin
+  (`12.17`) durum alanında saklandığı ve ikinci açılışta korunduğu
+- Windows'ta kaldırmanın uygulama dosyalarını alıp veritabanını, ayarları,
+  yedekleri ve durum dosyasını **bırakması**
+- Windows'ta platforma özgü test ayrımının `14.8.5`'e uyması: genel bir atlama
+  bayrağı bulunmaması ve kapsam kaybının raporlanması
+- İki akışın da (Linux ve Windows) aynı commit'te yeşil olması; bir platformun
+  düşmesinin diğerinin yayınını çıkarmaması
 
 #### Faz 3 tamamlanma ölçütü
 
 - Tek komutla test ve paket oluşturma süreci belgelenmiştir.
 - Garuda Linux için çalışan self-contained dağıtım vardır.
+- **Windows 11 x86_64 için, sistemde Java gerektirmeyen tek dosyalık bir kurucu
+  vardır ve temiz bir Windows 11 ortamında kurulum, açılış, kalıcılık ve kaldırma
+  turu koşulmuştur** (`14.8`, İş 17 ve İş 18).
 - Kullanıcı manuel ve otomatik yedeklerden verisini geri yükleyebilir.
 - Kritik erişilebilirlik ve veri bütünlüğü testleri geçer.
 - README ve kurulum belgesi uygulamayı sıfırdan kullanmaya yeterlidir.
@@ -3925,9 +4139,13 @@ içermelidir.
 
 ### Çoklu masaüstü platformları
 
-- Windows paketleme
 - macOS paketleme, imzalama ve notarization kararı
-- Her işletim sistemi için ayrı CI runner
+- ARM64 Windows ve 32-bit Windows
+- Microsoft Store, winget veya Chocolatey dağıtımı
+- Otomatik güncelleme
+
+*(Windows paketleme ve işletim sistemi başına ayrı CI runner bu listeden
+çıkmıştır: `3.1` ile Windows desteklenen hedef oldu ve sözleşmesi `14.8`'dedir.)*
 
 ### Android yardımcı uygulaması
 
@@ -3963,9 +4181,18 @@ içermelidir.
 
 ## 23. Nihai Definition of Done
 
-İlk Linux sürümü ancak aşağıdakilerin tamamı sağlandığında bitmiş sayılır:
+İlk sürüm ancak aşağıdakilerin tamamı sağlandığında bitmiş sayılır. Liste iki
+desteklenen platformu birden kapsar (`3.1`): bir maddenin yalnız birinde
+sağlanması onu karşılamaz.
 
 - Garuda Linux’ta temiz kurulumdan açılır.
+- **Temiz bir Windows 11 x86_64 kurulumunda tek dosyalık kurucudan açılır; sistemde
+  Java gerekmez, kurulum yönetici yetkisi istemez, veri `14.8.1`'deki yere yazılır
+  ve kaldırma o veriyi bırakır** (`14.8`).
+- **Windows kurucusu imzasızdır ve bu, SmartScreen uyarısıyla birlikte kullanıcı
+  belgesinde dürüstçe anlatılmıştır** (`14.8.3`).
+- **Windows desteği Linux'un davranışını geriletmemiştir:** XDG yolları,
+  paketler ve testler aynı sözleşmeyle çalışır.
 - İnternet olmadan bütün ana işlevler çalışır.
 - Oyun tablosu ve üç global görünüm tanımlanan kurallara uyar.
 - Oyunlar ve dört havuz tanımlanan kurallara uyar; havuzlar kopya görev üretmez.
