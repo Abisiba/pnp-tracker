@@ -1156,55 +1156,54 @@ game,column,task,pool,colors,required_quantity,status,notes
 
 ### 12.1 Masaüstü düzeni
 
-Birincil masaüstü gezinmesi sol kenar çubuğu veya eşdeğer geniş ekran navigasyonu kullanır:
+Birincil masaüstü gezinmesi **üstte tek satırlık** bir gezinmedir. Sol kenar
+çubuğu **yoktur** ve ayrı bir ana sayfa **yoktur**; uygulama `Oyunlar`'da açılır.
+Gezinme beş girişten ibarettir ve bu sayı onu tek satırda tutan şeydir:
 
-- Ana Sayfa
-- Oyun Tablosu
+- Oyunlar
 - 3D Baskı
 - Kartlar
 - Mukavva
-- Özel — en az bir silinmemiş özel görev varsa
+- Ayarlar
+
+`Ayarlar` girişi bir menü açar. Menünün içeriği, sırayla:
+
+- Ayarlar — ekranın kendisi, içeriği `12.16`'dadır
 - İçe Aktarma
-- Geçmiş
 - Renkler
-- Ayarlar — Faz 3 / İş 3 ile açılır; içeriği `12.16`'dadır
+- Geçmiş
+
+Bu üç bölüm bir tık daha uzaktadır ve **başka hiçbir şeyi değişmez**: aynı
+ekranlar, aynı işlevler.
+
+- `Özel` havuzu bu gezinmede **yer almaz**. En az bir silinmemiş özel görev
+  varken **oyun tablosundan** açılır (`9.`) ve tablodaki giriş aktif görev
+  sayısını söyler. Özel iş kalmadığında giriş kaybolur; o havuzda durulmuşsa
+  pencere sessizce 3D havuzuna geçer.
+- Seçili giriş rengin yanı sıra bir **çizgiyle** de belirtilir; hangi bölümün
+  açık olduğu renk tek başına taşımaz (`17.`).
+- Gezinme yatay olarak kaydırılabilir, sarmalanmaz: en küçük pencerede büyütülmüş
+  yazıyla bile son giriş kenardan düşmez.
 
 Ayrı bir oyun listesi ekranı ve ayrı bir oyun detay ekranı **yoktur**. Görev
 oluşturma ve düzenleme oyun tablosunun hücrelerinde yapılır.
 
-### 12.2 Ana sayfa
+### 12.2 Ana sayfa yoktur
 
-Ana sayfanın üst bölümünde oyun tablosuna giriş ve arama bulunur:
+Ana sayfa **kaldırıldı**. Bir özet ekranı, kullanıcıyı işin yapıldığı yere
+ulaşmak için bir adım fazla attırıyordu; oyun tablosu birincil çalışma yüzeyi
+olduğu için (`12.3`) pencere doğrudan onunla açılır.
 
-- Arama
-- Yeni oyun satırı
-- Excel/CSV içe aktar
-- Üç global tablo görünümüne hızlı geçiş
-- Son kullanılan veya sabitlenen oyunlar
+Ana sayfanın taşıdığı şeyler kaybolmadı, ait oldukları yere geçti:
 
-Bunların altında havuz özetleri bulunur:
+- Arama, yeni oyun satırı, içe aktarma ve üç global görünüm arasında geçiş
+  zaten oyun tablosunun kendi denetimleridir (`12.3`, `12.4`).
+- Havuz özetlerinin yerini gezinmedeki havuz girişleri ve havuzların kendi
+  ekranları alır (`12.10`–`12.13`).
+- `Özel` havuzuna giriş oyun tablosundadır (`12.1`, `9.`).
 
-```text
-3D Baskı
-• Aktif görev sayısı
-• Yeniden basılması gereken eksik/hatalı parça sayısı
-• Renk seçilecek görev sayısı
-
-Kartlar
-• Baskı bekleyen
-• Laminasyon bekleyen
-• Kesim bekleyen
-
-Mukavva
-• Baskı bekleyen
-• Yapıştırma bekleyen
-• Kesim bekleyen
-
-Özel
-• Yalnızca boş değilse gösterilir
-```
-
-Özet kartına tıklamak ilgili havuza götürür.
+Bir özet ekranı ileride istenirse bu bölüm yeniden yazılır; bugün böyle bir ekran
+**yoktur** ve olmadığı için hiçbir işlev eksik değildir.
 
 ### 12.3 Oyun tablosu
 
@@ -4138,7 +4137,7 @@ Beklenti:
 
 ### Senaryo 9 — Özel havuz görünürlüğü
 
-- Hiç özel görev yokken Özel havuz ana sayfada görünmez.
+- Hiç özel görev yokken Özel havuza giriş oyun tablosunda görünmez (`12.1`).
 - `8 özel zar` görevi eklenince Özel havuz görünür.
 - Görev tamamlanınca havuz görünür kalır ve `0 aktif` gösterir; geçmiş kaydı korunur.
 - Havuz, tüm özel görevler silinmedikçe veya kullanıcı açıkça gizlemedikçe saklanmaz.
@@ -4196,7 +4195,7 @@ Beklenti:
 ### UI testleri
 
 - Oyun tablosu ve üç global görünüm
-- Ana sayfa havuz özetleri
+- Üstteki gezinmenin beş girişi ve `Ayarlar` menüsünün içeriği (`12.1`)
 - Özel havuzun koşullu görünmesi
 - Inline `TaskSegment` görünümü, tik ve tamamlanan görevin yüzeyi
 - Kelimeye çapalı popover

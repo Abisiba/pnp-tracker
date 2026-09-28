@@ -29,6 +29,13 @@ fun ImportSection(
     confirmationController: ImportConfirmationController,
     rollbackController: ImportRollbackController,
     unfinishedController: UnfinishedImportsController,
+    /**
+     * Sending the tasks back out again, drawn at the end of this screen.
+     *
+     * Passed in rather than built here, so this section goes on knowing nothing
+     * about files: the same arrangement the table has for it (PLAN 12.1).
+     */
+    exportAction: @Composable () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var openBatchId: EntityId? by remember { mutableStateOf(null) }
@@ -62,5 +69,8 @@ fun ImportSection(
         // review to come back to, the other is work already done that PLAN
         // 11.4.4 lets the user undo.
         SettledImportsSection(controller = rollbackController)
+        // Last, because it is the way out of the application rather than a step
+        // in getting something into it.
+        exportAction()
     }
 }

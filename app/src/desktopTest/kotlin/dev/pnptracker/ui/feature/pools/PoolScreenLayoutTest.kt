@@ -55,7 +55,7 @@ class PoolScreenLayoutTest {
     }
 
     @Test
-    fun `the sidebar names the card pool in the plural the plan uses`() {
+    fun `the navigation names the card pool in the plural the plan uses`() {
         // PLAN 12.1 lists the section as `Kartlar` while the table column beside
         // it is `Kart`: one is a place, the other is a kind of work.
         assertEquals("Kartlar", textOf(Strings.Pool.navCard))
@@ -167,7 +167,7 @@ class PoolScreenLayoutTest {
     }
 
     @Test
-    fun `the sidebar says how much work a pool is holding`() {
+    fun `the navigation says how much work a pool is holding`() {
         val said = textOf(Strings.Pool.navActiveCount, "0")
 
         assertTrue(said.contains("0"), "the count is not in the sentence: $said")
@@ -177,17 +177,14 @@ class PoolScreenLayoutTest {
     @Test
     fun `the count a pool is holding is written on the entry and not only spoken`() {
         // PLAN 9 and its ninth scenario: once the last special task is done the
-        // pool stays in the sidebar and shows `0 aktif`. A number only a screen
+        // pool is still reachable and shows `0 aktif`. A number only a screen
         // reader can reach would leave that promise unkept for everyone else.
         assertEquals("0 aktif", textOf(Strings.Pool.navActiveBadge, "0"))
 
-        assertTrue(
-            "badge =" in scaffold && "Strings.Pool.navActiveBadge" in scaffold,
-            "the entry draws no count of its own",
-        )
+        assertTrue("Strings.Pool.navActiveBadge" in scaffold, "the entry draws no count of its own")
         // Drawn but not spoken: the entry already carries the count in its state,
         // and a badge with semantics of its own would say it a second time.
-        val badge = scaffold.substringAfter("badge =").substringBefore("icon =")
+        val badge = scaffold.substringAfter("Strings.Pool.navActiveBadge").substringBefore("}")
         assertTrue("clearAndSetSemantics" in badge, "the badge is read out as well as the entry's state")
         assertTrue("navActiveCount" in scaffold, "the spoken count was dropped")
     }
@@ -408,15 +405,56 @@ class PoolScreenLayoutTest {
         )
     }
 
-    // --------------------------------------------------------- the sidebar
+    // ----------------------------------------------------- the navigation
 
     @Test
-    fun `the sidebar offers a pool only while it is meant to be there`() {
-        assertTrue("Screen.offered(summary)" in scaffold, "the sidebar lists every pool whatever the state")
+    fun `the navigation offers a pool only while it is meant to be there`() {
+        // The three pools that are always there are in the row across the top; the
+        // Special one is offered on the game table, and only while it is offered
+        // at all (PLAN 12.1).
+        assertTrue("Screen.offered(summary)" in scaffold, "the Special entry is drawn whatever the state")
         assertTrue(
             "navigation.navigateTo(Screen.threeDPool)" in scaffold,
             "standing on a pool that stops being offered leaves the window on a section nobody can leave",
         )
+    }
+
+    @Test
+    fun `the special pool is reached from the game table and nowhere else`() {
+        // PLAN 12.1: it is in neither navigation list, so the table that holds the
+        // work is the way in, and the entry says how much work that is.
+        assertTrue("specialAction = {" in scaffold, "the table is given no way into the Special pool")
+        assertTrue(
+            "navigation.navigateTo(Screen.specialPool)" in scaffold,
+            "the entry on the table does not open the pool",
+        )
+        assertTrue("Strings.Table.openSpecial" in scaffold, "the entry is not named")
+    }
+
+    @Test
+    fun `there is one row of navigation across the top and no sidebar`() {
+        assertTrue("TopNavigation(" in scaffold, "there is no navigation across the top")
+        assertFalse("NavigationSidebar" in scaffold, "the sidebar is still drawn")
+        assertFalse("Screen.Home" in scaffold, "the home page is still reachable")
+        // Which section is open is said by a shape as well as by a colour.
+        assertTrue("SelectionUnderlineHeight" in scaffold, "the selected entry is marked by colour alone")
+    }
+
+    @Test
+    fun `import, colours and the history are opened from the menu under the settings`() {
+        assertTrue("SettingsMenu(" in scaffold, "there is no menu under the settings")
+        assertTrue("Screen.underSettings.forEach" in scaffold, "the menu does not offer what the plan puts in it")
+        assertTrue("DropdownMenu(" in scaffold, "the entry opens no menu")
+    }
+
+    @Test
+    fun `the export is reachable from the menu as well as from the table`() {
+        // The section the menu reaches is `İçe/Dışa Aktarma`, so the way out of
+        // the application is on it; the table keeps its own button (PLAN 12.1).
+        val onTheImportScreen = scaffold.substringAfter("Screen.Import ->").substringBefore("is Screen.Pool")
+        assertTrue("TaskExportAction(exportController)" in onTheImportScreen, "the menu cannot reach the export")
+        val onTheTable = scaffold.substringAfter("Screen.Games ->").substringBefore("Screen.History ->")
+        assertTrue("TaskExportAction(exportController)" in onTheTable, "the table lost its own export")
     }
 
     @Test

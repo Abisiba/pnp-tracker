@@ -63,7 +63,7 @@ class AppNavigationStateTest {
 
         assertEquals(Screen.Games, navigation.currentScreen)
         assertTrue(navigation.isCurrent(Screen.Games))
-        assertFalse(navigation.isCurrent(Screen.Home))
+        assertFalse(navigation.isCurrent(Screen.Settings))
     }
 
     @Test
@@ -76,13 +76,10 @@ class AppNavigationStateTest {
     }
 
     @Test
-    fun `the sidebar offers only the sections that have been built`() {
-        // PLAN 12.1's order, all of it: the pools sit between the table and the
-        // import section, the history between import and the colours, and the
-        // settings section last. Every one of them is built.
+    fun `every section that has been built is still a section`() {
+        // There is no home page any more (PLAN 12.2) and everything else is here.
         assertEquals(
             listOf(
-                Screen.Home,
                 Screen.Games,
                 Screen.Pool(PoolType.THREE_D),
                 Screen.Pool(PoolType.CARD),
@@ -98,6 +95,46 @@ class AppNavigationStateTest {
     }
 
     @Test
+    fun `the navigation across the top is the five entries the plan names`() {
+        // PLAN 12.1: the table, the three pools that are always there, and the
+        // settings. Five is what keeps it to one short line.
+        assertEquals(
+            listOf(
+                Screen.Games,
+                Screen.Pool(PoolType.THREE_D),
+                Screen.Pool(PoolType.CARD),
+                Screen.Pool(PoolType.BOARD),
+                Screen.Settings,
+            ),
+            Screen.topLevel,
+        )
+    }
+
+    @Test
+    fun `import, colours and the history are in the menu under the settings`() {
+        // Moved there by PLAN 12.1 and otherwise untouched: one click further
+        // away, the same screens.
+        assertEquals(listOf(Screen.Settings, Screen.Import, Screen.Colors, Screen.History), Screen.underSettings)
+        // And in neither list twice, so nothing is drawn in two places at once.
+        assertEquals(emptyList(), Screen.topLevel.filter { it in Screen.underSettings && it != Screen.Settings })
+    }
+
+    @Test
+    fun `the special pool is in no navigation list and is reached from the table`() {
+        // PLAN 12.1 keeps it out of the top row; PLAN 9 shows it only while there
+        // is special work, and the game table is where that work is.
+        assertFalse(Screen.specialPool in Screen.topLevel)
+        assertFalse(Screen.specialPool in Screen.underSettings)
+        assertTrue(Screen.specialPool in Screen.all)
+    }
+
+    @Test
+    fun `every section is either in the top row or in the settings menu, or is the special pool`() {
+        val reachable = (Screen.topLevel + Screen.underSettings).toSet()
+        assertEquals(setOf(Screen.specialPool), Screen.all.toSet() - reachable)
+    }
+
+    @Test
     fun `choosing the history opens the history screen`() {
         val navigation = AppNavigationState()
 
@@ -109,9 +146,9 @@ class AppNavigationStateTest {
 
     @Test
     fun `the history is offered whether or not there is special work`() {
-        // Unlike the Special pool, it is never hidden: PLAN 12.1 lists it
-        // unconditionally, and a history with nothing in it says so on the
-        // screen rather than by not being there.
+        // Unlike the Special pool, it is never hidden: PLAN 12.1 keeps it in the
+        // settings menu unconditionally, and a history with nothing in it says so
+        // on the screen rather than by not being there.
         assertTrue(Screen.History in Screen.offered(PoolNavigationSummary.EMPTY))
     }
 
@@ -121,8 +158,8 @@ class AppNavigationStateTest {
         val gone = PoolNavigationSummary.EMPTY
 
         // What the window does when the last special task is deleted: the pool
-        // stops being offered, so standing on it would leave a section the
-        // sidebar can no longer name. PLAN 9 hides the pool and says nothing
+        // stops being offered, so standing on it would leave a section nothing
+        // can name any more. PLAN 9 hides the pool and says nothing
         // else about it, so the move is silent and lands on the first pool.
         assertFalse(Screen.Pool(PoolType.SPECIAL) in Screen.offered(gone))
         navigation.navigateTo(Screen.threeDPool)
@@ -156,7 +193,7 @@ class AppNavigationStateTest {
     }
 
     @Test
-    fun `a state can be started on a screen other than home`() {
+    fun `a state can be started on a screen other than the table`() {
         assertEquals(Screen.Import, AppNavigationState(Screen.Import).currentScreen)
     }
 }

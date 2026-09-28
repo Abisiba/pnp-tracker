@@ -340,8 +340,6 @@ import dev.pnptracker.resources.history_summary_game
 import dev.pnptracker.resources.history_summary_period
 import dev.pnptracker.resources.history_task_unknown
 import dev.pnptracker.resources.history_title
-import dev.pnptracker.resources.home_description
-import dev.pnptracker.resources.home_title
 import dev.pnptracker.resources.import_cancel
 import dev.pnptracker.resources.import_choose_another_file
 import dev.pnptracker.resources.import_choose_file
@@ -420,7 +418,6 @@ import dev.pnptracker.resources.navigation_accessibility_label
 import dev.pnptracker.resources.navigation_colors
 import dev.pnptracker.resources.navigation_games
 import dev.pnptracker.resources.navigation_history
-import dev.pnptracker.resources.navigation_home
 import dev.pnptracker.resources.navigation_import
 import dev.pnptracker.resources.navigation_pool_active_badge
 import dev.pnptracker.resources.navigation_pool_active_count
@@ -430,6 +427,7 @@ import dev.pnptracker.resources.navigation_pool_special
 import dev.pnptracker.resources.navigation_pool_three_d
 import dev.pnptracker.resources.navigation_section_label
 import dev.pnptracker.resources.navigation_settings
+import dev.pnptracker.resources.navigation_settings_menu
 import dev.pnptracker.resources.navigation_state_not_selected
 import dev.pnptracker.resources.navigation_state_selected
 import dev.pnptracker.resources.pool_board
@@ -809,6 +807,7 @@ import dev.pnptracker.resources.table_empty_tick
 import dev.pnptracker.resources.table_fit_column
 import dev.pnptracker.resources.table_label
 import dev.pnptracker.resources.table_loading
+import dev.pnptracker.resources.table_open_special
 import dev.pnptracker.resources.table_rename_game
 import dev.pnptracker.resources.table_rename_saving
 import dev.pnptracker.resources.table_reset_sizes
@@ -960,16 +959,17 @@ object Strings {
 
     object Navigation {
         val sectionLabel = Res.string.navigation_section_label
-        val home = Res.string.navigation_home
         val games = Res.string.navigation_games
         val importReview = Res.string.navigation_import
         val history = Res.string.navigation_history
         val colors = Res.string.navigation_colors
         val settings = Res.string.navigation_settings
+
+        /** What the menu under `Ayarlar` is called to a reader. */
+        val settingsMenu = Res.string.navigation_settings_menu
     }
 
     object ScreenTitles {
-        val home = Res.string.home_title
         val games = Res.string.games_title
         val importReview = Res.string.import_title
         val history = Res.string.history_title
@@ -978,7 +978,6 @@ object Strings {
     }
 
     object ScreenDescriptions {
-        val home = Res.string.home_description
         val games = Res.string.games_description
         val importReview = Res.string.import_description
         val history = Res.string.history_description
@@ -1363,6 +1362,14 @@ object Strings {
     /** The game table itself: its three views, its cells and its one action. */
     object Table {
         val label = Res.string.table_label
+
+        /**
+         * The way into the Special pool, on the table that holds the work.
+         *
+         * The pool is not in the navigation across the top (PLAN 12.1), so this
+         * is how it is reached; it is drawn only while there is special work.
+         */
+        val openSpecial = Res.string.table_open_special
         val loading = Res.string.table_loading
 
         /** Said when storage would not answer the table; never that it is empty. */

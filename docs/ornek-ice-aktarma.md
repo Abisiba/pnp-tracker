@@ -137,7 +137,7 @@ anonimleştirilmiş küçük bir örnektir ve doğrulama turlarında kullanılab
 
 ## İçe aktardıktan sonra
 
-1. **İçe Aktarma** ekranında taslağı açın.
+1. **İçe/Dışa Aktarma** ekranında taslağı açın.
 2. Her ham hücrede görev olacak kısmı seçin; havuzu, adedi ve rengi belirleyin.
 3. **Onayla** deyin. Onaydan hemen önce uygulama kendiliğinden yedek alır.
 4. Sonuç beklediğiniz gibi değilse **Onaylanmış içe aktarmalar** listesinden

@@ -1,26 +1,27 @@
 package dev.pnptracker.ui.navigation
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,12 +29,14 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -50,7 +53,6 @@ import dev.pnptracker.ui.feature.games.GameTableController
 import dev.pnptracker.ui.feature.games.GameTableScreen
 import dev.pnptracker.ui.feature.history.HistoryController
 import dev.pnptracker.ui.feature.history.HistoryScreen
-import dev.pnptracker.ui.feature.home.HomeScreen
 import dev.pnptracker.ui.feature.importreview.ImportController
 import dev.pnptracker.ui.feature.importworkspace.ImportConfirmationController
 import dev.pnptracker.ui.feature.importworkspace.ImportReviewController
@@ -67,15 +69,18 @@ import dev.pnptracker.ui.textsOf
 import dev.pnptracker.ui.theme.ThemeMode
 import org.jetbrains.compose.resources.stringResource
 
-private val SidebarWidth = 236.dp
-private val NavigationItemShape = RoundedCornerShape(28.dp)
-private val SelectionMarkerWidth = 14.dp
-
-/** Shown before the name of the section that is open. */
-private const val SELECTION_MARKER = "\u25B8"
+private val NavigationItemShape = RoundedCornerShape(12.dp)
+private val SelectionUnderlineHeight = 3.dp
+private val SelectionUnderlineWidth = 24.dp
 
 /**
- * The window: a permanent sidebar on the left, the open section on the right.
+ * The window: one short line of navigation across the top, the open section
+ * under it (PLAN 12.1).
+ *
+ * There is no sidebar and no home page. The table is the surface the application
+ * is worked from, so it gets the whole width, and the five entries above it are
+ * the five places PLAN 12.1 names — with the rest of the sections in the menu
+ * under `Ayarlar`.
  */
 @Composable
 fun AppScaffold(
@@ -100,40 +105,60 @@ fun AppScaffold(
 ) {
     LaunchedEffect(poolControllers) { poolControllers.observeNavigationSummary() }
     val summary = poolControllers.summary
-    // The Special pool can stop being offered while it is the section on screen:
-    // its last task deleted, or the game it was in removed. Standing on a section
-    // that is no longer there would leave a screen nothing can navigate away from
-    // by its own name, so the window moves to the 3D pool and says nothing more
+    // The Special pool can stop being reachable while it is the section on
+    // screen: its last task deleted, or the game it was in removed. Standing on a
+    // section nothing can name any more would leave a screen with no way out by
+    // its own name, so the window moves to the 3D pool and says nothing more
     // about it (PLAN 9 hides the pool; it does not explain the hiding).
     LaunchedEffect(summary.showsSpecial, navigation.currentScreen) {
-        if (!summary.showsSpecial && navigation.currentScreen == Screen.Pool(PoolType.SPECIAL)) {
+        if (!summary.showsSpecial && navigation.currentScreen == Screen.specialPool) {
             navigation.navigateTo(Screen.threeDPool)
         }
     }
 
     Surface(modifier = modifier.fillMaxSize()) {
-        Row(modifier = Modifier.fillMaxSize()) {
-            NavigationSidebar(
-                appInfo = appInfo,
-                navigation = navigation,
-                summary = summary,
-                themeMode = themeMode,
-                onToggleTheme = onToggleTheme,
-            )
-            VerticalDivider()
-            Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            TopNavigation(appInfo = appInfo, navigation = navigation, summary = summary)
+            HorizontalDivider()
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 when (val screen = navigation.currentScreen) {
-                    Screen.Home -> HomeScreen()
                     Screen.Games ->
                         GameTableScreen(
                             controller = gameTableController,
                             exportAction = { TaskExportAction(exportController) },
+                            // The only way to the Special pool, because the
+                            // navigation across the top does not carry it.
+                            specialAction = {
+                                if (Screen.specialPool in Screen.offered(summary)) {
+                                    SpecialPoolEntry(
+                                        activeCount = summary.activeCountOf(PoolType.SPECIAL),
+                                        onOpen = { navigation.navigateTo(Screen.specialPool) },
+                                    )
+                                }
+                            },
                         )
                     Screen.History -> HistoryScreen(historyController)
                     Screen.Colors -> ColorCatalogueScreen(colorCatalogueController)
-                    Screen.Settings -> SettingsScreen(backupController, restoreController, retentionController)
+                    Screen.Settings ->
+                        SettingsScreen(
+                            controller = backupController,
+                            restoreController = restoreController,
+                            retentionController = retentionController,
+                            themeMode = themeMode,
+                            onToggleTheme = onToggleTheme,
+                        )
                     Screen.Import ->
-                        ImportSection(importController, reviewController, confirmationController, rollbackController, unfinishedController)
+                        ImportSection(
+                            importController = importController,
+                            reviewController = reviewController,
+                            confirmationController = confirmationController,
+                            rollbackController = rollbackController,
+                            unfinishedController = unfinishedController,
+                            // The section is `İçe/Dışa Aktarma`, so it is where
+                            // the menu under `Ayarlar` reaches the export too; the
+                            // table keeps its own button (PLAN 12.1).
+                            exportAction = { TaskExportAction(exportController) },
+                        )
                     // Keyed by the pool, so moving between two of them starts the
                     // new pool's reads and stops the old one's rather than
                     // leaving both running.
@@ -144,150 +169,185 @@ fun AppScaffold(
     }
 }
 
+/**
+ * The one line of navigation, with the application's name at the start of it.
+ *
+ * It scrolls sideways rather than wrapping, so the smallest window PLAN 17 allows
+ * with the text scaled up still reaches every entry instead of losing the last
+ * one off the edge.
+ */
 @Composable
-private fun NavigationSidebar(
+private fun TopNavigation(
     appInfo: AppInfo,
     navigation: AppNavigationState,
     summary: PoolNavigationSummary,
-    themeMode: ThemeMode,
-    onToggleTheme: () -> Unit,
 ) {
     val navigationLabel = stringResource(Strings.Accessibility.navigationLabel)
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier.width(SidebarWidth).fillMaxHeight(),
-    ) {
-        Column(modifier = Modifier.fillMaxHeight().padding(vertical = 16.dp)) {
-            Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-                Text(
-                    text = stringResource(Strings.App.name),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    text = stringResource(Strings.App.versionLabel, appInfo.version),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            // The list takes whatever height is left and scrolls inside it, so a
-            // short window never pushes the theme control off the bottom.
-            Column(
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                        .padding(top = 20.dp)
-                        .selectableGroup()
-                        .semantics { contentDescription = navigationLabel },
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(
-                    text = stringResource(Strings.Navigation.sectionLabel),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 20.dp, bottom = 8.dp),
-                )
-                Screen.offered(summary).forEach { screen ->
+    Surface(color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .selectableGroup()
+                    .semantics { contentDescription = navigationLabel },
+        ) {
+            Text(
+                text = stringResource(Strings.App.name),
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(end = 4.dp),
+            )
+            Text(
+                text = stringResource(Strings.App.versionLabel, appInfo.version),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(end = 12.dp),
+            )
+            Screen.topLevel.forEach { screen ->
+                if (screen == Screen.Settings) {
+                    SettingsMenu(navigation = navigation)
+                } else {
                     NavigationEntry(
-                        screen = screen,
+                        label = stringResource(textsOf(screen).navigationLabel),
                         selected = navigation.isCurrent(screen),
                         activeCount = (screen as? Screen.Pool)?.let { summary.activeCountOf(it.poolType) },
                         onSelect = { navigation.navigateTo(screen) },
                     )
                 }
             }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-            ThemeControl(themeMode = themeMode, onToggleTheme = onToggleTheme)
         }
     }
 }
 
+/**
+ * `Ayarlar`, and the sections that live under it (PLAN 12.1).
+ *
+ * The entry reads as selected while any of them is open, so a user looking at the
+ * colours can still see which of the five they are inside.
+ */
+@Composable
+private fun SettingsMenu(navigation: AppNavigationState) {
+    var open by remember { mutableStateOf(false) }
+    val menuLabel = stringResource(Strings.Navigation.settingsMenu)
+    Box {
+        NavigationEntry(
+            label = stringResource(Strings.Navigation.settings),
+            selected = navigation.currentScreen in Screen.underSettings,
+            onSelect = { open = true },
+            contentDescription = menuLabel,
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            Screen.underSettings.forEach { screen ->
+                val selected = navigation.isCurrent(screen)
+                val selectionText =
+                    stringResource(if (selected) Strings.Accessibility.selected else Strings.Accessibility.notSelected)
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = stringResource(textsOf(screen).navigationLabel),
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                    },
+                    onClick = {
+                        open = false
+                        navigation.navigateTo(screen)
+                    },
+                    modifier =
+                        Modifier.semantics {
+                            this.selected = selected
+                            stateDescription = selectionText
+                        },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * One entry of the navigation.
+ *
+ * The selected one is drawn in the accent colour **and** underlined, so which
+ * section is open is never carried by colour alone (PLAN 17).
+ *
+ * A pool entry says how much work it is holding, which PLAN 9 asks for in the
+ * number itself and not only in a screen reader: the badge is drawn, and the
+ * count travels once more in the entry's spoken state. Drawn but not spoken,
+ * because saying it in both places would say it twice.
+ */
 @Composable
 private fun NavigationEntry(
-    screen: Screen,
+    label: String,
     selected: Boolean,
-    activeCount: Int?,
     onSelect: () -> Unit,
+    activeCount: Int? = null,
+    contentDescription: String? = null,
 ) {
     val selectionText =
         stringResource(if (selected) Strings.Accessibility.selected else Strings.Accessibility.notSelected)
-    // How much work a pool is holding is part of what the entry says, so a
-    // reader hears it without opening the pool. PLAN 9 keeps the Special pool
-    // showing `0 aktif` after its last task is finished, which is exactly the
-    // number this carries.
     val stateText =
         activeCount?.let { selectionText + ", " + stringResource(Strings.Pool.navActiveCount, it.toString()) }
             ?: selectionText
-    NavigationDrawerItem(
-        selected = selected,
-        onClick = onSelect,
-        // PLAN 9 asks for the number itself to be on screen: the Special pool
-        // stays offered after its last task is done and says `0 aktif`, which
-        // only means anything if it can be seen. The reader already hears the
-        // count from the entry's state, so the badge is drawn and not spoken —
-        // otherwise it would be said twice.
-        badge =
-            activeCount?.let { count ->
-                {
-                    Text(
-                        text = stringResource(Strings.Pool.navActiveBadge, count.toString()),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.clearAndSetSemantics {},
-                    )
-                }
-            },
-        icon = {
-            // A shape, not only a colour, says which section is open.
-            Box(modifier = Modifier.width(SelectionMarkerWidth)) {
-                if (selected) Text(text = SELECTION_MARKER)
-            }
-        },
-        label = {
-            Text(
-                text = stringResource(textsOf(screen).navigationLabel),
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            )
-        },
-        modifier =
-            Modifier
-                .padding(horizontal = 12.dp)
-                .focusOutline(NavigationItemShape)
-                .semantics { stateDescription = stateText },
-    )
-}
-
-@Composable
-private fun ThemeControl(
-    themeMode: ThemeMode,
-    onToggleTheme: () -> Unit,
-) {
-    Column(modifier = Modifier.padding(horizontal = 12.dp)) {
-        Text(
-            text = stringResource(Strings.Theme.sectionLabel),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 12.dp, bottom = 4.dp),
-        )
-        // The label names the theme it switches to, so the control is readable
-        // without seeing which one is active.
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
         TextButton(
-            onClick = onToggleTheme,
-            modifier = Modifier.fillMaxWidth().focusOutline(NavigationItemShape),
+            onClick = onSelect,
+            shape = NavigationItemShape,
+            modifier =
+                Modifier
+                    .focusOutline(NavigationItemShape)
+                    .semantics {
+                        this.selected = selected
+                        stateDescription = stateText
+                        if (contentDescription != null) this.contentDescription = contentDescription
+                    },
         ) {
             Text(
-                text =
-                    stringResource(
-                        when (themeMode) {
-                            ThemeMode.LIGHT -> Strings.Theme.switchToDark
-                            ThemeMode.DARK -> Strings.Theme.switchToLight
-                        },
-                    ),
-                modifier = Modifier.fillMaxWidth(),
+                text = label,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (activeCount != null) {
+                Text(
+                    text = stringResource(Strings.Pool.navActiveBadge, activeCount.toString()),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 6.dp).clearAndSetSemantics {},
+                )
+            }
         }
+        // Always laid out and only changing colour, so selecting an entry does
+        // not move the row it is in.
+        Box(
+            modifier =
+                Modifier
+                    .width(SelectionUnderlineWidth)
+                    .height(SelectionUnderlineHeight)
+                    .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
+                    .clearAndSetSemantics {},
+        )
+    }
+}
+
+/**
+ * The way into the Special pool, drawn with the table's own controls.
+ *
+ * PLAN 9 keeps the pool out of sight until there is special work; PLAN 12.1 keeps
+ * it out of the navigation across the top. So it is reached from the table the
+ * work is in, and it says how much work that is, the way the sidebar used to.
+ */
+@Composable
+private fun SpecialPoolEntry(
+    activeCount: Int,
+    onOpen: () -> Unit,
+) {
+    TextButton(onClick = onOpen, modifier = Modifier.focusOutline(NavigationItemShape)) {
+        Text(
+            text =
+                stringResource(Strings.Table.openSpecial) + " — " +
+                    stringResource(Strings.Pool.navActiveBadge, activeCount.toString()),
+        )
     }
 }
 
@@ -295,7 +355,7 @@ private fun ThemeControl(
  * Draws a ring around whatever holds keyboard focus.
  *
  * The border is always laid out and only changes colour, so focusing an entry
- * does not move the ones below it.
+ * does not move the ones beside it.
  */
 @Composable
 private fun Modifier.focusOutline(shape: Shape): Modifier {

@@ -42,6 +42,7 @@ import dev.pnptracker.domain.backup.BackupFailure
 import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.navigation.Screen
 import dev.pnptracker.ui.textsOf
+import dev.pnptracker.ui.theme.ThemeMode
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
@@ -67,6 +68,8 @@ fun SettingsScreen(
     controller: BackupController,
     restoreController: RestoreController,
     retentionController: RetentionController,
+    themeMode: ThemeMode,
+    onToggleTheme: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val texts = textsOf(Screen.Settings)
@@ -88,6 +91,40 @@ fun SettingsScreen(
         BackupSection(controller, modifier = Modifier.padding(top = 12.dp))
         RestoreSection(restoreController, modifier = Modifier.padding(top = 20.dp))
         RetentionSection(retentionController, modifier = Modifier.padding(top = 20.dp))
+        AppearanceSection(themeMode = themeMode, onToggleTheme = onToggleTheme, modifier = Modifier.padding(top = 20.dp))
+    }
+}
+
+/**
+ * How the application looks, which is a setting like any other.
+ *
+ * It used to sit at the bottom of the sidebar, and the sidebar is gone (PLAN
+ * 12.1). The button names the theme it switches to, so the control can be read
+ * without first working out which one is on.
+ */
+@Composable
+private fun AppearanceSection(
+    themeMode: ThemeMode,
+    onToggleTheme: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = stringResource(Strings.Theme.sectionLabel),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Button(onClick = onToggleTheme) {
+            Text(
+                text =
+                    stringResource(
+                        when (themeMode) {
+                            ThemeMode.LIGHT -> Strings.Theme.switchToDark
+                            ThemeMode.DARK -> Strings.Theme.switchToLight
+                        },
+                    ),
+            )
+        }
     }
 }
 
