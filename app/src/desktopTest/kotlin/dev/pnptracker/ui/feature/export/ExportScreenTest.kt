@@ -11,10 +11,10 @@ import dev.pnptracker.domain.export.TaskExportNames
 import dev.pnptracker.domain.export.TaskExportStatus
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.PoolType
+import dev.pnptracker.domain.settings.ThemeMode
 import dev.pnptracker.ui.ComposeSceneHarness
 import dev.pnptracker.ui.contentDescriptions
 import dev.pnptracker.ui.theme.PnpTrackerTheme
-import dev.pnptracker.ui.theme.ThemeMode
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals

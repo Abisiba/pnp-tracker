@@ -61,12 +61,12 @@ import dev.pnptracker.ui.feature.importworkspace.ImportSection
 import dev.pnptracker.ui.feature.importworkspace.UnfinishedImportsController
 import dev.pnptracker.ui.feature.pools.PoolControllers
 import dev.pnptracker.ui.feature.pools.PoolScreen
+import dev.pnptracker.ui.feature.settings.AppearanceController
 import dev.pnptracker.ui.feature.settings.BackupController
 import dev.pnptracker.ui.feature.settings.RestoreController
 import dev.pnptracker.ui.feature.settings.RetentionController
 import dev.pnptracker.ui.feature.settings.SettingsScreen
 import dev.pnptracker.ui.textsOf
-import dev.pnptracker.ui.theme.ThemeMode
 import org.jetbrains.compose.resources.stringResource
 
 private val NavigationItemShape = RoundedCornerShape(12.dp)
@@ -86,8 +86,7 @@ private val SelectionUnderlineWidth = 24.dp
 fun AppScaffold(
     appInfo: AppInfo,
     navigation: AppNavigationState,
-    themeMode: ThemeMode,
-    onToggleTheme: () -> Unit,
+    appearanceController: AppearanceController,
     importController: ImportController,
     reviewController: ImportReviewController,
     confirmationController: ImportConfirmationController,
@@ -144,8 +143,7 @@ fun AppScaffold(
                             controller = backupController,
                             restoreController = restoreController,
                             retentionController = retentionController,
-                            themeMode = themeMode,
-                            onToggleTheme = onToggleTheme,
+                            appearanceController = appearanceController,
                         )
                     Screen.Import ->
                         ImportSection(

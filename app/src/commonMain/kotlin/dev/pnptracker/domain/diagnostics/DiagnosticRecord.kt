@@ -60,6 +60,9 @@ enum class DiagnosticArea {
     APPLICATION,
     STARTUP,
     SETTINGS,
+
+    /** How the application looks, which is kept in a file of its own (PLAN 12.16). */
+    APPEARANCE,
     IMPORT_FILE,
     IMPORT_DRAFT,
     IMPORT_REVIEW,

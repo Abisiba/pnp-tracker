@@ -9,6 +9,7 @@ import androidx.compose.ui.unit.Density
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.settings.ThemeMode
 import dev.pnptracker.domain.tasks.TaskDraft
 import dev.pnptracker.ui.ComposeSceneHarness
 import dev.pnptracker.ui.RealStack
@@ -16,7 +17,6 @@ import dev.pnptracker.ui.contentDescriptions
 import dev.pnptracker.ui.reads
 import dev.pnptracker.ui.stateDescriptionOrNull
 import dev.pnptracker.ui.theme.PnpTrackerTheme
-import dev.pnptracker.ui.theme.ThemeMode
 import kotlinx.coroutines.runBlocking
 import kotlin.math.max
 import kotlin.math.min

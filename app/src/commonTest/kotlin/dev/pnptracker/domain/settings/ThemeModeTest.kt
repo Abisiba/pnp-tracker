@@ -1,4 +1,4 @@
-package dev.pnptracker.ui.theme
+package dev.pnptracker.domain.settings
 
 import kotlin.test.Test
 import kotlin.test.assertEquals

@@ -2,10 +2,10 @@ package dev.pnptracker.ui.feature.startup
 
 import androidx.compose.ui.unit.Density
 import dev.pnptracker.domain.backup.automatic.StartupProblem
+import dev.pnptracker.domain.settings.ThemeMode
 import dev.pnptracker.ui.ComposeSceneHarness
 import dev.pnptracker.ui.contentDescriptions
 import dev.pnptracker.ui.theme.PnpTrackerTheme
-import dev.pnptracker.ui.theme.ThemeMode
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

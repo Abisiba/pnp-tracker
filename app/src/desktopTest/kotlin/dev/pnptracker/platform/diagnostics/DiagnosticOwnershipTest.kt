@@ -63,6 +63,9 @@ class DiagnosticOwnershipTest {
             // asks for the same pair of records the stores write: the disk
             // refusing a read, and the disk refusing a write.
             "DesktopTableSizesStore.kt",
+            // And how the application looks, in a file of its own (PLAN 12.16),
+            // recorded the same way: the disk refusing a read, and refusing a write.
+            "DesktopAppearanceStore.kt",
             "GameSetupStore.kt",
             "ImportConfirmationStore.kt",
             "ImportDraftRemovalStore.kt",

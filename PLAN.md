@@ -1643,6 +1643,38 @@ Yedekten geri yükle
   gösterilmez.
 - Ekran `17.`'nin klavye, odak, erişilebilirlik ve onay kurallarına uyar.
 
+Ekran ayrıca uygulamanın **görünümünü** taşır:
+
+```text
+Görünüm
+  Koyu temaya geç / Açık temaya geç
+  Vurgu rengi:  Mor  Mavi  Turkuaz  Yeşil  Turuncu  Gül kurusu
+```
+
+- Tema ve vurgu rengi `$XDG_CONFIG_HOME/pnp-tracker/appearance.json` içinde
+  tutulur; ayrı bir dosyadır çünkü `settings.json` her otomatik yedekten önce
+  okunur ve bu iki değer yalnız bu ekran tarafından yazılır. Atomik yazılır,
+  yedeğin kapsamına **girmez** ve okumak dosyayı **oluşturmaz**.
+- Varsayılan **açık tema ve mor**dur; bu, uygulamanın bugüne kadarki görünümüdür
+  ve varsayılanın değişmesi her kurulumun görünümünü değiştirmek olurdu.
+- Seçilen değerler **yeniden açılışta korunur**. Dosya pencere kurulmadan önce
+  okunur: koyu tema seçmiş bir makine koyu açılır, açık açılıp sonra atlamaz.
+- Vurgu rengi **kapalı bir kümedir**, serbest renk seçimi değildir. Her rengin
+  açık ve koyu tema için ayrı bir değeri vardır ve üzerine yazılan metinle
+  arasındaki kontrast `17.`'nin istediği 4.5:1'i geçer; serbest seçim bunu
+  garanti edemezdi.
+- Vurgu rengi yalnız **arayüzü** boyar: seçili gezinme girişleri, düğmeler, odak
+  halkası ve benzeri genel vurgular. **3D görevlerine atanmış renkleri
+  değiştirmez**; onlar kullanıcının verisidir ve renk kataloğundaki kendi hex
+  değerlerinden çizilir (`12.5`, `12.7`). Ekran bunu bir cümleyle açıkça söyler.
+- Hangi rengin seçili olduğu **renkle tek başına** anlatılmaz; seçili olanın adının
+  önünde bir işaret bulunur (`17.`).
+- Dosya bozuk veya okunamaz olduğunda varsayılan görünüm kullanılır, bu ekranda
+  açıkça söylenir ve **bozuk dosyanın üzerine kendiliğinden yazılmaz**; kullanıcı
+  bir seçim yaptığında yerine bütün bir belge yazılır.
+- Yazma başarısız olursa seçim **ekranda geçerli kalır** — kullanıcı onu istedi ve
+  pencere yapabiliyor — ve bir sonraki açılışta korunmayabileceği söylenir.
+
 Ayarların ileride kazanacağı başka içerikler bu işin kapsamında değildir.
 
 Faz 3 / İş 4 ekrana **tek** bir ayar ekler: saklanacak otomatik yedek sayısı.
@@ -3170,7 +3202,7 @@ dizinleri kullanılır:
 ```text
 %LOCALAPPDATA%\pnp-tracker\data\           pnp.db  ve  backups/
 %LOCALAPPDATA%\pnp-tracker\state\          logs/  ve  table-sizes.json
-%APPDATA%\pnp-tracker\                     settings.json
+%APPDATA%\pnp-tracker\                     settings.json  ve  appearance.json
 ```
 
 - Üç alan **kardeştir**, iç içe değildir: Linux'un `$XDG_DATA_HOME`,

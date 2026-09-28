@@ -106,6 +106,7 @@ class LargeLibraryPerformanceTest {
                 data.resolve("backups"),
                 config,
                 config.resolve("settings.json"),
+                config.resolve("appearance.json"),
                 home.root.resolve("state/pnp-tracker"),
                 home.root.resolve("state/pnp-tracker/logs"),
                 home.root.resolve("state/pnp-tracker/table-sizes.json"),

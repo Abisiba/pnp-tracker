@@ -8,10 +8,10 @@ import dev.pnptracker.domain.settings.SettingsNotSaved
 import dev.pnptracker.domain.settings.SettingsProblem
 import dev.pnptracker.domain.settings.SettingsStore
 import dev.pnptracker.domain.settings.SettingsWriteFailure
+import dev.pnptracker.domain.settings.ThemeMode
 import dev.pnptracker.ui.ComposeSceneHarness
 import dev.pnptracker.ui.contentDescriptions
 import dev.pnptracker.ui.theme.PnpTrackerTheme
-import dev.pnptracker.ui.theme.ThemeMode
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals

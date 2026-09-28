@@ -1,10 +1,7 @@
 package dev.pnptracker.ui
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import dev.pnptracker.AppInfo
 import dev.pnptracker.ui.feature.colors.ColorCatalogueController
 import dev.pnptracker.ui.feature.export.ExportController
@@ -16,25 +13,27 @@ import dev.pnptracker.ui.feature.importworkspace.ImportReviewController
 import dev.pnptracker.ui.feature.importworkspace.ImportRollbackController
 import dev.pnptracker.ui.feature.importworkspace.UnfinishedImportsController
 import dev.pnptracker.ui.feature.pools.PoolControllers
+import dev.pnptracker.ui.feature.settings.AppearanceController
 import dev.pnptracker.ui.feature.settings.BackupController
 import dev.pnptracker.ui.feature.settings.RestoreController
 import dev.pnptracker.ui.feature.settings.RetentionController
 import dev.pnptracker.ui.navigation.AppNavigationState
 import dev.pnptracker.ui.navigation.AppScaffold
 import dev.pnptracker.ui.theme.PnpTrackerTheme
-import dev.pnptracker.ui.theme.ThemeMode
 
 /**
  * The whole user interface below the platform window.
  *
- * It owns the two pieces of state the shell has — which section is open and
- * which theme is in use — and knows nothing about files, windows or the
- * database. Anything that does, such as the import controller, is handed in by
- * the platform layer that built it.
+ * It owns the one piece of state the shell has — which section is open — and
+ * knows nothing about files, windows or the database. How the application looks
+ * is state as well, but it is state with a file behind it, so it arrives in a
+ * controller the platform layer built and already read (PLAN 12.16). Anything else
+ * that touches a file, such as the import controller, arrives the same way.
  */
 @Composable
 fun PnpTrackerApp(
     appInfo: AppInfo,
+    appearanceController: AppearanceController,
     importController: ImportController,
     reviewController: ImportReviewController,
     confirmationController: ImportConfirmationController,
@@ -50,7 +49,6 @@ fun PnpTrackerApp(
     historyController: HistoryController,
 ) {
     val navigation = remember { AppNavigationState() }
-    var themeMode by remember { mutableStateOf(ThemeMode.LIGHT) }
 
     // A restore replaces every row in the database. The screens follow, because
     // they all read through a database flow, but a panel somebody left open is
@@ -71,12 +69,12 @@ fun PnpTrackerApp(
         }
     CloseStaleSurfacesAfterRestore(restoreController.restoredTick, staleSurfaces)
 
-    PnpTrackerTheme(themeMode = themeMode) {
+    val appearance = appearanceController.appearance
+    PnpTrackerTheme(themeMode = appearance.themeMode, accentColor = appearance.accentColor) {
         AppScaffold(
             appInfo = appInfo,
             navigation = navigation,
-            themeMode = themeMode,
-            onToggleTheme = { themeMode = themeMode.toggled() },
+            appearanceController = appearanceController,
             importController = importController,
             reviewController = reviewController,
             confirmationController = confirmationController,

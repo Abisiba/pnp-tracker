@@ -117,6 +117,8 @@ class DiagnosticSurfaceTest {
                 // The table's sizes are kept in a file of their own (PLAN 12.17),
                 // and the disk refusing it is recorded the way a store's is.
                 "DesktopTableSizesStore.kt",
+                // The appearance is kept in a file of its own too (PLAN 12.16).
+                "DesktopAppearanceStore.kt",
                 "GameSetupStore.kt",
                 "ImportConfirmationStore.kt",
                 "ImportDraftRemovalStore.kt",

@@ -896,6 +896,18 @@ import dev.pnptracker.resources.tasks_save
 import dev.pnptracker.resources.tasks_title
 import dev.pnptracker.resources.tasks_tracking_label
 import dev.pnptracker.resources.tasks_tracking_required
+import dev.pnptracker.resources.theme_accent_amber
+import dev.pnptracker.resources.theme_accent_blue
+import dev.pnptracker.resources.theme_accent_choice
+import dev.pnptracker.resources.theme_accent_green
+import dev.pnptracker.resources.theme_accent_label
+import dev.pnptracker.resources.theme_accent_note
+import dev.pnptracker.resources.theme_accent_purple
+import dev.pnptracker.resources.theme_accent_rose
+import dev.pnptracker.resources.theme_accent_teal
+import dev.pnptracker.resources.theme_file_not_understood
+import dev.pnptracker.resources.theme_kept_note
+import dev.pnptracker.resources.theme_not_saved
 import dev.pnptracker.resources.theme_section_label
 import dev.pnptracker.resources.theme_switch_to_dark
 import dev.pnptracker.resources.theme_switch_to_light
@@ -1027,6 +1039,23 @@ object Strings {
         val sectionLabel = Res.string.theme_section_label
         val switchToDark = Res.string.theme_switch_to_dark
         val switchToLight = Res.string.theme_switch_to_light
+
+        /** What the accent is and, as plainly as possible, what it is not. */
+        val accentLabel = Res.string.theme_accent_label
+        val accentNote = Res.string.theme_accent_note
+
+        /** Takes the colour's own name as its single argument. */
+        val accentChoice = Res.string.theme_accent_choice
+        val keptNote = Res.string.theme_kept_note
+        val notSaved = Res.string.theme_not_saved
+        val fileNotUnderstood = Res.string.theme_file_not_understood
+
+        val accentPurple = Res.string.theme_accent_purple
+        val accentBlue = Res.string.theme_accent_blue
+        val accentTeal = Res.string.theme_accent_teal
+        val accentGreen = Res.string.theme_accent_green
+        val accentAmber = Res.string.theme_accent_amber
+        val accentRose = Res.string.theme_accent_rose
     }
 
     object Import {
