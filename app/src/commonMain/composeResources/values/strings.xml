@@ -828,6 +828,9 @@
     <string name="pool_task_failures">Toplam %1$s hatalı kayıt</string>
     <string name="pool_task_primary_done">Ana baskı tamamlandı</string>
     <string name="pool_task_primary_pending">Ana baskı bekliyor</string>
+    <string name="pool_task_finish">Tamamla</string>
+    <string name="pool_task_finish_description">%1$s görevini tamamla</string>
+    <string name="pool_task_finish_refused">Görev tamamlanamadı. Yeniden deneyin.</string>
     <string name="pool_task_open">%1$s görevini aç</string>
     <string name="pool_task_colors">Renkleri: %1$s</string>
     <string name="pool_task_color_current">Bu grubun rengi: %1$s</string>

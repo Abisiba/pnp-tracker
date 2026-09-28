@@ -13,6 +13,7 @@ import dev.pnptracker.domain.diagnostics.DiagnosticArea
 import dev.pnptracker.domain.diagnostics.Diagnostics
 import dev.pnptracker.domain.diagnostics.answeringStorageRefusal
 import dev.pnptracker.domain.model.EntityId
+import dev.pnptracker.domain.model.IdGenerator
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.model.TrackingMode
@@ -60,6 +61,7 @@ class PoolController(
     private val taskEditing: TaskEditing,
     private val taskProgress: TaskProgressing,
     private val diagnostics: Diagnostics = Diagnostics.None,
+    private val idGenerator: IdGenerator = IdGenerator.Random,
 ) : TaskEditingHost,
     StaleSurfaces {
     var state: PoolScreenState by mutableStateOf(PoolScreenState(poolType = poolType))
@@ -702,6 +704,34 @@ class PoolController(
             // the list this question was asked from.
             else -> state = state.copy(work = null, focusRecall = state.focusRecall + 1)
         }
+    }
+
+    /**
+     * Finishes one 3D task with one press, from its card (PLAN 12.10).
+     *
+     * Through the same transaction the table's tick uses, so the task, its
+     * history and its game are left exactly as a finish from the table leaves
+     * them — and the table's `Eksik` column, which reads the same rows, drops it
+     * on its next read. Only the task pressed is finished: a task made in several
+     * colours is on several cards, and every one of them is the same task.
+     *
+     * Offered in the 3D pool only, and only on a task that is not finished; the
+     * way back is the one there already is, `Yeniden aç` in the task's menu. A
+     * second press while the first is being written does nothing, and a refusal
+     * is said on the card instead of being lost.
+     */
+    suspend fun finishTask(taskId: EntityId) {
+        if (poolType != PoolType.THREE_D) return
+        if (taskId in state.finishing) return
+        val task = taskOf(taskId) ?: return
+        if (task.isCompleted) return
+        state = state.copy(finishing = state.finishing + taskId, finishRefused = null)
+        val outcome = taskProgress.completeTask(taskId = taskId, eventId = idGenerator.newId())
+        state =
+            state.copy(
+                finishing = state.finishing - taskId,
+                finishRefused = if (outcome is TaskProgressOutcome.Refused) taskId else null,
+            )
     }
 
     /** Asks whether the task really should go back to being words. */

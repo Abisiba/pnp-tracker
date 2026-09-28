@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -624,64 +625,104 @@ private fun TaskCard(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Box {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .focusRequester(focus)
-                        .focusOutline(CardShape)
-                        .clickable(onClickLabel = open) { controller.openTaskMenu(card) }
-                        .semantics(mergeDescendants = true) { contentDescription = spoken }
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-            ) {
-                Text(
-                    text = task.gameName,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.Top) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .focusRequester(focus)
+                            .focusOutline(CardShape)
+                            .clickable(onClickLabel = open) { controller.openTaskMenu(card) }
+                            .semantics(mergeDescendants = true) { contentDescription = spoken }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                ) {
                     Text(
-                        text = task.name,
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.weight(1f, fill = false),
+                        text = task.gameName,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    // A total when there is one, drawn to be read at a glance. A
-                    // task with none says so quietly instead: PLAN 12.10 asks for
-                    // the number, and a task that has none has nothing to shout.
-                    Text(
-                        text =
-                            task.requiredQuantity?.let { stringResource(Strings.Pool.quantity, it.toString()) }
-                                ?: stringResource(Strings.Pool.quantityUnknown),
-                        style =
-                            if (task.requiredQuantity != null) {
-                                MaterialTheme.typography.bodyMedium
-                            } else {
-                                MaterialTheme.typography.labelSmall
-                            },
-                        color =
-                            if (task.requiredQuantity != null) {
-                                MaterialTheme.colorScheme.onSurface
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        fontWeight = if (task.requiredQuantity != null) FontWeight.SemiBold else FontWeight.Normal,
-                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = task.name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        // A total when there is one, drawn to be read at a glance. A
+                        // task with none says so quietly instead: PLAN 12.10 asks for
+                        // the number, and a task that has none has nothing to shout.
+                        Text(
+                            text =
+                                task.requiredQuantity?.let { stringResource(Strings.Pool.quantity, it.toString()) }
+                                    ?: stringResource(Strings.Pool.quantityUnknown),
+                            style =
+                                if (task.requiredQuantity != null) {
+                                    MaterialTheme.typography.bodyMedium
+                                } else {
+                                    MaterialTheme.typography.labelSmall
+                                },
+                            color =
+                                if (task.requiredQuantity != null) {
+                                    MaterialTheme.colorScheme.onSurface
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            fontWeight = if (task.requiredQuantity != null) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                    }
+                    if (task.colors.isNotEmpty()) {
+                        ColorChips(task = task, current = card.colorId)
+                    }
+                    TaskMarks(task)
+                    TaskFacts(task)
+                    if (task.stages.isNotEmpty()) {
+                        StageBadge(task = task, card = card, controller = controller)
+                    }
+                    if (task.trackingMode == TrackingMode.CHECKLIST || task.trackingMode == TrackingMode.COUNTED) {
+                        SpecialFacts(task)
+                    }
+                    if (state.finishRefused == task.taskId) {
+                        Text(
+                            text = stringResource(Strings.Pool.finishRefused),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
-                if (task.colors.isNotEmpty()) {
-                    ColorChips(task = task, current = card.colorId)
-                }
-                TaskMarks(task)
-                TaskFacts(task)
-                if (task.stages.isNotEmpty()) {
-                    StageBadge(task = task, card = card, controller = controller)
-                }
-                if (task.trackingMode == TrackingMode.CHECKLIST || task.trackingMode == TrackingMode.COUNTED) {
-                    SpecialFacts(task)
+                if (controller.poolType == PoolType.THREE_D && !task.isCompleted) {
+                    FinishButton(task = task, controller = controller)
                 }
             }
             if (isOpenHere) TaskPopover(controller)
         }
+    }
+}
+
+/**
+ * Finishes this one 3D task with a single press (PLAN 12.10).
+ *
+ * A control of its own beside the card rather than a part of it: pressing the
+ * card opens the task, and finishing is a different act that should not need
+ * the menu. It is a Tab stop with its own name, so the keyboard reaches it the
+ * way the pointer does, and it goes quiet while its finish is being written.
+ */
+@Composable
+private fun FinishButton(
+    task: PoolTask,
+    controller: PoolController,
+) {
+    val scope = rememberCoroutineScope()
+    val said = stringResource(Strings.Pool.finishDescription, task.name)
+    OutlinedButton(
+        onClick = { scope.launch { controller.finishTask(task.taskId) } },
+        enabled = task.taskId !in controller.state.finishing,
+        modifier =
+            Modifier
+                .padding(top = 8.dp, end = 8.dp)
+                .focusOutline(CardShape)
+                .semantics { contentDescription = said },
+    ) {
+        Text(stringResource(Strings.Pool.finish))
     }
 }
 

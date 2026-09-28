@@ -1574,6 +1574,22 @@ geçerlidir:
   tamamlanmış kalır, onay yerinde durur ve güvenli bir Türkçe hata ile yeniden
   deneme sunulur.
 
+
+**Tek tıkla tamamlama (3D Havuzu).** 3D Havuzunda tamamlanmamış her görev
+kartının yanında bir `Tamamla` düğmesi bulunur. Tek basış yalnız o görevi,
+tablodaki tikin kullandığı aynı transaction'la tamamlar. Görev etkin listeden
+çıkar ve tablodaki `Eksik` sütunu (`12.20`) aynı satırları okuduğu için onu
+hemen bırakır. Birkaç renkli bir görev birkaç kartta görünür; hangisinden
+basılırsa basılsın tamamlanan aynı tek görevdir.
+
+- Düğme kendi adı olan bir Tab durağıdır (`Ejderha görevini tamamla`). Karta
+  basmak eskisi gibi görevin menüsünü açar; düğme menüyü açmaz.
+- Yazım sürerken düğme pasiftir, ikinci basış bir şey yapmaz. Reddedilirse
+  kartta `Görev tamamlanamadı. Yeniden deneyin.` yazar.
+- Tamamlanmış görevde düğme yoktur. Geri dönüş yolu değişmez: `Tamamlandı`
+  listesinde görevin menüsündeki `Tamamlanmadı olarak işaretle`.
+- Bu düğme yalnız 3D Havuzundadır; diğer havuzlar değişmez.
+
 ### 12.11 Kart Havuzu
 
 - Kart görevleri açılır aşama rozetiyle gösterilir.
