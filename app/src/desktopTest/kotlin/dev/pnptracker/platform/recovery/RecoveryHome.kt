@@ -239,7 +239,22 @@ class WriterProcess(
         if (process.isAlive) process.destroyForcibly()
         assertTrue(process.waitFor(GUARD_MINUTES, TimeUnit.MINUTES), "the child did not die:\n${said()}")
         assertFalse(process.isAlive)
-        assertTrue(process.descendants().toList().isEmpty(), "the child left processes of its own behind")
+        // The child is gone. Whatever the system had hanging off it is the
+        // system's to clear, and Windows finishes that a little after the process
+        // itself: this read as a process left behind once in eight otherwise
+        // identical kills. So it is given a bounded while to finish, and if
+        // anything is still there the failure says what it was rather than only
+        // that there was something.
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(REAPING_SECONDS)
+        var left = process.descendants().toList()
+        while (left.isNotEmpty() && System.nanoTime() < deadline) {
+            Thread.sleep(REAPING_POLL_MILLISECONDS)
+            left = process.descendants().toList()
+        }
+        assertTrue(
+            left.isEmpty(),
+            "the child left processes of its own behind: ${left.map { it.info().command().orElse(it.pid().toString()) }}",
+        )
     }
 
     /** Waits for a process that exits by itself, and gives its exit code. */
@@ -273,6 +288,10 @@ class WriterProcess(
 
         /** What `TerminateProcess` leaves behind, which is what Java asks it for. */
         const val TERMINATED_EXIT = 1
+
+        /** How long the system may take to finish clearing a dead child's own children. */
+        const val REAPING_SECONDS = 10L
+        const val REAPING_POLL_MILLISECONDS = 50L
 
         val killedExitCode: Int get() = if (PlatformFileRules.onWindows) TERMINATED_EXIT else SIGKILL_EXIT
     }

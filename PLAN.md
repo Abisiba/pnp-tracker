@@ -3257,7 +3257,9 @@ olduğu için sessizce oluşamaz:
   çalışır. Windows'ta öyle olmadı — tutan sürecin öldüğü kanıtlandıktan sonra
   bile ilk açılış "başka bir kopya çalışıyor" ile reddedildi. Doğrulama bu
   yüzden Windows'ta kilidin geri gelmesini sınırlı bir süre içinde arar ve
-  **ne kadar sürdüğünü yazar**; ölçülen süre İş 20'de kayda geçer.
+  **ne kadar sürdüğünü yazar**. `windows-2025` koşucusunda ölçülen: kilit
+  **ikinci denemede** geri gelmişti, yani bırakılma tek bir 50 ms'lik yoklama
+  aralığı içinde oldu; gecikme saniyeler değil, milisaniyeler mertebesindedir.
   Uygulamanın davranışı bu turda **değişmemiştir**: `14.4.10` gereği ikinci
   kopya beklemez, reddeder ve söyler. Çökmenin hemen ardından yeniden açan bir
   Windows kullanıcısının bu yüzden haksız bir ret görüp görmeyeceği ve buna
@@ -3289,6 +3291,13 @@ olduğu için sessizce oluşamaz:
   söyleyen bir çağrı için, ve kalan ne varsa yazdırılarak. Bir veritabanının
   `close` sonrası günlüğünü hiç bırakmaması gerekip gerekmediği ayrı bir sorudur
   ve `18.` Faz 3 / İş 19'da sorulur.
+- **Ölen bir sürecin çocuklarının toplanması.** Bir süreç öldükten sonra sistemin
+  ona bağlı bıraktıklarını temizlemesi Windows'ta sürecin kendisinden biraz sonra
+  bitiyor: aynı öldürmenin sekiz tekrarından birinde, çocuk öldüğü kanıtlandığı
+  anda hâlâ bir torun görünüyordu. Doğrulama bunu "uygulama arkasında süreç
+  bıraktı" diye okumaz; sisteme sınırlı bir süre tanır ve süre sonunda hâlâ bir
+  şey varsa **ne olduğunu adıyla** söyler. Uygulamanın kendi süreç açmadığı
+  iddiası değişmez.
 - **Bir adın yasak olması.** NTFS bazı karakterleri ada hiç almaz — `?` bunların
   başında gelir. Bu karakterleri konu edinen bir doğrulama, sorusunu o sistemde
   **yasal olan** karakterlerle aynen sorar; soruyu düşürmek veya testi silmek
