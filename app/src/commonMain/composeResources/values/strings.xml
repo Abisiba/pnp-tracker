@@ -423,7 +423,7 @@
     <string name="cell_task_save_text_first">Görev, kaydedilmiş metinden oluşturulur. Önce değişikliklerinizi kaydedin.</string>
     <string name="cell_task_panel_title">Görev oluştur</string>
     <string name="cell_task_window">Görev oluşturma penceresi</string>
-    <string name="cell_task_name_label">Seçilen görev adı</string>
+    <string name="cell_task_name_label">Görev adı</string>
     <string name="cell_task_color_label">Renk</string>
     <string name="cell_task_color_search">Renk ara</string>
     <string name="cell_task_color_required">Bir renk seçin.</string>

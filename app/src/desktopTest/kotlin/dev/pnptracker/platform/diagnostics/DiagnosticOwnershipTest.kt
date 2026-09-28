@@ -76,6 +76,7 @@ class DiagnosticOwnershipTest {
             "ImportRollbackStore.kt",
             "TaskEditStore.kt",
             "TaskExportStore.kt",
+            "TaskFromNewTextStore.kt",
             "TaskFromTextStore.kt",
             "TaskProgressStore.kt",
             "TaskSetupStore.kt",

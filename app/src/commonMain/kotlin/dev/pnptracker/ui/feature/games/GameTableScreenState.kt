@@ -21,6 +21,7 @@ import dev.pnptracker.domain.model.hasStages
 import dev.pnptracker.domain.rules.poolHoldsColors
 import dev.pnptracker.domain.search.GameTableFilter
 import dev.pnptracker.domain.tasks.CellTextSelection
+import dev.pnptracker.domain.tasks.NewTaskText
 import dev.pnptracker.domain.tasks.TaskEditFailure
 import dev.pnptracker.domain.tasks.TaskFromTextFailure
 import dev.pnptracker.domain.tasks.TaskProgressFailure
@@ -622,7 +623,8 @@ data class MulticolorDraft(
  * telling them apart afterwards is a rename.
  */
 data class TaskComposer(
-    val selection: CellTextSelection,
+    /** The saved words the task is cut out of, or null when [newText] says where it comes from. */
+    val selection: CellTextSelection?,
     val columnType: CellColumnType,
     /** The selected words, with the whitespace at their edges already left behind. */
     val name: String,
@@ -651,6 +653,11 @@ data class TaskComposer(
     val failureRow: Int? = null,
     /** The place [failureRow] clashes with, when the refusal was about a pair. */
     val failureConflictsWith: Int? = null,
+    /**
+     * A name typed a moment ago and not saved yet, which the task is made from
+     * (PLAN 12.6); null when the task is cut out of saved words by [selection].
+     */
+    val newText: NewTaskText? = null,
 ) {
     init {
         require(rows.size >= LEAST_INDEPENDENT_TASKS) {

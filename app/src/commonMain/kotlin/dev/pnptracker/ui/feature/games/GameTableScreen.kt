@@ -88,6 +88,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
@@ -2703,6 +2704,16 @@ private fun CellEditorSlot(
                                 true
                             }
 
+                            // Enter on a name just typed into a task column opens
+                            // the task window over it, without saving and
+                            // selecting it first (PLAN 12.6). Anywhere else, and
+                            // with Shift always, it is a line break as before.
+                            (event.key == Key.Enter || event.key == Key.NumPadEnter) &&
+                                !event.isShiftPressed &&
+                                !event.isAltPressed &&
+                                composer == null &&
+                                creator == null -> controller.beginTaskFromTypedName()
+
                             else -> false
                         }
                     },
@@ -4026,6 +4037,7 @@ private fun TaskRowColors(
         enabled = !composer.isSaving,
         emptyQuery = draft.colorQuery.isBlank(),
         onChoose = { controller.chooseTaskColor(row, it) },
+        spread = true,
     )
     NewColorButton(target = target, enabled = !composer.isSaving, controller = controller)
     composer.repeatedColorRows[row]?.let { earlier ->
@@ -4163,6 +4175,7 @@ private fun MulticolorColors(
         // Choosing one already in the list takes it back out, so the same colour
         // can never be in it twice — PLAN 5.10 numbers a task's colours uniquely.
         onChoose = controller::toggleMulticolorColor,
+        spread = true,
     )
     NewColorButton(
         target = NewColorTarget.MulticolorList,

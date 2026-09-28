@@ -24,6 +24,7 @@ import dev.pnptracker.data.repository.ImportRollbackStore
 import dev.pnptracker.data.repository.PoolStore
 import dev.pnptracker.data.repository.TaskEditStore
 import dev.pnptracker.data.repository.TaskExportStore
+import dev.pnptracker.data.repository.TaskFromNewTextStore
 import dev.pnptracker.data.repository.TaskFromTextStore
 import dev.pnptracker.data.repository.TaskProgressStore
 import dev.pnptracker.data.repository.UnfinishedImportsStore
@@ -236,6 +237,7 @@ fun main() {
             // The table's own sizes, kept in the state directory (PLAN 12.17).
             tableSizes = DesktopTableSizesStore(paths.tableSizesFile, diagnostics = diagnostics),
             gameOrder = DesktopGameOrderStore(paths.gameOrderFile, diagnostics = diagnostics),
+            newTextTasks = TaskFromNewTextStore(database, diagnostics = diagnostics),
             diagnostics = diagnostics,
         )
     // The exporter owns the only Path on its side of the application, exactly as
