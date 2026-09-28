@@ -24,13 +24,6 @@ data class ScreenTexts(
  */
 fun textsOf(screen: Screen): ScreenTexts =
     when (screen) {
-        Screen.Home ->
-            ScreenTexts(
-                navigationLabel = Strings.Navigation.home,
-                title = Strings.ScreenTitles.home,
-                description = Strings.ScreenDescriptions.home,
-            )
-
         Screen.Games ->
             ScreenTexts(
                 navigationLabel = Strings.Navigation.games,

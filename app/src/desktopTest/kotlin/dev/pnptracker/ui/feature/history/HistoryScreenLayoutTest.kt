@@ -206,7 +206,7 @@ class HistoryScreenLayoutTest {
     }
 
     @Test
-    fun `the section is named and described in the sidebar and over the screen`() {
+    fun `the section is named and described in the navigation and over the screen`() {
         val texts = textsOf(Screen.History)
 
         assertEquals("Geçmiş", textOf(texts.navigationLabel))
@@ -280,16 +280,18 @@ class HistoryScreenLayoutTest {
     }
 
     @Test
-    fun `the sidebar reaches the history and the screen is drawn for it`() {
+    fun `the navigation reaches the history and the screen is drawn for it`() {
         assertTrue(Screen.History in Screen.all)
         assertTrue("Screen.History -> HistoryScreen(historyController)" in scaffold)
     }
 
     @Test
-    fun `the history sits where PLAN 12 1 puts it, between import and colours`() {
-        val order = Screen.all
-        assertEquals(order.indexOf(Screen.Import) + 1, order.indexOf(Screen.History))
-        assertEquals(order.indexOf(Screen.History) + 1, order.indexOf(Screen.Colors))
+    fun `the history sits where PLAN 12 1 puts it, last in the settings menu`() {
+        // It moved out of the row across the top and into the menu under
+        // `Ayarlar`, after the import and the colours, and nothing else about it
+        // changed.
+        assertEquals(listOf(Screen.Settings, Screen.Import, Screen.Colors, Screen.History), Screen.underSettings)
+        assertFalse(Screen.History in Screen.topLevel)
     }
 
     @Test

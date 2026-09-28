@@ -362,9 +362,43 @@ class AppKeyboardAndScalingTest {
     private fun Rect.drawnInside(viewport: Viewport): Boolean =
         width > 0f && height > 0f && left >= -1f && top >= -1f && right <= viewport.width + 1f && bottom <= viewport.height + 1f
 
-    /** Presses Tab until the sidebar entry of [screen] holds the keyboard. */
+    /**
+     * Presses Tab until the thing that opens [screen] holds the keyboard.
+     *
+     * Four of the five entries across the top are one walk away. The sections in
+     * the menu under `Ayarlar` (PLAN 12.1) are inside it, so the walk reaches
+     * `Ayarlar`, opens it with the keyboard and carries on inside — the same path
+     * a person with no mouse has.
+     */
     private fun ComposeSceneHarness.tabToEntryOf(screen: Screen): Boolean {
-        val entry = textOf(textsOf(screen).navigationLabel)
+        val label = textOf(textsOf(screen).navigationLabel)
+        if (screen !in Screen.underSettings) return tabToLabel(label)
+
+        val menuLabel = textOf(Strings.Navigation.settingsMenu)
+        if (!tabToLabel(textOf(Strings.Navigation.settings))) return false
+        press(Key.Enter)
+        settle(this)
+        // Inside the menu now. The entry that opened it is called `Ayarlar` too,
+        // and it is the one thing that also says `Ayarlar menüsü` — which is how
+        // the item is told from the thing that opened it.
+        repeat(60) {
+            val words = keyboardHolder()?.words()
+            if (words != null && label in words && menuLabel !in words) return true
+            tab()
+            settle(this)
+        }
+        return false
+    }
+
+    /** What the keyboard has to land on to open [screen]: an entry, or the menu's. */
+    private fun entryLabelOf(screen: Screen): String =
+        if (screen in Screen.underSettings) {
+            textOf(Strings.Navigation.settings)
+        } else {
+            textOf(textsOf(screen).navigationLabel)
+        }
+
+    private fun ComposeSceneHarness.tabToLabel(entry: String): Boolean {
         repeat(60) {
             if (keyboardHolder()?.words()?.contains(entry) == true) return true
             tab()
@@ -372,18 +406,29 @@ class AppKeyboardAndScalingTest {
         return keyboardHolder()?.words()?.contains(entry) == true
     }
 
+    /**
+     * The sections the navigation itself offers, each once.
+     *
+     * `Ayarlar` is in both lists PLAN 12.1 names — it is an entry across the top
+     * and the first thing in its own menu — so it is walked to once.
+     */
+    private val navigable: List<Screen> = (Screen.topLevel + Screen.underSettings).distinct()
+
     // ---------------------------------------------------------- the keyboard
 
     @Test
     fun `every screen is reached, walked and walked back with the keyboard alone, at every size`() {
         val problems = mutableListOf<String>()
         viewports.forEach { viewport ->
-            Screen.all.forEachIndexed { index, screen ->
-                val wiring = wiring(if (screen == Screen.Home) Screen.Games else Screen.Home)
+            // Every section the navigation itself offers. The Special pool is
+            // reached from the game table instead (PLAN 12.1) and is walked to by
+            // the test that owns that entry.
+            navigable.forEachIndexed { index, screen ->
+                val wiring = wiring(if (screen == Screen.Games) Screen.Import else Screen.Games)
                 onApp(wiring, viewport) { harness ->
                     val where = "${viewport.name} / $screen"
                     if (!harness.tabToEntryOf(screen)) {
-                        problems += "$where: Tab never reached the sidebar entry"
+                        problems += "$where: the keyboard never reached the entry"
                         return@onApp
                     }
                     // Enter on one entry, Space on the next: both are how a
@@ -398,10 +443,10 @@ class AppKeyboardAndScalingTest {
                         problems += "$where: the screen's own title is not written"
                     }
 
-                    // Walk forward until the keyboard is back on this screen's
-                    // own sidebar entry: everything in between was reachable,
-                    // and coming back at all means nothing held the keyboard.
-                    val entry = textOf(textsOf(screen).navigationLabel)
+                    // Walk forward until the keyboard is back on the entry that
+                    // opens this screen: everything in between was reachable, and
+                    // coming back at all means nothing held the keyboard.
+                    val entry = entryLabelOf(screen)
                     val stops = mutableListOf<String>()
                     var cameBack = false
                     var walked = 0
@@ -423,7 +468,7 @@ class AppKeyboardAndScalingTest {
                             problems += "$where: stop `${nameOf(focused)}` is not drawn inside the window (${focused.boundsInRoot})"
                         }
                     }
-                    if (!cameBack) problems += "$where: Tab did not come back to the sidebar within 150 stops"
+                    if (!cameBack) problems += "$where: Tab did not come back to the navigation within 150 stops"
 
                     // Shift+Tab retraces the last stops Tab took, one for one.
                     val retraced = mutableListOf<String>()

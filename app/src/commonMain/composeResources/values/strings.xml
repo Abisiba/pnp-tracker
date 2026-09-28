@@ -6,21 +6,18 @@
 
     <!-- Navigation names -->
     <string name="navigation_section_label">Bölümler</string>
-    <string name="navigation_home">Ana Sayfa</string>
     <string name="navigation_games">Oyunlar</string>
-    <string name="navigation_import">İçe Aktarma</string>
+    <string name="navigation_import">İçe/Dışa Aktarma</string>
     <string name="navigation_history">Geçmiş</string>
 
     <!-- Screen titles -->
-    <string name="home_title">Ana Sayfa</string>
     <string name="games_title">Oyun Tablosu</string>
-    <string name="import_title">İçe Aktarma</string>
+    <string name="import_title">İçe/Dışa Aktarma</string>
     <string name="history_title">Geçmiş</string>
 
     <!-- Screen descriptions -->
-    <string name="home_description">Oyunların ve üretim havuzlarının özetleri bu ekranda toplanacak. Şu anda yalnızca uygulama kabuğu hazır.</string>
     <string name="games_description">Bütün çalışma buradan yürür: her oyun bir satır, her sütun o oyunun bir hücresidir.</string>
-    <string name="import_description">Excel ve CSV içe aktarma taslakları bu ekranda yönetilecek. Ham hücre metni değiştirilmeden saklanır, görev taslakları ham metinden elle oluşturulur.</string>
+    <string name="import_description">Excel ve CSV içe aktarma taslakları bu ekranda yönetilir; görevlerinizi CSV olarak dışa aktarmak da buradadır. Ham hücre metni değiştirilmeden saklanır, görev taslakları ham metinden elle oluşturulur.</string>
     <string name="history_description">Görevlerde ve oyunlarda ne olduğunun kaydı, en yenisi üstte. Bu ekran yalnızca okunur; buradan hiçbir kayıt değiştirilemez.</string>
 
     <!-- Theme -->
@@ -275,6 +272,7 @@
     <string name="review_draft_only_note">Bu bir taslaktır; gerçek görev oluşturmaz.</string>
     <!-- Game table: the three global views -->
     <string name="table_view_label">Görünüm</string>
+    <string name="table_open_special">Özel görevler</string>
     <string name="table_view_ongoing">Devam Eden</string>
     <string name="table_view_completed">Tamamlanan</string>
     <string name="table_view_all">Tümü</string>
@@ -618,6 +616,7 @@
     <string name="colors_description">Bütün oyunlarda ortak kullanılan renk kataloğu burada tutulur; yeni renk ekleyebilir ve her rengin örneğini yazılı adıyla birlikte görebilirsiniz.</string>
 
     <string name="navigation_settings">Ayarlar</string>
+    <string name="navigation_settings_menu">Ayarlar menüsü</string>
     <string name="settings_title">Ayarlar</string>
     <string name="settings_description">Uygulamanın kendi bakım işleri burada toplanır.</string>
 

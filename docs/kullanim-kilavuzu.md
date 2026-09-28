@@ -35,9 +35,14 @@ Bilmeniz yeterli olan üç şey:
 
 ## Ekranlar
 
-Sol kenardaki bölümler: **Ana Sayfa**, **Oyunlar**, dört havuz (**3D Baskı**,
-**Kartlar**, **Mukavva**, **Özel**), **İçe Aktarma**, **Geçmiş**, **Renkler**,
-**Ayarlar**.
+Uygulama **Oyunlar**'da açılır. Üstteki tek satırlık gezinmede beş bölüm vardır:
+**Oyunlar**, **3D Baskı**, **Kartlar**, **Mukavva** ve **Ayarlar**.
+
+**Ayarlar** bir menü açar: **Ayarlar**, **İçe/Dışa Aktarma**, **Renkler** ve
+**Geçmiş**.
+
+**Özel** havuzu gezinmede yer almaz: özel bir göreviniz olduğunda oyun tablosunda
+**Özel görevler** girişi belirir ve kaç görevin açık olduğunu söyler.
 
 ## Oyun oluşturma
 
@@ -72,7 +77,7 @@ bildir** ve **Görevi metne dönüştür** vardır.
 
 ## XLSX ve CSV içe aktarma
 
-**İçe Aktarma** bölümünde **Excel veya CSV dosyası seç** ile başlarsınız.
+**İçe/Dışa Aktarma** bölümünde **Excel veya CSV dosyası seç** ile başlarsınız.
 
 - **Excel (.xlsx)**: yedi sütunlu referans düzeni beklenir (Oyun, 3D Print,
   Laminasyon, Mukavva, Özel, Eksik, Ödünç Parçalar). Hücre renkleri ve zengin

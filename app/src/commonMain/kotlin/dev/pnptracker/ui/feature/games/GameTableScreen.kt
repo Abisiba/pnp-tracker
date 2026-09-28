@@ -304,6 +304,13 @@ fun GameTableScreen(
      * files, and so a test of the table needs no exporter at all.
      */
     exportAction: @Composable () -> Unit = {},
+    /**
+     * The way into the Special pool, drawn with the table's own controls.
+     *
+     * Passed in for the same reason the export action is: the table knows which
+     * work it holds and nothing about where the window can go (PLAN 12.1).
+     */
+    specialAction: @Composable () -> Unit = {},
 ) {
     // Keyed on the attempt as well, so asking again ends the collection a
     // refusal left standing and starts a fresh one (PLAN 14.7.6).
@@ -334,7 +341,12 @@ fun GameTableScreen(
                     modifier = Modifier.padding(top = 4.dp),
                 )
 
-                TableControls(controller = controller, state = state, exportAction = exportAction)
+                TableControls(
+                    controller = controller,
+                    state = state,
+                    exportAction = exportAction,
+                    specialAction = specialAction,
+                )
                 FailureLine(state.failure)
                 CreatedTaskLine(state.createdTask, controller)
             }
@@ -446,6 +458,7 @@ private fun TableControls(
     controller: GameTableController,
     state: GameTableScreenState,
     exportAction: @Composable () -> Unit = {},
+    specialAction: @Composable () -> Unit = {},
 ) {
     Column(modifier = Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
@@ -526,9 +539,12 @@ private fun TableControls(
             GameComposer(controller = controller, composer = composer, isSaving = controller.isSaving)
         }
 
-        // Below the composer, because it is about the whole table rather than
+        // Below the composer, because they are about the whole table rather than
         // about the row somebody is adding to it.
-        exportAction()
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            exportAction()
+            specialAction()
+        }
     }
 }
 

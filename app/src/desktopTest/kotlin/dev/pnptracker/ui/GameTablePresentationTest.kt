@@ -145,8 +145,8 @@ class GameTablePresentationTest {
 
     @Test
     fun `import and the colour catalogue are still one click away`() {
-        assertTrue(Screen.all.contains(Screen.Import), "the import section left the sidebar")
-        assertTrue(Screen.all.contains(Screen.Colors), "the colour catalogue left the sidebar")
+        assertTrue(Screen.all.contains(Screen.Import), "the import section left the navigation")
+        assertTrue(Screen.all.contains(Screen.Colors), "the colour catalogue left the navigation")
         assertTrue(Screen.all.contains(Screen.Games))
     }
 
