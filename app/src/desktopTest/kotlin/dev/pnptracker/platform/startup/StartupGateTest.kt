@@ -372,8 +372,8 @@ class StartupGateTest {
     @Test
     fun `a copy that died without releasing the lock leaves it free`() {
         // The whole of the stale-lock question. The holder is killed rather than
-        // asked to stop, so nothing releases the lock in user code; the operating
-        // system does, and the next start simply works.
+        // asked to stop, so nothing releases the lock in user code and the
+        // operating system is the only thing that can give it back.
         aVersion3Database()
         val holder = startALockHolder()
         assertFailsWith<StartupRefused> { gate().open() }
@@ -382,7 +382,29 @@ class StartupGateTest {
         // so instead of looking like a lock the system never gave back.
         assertTrue(holder.destroyForcibly().waitFor(20, TimeUnit.SECONDS), "the copy holding the lock did not die")
 
-        val opened = openThrough(gate())
+        // Linux gives the lock back with the process and the next start simply
+        // works, which is what is asserted below. Windows was measured not to:
+        // with the holder proved gone, the first start was still refused. So this
+        // asks again until the system answers, within a bound, and says how long
+        // it took — the waiting here is the instrument, not a flake being slept
+        // away, and the figure it prints is what PLAN 14.8.4 records.
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20)
+        val began = System.nanoTime()
+        var attempts = 0
+        var opened: OpenedDatabase? = null
+        while (opened == null) {
+            attempts += 1
+            opened = runCatching { openThrough(gate()) }.getOrNull()
+            if (opened == null) {
+                assertTrue(System.nanoTime() < deadline, "the system never gave the lock back, after $attempts attempts")
+                Thread.sleep(POLL_MILLISECONDS)
+            }
+        }
+        val took = (System.nanoTime() - began) / 1_000_000
+        println("LOCK: back after $attempts attempt(s), $took ms")
+        if (!PlatformFileRules.onWindows) {
+            assertEquals(1, attempts, "the kernel did not give the lock back with the process")
+        }
 
         assertNotNull(opened.set)
         assertEquals(8, schemaVersionOf(paths.databaseFile))
@@ -459,5 +481,10 @@ class StartupGateTest {
         page[16] = 0x10
         page[63] = userVersion.toByte()
         return page
+    }
+
+    private companion object {
+        /** How long to leave the system between two tries for the lock. */
+        const val POLL_MILLISECONDS = 50L
     }
 }

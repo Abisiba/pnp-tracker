@@ -3250,9 +3250,20 @@ olduğu için sessizce oluşamaz:
   geçerlidir. Farkı şudur: hedef dosya başka bir süreç tarafından açık tutuluyorsa
   taşıma reddedilir. Bu, mevcut tipli "yazılamadı" sonucuna düşer; veri
   kaybettiren bir geri çekilme yolu **eklenmez**.
-- **Tek kopya kilidi.** `14.4.10`'un instance kilidi işletim sisteminin kilididir
-  ve Windows'ta da süreç ölünce bırakılır. Kilit dosyası hiçbir platformda
-  silinmez.
+- **Tek kopya kilidi.** `14.4.10`'un instance kilidi işletim sisteminin
+  kilididir ve kilit dosyası hiçbir platformda silinmez. Bırakılma anı ise
+  platforma göre aynı değil, ve bu **ölçülmüştür**: Linux'ta çekirdek kilidi
+  süreçle birlikte verir, kilidi tutan kopya öldükten sonraki **ilk** açılış
+  çalışır. Windows'ta öyle olmadı — tutan sürecin öldüğü kanıtlandıktan sonra
+  bile ilk açılış "başka bir kopya çalışıyor" ile reddedildi. Doğrulama bu
+  yüzden Windows'ta kilidin geri gelmesini sınırlı bir süre içinde arar ve
+  **ne kadar sürdüğünü yazar**; ölçülen süre İş 20'de kayda geçer.
+  Uygulamanın davranışı bu turda **değişmemiştir**: `14.4.10` gereği ikinci
+  kopya beklemez, reddeder ve söyler. Çökmenin hemen ardından yeniden açan bir
+  Windows kullanıcısının bu yüzden haksız bir ret görüp görmeyeceği ve buna
+  karşı ne yapılacağı (sınırlı bir bekleme, ekranda "birkaç saniye sonra
+  yeniden deneyin" demek, ya da olduğu gibi bırakmak) **açık bir karardır** ve
+  İş 20'de sorulur; ölçüm yapılmadan karara bağlanmaz.
 - **Satır sonları.** Uygulamanın yazdığı dosyaların biçimi platforma göre
   **değişmez**: yedek JSON'u, tanılama satırları ve CSV dışa aktarma
   `14.4.1`, `14.7.1` ve CSV sözleşmesinin dediği baytları yazar. CSV'nin CRLF'i
@@ -3802,6 +3813,15 @@ Kişisel kullanımda veri kaybı riski düşük, test edilmiş ve Garuda Linux�
     Garuda turunun karşılığıdır ve aynı kuralla: bu geliştirme makinesi temiz ortam
     sayılmaz, tur ayrı bir makinede veya sanal makinede koşulur ve sonuçları
     matrisiyle kaydedilir.
+20. Windows'ta öldürülen bir kopyanın instance kilidini işletim sisteminin ne
+    zaman geri verdiğini ölçüye bağla ve sonucu karara dönüştür (`14.8.4`, İş
+    17'de ölçüldü). Bilinen: Linux'ta ilk açılış çalışır, Windows'ta çalışmadı.
+    Sıra şudur: doğrulamanın yazdığı süre okunur, süre PLAN'a gerçek değeriyle
+    geçer, sonra kullanıcı açısından karar verilir — sınırlı bir bekleme,
+    açılış ekranında "birkaç saniye sonra yeniden deneyin" diyen bir metin, ya
+    da bugünkü davranışın bilinçli olarak korunması. Karar verilmeden
+    `14.4.10`'un "ikinci kopya beklemez" kuralı **değiştirilmez** ve bu sınır
+    kullanıcı belgesinde dürüstçe yazılır.
 19. `close` dönmüş bir veritabanının `-wal` ve `-shm` dosyalarını neden açık
     tuttuğunu araştır (`14.8.4`, İş 17'de ölçüldü). Ölçülen iki durum: sürücünün
     içinde düşürülen bir ifade ve sahnesi yaşarken okumayı sürdüren bir ekran.
@@ -3816,6 +3836,8 @@ Kişisel kullanımda veri kaybı riski düşük, test edilmiş ve Garuda Linux�
 
 #### Faz 3 testleri
 
+- Öldürülen bir kopyanın kilidinin iki sistemde de geri gelmesi; Linux'ta ilk
+  açılışta, Windows'ta ölçülen süre içinde (İş 20)
 - Bir ifadesi düşürülmüş veya okuması sürmekte olan bir veritabanının `close`
   sonrasında neyi açık tuttuğunun ölçülmesi (İş 19); normal kapanışta hiçbir yan
   dosyanın kalmaması
