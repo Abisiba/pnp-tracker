@@ -8,6 +8,7 @@ import dev.pnptracker.domain.backup.BackupData
 import dev.pnptracker.platform.files.AppDirectoryInitializer
 import dev.pnptracker.platform.files.AppPaths
 import dev.pnptracker.platform.files.AppPathsResolver
+import dev.pnptracker.platform.files.PlatformFileRules
 import dev.pnptracker.platform.files.XDG_LAYOUT
 import dev.pnptracker.platform.startup.INSTANCE_LOCK_NAME
 import dev.pnptracker.platform.startup.deleteTemporaryTree
@@ -86,7 +87,7 @@ class RecoveryHome : AutoCloseable {
         write: InterruptedWrite,
         ending: Ending,
     ): WriterProcess {
-        val java = Path.of(System.getProperty("java.home"), "bin", "java").toString()
+        val java = PlatformFileRules.javaLauncher().toString()
         val builder =
             ProcessBuilder(
                 java,

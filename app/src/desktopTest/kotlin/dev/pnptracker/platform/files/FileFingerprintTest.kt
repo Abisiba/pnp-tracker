@@ -6,7 +6,6 @@ import dev.pnptracker.platform.xlsx.openHandlesTo
 import java.nio.file.Files
 import java.nio.file.NoSuchFileException
 import java.nio.file.Path
-import java.nio.file.attribute.PosixFilePermissions
 import kotlin.io.path.deleteRecursively
 import kotlin.random.Random
 import kotlin.test.AfterTest
@@ -31,9 +30,7 @@ class FileFingerprintTest {
         check(directory.startsWith(Path.of(System.getProperty("java.io.tmpdir")))) {
             "refusing to delete $directory, which is not under the temporary directory"
         }
-        Files.walk(directory).forEach { path ->
-            Files.setPosixFilePermissions(path, PosixFilePermissions.fromString("rwx------"))
-        }
+        Files.walk(directory).forEach { path -> runCatching { PlatformFileRules.letWritingBack(path) } }
         directory.deleteRecursively()
     }
 
