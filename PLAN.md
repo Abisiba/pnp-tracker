@@ -1336,6 +1336,18 @@ Tamamlanan görev:
 Bu görünüm yalnız sunumdur: tamamlama transaction'ı, geçmiş, yeniden açma ve
 havuz filtreleri bundan etkilenmez.
 
+**Görevin notu tabloda.** Göreve eklenen not (`Not (isteğe bağlı)`) görevin
+kendi kaydında saklanır ve tabloda görevin adının ve adedinin hemen ardından,
+parantez içinde çizilir: `Ejderha ×3 (boyası kuruyor)`. Notun satır sonları
+çizimde boşluğa döner; kaydın kendisi değişmez.
+
+- Görev türü sütunlarında (3D, Kart, Mukavva, Özel) ve `Eksik`'te (`12.20`)
+  aynı biçimde görünür ve ekran okuyucuya görevin tarifinin sonunda söylenir.
+- Not, görevin basılabilir parçasıdır; hücrenin belgesine (`5.5`), `Notlar`
+  sütununa veya `Ödünç Parçalar` sütununa **yazılmaz**. Hücre düzenleyicisi
+  notu göstermez, çünkü orada çizilen metin belgenin kendisidir.
+- Notu olmayan görevde parantez çizilmez.
+
 ### 12.6 Metinden görev oluşturma
 
 Kullanıcı düz metinde bir kelime veya ifade seçer. Çift tıklama kelime seçimini

@@ -1142,7 +1142,7 @@ private fun missingLineOf(
 ): String =
     label + MISSING_LABEL_GAP +
         cell.segments.joinToString(separator = MISSING_TASK_GAP) { task ->
-            task.text + (task.requiredQuantity?.let { " ×$it" } ?: "")
+            task.text + (task.requiredQuantity?.let { " ×$it" } ?: "") + (noteShownOf(task)?.let { " $it" } ?: "")
         }
 
 /** Between a column's name and its first task in the `Eksik` column. */
@@ -1150,6 +1150,22 @@ private const val MISSING_LABEL_GAP = ": "
 
 /** Between two tasks when a line of the `Eksik` column is measured. */
 private const val MISSING_TASK_GAP = "  "
+
+/**
+ * A task's note as it is drawn beside the task: in brackets, on one line.
+ *
+ * Null when there is none to draw. The note itself is left exactly as it was
+ * written; only its line breaks become spaces here, so a note of several lines
+ * reads as one aside rather than breaking the cell's own lines apart.
+ */
+private fun noteShownOf(task: CellSegmentPreview): String? =
+    task.notes
+        ?.takeIf { task.isTask && it.isNotBlank() }
+        ?.lines()
+        ?.map(String::trim)
+        ?.filter(String::isNotEmpty)
+        ?.joinToString(separator = " ")
+        ?.let { "($it)" }
 
 /**
  * What is still to do in this game, gathered from its production columns (PLAN 12.20).
@@ -2052,16 +2068,29 @@ private fun drawnDocumentOf(
                 // hanging off it. Nothing is added by this — the same characters
                 // in the same place — which is the whole point: PLAN 12.5 will
                 // not have finishing a task cost it any room.
+                val metaStyle =
+                    if (finished) {
+                        SpanStyle(background = finishedFill, color = finishedInk)
+                    } else {
+                        SpanStyle(color = metadata)
+                    }
                 marks[index]?.let { mark ->
-                    val style =
-                        if (finished) {
-                            SpanStyle(background = finishedFill, color = finishedInk)
-                        } else {
-                            SpanStyle(color = metadata)
-                        }
-                    withStyle(style) {
+                    withStyle(metaStyle) {
                         append(QUANTITY_GAP)
                         append(mark)
+                    }
+                }
+                // The task's own note, in brackets after its name and count, where
+                // the cell is being read (PLAN 12.6). It belongs to the task and is
+                // stored on it: it is drawn here, part of the task's pressable run,
+                // and never written into the document, the notes or the borrowed
+                // parts. Left out of an editor for the same reason the count is.
+                if (withCounts) {
+                    noteShownOf(segment)?.let { note ->
+                        withStyle(metaStyle) {
+                            append(QUANTITY_GAP)
+                            append(note)
+                        }
                     }
                 }
                 // No word is written here. `✓ Tamamlandı` used to be, and in a
@@ -3284,7 +3313,7 @@ private fun spokenTaskOf(segment: CellSegmentPreview): String {
     // Whether it is finished is deliberately not folded in here. The piece says
     // that as a state of its own, so a reader hears it once and hears it change;
     // saying it in the name as well would have it read out twice.
-    return said
+    return noteShownOf(segment)?.let { note -> "$said $note" } ?: said
 }
 
 /** How big the task window is where the screen has room for it (PLAN 12.6). */
