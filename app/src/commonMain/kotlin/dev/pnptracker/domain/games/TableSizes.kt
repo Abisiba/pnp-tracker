@@ -26,6 +26,9 @@ const val AUTOMATIC_WIDTH_LIMIT_DP: Float = 480f
 /** A column of the table: the name column, and one for each cell. */
 enum class TableColumn {
     GAME_NAME,
+
+    /** The unfinished tasks of the four production columns, together (PLAN 12.20). */
+    MISSING,
     THREE_D,
     CARD,
     BOARD,

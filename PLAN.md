@@ -1215,6 +1215,7 @@ Sütunlar:
 | Sütun | İçerik |
 |---|---|
 | Oyun adı | Oyunun adı ve tamamlanma tiki |
+| Eksik | 3D, Kart, Mukavva ve Özel sütunlarındaki tamamlanmamış görevlerin birlikte görünümü (`12.20`) |
 | 3D | 3D hücresi |
 | Kart | Kart hücresi |
 | Mukavva | Mukavva hücresi |
@@ -1700,7 +1701,7 @@ sütun genişlikleri ve satır yükseklikleri kullanıcının kendi ölçülerid
 
 **Ne ayarlanır**
 
-- Her sütun ayrı ayrı: `Oyun adı`, `3D`, `Kart`, `Mukavva`, `Özel`,
+- Her sütun ayrı ayrı: `Oyun adı`, `Eksik`, `3D`, `Kart`, `Mukavva`, `Özel`,
   `Ödünç Parçalar`, `Notlar`. Sütun ölçüsü o sütunun **tamamına** uygulanır.
 - Her oyun satırının yüksekliği **yalnız o satıra** uygulanır; ölçü oyunun
   kimliğine bağlanır.
@@ -1869,6 +1870,30 @@ için oyun başına bir not alanıdır.
   ve boş görünür.
 - Bu sürümü bilmeyen daha eski bir uygulama, `BORROWED` hücresi içeren bir
   yedeği tanımadığı bir sütun türü olarak geri çevirir.
+
+### 12.20 Eksik
+
+Bir oyunda henüz yapılmamış işi tek bakışta göstermek için `Oyun` ile `3D`
+arasında duran bir **görünümdür**.
+
+- Aynı oyunun `3D`, `Kart`, `Mukavva` ve `Özel` hücrelerindeki **tamamlanmamış**
+  görevleri birlikte gösterir. Her sütunun görevleri, hücresindeki sırayla, o
+  sütunun adıyla başlayan bir satırdadır (`3D Baskı: …`). Görevi olmayan sütun
+  listelenmez; hiç eksik yoksa hücre boştur.
+- Görevler kendi hücrelerinde çizildikleri gibi çizilir: 3D görevleri kendi
+  renklerinde, kontrast kenarlarıyla ve adetleriyle. Görevlerin arasındaki düz
+  metin buraya taşınmaz.
+- Hiçbir kopya görev, hücre, satır veya başka bir kayıt oluşturulmaz. Görünüm her
+  okumada satırın hücrelerinden türetilir (`GameTableRow.missing`). Bu yüzden
+  görev kendi sütununda tamamlandığında bir sonraki karede buradan kalkar,
+  yeniden açıldığında geri gelir.
+- Eksik'te tamamlama kutusu, düzenleyici veya görev menüsü yoktur. Görev
+  üzerindeki her iş kendi hücresinde, bugünkü gibi yapılır. Hücre bir Tab durağı
+  değildir; ekran okuyucuya tek bir hücre olarak tarif edilir
+  (`Eksik hücresi: …`).
+- Otomatik genişlik ve yükseklik (`12.17`) bu sütunda da çalışır. Genişliği
+  elle ayarlanabilir ve sığdırılabilir; ölçüsü `table-sizes.json`'da `MISSING`
+  adıyla tutulur.
 
 ## 13. Arama, filtreleme ve sıralama
 

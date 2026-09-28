@@ -247,4 +247,21 @@ data class GameTableRow(
 
     /** This row's cell in one column; always present, sometimes empty. */
     fun cell(columnType: CellColumnType): CellPreview = cells[columnType.ordinal]
+
+    /**
+     * What is still to do in this game, for the `Eksik` column (PLAN 12.20).
+     *
+     * The unfinished tasks of the four production columns, each column's in the
+     * order its cell holds them and the columns in table order. Nothing here is
+     * a task of its own: these are the pieces the cells already carry, with the
+     * finished ones and the plain text left out, so a task finished or reopened
+     * in its own column leaves or comes back on the very next read. A column with
+     * nothing left to do is not listed at all.
+     */
+    val missing: List<CellPreview>
+        get() =
+            cells
+                .filter { it.columnType.holdsTasks }
+                .map { cell -> cell.copy(segments = cell.segments.filter { it.isTask && !it.isCompletedTask }) }
+                .filterNot { it.isEmpty }
 }
