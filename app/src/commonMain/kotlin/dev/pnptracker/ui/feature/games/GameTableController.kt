@@ -58,7 +58,10 @@ import dev.pnptracker.ui.StaleSurfaces
 import dev.pnptracker.ui.feature.colors.ColorComposer
 import dev.pnptracker.ui.feature.colors.baseColorsIn
 import dev.pnptracker.ui.feature.tasks.TaskEditingHost
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.withContext
 
 /**
  * The game table: which games it shows, what is being written in it, and what is
@@ -243,6 +246,7 @@ class GameTableController(
         // rows stayed at `Loading` for as long as the screen was open.
         val read = tableSizes.read()
         state = state.copy(sizes = read)
+        writtenSizes = read
     }
 
     /**
@@ -284,13 +288,45 @@ class GameTableController(
     suspend fun rememberSizes() {
         val kept = state.sizes.prunedTo(allRows.mapTo(mutableSetOf()) { it.gameId })
         state = state.copy(sizes = kept)
-        tableSizes.write(kept)
+        writeSizes(kept)
     }
 
     /** Puts every column and every row back to the table's own defaults. */
     suspend fun resetSizes() {
         state = state.copy(sizes = TableSizes.Default)
-        tableSizes.write(TableSizes.Default)
+        writeSizes(TableSizes.Default)
+    }
+
+    /**
+     * Writes whatever size is not on disk yet, as the window closes (PLAN 12.17).
+     *
+     * A drag's write is launched from the screen, and closing the window takes
+     * the screen with it: a write still waiting behind the one before it was
+     * cancelled, and the last size the user gave was forgotten by the next start.
+     * This is called by the window before anything is closed, writes the sizes as
+     * they stand if they differ from what was last written, and waits for it.
+     * Nothing it does can be cancelled half way, and a file that will not be
+     * written is the store's to record, exactly as it is on any other write.
+     */
+    suspend fun finishWritingSizes() {
+        // Never read means never shown, and a table nobody saw was not resized:
+        // writing then would create the file for nothing.
+        val written = writtenSizes ?: return
+        val standing = state.sizes.prunedTo(allRows.mapTo(mutableSetOf()) { it.gameId })
+        if (standing != written) writeSizes(standing)
+    }
+
+    /** What was last written, so closing writes only what is not there yet. */
+    private var writtenSizes: TableSizes? = null
+
+    private suspend fun writeSizes(sizes: TableSizes) {
+        // Not cancelled with the screen: a size the user let go of is theirs to
+        // keep, and the file is one whole document either way. And not on the
+        // window's thread: the window waits for this as it closes, and a write
+        // that had to come back to that thread while holding the store's turn
+        // would wait for the window forever.
+        withContext(NonCancellable + Dispatchers.Default) { tableSizes.write(sizes) }
+        writtenSizes = sizes
     }
 
     /**
