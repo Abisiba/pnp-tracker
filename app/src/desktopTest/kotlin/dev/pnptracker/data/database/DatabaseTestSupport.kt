@@ -19,6 +19,7 @@ import dev.pnptracker.domain.pools.PoolSnapshot
 import dev.pnptracker.domain.pools.PoolTask
 import dev.pnptracker.domain.search.PoolFilter
 import dev.pnptracker.domain.search.filterPoolTasks
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.assertTrue
@@ -34,8 +35,22 @@ class TemporaryDatabaseDirectory {
 
     val databaseFile: Path get() = root.resolve("pnp.db")
 
-    /** Deletes only this directory, after proving it is the one this test created. */
-    fun delete() {
+    /**
+     * Deletes only this directory, after proving it is the one this test created.
+     *
+     * [allowingADatabaseStillOpen] lets the database and its `-wal` and `-shm`
+     * stay if this process still has them open. Two situations were measured to
+     * do that: a statement deliberately broken inside the driver, and a screen
+     * whose reader is still collecting while the scene is alive. In both, `close`
+     * has returned and the log is still there — measured on Linux, where deleting
+     * an open file is allowed and so nothing ever showed it, and refused outright
+     * on Windows. The allowance is that and no wider: only those files, only
+     * where a caller says the situation applies, and what is left is printed
+     * rather than passed over (PLAN 14.8.4). Whether a database ought to keep its
+     * log after `close` at all is a question of its own, and PLAN Faz 3 / İş 19
+     * is where it is asked.
+     */
+    fun delete(allowingADatabaseStillOpen: Boolean = false) {
         val systemTemporaryDirectory = Path.of(System.getProperty("java.io.tmpdir")).toAbsolutePath().normalize()
         val absoluteRoot = root.toAbsolutePath().normalize()
         check(absoluteRoot.startsWith(systemTemporaryDirectory) && absoluteRoot != systemTemporaryDirectory) {
@@ -45,8 +60,21 @@ class TemporaryDatabaseDirectory {
         check(!absoluteRoot.startsWith(realUserHome)) {
             "Refusing to delete $absoluteRoot: it is below the real user home"
         }
+        val stillOpen = mutableListOf<Path>()
         Files.walk(absoluteRoot).use { entries ->
-            entries.sorted(Comparator.reverseOrder()).forEach(Files::delete)
+            entries.sorted(Comparator.reverseOrder()).forEach { path ->
+                try {
+                    Files.delete(path)
+                } catch (heldOpen: IOException) {
+                    val isTheDatabase = path.fileName.toString().startsWith("pnp.db") || path == absoluteRoot
+                    if (!allowingADatabaseStillOpen || !isTheDatabase) throw heldOpen
+                    stillOpen.add(path)
+                }
+            }
+        }
+        if (stillOpen.isNotEmpty()) {
+            // In the system's temporary directory, and gone with the machine.
+            println("the database was still open, so it stays: ${stillOpen.map { it.fileName }}")
         }
     }
 
