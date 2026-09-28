@@ -156,13 +156,18 @@ jobs:
         # The same memory-limited form the Linux job uses. Windows runners have an
         # interactive desktop session, so the tests that open a Compose scene need
         # no display server of their own.
+        #
+        # Every argument that begins with a dash and carries a dot is quoted:
+        # PowerShell ends a parameter name at the first dot, so an unquoted
+        # -Pkotlin.compiler.execution.strategy=in-process reaches Gradle split in
+        # two and its tail is read as a task name.
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           .\gradlew.bat clean check --rerun-tasks `
             --no-daemon --no-parallel --max-workers=1 `
-            -Pkotlin.compiler.execution.strategy=in-process `
-            "-Dorg.gradle.jvmargs=-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8"
+            '-Pkotlin.compiler.execution.strategy=in-process' `
+            '-Dorg.gradle.jvmargs=-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8'
 
       - name: Kurucuyu üret ve doğrula
         shell: pwsh
@@ -170,7 +175,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           .\gradlew.bat :app:verifyWindowsPackage `
             --no-daemon --no-parallel --max-workers=1 `
-            "-Dorg.gradle.jvmargs=-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8"
+            '-Dorg.gradle.jvmargs=-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8'
           Get-ChildItem app\build\windows\dist | Select-Object Name, Length
           Get-FileHash -Algorithm SHA256 app\build\windows\dist\*.exe | Format-List
 
