@@ -62,7 +62,14 @@ değiştirmez.
 Her oyunun altı sütunu (hücresi) vardır: **3D Baskı**, **Kart**, **Mukavva**,
 **Özel**, **Ödünç Parçalar** ve **Notlar**. İlk dördü aynı adlı havuzları
 besler. **Ödünç Parçalar** başka bir oyundan ödünç alınan parçalar için,
-**Notlar** her türlü not için serbest metindir; ikisi de görev tutmaz. Hücrenin içi yazıdır; o yazının içinde bazı
+**Notlar** her türlü not için serbest metindir; ikisi de görev tutmaz.
+
+Oyun adının hemen yanındaki **Eksik** sütunu bir hücre değil, bir görünümdür: o
+oyunun 3D Baskı, Kart, Mukavva ve Özel sütunlarındaki tamamlanmamış görevleri,
+kendi renkleri ve adetleriyle, sütun adlarının ardından gösterir. Bir görevi
+kendi sütununda tamamladığınızda Eksik'ten kalkar, yeniden açtığınızda geri
+gelir. Eksik'te düzenleme yapılmaz; görevler kendi hücrelerinde düzenlenir ve
+tamamlanır. Hücrenin içi yazıdır; o yazının içinde bazı
 kelimeler **görev** olarak işaretlenir.
 
 (Excel dosyasındaki başlıklar farklıdır: orada aynı sütunlar *3D Print*,

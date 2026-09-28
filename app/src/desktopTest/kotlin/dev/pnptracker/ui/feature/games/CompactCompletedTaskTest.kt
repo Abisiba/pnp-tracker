@@ -134,16 +134,22 @@ class CompactCompletedTaskTest {
     /** The one drawn node that holds a cell's document. */
     private fun ComposeSceneHarness.cellNode(word: String): SemanticsNode =
         nodes()
-            .firstOrNull { node ->
-                node.reads(SemanticsProperties.Text).orEmpty().any { word in it.text && it.spanStyles.isNotEmpty() }
-            }
+            .firstOrNull { node -> node.reads(SemanticsProperties.Text).orEmpty().any { it.isTheCellHolding(word) } }
             ?: fail("no drawn cell holds $word")
 
     private fun ComposeSceneHarness.cellText(word: String): AnnotatedString =
         cellNode(word)
             .reads(SemanticsProperties.Text)
             .orEmpty()
-            .first { word in it.text && it.spanStyles.isNotEmpty() }
+            .first { it.isTheCellHolding(word) }
+
+    /**
+     * The 3D cell's own document, and not the `Eksik` line that shows the same
+     * unfinished task further left (PLAN 12.20) — that one starts with the
+     * column's name and leaves as soon as the task is finished.
+     */
+    private fun AnnotatedString.isTheCellHolding(word: String): Boolean =
+        word in text && spanStyles.isNotEmpty() && !text.startsWith("3D Baskı: ")
 
     /** The task drawn for [name], as a reader reaches it — or null when it is not drawn at all. */
     private fun ComposeSceneHarness.taskNode(name: String): SemanticsNode? =

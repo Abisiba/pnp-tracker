@@ -399,6 +399,7 @@ private fun TableSizeControls(
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val cellStyle = MaterialTheme.typography.bodyMedium
+    val missingLabels = rememberMissingLabels()
     val fitLabel = stringResource(Strings.Table.fitColumn)
     val resetLabel = stringResource(Strings.Table.resetSizes)
     var choosing by remember { mutableStateOf(false) }
@@ -421,7 +422,7 @@ private fun TableSizeControls(
                             choosing = false
                             controller.fitColumn(
                                 column,
-                                widthThatFits(column, rows, measurer, cellStyle, cellStyle, density),
+                                widthThatFits(column, rows, measurer, cellStyle, cellStyle, density, missingLabels),
                             )
                             scope.launch { controller.rememberSizes() }
                         },
@@ -444,6 +445,7 @@ private fun TableSizeControls(
 private fun headingOf(column: TableColumn) =
     when (column) {
         TableColumn.GAME_NAME -> Strings.Columns.game
+        TableColumn.MISSING -> Strings.Columns.missing
         TableColumn.THREE_D -> columnNameOf(CellColumnType.THREE_D)
         TableColumn.CARD -> columnNameOf(CellColumnType.CARD)
         TableColumn.BOARD -> columnNameOf(CellColumnType.BOARD)
@@ -891,10 +893,11 @@ private fun rememberNeededWidths(rows: List<GameTableRow>): Map<TableColumn, Flo
     val density = LocalDensity.current
     val cellStyle = MaterialTheme.typography.bodyMedium
     val nameStyle = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium)
+    val missingLabels = rememberMissingLabels()
     val measured = remember(density, cellStyle, nameStyle) { HashMap<Pair<Boolean, String>, Int>() }
-    return remember(rows, density, cellStyle, nameStyle) {
+    return remember(rows, density, cellStyle, nameStyle, missingLabels) {
         TableColumn.entries.associateWith { column ->
-            widthThatFits(column, rows, density) { text, isName ->
+            widthThatFits(column, rows, density, missingLabels) { text, isName ->
                 measured.getOrPut(isName to text) {
                     measurer.measure(text, if (isName) nameStyle else cellStyle, softWrap = false).size.width
                 }
@@ -913,10 +916,12 @@ private fun TableHeader(
     val density = LocalDensity.current
     val cellStyle = MaterialTheme.typography.bodyMedium
     val nameStyle = MaterialTheme.typography.bodyMedium
+    val missingLabels = rememberMissingLabels()
     val drawn by rememberUpdatedState(widths)
     Box(modifier = Modifier.width(widths.table)) {
         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
             HeaderCell(text = stringResource(Strings.Columns.game), width = widths.of(TableColumn.GAME_NAME))
+            HeaderCell(text = stringResource(Strings.Columns.missing), width = widths.of(TableColumn.MISSING))
             CellColumnType.entries.forEach { columnType ->
                 HeaderCell(
                     text = stringResource(columnNameOf(columnType)),
@@ -939,7 +944,10 @@ private fun TableHeader(
                     widthNow = { drawn.valueOf(column) },
                     controller = controller,
                     onFitToContent = {
-                        controller.fitColumn(column, widthThatFits(column, rows, measurer, cellStyle, nameStyle, density))
+                        controller.fitColumn(
+                            column,
+                            widthThatFits(column, rows, measurer, cellStyle, nameStyle, density, missingLabels),
+                        )
                     },
                 )
             }
@@ -1074,8 +1082,9 @@ private fun widthThatFits(
     cellStyle: TextStyle,
     nameStyle: TextStyle,
     density: Density,
+    missingLabels: Map<CellColumnType, String>,
 ): Float =
-    widthThatFits(column, rows, density) { text, isName ->
+    widthThatFits(column, rows, density, missingLabels) { text, isName ->
         measurer.measure(text, if (isName) nameStyle else cellStyle, softWrap = false).size.width
     }
 
@@ -1084,11 +1093,14 @@ private fun widthThatFits(
     column: TableColumn,
     rows: List<GameTableRow>,
     density: Density,
+    missingLabels: Map<CellColumnType, String>,
     widthOf: (text: String, isName: Boolean) -> Int,
 ): Float {
     val texts =
         if (column == TableColumn.GAME_NAME) {
             rows.map { it.gameName }
+        } else if (column == TableColumn.MISSING) {
+            rows.flatMap { row -> row.missing.map { missingLineOf(it, missingLabels[it.columnType].orEmpty()) } }
         } else {
             val columnType = CellColumnType.entries.first { TableColumn.of(it) == column }
             rows.flatMap { row ->
@@ -1115,6 +1127,104 @@ private const val CELL_FURNITURE = 32f
 
 /** The name column also draws the completion tick beside the name. */
 private const val NAME_COLUMN_FURNITURE = 118f
+
+/** The words the `Eksik` column puts before each production column's tasks. */
+@Composable
+private fun rememberMissingLabels(): Map<CellColumnType, String> =
+    CellColumnType.entries
+        .filter { it.holdsTasks }
+        .associateWith { stringResource(columnNameOf(it)) }
+
+/** One line of the `Eksik` column as text, which is what its width is measured from. */
+private fun missingLineOf(
+    cell: CellPreview,
+    label: String,
+): String =
+    label + MISSING_LABEL_GAP +
+        cell.segments.joinToString(separator = MISSING_TASK_GAP) { task ->
+            task.text + (task.requiredQuantity?.let { " ×$it" } ?: "")
+        }
+
+/** Between a column's name and its first task in the `Eksik` column. */
+private const val MISSING_LABEL_GAP = ": "
+
+/** Between two tasks when a line of the `Eksik` column is measured. */
+private const val MISSING_TASK_GAP = "  "
+
+/**
+ * What is still to do in this game, gathered from its production columns (PLAN 12.20).
+ *
+ * A view and nothing else: every task here is a task that lives in its own cell,
+ * drawn the way that cell draws it — in its own colours, with its count — and
+ * led by the name of the column it lives in. Nothing is stored for it, so a task
+ * finished in its own column is gone from here on the very next frame and a task
+ * reopened there is back. It has no tick and opens no editor: finishing, editing
+ * and every other thing done to a task are done where the task is, and stay
+ * exactly as they were.
+ *
+ * Described as one cell, the way the other cells are, and not a Tab stop: there
+ * is nothing to do in it that is not one Tab away in the task's own cell.
+ */
+@Composable
+private fun MissingCell(
+    row: GameTableRow,
+    width: Dp,
+) {
+    val columnName = stringResource(Strings.Columns.missing)
+    val labels = rememberMissingLabels()
+    val groups = row.missing
+    val spoken = groups.map { cell -> labels.getValue(cell.columnType) + MISSING_LABEL_GAP + spokenContentOf(cell) }
+    val description =
+        if (groups.isEmpty()) {
+            stringResource(Strings.Table.cellEmptyDescription, columnName)
+        } else {
+            stringResource(Strings.Table.cellDescription, columnName, spoken.joinToString(separator = "; "))
+        }
+    val metadata = MaterialTheme.colorScheme.onSurfaceVariant
+    val edgeCorner = with(LocalDensity.current) { 3.dp.toPx() }
+    val edgeStroke = with(LocalDensity.current) { 1.dp.toPx() }
+    Column(
+        modifier =
+            Modifier
+                .width(width)
+                .fillMaxHeight()
+                .heightIn(min = 64.dp)
+                .cellBorder(focused = false)
+                .padding(horizontal = 10.dp, vertical = 8.dp)
+                .semantics { contentDescription = description },
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        if (groups.isEmpty()) {
+            Text(
+                text = stringResource(Strings.Table.cellEmpty),
+                style = MaterialTheme.typography.bodyMedium,
+                color = metadata,
+            )
+        }
+        groups.forEach { cell ->
+            val label = labels.getValue(cell.columnType) + MISSING_LABEL_GAP
+            val drawn = drawnDocumentOf(cell, withCounts = true, withTicks = false)
+            val text =
+                buildAnnotatedString {
+                    withStyle(SpanStyle(color = metadata)) { append(label) }
+                    append(drawn.text)
+                }
+            // The edges that make a colour visible on a ground it matches, moved
+            // along by the label the line starts with.
+            val shifted =
+                drawn.tasks.map { task ->
+                    task.copy(stripes = task.stripes.map { it.copy(start = it.start + label.length, end = it.end + label.length) })
+                }
+            var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                onTextLayout = { layout = it },
+                modifier = Modifier.drawBehind { layout?.let { drawTaskEdges(it, shifted, edgeCorner, edgeStroke) } },
+            )
+        }
+    }
+}
 
 @Composable
 private fun HeaderCell(
@@ -1178,6 +1288,7 @@ private fun TableRow(
             width = widths.of(TableColumn.GAME_NAME),
             drag = drag,
         )
+        MissingCell(row = row, width = widths.of(TableColumn.MISSING))
         CellColumnType.entries.forEach { columnType ->
             val cell = row.cell(columnType)
             val writing = state.writingIn(row.gameId, columnType)
@@ -1825,6 +1936,7 @@ private data class DrawnDocument(
 private fun drawnDocumentOf(
     cell: CellPreview,
     withCounts: Boolean,
+    withTicks: Boolean = withCounts,
 ): DrawnDocument {
     val metadata = MaterialTheme.colorScheme.onSurfaceVariant
     val finishedFill = PnpStatus.colors.completedContainer
@@ -1882,7 +1994,7 @@ private fun drawnDocumentOf(
                 // the document says what the user typed. The editor draws the
                 // same text without this, because there the string has to match
                 // the document character for character.
-                if (withCounts) {
+                if (withTicks) {
                     segment.taskId?.let { taskId ->
                         appendInlineContent(tickIdOf(taskId), TICK_ALTERNATE)
                     }
