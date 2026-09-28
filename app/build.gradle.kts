@@ -20,6 +20,9 @@ plugins {
 // package — is derived from it; nothing else writes one down.
 version = "0.1.8"
 
+/** Which system this build is running on; the installer is made only on Windows. */
+val onWindows: Boolean = System.getProperty("os.name").lowercase().contains("windows")
+
 // Jars and archives carry no build moment and no file-system order, so two
 // builds of the same sources produce the same package (Faz 3 / İş 11).
 tasks.withType<AbstractArchiveTask>().configureEach {
@@ -110,6 +113,27 @@ compose.desktop {
             modules("java.instrument", "java.security.jgss", "java.xml.crypto", "jdk.unsupported")
             linux {
                 iconFile.set(rootProject.file("packaging/linux/pnp-tracker.png"))
+            }
+            // PLAN 14.8.2: one installer, per user, with a Start menu entry and an
+            // optional desktop shortcut. `upgradeUuid` identifies this product to
+            // Windows for the rest of its life — a new value would make the next
+            // version a second, separate application — so it is written down once
+            // and never generated.
+            windows {
+                iconFile.set(rootProject.file("packaging/windows/pnp-tracker.ico"))
+                upgradeUuid = "68A7A402-8CAB-4787-B3EE-F629442D58DA"
+                menuGroup = "PnP Üretim Takipçisi"
+                perUserInstall = true
+                menu = true
+                shortcut = true
+                dirChooser = true
+                console = false
+            }
+            // Only on Windows, so a Linux build configures exactly what it did
+            // before and nobody can ask this project to make a Windows installer
+            // on Linux (PLAN 14.8.6).
+            if (onWindows) {
+                targetFormats(org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe)
             }
         }
     }
@@ -251,15 +275,19 @@ fun normaliseRepackedJars(appDirectory: File) {
  * guessed — an artifact that says nothing about its licence is written down as
  * saying nothing, and no licence of a third party is presented as ours.
  */
-fun writeThirdPartyNotices(application: File) {
+fun writeThirdPartyNotices(
+    application: File,
+    runtimeDirectory: String = "lib/runtime",
+    appDirectory: String = "lib/app",
+) {
     val ownJar = "app-desktop-${project.version}"
     val release =
         application
-            .resolve("lib/runtime/release")
+            .resolve("$runtimeDirectory/release")
             .readLines()
             .mapNotNull { line -> line.split('=', limit = 2).takeIf { it.size == 2 } }
             .associate { (key, value) -> key to value.trim('"') }
-    val modules = application.resolve("lib/runtime/legal").listFiles()!!.map { it.name }.sorted()
+    val modules = application.resolve("$runtimeDirectory/legal").listFiles()!!.map { it.name }.sorted()
 
     val texts = application.resolve("third-party")
     texts.deleteRecursively()
@@ -268,7 +296,7 @@ fun writeThirdPartyNotices(application: File) {
 
     val rows =
         application
-            .resolve("lib/app")
+            .resolve(appDirectory)
             .listFiles { file -> file.name.endsWith(".jar") }!!
             .map { jar ->
                 val stem = digestSuffix.replace(jar.name.removeSuffix(".jar"), "")
@@ -323,9 +351,9 @@ fun writeThirdPartyNotices(application: File) {
             }
             appendLine("```")
             appendLine()
-            val base = application.resolve("lib/runtime/legal/java.base")
+            val base = application.resolve("$runtimeDirectory/legal/java.base")
             base.resolve("LICENSE").takeIf { it.isFile }?.let { licence ->
-                appendLine("Çalışma ortamının kendi lisansı, paketteki `lib/runtime/legal/java.base/LICENSE`")
+                appendLine("Çalışma ortamının kendi lisansı, paketteki `$runtimeDirectory/legal/java.base/LICENSE`")
                 appendLine("dosyasının ilk satırıyla: **${licence.readLines().first { it.isNotBlank() }.trim()}**.")
                 if (base.resolve("ASSEMBLY_EXCEPTION").isFile) {
                     appendLine("Yanında `ASSEMBLY_EXCEPTION` dosyası da dağıtılır (Classpath istisnası).")
@@ -333,7 +361,7 @@ fun writeThirdPartyNotices(application: File) {
                 appendLine()
             }
             appendLine("Çalışma ortamı `jlink` ile ${modules.size} modüle indirilmiştir. Bu modüllerin")
-            appendLine("kendi lisans ve bildirim metinleri paketin içinde, `lib/runtime/legal/<modül>/`")
+            appendLine("kendi lisans ve bildirim metinleri paketin içinde, `$runtimeDirectory/legal/<modül>/`")
             appendLine("altında dağıtılır:")
             appendLine()
             appendLine("```text")
@@ -540,6 +568,77 @@ tasks.register<JavaExec>("verifyArchPackage") {
 // the one version source (master §33 R5), so `v<version>` is the one tag that
 // may go on: anything else stops here, before a package is made or a release is
 // created.
+// ------------------------------------------------------------- Windows installer
+
+// PLAN 14.8.6: the installer is made on Windows, so on any other system these
+// tasks do not exist at all. A Linux build configures exactly what it did before
+// and nobody can ask it to produce a Windows package.
+if (onWindows) {
+    // The name the release carries (PLAN 14.8.2). jpackage names the file after
+    // the package and its version; this is what it is renamed to, so the three
+    // published packages read the same way.
+    val windowsInstallerName = "pnp-tracker-${project.version}-windows-x86_64.exe"
+
+    // Puts into the application image the four files the installed application
+    // must carry, then lets jpackage wrap it. The same four the Linux archive
+    // carries and made the same way — the notices are derived from the image's own
+    // content rather than written by hand — and the repacked skiko jar is
+    // normalised here too, so two builds of the same sources still produce the
+    // same bytes inside the installer.
+    tasks.register("prepareWindowsApplication") {
+        group = "distribution"
+        description = "Adds the version, the licence, the notices and the readme to the Windows application image."
+        dependsOn(tasks.named("createDistributable"))
+        val image = layout.buildDirectory.dir("compose/binaries/main/app/pnp-tracker")
+        val license = rootProject.file("LICENSE")
+        val readme = rootProject.file("packaging/windows/README.txt")
+        val version = project.version.toString()
+        inputs.files(license, readme)
+        outputs.dir(image)
+        doLast {
+            val root = image.get().asFile
+            check(root.isDirectory) { "the application image is not at $root" }
+            root.resolve("VERSION").writeText("name=pnp-tracker\nversion=$version\narch=x86_64\n")
+            license.copyTo(root.resolve("LICENSE"), overwrite = true)
+            readme.copyTo(root.resolve("README.txt"), overwrite = true)
+            normaliseRepackedJars(root.resolve("app"))
+            writeThirdPartyNotices(root, runtimeDirectory = "runtime", appDirectory = "app")
+        }
+    }
+
+    // One `.exe` under app/build/windows/dist, named the way the release names it.
+    tasks.register<Copy>("packageWindows") {
+        group = "distribution"
+        description = "Builds the single-file Windows installer that carries its own Java runtime."
+        dependsOn("prepareWindowsApplication", tasks.named("packageExe"))
+        from(layout.buildDirectory.dir("compose/binaries/main/exe")) {
+            include("*.exe")
+            rename { windowsInstallerName }
+        }
+        into(layout.buildDirectory.dir("windows/dist"))
+    }
+
+    // Same shape as the two Linux checks: one program, everything outside the
+    // repository, and nothing installed or removed (PLAN 14.8.6).
+    tasks.register<JavaExec>("verifyWindowsPackage") {
+        group = "verification"
+        description = "Checks the Windows installer and the application image it carries."
+        val desktopTest = kotlin.jvm("desktop").compilations.getByName("test")
+        dependsOn("packageWindows")
+        classpath = files(desktopTest.output.allOutputs, desktopTest.runtimeDependencyFiles)
+        mainClass = "dev.pnptracker.packaging.WindowsPackageCheckKt"
+        val installer = layout.buildDirectory.file("windows/dist/$windowsInstallerName")
+        val image = layout.buildDirectory.dir("compose/binaries/main/app/pnp-tracker")
+        val version = project.version.toString()
+        val repository = rootProject.projectDir
+        argumentProviders.add(
+            CommandLineArgumentProvider {
+                listOf(installer.get().asFile.absolutePath, image.get().asFile.absolutePath, version, repository.absolutePath)
+            },
+        )
+    }
+}
+
 tasks.register("checkReleaseTag") {
     group = "distribution"
     description = "Fails unless -PreleaseTag is exactly v<project.version>."
