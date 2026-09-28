@@ -482,6 +482,9 @@ import dev.pnptracker.resources.pool_stage_unavailable
 import dev.pnptracker.resources.pool_task_color_current
 import dev.pnptracker.resources.pool_task_colors
 import dev.pnptracker.resources.pool_task_failures
+import dev.pnptracker.resources.pool_task_finish
+import dev.pnptracker.resources.pool_task_finish_description
+import dev.pnptracker.resources.pool_task_finish_refused
 import dev.pnptracker.resources.pool_task_missing
 import dev.pnptracker.resources.pool_task_open
 import dev.pnptracker.resources.pool_task_primary_done
@@ -1244,6 +1247,13 @@ object Strings {
         val primaryDone = Res.string.pool_task_primary_done
         val primaryPending = Res.string.pool_task_primary_pending
         val open = Res.string.pool_task_open
+
+        /** The one-click finish on a 3D card, and what it says to a reader. */
+        val finish = Res.string.pool_task_finish
+        val finishDescription = Res.string.pool_task_finish_description
+
+        /** Said on the card when the finish was refused. */
+        val finishRefused = Res.string.pool_task_finish_refused
         val colors = Res.string.pool_task_colors
         val currentColor = Res.string.pool_task_color_current
         val stageBadge = Res.string.pool_stage_badge

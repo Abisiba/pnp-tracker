@@ -246,6 +246,10 @@ data class PoolScreenState(
      * user opened.
      */
     val expandedStages: Set<EntityId> = emptySet(),
+    /** The 3D tasks a one-click finish is being written for (PLAN 12.10). */
+    val finishing: Set<EntityId> = emptySet(),
+    /** The task whose one-click finish was refused, until the next one is tried. */
+    val finishRefused: EntityId? = null,
     /** Bumped whenever the keyboard has to be handed back somewhere. */
     val focusRecall: Int = 0,
 ) {
