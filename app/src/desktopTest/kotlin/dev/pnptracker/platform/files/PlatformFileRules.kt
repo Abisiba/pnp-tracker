@@ -21,7 +21,13 @@ import java.util.Locale
  * language that system speaks.
  */
 internal object PlatformFileRules {
-    private val onWindows =
+    /**
+     * Whether the suite is running on Windows.
+     *
+     * The one place a test asks, so a platform question is answered here and not
+     * spread through the tests that have to ask it.
+     */
+    val onWindows: Boolean =
         System
             .getProperty("os.name")
             .orEmpty()

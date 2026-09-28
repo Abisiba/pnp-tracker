@@ -69,8 +69,12 @@ class UnexpectedShutdownTest {
         child.awaitLine("BEFORE")
         val closed = child.awaitLine("CLOSED")
         assertEquals(0, child.awaitExit(), "the application did not exit normally")
-        // A normal exit takes even the driver's unpacked native library with it.
-        assertEquals(emptyList(), home.temporary.namesInside(), "a normal exit left temporary files behind")
+        // A normal exit takes even the driver's unpacked native library with it —
+        // on Linux. Windows will not delete a library that is still mapped into
+        // the exiting process, so there the same one file stays.
+        val leftBehind = home.temporary.namesInside()
+        assertEquals(nativesLeftByANormalExit(), leftBehind.size, "a normal exit left $leftBehind in the temporary directory")
+        leftBehind.forEach { stray -> assertTrue(stray.matches(DRIVERS_UNPACKED_NATIVE), stray) }
 
         val snapshot = importSnapshots().single()
         val afterClose = home.filesOnDisk()
@@ -104,7 +108,7 @@ class UnexpectedShutdownTest {
         // and nothing in the application reads it as a sign of anything.
         val strays = home.temporary.namesInside()
         assertEquals(1, strays.size, "a kill left $strays in the temporary directory")
-        assertTrue(strays.single().matches(Regex("androidx_sqliteJni\\d+\\.tmp")), strays.single())
+        assertTrue(strays.single().matches(DRIVERS_UNPACKED_NATIVE), strays.single())
 
         // The start after it is an ordinary start: the gate opens it (no refusal,
         // no migration set), every committed row is there, and what is left on

@@ -193,7 +193,9 @@ class ArchDependenciesTest {
             val tiny = root.resolve("lib/short")
             Files.write(tiny, byteArrayOf(0x7f, 'E'.code.toByte()))
 
-            val found = elfFilesUnder(root).map { root.relativize(it).toString() }
+            // Joined with `/`: what is being checked is which files were found,
+            // not what this system writes between two names.
+            val found = elfFilesUnder(root).map { root.relativize(it).joinToString("/") }
             assertEquals(listOf("lib/notevenanextension"), found)
         } finally {
             root.toFile().deleteRecursively()

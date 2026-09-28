@@ -236,7 +236,7 @@ class InterruptedWriteTest {
         assertEquals("${write.name} true ${write.halfDone}", child.awaitLine("INSIDE"))
 
         child.kill()
-        assertTrue(child.exitedBySignal, "the child was not ended by SIGKILL")
+        assertTrue(child.wasKilled, "the child was not ended by the system")
 
         return before to reopenedWhole()
     }
@@ -249,7 +249,7 @@ class InterruptedWriteTest {
         val committed = child.awaitLine("COMMITTED")
 
         child.kill()
-        assertTrue(child.exitedBySignal, "the child was not ended by SIGKILL")
+        assertTrue(child.wasKilled, "the child was not ended by the system")
         // What was committed lives in the log and nowhere else: the killed
         // process never checkpointed it into the database file. Reading it back
         // below is SQLite's own recovery doing its job.

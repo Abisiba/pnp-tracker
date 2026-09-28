@@ -1,4 +1,25 @@
-# The example import file is a real CSV: RFC 4180 ends every record with CRLF and
-# the application's own export writes it that way, so the line endings are part of
-# the fixture rather than stray whitespace.
-docs/ornek-ice-aktarma.csv -text -whitespace
+# What is stored here and what is checked out, on every system.
+#
+# Three tests hold a tracked file to its exact bytes: the MIT licence word for
+# word, the import example against the guide that quotes it, and one test that
+# reads its own source for the anchors it pins the screen with. A checkout that
+# turned those files into CRLF would break all three for a reason that has
+# nothing to do with the application, whose own output is the same bytes on
+# both platforms (PLAN 14.8.4). So every text file is LF, everywhere.
+* text=auto eol=lf
+
+# Two files are already not LF and must stay exactly as they are, so they are
+# kept out of every conversion rather than normalised into one:
+#
+#   the CSV example is CRLF because RFC 4180 says a CSV is, and the
+#   application writes it that way on both platforms;
+#   the Gradle wrapper's batch file is CRLF because Windows' command
+#   interpreter reads it a line at a time.
+*.csv -text
+*.bat -text
+
+# Binary: never examined for line endings, never converted.
+*.jar binary
+*.xlsx binary
+*.png binary
+*.ico binary

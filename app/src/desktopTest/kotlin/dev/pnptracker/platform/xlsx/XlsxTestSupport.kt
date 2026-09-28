@@ -39,13 +39,27 @@ fun sha256Of(file: Path): String =
  * Linux publishes the descriptor table, so a leaked handle can be seen directly
  * rather than guessed at from whether a delete happens to succeed.
  */
-fun openHandlesTo(file: Path): List<String> {
+fun assertNothingHasOpen(
+    file: Path,
+    message: String,
+) {
+    val descriptors = Path.of("/proc/self/fd")
+    // Linux lists this process's open descriptors and the question is answered
+    // directly. Windows keeps no such list, and a Java handle is opened so that
+    // the file can still be renamed and deleted, so there is nothing here that
+    // could answer it without lying. This one assertion is therefore proved on
+    // Linux only; the tests that use it keep every other assertion on both
+    // systems, and what stays unproved on Windows is "no descriptor remains" —
+    // not "the reader closed the file", which its own `close` is under test for
+    // elsewhere (PLAN 14.8.5, and the round's report names the loss).
+    if (!Files.isDirectory(descriptors)) return
     val absolute = file.toAbsolutePath().toString()
-    return Path
-        .of("/proc/self/fd")
-        .listDirectoryEntries()
-        .mapNotNull { entry -> runCatching { entry.readSymbolicLink().toString() }.getOrNull() }
-        .filter { it == absolute }
+    val open =
+        descriptors
+            .listDirectoryEntries()
+            .mapNotNull { entry -> runCatching { entry.readSymbolicLink().toString() }.getOrNull() }
+            .filter { it == absolute }
+    assertTrue(open.isEmpty(), message)
 }
 
 /** Fails if the reader left anything of its own beside the file it read. */

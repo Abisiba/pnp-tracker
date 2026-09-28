@@ -224,7 +224,7 @@ class UnfinishedImportsSmokeTest {
         child.awaitLine("BEFORE")
         child.awaitLine("COMMITTED")
         child.kill()
-        assertTrue(child.exitedBySignal, "the child was not ended by SIGKILL")
+        assertTrue(child.wasKilled, "the child was not ended by the system")
 
         val batchId =
             home

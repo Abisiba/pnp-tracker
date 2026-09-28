@@ -208,7 +208,7 @@ class XlsxImportEndToEndTest {
             assertEquals(before, sha256Of(file))
             assertEquals(sizeBefore, Files.size(file))
             assertEquals(modifiedBefore, Files.getLastModifiedTime(file))
-            assertEquals(emptyList(), openHandlesTo(file), "the import is still holding the file open")
+            assertNothingHasOpen(file, "the import is still holding the file open")
             assertNoSiblingsCreated(fileDirectory, setOf(FIXTURE_NAME))
         }
 

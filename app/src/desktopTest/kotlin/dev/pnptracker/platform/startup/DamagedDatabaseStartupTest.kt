@@ -23,6 +23,7 @@ import dev.pnptracker.platform.files.AppDirectoryInitializer
 import dev.pnptracker.platform.files.AppPaths
 import dev.pnptracker.platform.files.AppPathsResolver
 import dev.pnptracker.platform.files.AtomicFileWriter
+import dev.pnptracker.platform.files.PlatformFileRules
 import dev.pnptracker.platform.files.XDG_LAYOUT
 import dev.pnptracker.platform.settings.DesktopSettingsStore
 import kotlinx.coroutines.runBlocking
@@ -271,7 +272,11 @@ class DamagedDatabaseStartupTest {
 
     @Test
     fun `a home whose path holds what a SQLite URI reads as syntax is still the database that is checked`() {
-        val odd = home.resolve("veri ?#% ğüşİ")
+        // `?` opens a query in a URI and is the sharpest case of all, but NTFS
+        // will not have it in a name at any price, so on Windows the name carries
+        // the rest of it — `#`, `%`, a space and Turkish letters — and the
+        // question the test asks is word for word the same (PLAN 14.8.5).
+        val odd = home.resolve(if (PlatformFileRules.onWindows) "veri #% ğüşİ" else "veri ?#% ğüşİ")
         paths =
             AppPathsResolver(
                 systemProperty = XDG_LAYOUT,
