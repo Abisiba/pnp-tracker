@@ -6,8 +6,9 @@ import dev.pnptracker.data.database.AppDatabase
 import dev.pnptracker.data.database.TemporaryDatabaseDirectory
 import dev.pnptracker.domain.backup.BackupData
 import dev.pnptracker.platform.files.AppDirectoryInitializer
-import dev.pnptracker.platform.files.XdgAppPaths
-import dev.pnptracker.platform.files.XdgAppPathsResolver
+import dev.pnptracker.platform.files.AppPaths
+import dev.pnptracker.platform.files.AppPathsResolver
+import dev.pnptracker.platform.files.XDG_LAYOUT
 import dev.pnptracker.platform.startup.INSTANCE_LOCK_NAME
 import dev.pnptracker.platform.startup.deleteTemporaryTree
 import kotlinx.coroutines.runBlocking
@@ -40,8 +41,9 @@ class RecoveryHome : AutoCloseable {
     private val realFootprintBefore = realFootprint()
     private val children = mutableListOf<WriterProcess>()
 
-    val paths: XdgAppPaths =
-        XdgAppPathsResolver(
+    val paths: AppPaths =
+        AppPathsResolver(
+            systemProperty = XDG_LAYOUT,
             environment = { name ->
                 when (name) {
                     "XDG_DATA_HOME" -> root.resolve("data").toString()
@@ -145,7 +147,10 @@ class RecoveryHome : AutoCloseable {
  * initialiser runs here.
  */
 fun realFootprint(): List<String> {
-    val real = XdgAppPathsResolver().resolve()
+    val real =
+        AppPathsResolver(
+            systemProperty = XDG_LAYOUT,
+        ).resolve()
     return listOf(
         real.databaseFile,
         Path.of("${real.databaseFile}-wal"),

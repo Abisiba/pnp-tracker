@@ -13,7 +13,7 @@ import dev.pnptracker.domain.diagnostics.DiagnosticEvent
 import dev.pnptracker.domain.diagnostics.DiagnosticRecord
 import dev.pnptracker.domain.diagnostics.Diagnostics
 import dev.pnptracker.domain.diagnostics.recordSafely
-import dev.pnptracker.platform.files.XdgAppPaths
+import dev.pnptracker.platform.files.AppPaths
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -60,7 +60,7 @@ class OpenedDatabase(
  * application (PLAN 14.4.13).
  */
 class StartupGate(
-    private val paths: XdgAppPaths,
+    private val paths: AppPaths,
     private val databases: DatabaseFactory,
     private val sets: MigrationSnapshotSetWriter,
     private val housekeeping: AutomaticBackupHousekeeping,

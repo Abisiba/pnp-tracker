@@ -32,7 +32,7 @@ import dev.pnptracker.domain.search.SearchQuery
 import dev.pnptracker.domain.search.TaskFlagFilter
 import dev.pnptracker.domain.search.TaskStateFilter
 import dev.pnptracker.domain.search.filterPoolTasks
-import dev.pnptracker.platform.files.XdgAppPaths
+import dev.pnptracker.platform.files.AppPaths
 import dev.pnptracker.platform.recovery.gateFor
 import dev.pnptracker.ui.NoCells
 import dev.pnptracker.ui.NoColors
@@ -88,7 +88,7 @@ private const val TASKS_PER_GAME = 10
  */
 class LargeLibraryPerformanceTest {
     private lateinit var home: TemporaryDatabaseDirectory
-    private lateinit var paths: XdgAppPaths
+    private lateinit var paths: AppPaths
     private lateinit var database: AppDatabase
     private val driver = CountingSqliteDriver()
     private var realDatabaseExistedBefore = false
@@ -100,7 +100,7 @@ class LargeLibraryPerformanceTest {
         val data = home.root.resolve("data/pnp-tracker")
         val config = home.root.resolve("config/pnp-tracker")
         paths =
-            XdgAppPaths(
+            AppPaths(
                 data,
                 data.resolve("pnp.db"),
                 data.resolve("backups"),

@@ -12,7 +12,7 @@ import java.nio.file.attribute.PosixFilePermissions
 
 /**
  * Creates the directories this application owns. Path resolution lives in
- * [XdgAppPathsResolver]; this class is the only place that touches the disk.
+ * [AppPathsResolver]; this class is the only place that touches the disk.
  *
  * Never creates `pnp.db` or `settings.json`: those belong to the components that
  * own them. Nothing here removes, moves or writes over anything — a directory
@@ -30,7 +30,7 @@ class AppDirectoryInitializer {
      *   and the log are both made out of — neither of them looks at the cause,
      *   which is where the absolute path lives.
      */
-    fun ensureDirectories(paths: XdgAppPaths) {
+    fun ensureDirectories(paths: AppPaths) {
         createAppDirectory(paths.dataDirectory, "data")
         createAppDirectory(paths.backupsDirectory, "backups")
         createAppDirectory(paths.configDirectory, "config")

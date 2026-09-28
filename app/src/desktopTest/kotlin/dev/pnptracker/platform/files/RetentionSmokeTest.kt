@@ -31,7 +31,7 @@ private val WRITTEN_AT = Instant.fromEpochMilliseconds(1_757_320_364_031)
  * Housekeeping in a home of its own, with nothing pretended.
  *
  * The companion of the other smoke tests, and the smallest of them: the paths
- * come from [XdgAppPathsResolver], the folder from [AppDirectoryInitializer],
+ * come from [AppPathsResolver], the folder from [AppDirectoryInitializer],
  * the files are written by [AtomicFileWriter] and the documents by the real
  * backup writer. Only the trigger is missing, because there is not one yet —
  * this slice builds the housekeeping and the next three give it something to
@@ -73,7 +73,8 @@ class RetentionSmokeTest {
             // backups go.
             val data = home.resolve("data")
             val paths =
-                XdgAppPathsResolver(
+                AppPathsResolver(
+                    systemProperty = XDG_LAYOUT,
                     environment = { name ->
                         when (name) {
                             "XDG_DATA_HOME" -> data.toString()

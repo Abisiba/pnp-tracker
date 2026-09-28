@@ -35,7 +35,7 @@ import dev.pnptracker.domain.spreadsheet.SheetVisibility
 import dev.pnptracker.domain.time.localMomentOf
 import dev.pnptracker.platform.backupfiles.DesktopBackupDirectory
 import dev.pnptracker.platform.backupfiles.DesktopImportSnapshotWriter
-import dev.pnptracker.platform.files.XdgAppPaths
+import dev.pnptracker.platform.files.AppPaths
 import dev.pnptracker.platform.settings.DesktopSettingsStore
 import dev.pnptracker.platform.startup.MigrationSnapshotSetWriter
 import dev.pnptracker.platform.startup.StartupGate
@@ -58,7 +58,7 @@ fun walOf(databaseFile: Path): Path = Path.of("$databaseFile-wal")
 
 /** The gate exactly as `Main` builds it, over whichever factory the caller hands in. */
 fun gateFor(
-    paths: XdgAppPaths,
+    paths: AppPaths,
     databases: DatabaseFactory = DatabaseFactory(),
     temporaryDirectory: () -> Path = { Files.createTempDirectory("pnp-tracker-recovery-probe") },
 ): StartupGate =
@@ -75,14 +75,14 @@ fun gateFor(
     )
 
 fun readerFor(
-    paths: XdgAppPaths,
+    paths: AppPaths,
     temporaryDirectory: () -> Path,
 ): UntrustedBackupReader =
     UntrustedBackupReader(
         TemporaryBackupProbe(temporaryDirectory = temporaryDirectory, applicationDataDirectory = { paths.dataDirectory }),
     )
 
-fun housekeepingFor(paths: XdgAppPaths): SettingsDrivenHousekeeping =
+fun housekeepingFor(paths: AppPaths): SettingsDrivenHousekeeping =
     SettingsDrivenHousekeeping(
         settings = DesktopSettingsStore(paths.settingsFile),
         rotation = AutomaticBackupRotation(DesktopBackupDirectory(paths.backupsDirectory)),
@@ -91,7 +91,7 @@ fun housekeepingFor(paths: XdgAppPaths): SettingsDrivenHousekeeping =
 /** The confirmation store exactly as `Main` wires it: a snapshot written, read back and kept. */
 fun realConfirmationStore(
     database: AppDatabase,
-    paths: XdgAppPaths,
+    paths: AppPaths,
     temporaryDirectory: () -> Path,
 ): ImportConfirmationStore =
     ImportConfirmationStore(

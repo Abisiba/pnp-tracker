@@ -77,7 +77,7 @@ private class SteppingClock(
  *
  * The companion of the other smokes in this package, and the one that joins the
  * import side to the backup side. Everything is production: the paths from
- * [XdgAppPathsResolver], the folders from [AppDirectoryInitializer], the database
+ * [AppPathsResolver], the folders from [AppDirectoryInitializer], the database
  * from [DatabaseFactory], the real workbook reader over the committed fixture,
  * the real CSV reader, the real draft and review stores, the real confirming
  * transaction, and the backup taken in front of it by the real exporter, the
@@ -93,7 +93,7 @@ private class SteppingClock(
  */
 class ImportSnapshotSmokeTest {
     private lateinit var home: Path
-    private lateinit var paths: XdgAppPaths
+    private lateinit var paths: AppPaths
     private lateinit var database: AppDatabase
     private var realDatabaseExisted = false
     private val probeRoots = mutableListOf<Path>()
@@ -103,7 +103,8 @@ class ImportSnapshotSmokeTest {
         realDatabaseExisted = Files.exists(TemporaryDatabaseDirectory.realApplicationDatabaseFile())
         home = Files.createTempDirectory("pnp-tracker-import-snapshot-smoke")
         paths =
-            XdgAppPathsResolver(
+            AppPathsResolver(
+                systemProperty = XDG_LAYOUT,
                 environment = { name ->
                     when (name) {
                         "XDG_DATA_HOME" -> home.resolve("data").toString()

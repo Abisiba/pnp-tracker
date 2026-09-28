@@ -13,7 +13,7 @@ import dev.pnptracker.domain.backup.restore.BackupProblem
 import dev.pnptracker.domain.backup.restore.BackupRejection
 import dev.pnptracker.domain.backup.restore.SUPPORTED_SOURCE_SCHEMA_VERSION
 import dev.pnptracker.domain.backup.sha256Of
-import dev.pnptracker.platform.files.XdgAppPathsResolver
+import dev.pnptracker.platform.files.AppPathsResolver
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -57,7 +57,7 @@ class TemporaryBackupProbe(
      * application's own data, is refused rather than used.
      */
     private val temporaryDirectory: () -> Path = { Files.createTempDirectory("pnp-tracker-backup-probe") },
-    private val applicationDataDirectory: () -> Path = { XdgAppPathsResolver().resolve().dataDirectory },
+    private val applicationDataDirectory: () -> Path = { AppPathsResolver().resolve().dataDirectory },
 ) : BackupProbe {
     override suspend fun probe(
         data: BackupData,

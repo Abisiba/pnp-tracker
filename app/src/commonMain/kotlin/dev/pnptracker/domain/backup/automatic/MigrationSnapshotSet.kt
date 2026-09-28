@@ -44,6 +44,16 @@ enum class StartupProblem {
     ANOTHER_COPY_IS_RUNNING,
 
     /**
+     * The system said nothing usable about where the user's own folders are.
+     *
+     * Decided first of all, before even the diagnostic log has somewhere to live
+     * (PLAN 14.8.1): the application does not guess a second place to write to,
+     * so nothing at all has been touched. On Linux that is `user.home` and on
+     * Windows `%USERPROFILE%`, and both refuse the same way.
+     */
+    FOLDERS_NOT_FOUND,
+
+    /**
      * The folders this application keeps its data in could not be made.
      *
      * Decided before anything is opened, and the only reason here that is not
