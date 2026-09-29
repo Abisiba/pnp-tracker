@@ -150,7 +150,8 @@ class GameTableLayoutTest {
         // PLAN 12.17: no three line preview, no ellipsis and no "there is more"
         // line. The row grows to hold the writing and a long word is broken.
         listOf(
-            "private fun CellSlot(" to "private fun tickContentOf(",
+            "private fun CellSlot(" to "private sealed interface CellLine",
+            "private fun TaskLine(" to "private val TaskLineGap",
             "private fun GameNameCell(" to "private class RowDrag",
             "private fun HeaderCell(" to "private fun TableRow(",
         ).forEach { (from, to) ->
@@ -355,9 +356,13 @@ class GameTableLayoutTest {
         assertTrue("PnpStatus.colors.completedContainer" in drawn, "a finished task has no ground of its own")
         assertTrue("CellTask.completedBadge" !in drawn, "a finished task is labelled in words again")
         assertTrue("CellTask.completedBadge" !in source, "the label lives on somewhere else in the screen")
-        // Still to do first, finished after — and only where the cell is read.
-        assertTrue("filterNot { it.isCompletedTask }" in drawn, "finished work is not put after the work still to do")
-        assertTrue("if (withCounts) {" in drawn, "the order was changed in the string the editor lines up with")
+        // In the order it was written, finished or not: finishing changes how a
+        // task is drawn and never where (PLAN 12.5).
+        assertTrue("val pieces = cell.segments" in drawn, "finished work is moved away from where it was written")
+        assertTrue("filterNot { it.isCompletedTask }" !in drawn, "finished work is still put after the work still to do")
+        // And each task on a line of its own, its box beside its words.
+        val line = source.substringAfter("private fun TaskLine(").substringBefore("private val TaskLineGap")
+        assertTrue("CompletionTick(" in line && "Modifier.weight(1f)" in line, "a task's words can run under its box")
     }
 
     @Test
@@ -391,7 +396,7 @@ class GameTableLayoutTest {
         // task the keyboard was really on: Enter opened the cell's editor and
         // the task never saw the key. Bubbling asks the cell only for what
         // nothing inside it claimed.
-        val cell = sourceOf("private fun CellSlot(", "private fun tickContentOf(")
+        val cell = sourceOf("private fun CellSlot(", "private sealed interface CellLine")
         assertTrue(".onKeyEvent {" in cell, "the cell no longer answers Enter at all")
         assertTrue(".onPreviewKeyEvent" !in cell, "the cell takes the key before whatever is really focused")
         assertTrue(cell.indexOf(".onKeyEvent {") < cell.indexOf(".focusable()"), "the cell's own key never reaches its handler")
