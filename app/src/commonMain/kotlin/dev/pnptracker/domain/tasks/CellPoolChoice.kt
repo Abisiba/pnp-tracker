@@ -5,6 +5,7 @@ import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.rules.allowedTrackingModes
+import dev.pnptracker.domain.rules.offeredTrackingModes
 
 /**
  * Where a task is going and which pool it belongs to, kept from contradicting
@@ -97,8 +98,19 @@ data class CellPoolChoice(
 /** True when a cell of this column can be aimed at while [poolType] is chosen. */
 fun CellColumnType.suitsPool(poolType: PoolType?): Boolean = holdsTasks && (poolType == null || this.poolType == poolType)
 
-/** The tracking modes a pool allows, in a fixed order the screen can draw. */
-fun trackingModesOf(poolType: PoolType): List<TrackingMode> = allowedTrackingModes.getValue(poolType).sortedBy { it.ordinal }
+/**
+ * The tracking modes a new task in this pool can be given, in a fixed order the
+ * screen can draw. One for every pool now, so a screen that offers a choice only
+ * when there is more than one never asks.
+ */
+fun trackingModesOf(poolType: PoolType): List<TrackingMode> = listOf(offeredTrackingModes.getValue(poolType))
 
-/** The mode a pool leaves no choice about, or null when it allows more than one. */
-fun onlyTrackingModeOf(poolType: PoolType): TrackingMode? = allowedTrackingModes.getValue(poolType).singleOrNull()
+/** The mode a new task in this pool is given without asking, or null when the user would have to choose. */
+fun onlyTrackingModeOf(poolType: PoolType): TrackingMode? = trackingModesOf(poolType).singleOrNull()
+
+/**
+ * The pool a tracking mode belongs to, read from every mode a task may carry —
+ * including a mode no longer offered for new tasks, which older tasks still have.
+ */
+fun poolOfTrackingMode(trackingMode: TrackingMode): PoolType? =
+    PoolType.entries.firstOrNull { trackingMode in allowedTrackingModes.getValue(it) }

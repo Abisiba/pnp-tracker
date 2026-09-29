@@ -1000,7 +1000,7 @@ class GameTableControllerTest {
         }
 
     @Test
-    fun `a pool that allows more than one way of tracking asks rather than guessing`() =
+    fun `a special task is an ordinary counted task and nobody is asked how it is tracked`() =
         runBlocking<Unit> {
             val row = row("Harmonies", cells = cellsOf(CellColumnType.SPECIAL to "kutu bandı"))
             val controller = controllerOf(FakeTable(listOf(row)))
@@ -1009,8 +1009,11 @@ class GameTableControllerTest {
             controller.beginTaskComposer(0, 4)
 
             val composer = assertNotNull(controller.composerState())
-            assertNull(composer.rows.first().trackingMode, "a tracking mode nobody chose was written into the task")
-            assertFalse(composer.canSave, "the task could be saved without a tracking mode")
+            assertEquals(
+                TrackingMode.COUNTED,
+                composer.rows.first().trackingMode,
+                "a special task is left waiting for a tracking choice that is no longer offered",
+            )
             collecting.cancelAndJoin()
         }
 

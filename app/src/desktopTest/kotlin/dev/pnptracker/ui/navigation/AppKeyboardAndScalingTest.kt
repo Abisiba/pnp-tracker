@@ -366,38 +366,23 @@ class AppKeyboardAndScalingTest {
     /**
      * Presses Tab until the thing that opens [screen] holds the keyboard.
      *
-     * Four of the five entries across the top are one walk away. The sections in
-     * the menu under `Ayarlar` (PLAN 12.1) are inside it, so the walk reaches
-     * `Ayarlar`, opens it with the keyboard and carries on inside — the same path
-     * a person with no mouse has.
+     * The entries across the top are one walk away. The other sections are tabs
+     * of the settings page, so the walk reaches `Ayarlar`, opens the page with
+     * the keyboard and carries on to the tab — the same path a person with no
+     * mouse has.
      */
     private fun ComposeSceneHarness.tabToEntryOf(screen: Screen): Boolean {
         val label = textOf(textsOf(screen).navigationLabel)
-        if (screen !in Screen.underSettings) return tabToLabel(label)
+        if (screen in Screen.topLevel) return tabToLabel(label)
 
-        val menuLabel = textOf(Strings.Navigation.settingsMenu)
         if (!tabToLabel(textOf(Strings.Navigation.settings))) return false
         press(Key.Enter)
         settle(this)
-        // Inside the menu now. The entry that opened it is called `Ayarlar` too,
-        // and it is the one thing that also says `Ayarlar menüsü` — which is how
-        // the item is told from the thing that opened it.
-        repeat(60) {
-            val words = keyboardHolder()?.words()
-            if (words != null && label in words && menuLabel !in words) return true
-            tab()
-            settle(this)
-        }
-        return false
+        return tabToLabel(label)
     }
 
-    /** What the keyboard has to land on to open [screen]: an entry, or the menu's. */
-    private fun entryLabelOf(screen: Screen): String =
-        if (screen in Screen.underSettings) {
-            textOf(Strings.Navigation.settings)
-        } else {
-            textOf(textsOf(screen).navigationLabel)
-        }
+    /** What the keyboard has to land on to open [screen]: an entry across the top, or a tab of the settings page. */
+    private fun entryLabelOf(screen: Screen): String = textOf(textsOf(screen).navigationLabel)
 
     private fun ComposeSceneHarness.tabToLabel(entry: String): Boolean {
         repeat(60) {
@@ -410,8 +395,8 @@ class AppKeyboardAndScalingTest {
     /**
      * The sections the navigation itself offers, each once.
      *
-     * `Ayarlar` is in both lists PLAN 12.1 names — it is an entry across the top
-     * and the first thing in its own menu — so it is walked to once.
+     * `Ayarlar` is in both lists — it is an entry across the top and the first
+     * tab of its own page — so it is walked to once.
      */
     private val navigable: List<Screen> = (Screen.topLevel + Screen.underSettings).distinct()
 
@@ -421,9 +406,8 @@ class AppKeyboardAndScalingTest {
     fun `every screen is reached, walked and walked back with the keyboard alone, at every size`() {
         val problems = mutableListOf<String>()
         viewports.forEach { viewport ->
-            // Every section the navigation itself offers. The Special pool is
-            // reached from the game table instead (PLAN 12.1) and is walked to by
-            // the test that owns that entry.
+            // Every section the navigation itself offers, the Special pool among
+            // them.
             navigable.forEachIndexed { index, screen ->
                 val wiring = wiring(if (screen == Screen.Games) Screen.Import else Screen.Games)
                 onApp(wiring, viewport) { harness ->

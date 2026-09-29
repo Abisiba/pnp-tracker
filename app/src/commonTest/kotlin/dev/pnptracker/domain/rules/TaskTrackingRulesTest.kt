@@ -21,6 +21,13 @@ class TaskTrackingRulesTest {
     }
 
     @Test
+    fun `every pool offers one mode for new tasks, and a special task is an ordinary counted one`() {
+        assertEquals(PoolType.entries.toSet(), offeredTrackingModes.keys)
+        offeredTrackingModes.forEach { (pool, mode) -> assertTrue(isTrackingModeAllowed(pool, mode), "$pool offers $mode") }
+        assertEquals(TrackingMode.COUNTED, offeredTrackingModes.getValue(PoolType.SPECIAL))
+    }
+
+    @Test
     fun `every pool has a rule`() {
         assertEquals(PoolType.entries.toSet(), allowedTrackingModes.keys)
     }

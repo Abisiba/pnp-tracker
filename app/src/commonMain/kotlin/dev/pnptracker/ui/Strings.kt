@@ -429,7 +429,8 @@ import dev.pnptracker.resources.navigation_pool_special
 import dev.pnptracker.resources.navigation_pool_three_d
 import dev.pnptracker.resources.navigation_section_label
 import dev.pnptracker.resources.navigation_settings
-import dev.pnptracker.resources.navigation_settings_menu
+import dev.pnptracker.resources.navigation_settings_general
+import dev.pnptracker.resources.navigation_settings_sections
 import dev.pnptracker.resources.navigation_state_not_selected
 import dev.pnptracker.resources.navigation_state_selected
 import dev.pnptracker.resources.pool_board
@@ -449,10 +450,7 @@ import dev.pnptracker.resources.pool_section_awaiting_color
 import dev.pnptracker.resources.pool_section_multicolor
 import dev.pnptracker.resources.pool_section_single_color
 import dev.pnptracker.resources.pool_special
-import dev.pnptracker.resources.pool_special_checklist
-import dev.pnptracker.resources.pool_special_counted
 import dev.pnptracker.resources.pool_special_game
-import dev.pnptracker.resources.pool_special_remaining
 import dev.pnptracker.resources.pool_stage_all_done
 import dev.pnptracker.resources.pool_stage_badge
 import dev.pnptracker.resources.pool_stage_badge_of
@@ -817,7 +815,6 @@ import dev.pnptracker.resources.table_label
 import dev.pnptracker.resources.table_loading
 import dev.pnptracker.resources.table_more_actions
 import dev.pnptracker.resources.table_move_game_description
-import dev.pnptracker.resources.table_open_special
 import dev.pnptracker.resources.table_rename_game
 import dev.pnptracker.resources.table_rename_saving
 import dev.pnptracker.resources.table_reset_sizes
@@ -988,7 +985,8 @@ object Strings {
         val settings = Res.string.navigation_settings
 
         /** What the menu under `Ayarlar` is called to a reader. */
-        val settingsMenu = Res.string.navigation_settings_menu
+        val settingsSections = Res.string.navigation_settings_sections
+        val settingsGeneral = Res.string.navigation_settings_general
     }
 
     object ScreenTitles {
@@ -1283,9 +1281,6 @@ object Strings {
         val stageUnavailable = Res.string.pool_stage_unavailable
         val stageNoTotal = Res.string.pool_stage_no_total
         val stageBroken = Res.string.pool_stage_broken
-        val checklist = Res.string.pool_special_checklist
-        val counted = Res.string.pool_special_counted
-        val remaining = Res.string.pool_special_remaining
         val game = Res.string.pool_special_game
         val spokenTask = Res.string.pool_task_spoken
         val error = Res.string.pool_error
@@ -1414,14 +1409,6 @@ object Strings {
     /** The game table itself: its three views, its cells and its one action. */
     object Table {
         val label = Res.string.table_label
-
-        /**
-         * The way into the Special pool, on the table that holds the work.
-         *
-         * The pool is not in the navigation across the top (PLAN 12.1), so this
-         * is how it is reached; it is drawn only while there is special work.
-         */
-        val openSpecial = Res.string.table_open_special
 
         /** The two layouts of the games (PLAN 12.18). */
         val arrangementLabel = Res.string.table_arrangement_label

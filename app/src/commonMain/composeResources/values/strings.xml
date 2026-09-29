@@ -285,7 +285,6 @@
     <string name="review_draft_only_note">Bu bir taslaktır; gerçek görev oluşturmaz.</string>
     <!-- Game table: the three global views -->
     <string name="table_view_label">Görünüm</string>
-    <string name="table_open_special">Özel görevler</string>
     <string name="table_arrangement_label">Sıralama</string>
     <string name="table_arrangement_mine">Benim sıram</string>
     <string name="table_arrangement_alphabetical">A–Z</string>
@@ -635,7 +634,8 @@
     <string name="colors_description">Bütün oyunlarda ortak kullanılan renk kataloğu burada tutulur; yeni renk ekleyebilir ve her rengin örneğini yazılı adıyla birlikte görebilirsiniz.</string>
 
     <string name="navigation_settings">Ayarlar</string>
-    <string name="navigation_settings_menu">Ayarlar menüsü</string>
+    <string name="navigation_settings_sections">Ayarlar bölümleri</string>
+    <string name="navigation_settings_general">Genel</string>
     <string name="settings_title">Ayarlar</string>
     <string name="settings_description">Uygulamanın kendi bakım işleri burada toplanır.</string>
 
@@ -861,9 +861,6 @@
     <string name="pool_stage_unavailable">Bu görev artık burada değil.</string>
     <string name="pool_stage_no_total">Aşama sayaçları için önce görevin toplam adedi gerekiyor.</string>
     <string name="pool_stage_broken">Bu görevin aşamaları okunamadı.</string>
-    <string name="pool_special_checklist">Kontrol listesi görevi</string>
-    <string name="pool_special_counted">Adetli görev</string>
-    <string name="pool_special_remaining">Kalan: %1$s</string>
     <string name="pool_special_game">Oyun: %1$s</string>
     <string name="pool_task_spoken">%1$s, %2$s oyunu, %3$s</string>
     <string name="pool_error">Havuz okunamadı.</string>

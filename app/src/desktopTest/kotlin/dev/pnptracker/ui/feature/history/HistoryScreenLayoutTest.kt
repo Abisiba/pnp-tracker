@@ -282,11 +282,11 @@ class HistoryScreenLayoutTest {
     @Test
     fun `the navigation reaches the history and the screen is drawn for it`() {
         assertTrue(Screen.History in Screen.all)
-        assertTrue("Screen.History -> HistoryScreen(historyController)" in scaffold)
+        assertTrue("Screen.History -> SettingsPage(navigation) { HistoryScreen(historyController) }" in scaffold)
     }
 
     @Test
-    fun `the history sits where PLAN 12 1 puts it, last in the settings menu`() {
+    fun `the history sits where PLAN 12 1 puts it, the last tab of the settings page`() {
         // It moved out of the row across the top and into the menu under
         // `Ayarlar`, after the import and the colours, and nothing else about it
         // changed.
