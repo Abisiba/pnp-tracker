@@ -28,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,9 +49,12 @@ import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.feature.colors.ColorCatalogueController
 import dev.pnptracker.ui.feature.colors.ColorCatalogueScreen
 import dev.pnptracker.ui.feature.export.ExportController
+import dev.pnptracker.ui.feature.export.ExportScreenState
 import dev.pnptracker.ui.feature.export.TaskExportAction
+import dev.pnptracker.ui.feature.export.TaskExportStatus
 import dev.pnptracker.ui.feature.games.GameTableController
 import dev.pnptracker.ui.feature.games.GameTableScreen
+import dev.pnptracker.ui.feature.games.TableExport
 import dev.pnptracker.ui.feature.history.HistoryController
 import dev.pnptracker.ui.feature.history.HistoryScreen
 import dev.pnptracker.ui.feature.importreview.ImportController
@@ -67,6 +71,7 @@ import dev.pnptracker.ui.feature.settings.RestoreController
 import dev.pnptracker.ui.feature.settings.RetentionController
 import dev.pnptracker.ui.feature.settings.SettingsScreen
 import dev.pnptracker.ui.textsOf
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
 private val NavigationItemShape = RoundedCornerShape(12.dp)
@@ -115,6 +120,7 @@ fun AppScaffold(
         }
     }
 
+    val exportScope = rememberCoroutineScope()
     Surface(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             TopNavigation(appInfo = appInfo, navigation = navigation, summary = summary)
@@ -124,7 +130,16 @@ fun AppScaffold(
                     Screen.Games ->
                         GameTableScreen(
                             controller = gameTableController,
-                            exportAction = { TaskExportAction(exportController) },
+                            // The export lives in the table's `⋯` menu; what it has
+                            // to say is drawn under the table's toolbar.
+                            export =
+                                TableExport(
+                                    start = { exportScope.launch { exportController.exportTasks() } },
+                                    enabled =
+                                        !exportController.isBusy &&
+                                            exportController.state !is ExportScreenState.ConfirmingOverwrite,
+                                    status = { TaskExportStatus(exportController) },
+                                ),
                             // The only way to the Special pool, because the
                             // navigation across the top does not carry it.
                             specialAction = {

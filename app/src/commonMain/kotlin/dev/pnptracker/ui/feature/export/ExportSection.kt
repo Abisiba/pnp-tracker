@@ -92,30 +92,7 @@ fun TaskExportAction(
             modifier = Modifier.widthIn(max = MaxMessageWidth),
         )
 
-        when (state) {
-            is ExportScreenState.ConfirmingOverwrite ->
-                OverwriteQuestion(
-                    fileName = state.fileName,
-                    onConfirm = { scope.launch { controller.confirmOverwrite() } },
-                    onCancel = controller::cancelOverwrite,
-                )
-
-            is ExportScreenState.Written ->
-                ResultLine(
-                    text = stringResource(Strings.Export.written, state.taskCount, state.fileName),
-                    isProblem = false,
-                    onDismiss = controller::startOver,
-                )
-
-            is ExportScreenState.Failed ->
-                ResultLine(
-                    text = stringResource(messageFor(state.failure)),
-                    isProblem = true,
-                    onDismiss = controller::startOver,
-                )
-
-            else -> Unit
-        }
+        TaskExportOutcome(controller)
     }
 }
 
@@ -233,3 +210,48 @@ internal fun messageFor(failure: ExportFailure): StringResource =
         ExportFailure.WRITE_FAILED -> Strings.ExportErrors.writeFailed
         ExportFailure.NOT_ATOMIC -> Strings.ExportErrors.notAtomic
     }
+
+/**
+ * What an export has to say once it is asked for: busy, a question about
+ * replacing a file, or the result — without the button that asks for it.
+ *
+ * The game table offers the export in its `⋯` menu and shows this under its
+ * toolbar; the import and export screen shows it under its own button.
+ */
+@Composable
+fun TaskExportStatus(controller: ExportController) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (controller.isBusy) BusyLine(controller.state)
+        TaskExportOutcome(controller)
+    }
+}
+
+@Composable
+private fun TaskExportOutcome(controller: ExportController) {
+    val scope = rememberCoroutineScope()
+    val state = controller.state
+    when (state) {
+        is ExportScreenState.ConfirmingOverwrite ->
+            OverwriteQuestion(
+                fileName = state.fileName,
+                onConfirm = { scope.launch { controller.confirmOverwrite() } },
+                onCancel = controller::cancelOverwrite,
+            )
+
+        is ExportScreenState.Written ->
+            ResultLine(
+                text = stringResource(Strings.Export.written, state.taskCount, state.fileName),
+                isProblem = false,
+                onDismiss = controller::startOver,
+            )
+
+        is ExportScreenState.Failed ->
+            ResultLine(
+                text = stringResource(messageFor(state.failure)),
+                isProblem = true,
+                onDismiss = controller::startOver,
+            )
+
+        else -> Unit
+    }
+}

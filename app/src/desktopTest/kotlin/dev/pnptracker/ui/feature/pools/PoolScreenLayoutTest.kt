@@ -450,11 +450,13 @@ class PoolScreenLayoutTest {
     @Test
     fun `the export is reachable from the menu as well as from the table`() {
         // The section the menu reaches is `İçe/Dışa Aktarma`, so the way out of
-        // the application is on it; the table keeps its own button (PLAN 12.1).
+        // the application is on it; the table offers it in its own `⋯` menu and
+        // says what came of it under its toolbar (PLAN 12.1).
         val onTheImportScreen = scaffold.substringAfter("Screen.Import ->").substringBefore("is Screen.Pool")
         assertTrue("TaskExportAction(exportController)" in onTheImportScreen, "the menu cannot reach the export")
         val onTheTable = scaffold.substringAfter("Screen.Games ->").substringBefore("Screen.History ->")
-        assertTrue("TaskExportAction(exportController)" in onTheTable, "the table lost its own export")
+        assertTrue("exportController.exportTasks()" in onTheTable, "the table lost its own export")
+        assertTrue("TaskExportStatus(exportController)" in onTheTable, "the table no longer says what the export did")
     }
 
     @Test

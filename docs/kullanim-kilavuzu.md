@@ -173,7 +173,9 @@ aktarılan dosyaya dokunmaz.
 
 ## CSV dışa aktarma
 
-**Ayarlar → Görevleri CSV'ye aktar** ile bütün görevleri tek dosyaya yazarsınız.
+**Ayarlar → İçe/Dışa Aktarma → Görevleri CSV'ye aktar** ile ya da Oyunlar
+ekranında araç çubuğunun **⋯** menüsünden bütün görevleri tek dosyaya
+yazarsınız.
 
 - Ekrandaki arama ve filtreler dosyanın kapsamını değiştirmez: her zaman bütün
   görevler yazılır.
