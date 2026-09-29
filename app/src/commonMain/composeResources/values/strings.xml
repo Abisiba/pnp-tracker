@@ -136,6 +136,7 @@
     <!-- Import screen: accessibility -->
     <string name="import_sheet_accessibility_label">İçe aktarılacak çalışma sayfası</string>
     <!-- Task export -->
+    <string name="table_more_actions">Diğer işlemler</string>
     <string name="export_action">Görevleri CSV’ye aktar</string>
     <string name="export_action_description">Bütün görevleri CSV dosyasına aktar</string>
     <string name="export_choosing">Dosya konumu seçiliyor…</string>

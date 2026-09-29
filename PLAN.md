@@ -1240,6 +1240,21 @@ Tablo eylemleri:
 - Oyun silme
 - Sütun genişliklerini ve satır yüksekliklerini kendi ölçüsüne getirme (`12.17`)
 
+Araç çubuğu:
+
+- Oyunlar ekranında büyük başlık, açıklama ve ayrı kontrol satırları yoktur.
+  Üstteki gezinme satırının altında **tek bir kompakt araç çubuğu** bulunur ve
+  tablo onun hemen altında başlar.
+- Çubukta sırasıyla: arama, görünüm (`Devam Eden` / `Tamamlanan` / `Tümü`),
+  sıralama (`Benim sıram` / `A–Z`), `Filtreler`, `Oyun ekle`, varsa `Özel
+  görevler` ve `⋯` (`Diğer işlemler`). Açılış boyutunda (1100 dp) hepsi tek
+  satırdadır; daha dar pencerede çubuk alt satıra sarılır.
+- `⋯` menüsü: `Sütunu içeriğe göre ayarla` (aynı menüde sütun sorar),
+  `Hücre boyutlarını sıfırla` ve `Görevleri CSV’ye aktar`. Dışa aktarmanın
+  sorusu ve sonucu çubuğun altında gösterilir.
+- Çubuğun açtığı şeyler (filtre paneli ve özeti, yeni oyun adı, `A–Z`
+  notu, bildirimler) çubuğun içine değil altına çizilir.
+
 Oyun adını yeniden adlandırma:
 
 - Oyun adı hücresine fareyle çift tıklamak adı düzenleme durumunu açar. Hücrede
@@ -1839,8 +1854,8 @@ sütun genişlikleri ve satır yükseklikleri kullanıcının kendi ölçülerid
   satırların en geniş içeriğine göre ayarlar. Sonuç en küçük ölçü ile bir üst
   sınır arasına kırpılır; tek bir çok uzun hücre sütunu ekrandan taşırmaz.
 - **Klavye yolu:** sürekli sürükleme jesti fareye özgüdür, ama hiçbir **sonuç**
-  fareye mahkûm değildir. Tablo denetimlerinde (`12.3`) iki eylem bulunur:
-  altı sütunu listeleyen `Sütunu içeriğe göre ayarla` ve
+  fareye mahkûm değildir. Tablonun araç çubuğundaki `⋯` menüsünde (`12.3`) iki
+  eylem bulunur: sütunları listeleyen `Sütunu içeriğe göre ayarla` ve
   `Hücre boyutlarını sıfırla`. İkisi de klavyeyle ulaşılabilir ve `17.`'nin
   kurallarına uyar. Tabloya yeni Tab durağı **eklenmez**: yoğun bir tablonun
   odak sırası, altı ayırıcı durağıyla bozulmaz.

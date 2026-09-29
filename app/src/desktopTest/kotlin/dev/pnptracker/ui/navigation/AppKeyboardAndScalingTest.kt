@@ -440,7 +440,9 @@ class AppKeyboardAndScalingTest {
                         problems += "$where: the entry did not open the screen (${wiring.navigation.currentScreen})"
                         return@onApp
                     }
-                    if (textOf(textsOf(screen).title) !in harness.writtenText()) {
+                    // The game table has no title of its own: it starts right under
+                    // its toolbar, and the selected entry above says where it is.
+                    if (screen != Screen.Games && textOf(textsOf(screen).title) !in harness.writtenText()) {
                         problems += "$where: the screen's own title is not written"
                     }
 

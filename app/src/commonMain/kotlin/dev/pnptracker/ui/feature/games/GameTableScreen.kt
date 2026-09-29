@@ -23,10 +23,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -57,6 +59,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -299,12 +302,12 @@ private val ComposerShape = RoundedCornerShape(8.dp)
 fun GameTableScreen(
     controller: GameTableController,
     /**
-     * The export action, drawn with the table's own controls.
+     * The task export, offered in the table's `⋯` menu.
      *
      * Passed in rather than built here so the table keeps knowing nothing about
      * files, and so a test of the table needs no exporter at all.
      */
-    exportAction: @Composable () -> Unit = {},
+    export: TableExport? = null,
     /**
      * The way into the Special pool, drawn with the table's own controls.
      *
@@ -324,7 +327,7 @@ fun GameTableScreen(
     }
 
     val state = controller.state
-    BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(ScreenInsets)) {
         // Everything above the table may take the window, less what the table
         // needs to show a row; past that it scrolls. At the size the window opens
         // at this changes nothing. In the smallest window `Main` allows, or with
@@ -333,28 +336,19 @@ fun GameTableScreen(
         // edge, so the keyboard walked onto rows and buttons nobody could see.
         val controlsLimit = maxOf(maxHeight - TableMinimumHeight, maxHeight * CONTROLS_SHARE_AT_LEAST)
         Column(modifier = Modifier.fillMaxSize()) {
+            // No title and no description: the navigation above already says
+            // where this is, and the table starts right under one bar of tools.
             Column(modifier = Modifier.heightIn(max = controlsLimit).verticalScroll(rememberScrollState())) {
-                Text(
-                    text = stringResource(Strings.ScreenTitles.games),
-                    style = MaterialTheme.typography.headlineSmall,
-                )
-                Text(
-                    text = stringResource(Strings.ScreenDescriptions.games),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-
                 TableControls(
                     controller = controller,
                     state = state,
-                    exportAction = exportAction,
+                    export = export,
                     specialAction = specialAction,
                 )
                 FailureLine(state.failure)
                 CreatedTaskLine(state.createdTask, controller)
             }
-            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
             when (val rows = state.rows) {
                 GameTableRowsState.Loading -> Message(stringResource(Strings.Table.loading))
@@ -381,6 +375,9 @@ fun GameTableScreen(
     }
 }
 
+/** The room around the whole screen: the sides as before, less above and below so the table starts high. */
+private val ScreenInsets = PaddingValues(start = 24.dp, top = 12.dp, end = 24.dp, bottom = 12.dp)
+
 /** What the table keeps for itself however tall the controls above it grow: its header and a row. */
 private val TableMinimumHeight = 200.dp
 
@@ -388,43 +385,69 @@ private val TableMinimumHeight = 200.dp
 private const val CONTROLS_SHARE_AT_LEAST = 0.4f
 
 /**
- * The two size actions, where the keyboard can reach them (PLAN 12.17).
+ * The task export as the table's menu offers it.
  *
- * The drag is a pointer gesture and stays one; what must not be trapped behind a
- * pointer is the *outcome*, so fitting a column to its content and putting every
- * size back are ordinary controls with ordinary focus. Nothing here is drawn
- * inside the table, so the table's own focus order is untouched.
+ * [start] asks for the file, [enabled] says whether it may be asked now, and
+ * [status] draws what the export has to say — a question about replacing a file,
+ * the result — under the toolbar, where the user is looking.
+ */
+class TableExport(
+    val start: () -> Unit,
+    val enabled: Boolean,
+    val status: @Composable () -> Unit,
+)
+
+/**
+ * The `⋯` at the end of the toolbar: what is done to the table as a whole.
+ *
+ * Fitting a column to its content, putting every size back (PLAN 12.17) and
+ * exporting the tasks. They are ordinary menu items with ordinary focus, so the
+ * outcome of a size drag is never trapped behind a pointer; fitting asks which
+ * column in the same menu.
  */
 @Composable
-private fun TableSizeControls(
+private fun MoreActions(
     controller: GameTableController,
     state: GameTableScreenState,
+    export: TableExport?,
 ) {
     val scope = rememberCoroutineScope()
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val cellStyle = MaterialTheme.typography.bodyMedium
     val missingLabels = rememberMissingLabels()
+    val moreLabel = stringResource(Strings.Table.moreActions)
     val fitLabel = stringResource(Strings.Table.fitColumn)
     val resetLabel = stringResource(Strings.Table.resetSizes)
-    var choosing by remember { mutableStateOf(false) }
+    val exportLabel = stringResource(Strings.Export.action)
+    var open by remember { mutableStateOf(false) }
+    var choosingColumn by remember { mutableStateOf(false) }
     val rows = (state.rows as? GameTableRowsState.Content)?.rows.orEmpty()
+    val close = {
+        open = false
+        choosingColumn = false
+    }
 
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box {
-            TextButton(
-                onClick = { choosing = true },
-                modifier = Modifier.semantics { contentDescription = fitLabel },
-            ) {
-                Text(fitLabel)
-            }
-            DropdownMenu(expanded = choosing, onDismissRequest = { choosing = false }) {
+    Box {
+        OutlinedButton(
+            onClick = { open = true },
+            contentPadding = PaddingValues(horizontal = 8.dp),
+            modifier =
+                Modifier
+                    .defaultMinSize(minWidth = MoreButtonWidth)
+                    .focusOutline(ComposerShape)
+                    .semantics { contentDescription = moreLabel },
+        ) {
+            Text(text = MORE_MARK, style = MaterialTheme.typography.titleMedium)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = close) {
+            if (choosingColumn) {
                 TableColumn.entries.forEach { column ->
                     val name = stringResource(headingOf(column))
                     DropdownMenuItem(
                         text = { Text(name) },
                         onClick = {
-                            choosing = false
+                            close()
                             controller.fitColumn(
                                 column,
                                 widthThatFits(column, rows, measurer, cellStyle, cellStyle, density, missingLabels),
@@ -434,17 +457,42 @@ private fun TableSizeControls(
                         modifier = Modifier.semantics { contentDescription = name },
                     )
                 }
+            } else {
+                DropdownMenuItem(
+                    text = { Text(fitLabel) },
+                    onClick = { choosingColumn = true },
+                    modifier = Modifier.semantics { contentDescription = fitLabel },
+                )
+                DropdownMenuItem(
+                    text = { Text(resetLabel) },
+                    onClick = {
+                        close()
+                        scope.launch { controller.resetSizes() }
+                    },
+                    enabled = !state.sizes.isDefault,
+                    modifier = Modifier.semantics { contentDescription = resetLabel },
+                )
+                if (export != null) {
+                    DropdownMenuItem(
+                        text = { Text(exportLabel) },
+                        onClick = {
+                            close()
+                            export.start()
+                        },
+                        enabled = export.enabled,
+                        modifier = Modifier.semantics { contentDescription = exportLabel },
+                    )
+                }
             }
-        }
-        TextButton(
-            onClick = { scope.launch { controller.resetSizes() } },
-            enabled = !state.sizes.isDefault,
-            modifier = Modifier.semantics { contentDescription = resetLabel },
-        ) {
-            Text(resetLabel)
         }
     }
 }
+
+/** Narrow enough to leave the toolbar one line, wide enough to hit. */
+private val MoreButtonWidth = 44.dp
+
+/** The mark on the menu button: more, of the table's own. */
+private const val MORE_MARK = "\u22EF"
 
 /** What a column is called in the table's heading. */
 private fun headingOf(column: TableColumn) =
@@ -459,49 +507,91 @@ private fun headingOf(column: TableColumn) =
         TableColumn.NOTES -> columnNameOf(CellColumnType.NOTES)
     }
 
-/** The view filter and the one action, above the table. */
+/**
+ * One compact bar of tools above the table, and what it opens under it.
+ *
+ * Search, which games are listed, the order they are in, the filters, adding a
+ * game, the way into the Special pool and the `⋯` menu, in that order, on one
+ * line that wraps only when the window is too narrow for it. What a tool opens —
+ * the filter panel, the new game's name, a notice — is drawn under the bar, never
+ * in it, so the bar stays one line where there is room for one.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TableControls(
     controller: GameTableController,
     state: GameTableScreenState,
-    exportAction: @Composable () -> Unit = {},
+    export: TableExport?,
     specialAction: @Composable () -> Unit = {},
 ) {
-    Column(modifier = Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier =
-                Modifier
-                    .selectableGroup()
-                    .semantics { contentDescription = "" },
+    val filterButtonFocus = remember { FocusRequester() }
+    LaunchedEffect(state.focusRecall) {
+        if (state.filterSurface == TableFilterSurface.CLOSED && !state.isBusy) {
+            runCatching { filterButtonFocus.requestFocus() }
+        }
+    }
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .closesFilterPanelOnEscape(state.filterSurface == TableFilterSurface.OPEN, controller::closeFilters),
+    ) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            itemVerticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
         ) {
+            SearchField(
+                text = state.searchText,
+                onChange = controller::search,
+                onClear = controller::clearSearch,
+                modifier = Modifier.width(ToolbarSearchWidth),
+            )
+            ViewChoices(controller = controller, state = state)
+            ArrangementControls(controller = controller, state = state)
+            FilterButton(
+                chosenCount = state.chosenFilterCount,
+                onClick = if (state.filterSurface == TableFilterSurface.OPEN) controller::closeFilters else controller::openFilters,
+                focus = filterButtonFocus,
+            )
+            if (state.gameComposer == null) {
+                Button(
+                    onClick = controller::startGameComposer,
+                    contentPadding = PaddingValues(horizontal = 14.dp),
+                    modifier = Modifier.focusOutline(ComposerShape),
+                ) {
+                    Text(text = stringResource(Strings.Table.addGame))
+                }
+            }
+            specialAction()
+            MoreActions(controller = controller, state = state, export = export)
+        }
+
+        if (!controller.canReorder) {
+            // Said rather than left to be discovered: in this layout the handles
+            // are gone, and the reason is that a place here is the name's.
             Text(
-                text = stringResource(Strings.Table.viewLabel),
-                style = MaterialTheme.typography.labelLarge,
+                text = stringResource(Strings.Table.arrangementAlphabeticalNote),
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            // The first chip is where the keyboard lands when a row it was on
-            // left the view and there was no other row left to give it to.
-            val filterFocus = remember { FocusRequester() }
-            LaunchedEffect(state.focusAfterRow, state.rowFocusRecall) {
-                if (state.focusAfterRow == RowFocusTarget.ViewFilter) runCatching { filterFocus.requestFocus() }
-            }
-            GameTableView.entries.forEachIndexed { index, view ->
-                ViewChip(
-                    view = view,
-                    selected = state.view == view,
-                    onSelect = { controller.showView(view) },
-                    focus = filterFocus.takeIf { index == 0 },
-                )
+        }
+        FilterSummary(parts = tableFilterSummaryOf(state), onClearAll = controller::clearFilters)
+        if (state.filterSurface == TableFilterSurface.OPEN) {
+            FilterPanel(
+                onClose = controller::closeFilters,
+                onClearAll = controller::clearFilters,
+                hasChoices = state.chosenFilterCount > 0,
+            ) {
+                TableFilterChoices(controller, state)
             }
         }
 
-        ArrangementControls(controller = controller, state = state)
-
-        TableSearchControls(controller = controller, state = state)
-
-        TableSizeControls(controller = controller, state = state)
+        state.gameComposer?.let { composer ->
+            GameComposer(controller = controller, composer = composer, isSaving = controller.isSaving)
+        }
 
         if (state.blockedByEditor) {
             // Nothing is saved and nothing is thrown away; the user is told the
@@ -536,74 +626,41 @@ private fun TableControls(
             }
         }
 
-        val composer = state.gameComposer
-        if (composer == null) {
-            Button(
-                onClick = controller::startGameComposer,
-                modifier = Modifier.focusOutline(ComposerShape),
-            ) {
-                Text(text = stringResource(Strings.Table.addGame))
-            }
-        } else {
-            GameComposer(controller = controller, composer = composer, isSaving = controller.isSaving)
-        }
-
-        // Below the composer, because they are about the whole table rather than
-        // about the row somebody is adding to it.
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            exportAction()
-            specialAction()
-        }
+        export?.status?.invoke()
     }
 }
 
-/**
- * The search box, the filter button and the summary of what is in force.
- *
- * Under the three view chips and never beside them, at every width. The chips
- * already fill a line at 720, and the two things are about different subjects
- * anyway: the row above chooses which **games** are listed, and this chooses
- * which of them hold the **work** the user is looking for.
- */
+/** How wide the search box is in the toolbar: a name fits, the rest of the bar still does. */
+private val ToolbarSearchWidth = 200.dp
+
+/** `Devam eden`, `Tamamlanan` and `Tümü`, as one choice. */
 @Composable
-private fun TableSearchControls(
+private fun ViewChoices(
     controller: GameTableController,
     state: GameTableScreenState,
 ) {
-    val filterButtonFocus = remember { FocusRequester() }
-    LaunchedEffect(state.focusRecall) {
-        if (state.filterSurface == TableFilterSurface.CLOSED && !state.isBusy) {
-            runCatching { filterButtonFocus.requestFocus() }
-        }
-    }
-    Column(
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+    val label = stringResource(Strings.Table.viewLabel)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         modifier =
             Modifier
-                .fillMaxWidth()
-                .closesFilterPanelOnEscape(state.filterSurface == TableFilterSurface.OPEN, controller::closeFilters),
+                .selectableGroup()
+                .semantics { contentDescription = label },
     ) {
-        SearchField(
-            text = state.searchText,
-            onChange = controller::search,
-            onClear = controller::clearSearch,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            FilterButton(
-                chosenCount = state.chosenFilterCount,
-                onClick = if (state.filterSurface == TableFilterSurface.OPEN) controller::closeFilters else controller::openFilters,
-                focus = filterButtonFocus,
-            )
-            FilterSummary(parts = tableFilterSummaryOf(state), onClearAll = controller::clearFilters)
+        // The first chip is where the keyboard lands when a row it was on
+        // left the view and there was no other row left to give it to.
+        val filterFocus = remember { FocusRequester() }
+        LaunchedEffect(state.focusAfterRow, state.rowFocusRecall) {
+            if (state.focusAfterRow == RowFocusTarget.ViewFilter) runCatching { filterFocus.requestFocus() }
         }
-        if (state.filterSurface == TableFilterSurface.OPEN) {
-            FilterPanel(
-                onClose = controller::closeFilters,
-                onClearAll = controller::clearFilters,
-                hasChoices = state.chosenFilterCount > 0,
-            ) {
-                TableFilterChoices(controller, state)
-            }
+        GameTableView.entries.forEachIndexed { index, view ->
+            ViewChip(
+                view = view,
+                selected = state.view == view,
+                onSelect = { controller.showView(view) },
+                focus = filterFocus.takeIf { index == 0 },
+            )
         }
     }
 }
@@ -677,16 +734,12 @@ private fun ArrangementControls(
     controller: GameTableController,
     state: GameTableScreenState,
 ) {
+    val label = stringResource(Strings.Table.arrangementLabel)
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.selectableGroup().semantics { contentDescription = label },
     ) {
-        Text(
-            text = stringResource(Strings.Table.arrangementLabel),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
         GameArrangement.entries.forEach { arrangement ->
             val selected = state.arrangement == arrangement
             val stateText =
@@ -704,15 +757,6 @@ private fun ArrangementControls(
                     Modifier
                         .focusOutline(ComposerShape)
                         .semantics { stateDescription = stateText },
-            )
-        }
-        if (!controller.canReorder) {
-            // Said rather than left to be discovered: in this layout the handles
-            // are gone, and the reason is that a place here is the name's.
-            Text(
-                text = stringResource(Strings.Table.arrangementAlphabeticalNote),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

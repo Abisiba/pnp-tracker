@@ -2,6 +2,7 @@ package dev.pnptracker.ui.feature.games
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsProperties
 import dev.pnptracker.domain.games.DEFAULT_CELL_COLUMN_WIDTH_DP
 import dev.pnptracker.domain.games.MINIMUM_COLUMN_WIDTH_DP
@@ -146,6 +147,17 @@ class TableResizeTest {
     private fun ComposeSceneHarness.rowBottom(columnName: String): Offset {
         val cell = cellBounds(columnName)
         return Offset(cell.center.x, cell.bottom - 2f)
+    }
+
+    /**
+     * Opens the toolbar's `⋯` menu the way a keyboard does: Tab to it, then Enter.
+     * The size actions live there (PLAN 12.17).
+     */
+    private fun ComposeSceneHarness.openMoreActions() {
+        assertTrue(tabTo(MORE_ACTIONS, limit = 40), "the menu with the size actions cannot be reached from the keyboard")
+        press(Key.Enter)
+        render()
+        render()
     }
 
     @Test
@@ -339,7 +351,7 @@ class TableResizeTest {
             screen.use {
                 makeHarmonies(screen, table, stack)
 
-                assertTrue(screen.tabTo(FIT_COLUMN, limit = 40), "the fit action cannot be reached from the keyboard")
+                screen.openMoreActions()
                 assertTrue(screen.click(FIT_COLUMN), "the fit action does not answer")
                 screen.render()
                 assertTrue(screen.click(THREE_D_HEADING), "the fit menu does not offer the 3D column")
@@ -364,7 +376,7 @@ class TableResizeTest {
                 screen.dragFrom(screen.rowBottom("Kart"), screen.rowBottom("Kart") + Offset(0f, 90f))
                 screen.render()
 
-                assertTrue(screen.tabTo(RESET_SIZES, limit = 40), "the reset action cannot be reached from the keyboard")
+                screen.openMoreActions()
                 assertTrue(screen.click(RESET_SIZES), "the reset action does not answer")
                 screen.settle("the sizes are back to the defaults") { table.state.sizes.isDefault }
 
@@ -424,6 +436,7 @@ class TableResizeTest {
         const val TOLERANCE = 2f
         const val SLOW_DISK_MS = 300L
         const val AUTOMATIC_LIMIT = 480f
+        const val MORE_ACTIONS = "Diğer işlemler"
         const val FIT_COLUMN = "Sütunu içeriğe göre ayarla"
         const val RESET_SIZES = "Hücre boyutlarını sıfırla"
         const val THREE_D_HEADING = "3D Baskı"

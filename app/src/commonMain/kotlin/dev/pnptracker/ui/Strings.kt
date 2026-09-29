@@ -815,6 +815,7 @@ import dev.pnptracker.resources.table_empty_tick
 import dev.pnptracker.resources.table_fit_column
 import dev.pnptracker.resources.table_label
 import dev.pnptracker.resources.table_loading
+import dev.pnptracker.resources.table_more_actions
 import dev.pnptracker.resources.table_move_game_description
 import dev.pnptracker.resources.table_open_special
 import dev.pnptracker.resources.table_rename_game
@@ -1452,6 +1453,9 @@ object Strings {
         val cellDescription = Res.string.table_cell_description
         val fitColumn = Res.string.table_fit_column
         val resetSizes = Res.string.table_reset_sizes
+
+        /** The `⋯` menu at the end of the table's toolbar, as a reader hears it. */
+        val moreActions = Res.string.table_more_actions
 
         val rowCompleted = Res.string.table_row_completed
         val rowOngoing = Res.string.table_row_ongoing
