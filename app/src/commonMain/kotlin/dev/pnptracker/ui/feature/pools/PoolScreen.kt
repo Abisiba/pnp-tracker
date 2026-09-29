@@ -668,12 +668,17 @@ private fun TaskCard(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Box {
-            Row(verticalAlignment = Alignment.Top) {
+            // The task above, what can be done to it below — so reading and the
+            // keyboard both go one way down the card, and a card taller than the
+            // window never sends the keyboard back up to a control scrolled out
+            // of sight. The controls get the card's whole width, so a narrow
+            // column squeezes neither them nor the task's words.
+            Column {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                     modifier =
                         Modifier
-                            .weight(1f)
+                            .fillMaxWidth()
                             .focusRequester(focus)
                             .focusOutline(CardShape)
                             .clickable(onClickLabel = open) { controller.openTaskMenu(card) }
@@ -722,7 +727,6 @@ private fun TaskCard(
                     }
                     TaskMarks(task)
                     TaskFacts(task)
-                    MissingControl(task = task, card = card, controller = controller)
                     if (task.stages.isNotEmpty()) {
                         StageBadge(task = task, card = card, controller = controller)
                     }
@@ -734,9 +738,7 @@ private fun TaskCard(
                         )
                     }
                 }
-                if (controller.poolType == PoolType.THREE_D && !task.isCompleted) {
-                    FinishButton(task = task, controller = controller)
-                }
+                CardActions(task = task, card = card, controller = controller)
             }
             if (isOpenHere) TaskPopover(controller)
         }
@@ -744,9 +746,33 @@ private fun TaskCard(
 }
 
 /**
+ * What can be done to the task from its card: its missing count, and on a 3D
+ * card the one-press finish. Laid out in a row that wraps, so four narrow
+ * columns put the second control under the first rather than cutting either.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CardActions(
+    task: PoolTask,
+    card: PoolCardKey,
+    controller: PoolController,
+) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp, bottom = 8.dp),
+    ) {
+        MissingControl(task = task, card = card, controller = controller)
+        if (controller.poolType == PoolType.THREE_D && !task.isCompleted) {
+            FinishButton(task = task, controller = controller)
+        }
+    }
+}
+
+/**
  * Finishes this one 3D task with a single press (PLAN 12.10).
  *
- * A control of its own beside the card rather than a part of it: pressing the
+ * A control of its own under the task's words rather than a part of them: pressing the
  * card opens the task, and finishing is a different act that should not need
  * the menu. It is a Tab stop with its own name, so the keyboard reaches it the
  * way the pointer does, and it goes quiet while its finish is being written.
@@ -763,7 +789,6 @@ private fun FinishButton(
         enabled = task.taskId !in controller.state.finishing,
         modifier =
             Modifier
-                .padding(top = 8.dp, end = 8.dp)
                 .focusOutline(CardShape)
                 .semantics { contentDescription = said },
     ) {
