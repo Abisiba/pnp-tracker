@@ -179,6 +179,31 @@ class ComposeSceneHarness(
         render()
     }
 
+    /** The first half of a drag: the button goes down at [at] and stays down. */
+    fun pressAt(at: Offset) {
+        scene.sendPointerEvent(PointerEventType.Press, at)
+        render()
+    }
+
+    /** The pointer moves to [to] with the button still down, in [steps] even moves. */
+    fun moveTo(
+        from: Offset,
+        to: Offset,
+        steps: Int = 4,
+    ) {
+        (1..steps).forEach { step ->
+            val at = from + (to - from) * (step.toFloat() / steps)
+            scene.sendPointerEvent(PointerEventType.Move, at)
+            render()
+        }
+    }
+
+    /** The end of a drag: the button comes up at [at]. */
+    fun releaseAt(at: Offset) {
+        scene.sendPointerEvent(PointerEventType.Release, at)
+        render()
+    }
+
     /**
      * Presses and releases the mouse at one place, the way a person clicks.
      *

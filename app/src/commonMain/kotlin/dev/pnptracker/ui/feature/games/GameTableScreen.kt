@@ -61,6 +61,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -1029,7 +1030,7 @@ private fun RowWithItsOwnHeight(
                 // not raised off the page: the table stays a grid even while a row
                 // is being carried.
                 .zIndex(if (carried) 1f else 0f)
-                .graphicsLayer { translationY = if (carried) drag.offset else 0f },
+                .graphicsLayer { translationY = drag.shiftOf(row.gameId) },
     ) {
         TableRow(row = row, controller = controller, state = state, widths = widths, height = chosen?.dp, drag = drag)
         RowBoundary(
@@ -1127,7 +1128,7 @@ private fun widthThatFits(
 private const val CELL_FURNITURE = 32f
 
 /** The name column also draws the completion tick beside the name. */
-private const val NAME_COLUMN_FURNITURE = 118f
+private const val NAME_COLUMN_FURNITURE = 126f
 
 /** The words the `Eksik` column puts before each production column's tasks. */
 @Composable
@@ -1425,48 +1426,81 @@ private fun GameNameCell(
 /**
  * Where a row is being carried to, while it is being carried.
  *
- * Only the screen's business: which row the pointer has, how far it has moved it,
- * and where every row is drawn, so the one under the pointer when it is let go can
- * be found. Nothing here is written anywhere; the move itself is the controller's.
+ * Only the screen's business: which row the pointer has, how far it has pulled
+ * it, and where every row sits in the list, so the row it is over can be found.
+ * The rows move out of its way as it goes — the controller lays them out in the
+ * order a drop would make — so where the carried row belongs changes under it;
+ * it is drawn where the pointer holds it, however far that is from its place.
+ * Nothing here is written anywhere.
  */
 private class RowDrag {
     var gameId: EntityId? by mutableStateOf(null)
         private set
-    var offset: Float by mutableStateOf(0f)
-        private set
-    private val drawnAt = mutableMapOf<EntityId, Pair<Float, Float>>()
+    private var startTop = 0f
+    private var pulled by mutableStateOf(0f)
+    private val drawnAt = mutableStateMapOf<EntityId, Pair<Float, Float>>()
 
+    /** Where a row sits in the list, before anything is drawn out of place. */
     fun place(
         gameId: EntityId,
         top: Float,
         bottom: Float,
     ) {
-        // A row being carried is drawn where the pointer is, not where it belongs,
-        // so where it belongs is what is kept.
-        if (gameId == this.gameId) return
-        drawnAt[gameId] = top to bottom
+        if (drawnAt[gameId] != top to bottom) drawnAt[gameId] = top to bottom
     }
 
     fun start(gameId: EntityId) {
         this.gameId = gameId
-        offset = 0f
+        startTop = drawnAt[gameId]?.first ?: 0f
+        pulled = 0f
     }
 
     fun moveBy(delta: Float) {
-        offset += delta
+        pulled += delta
     }
 
-    /** The row the carried one is over now, or null if it is over none but itself. */
+    /** How far [gameId] is drawn from its place: the carried row follows the pointer. */
+    fun shiftOf(gameId: EntityId): Float {
+        if (gameId != this.gameId) return 0f
+        val place = drawnAt[gameId]?.first ?: return 0f
+        return startTop + pulled - place
+    }
+
+    /**
+     * The row the carried one has passed the middle of, or null if none.
+     *
+     * The middle, reached or passed, and not merely the edge: once two rows have changed places the
+     * carried one is over its own place again, so the next change needs the
+     * pointer to go on past the next row's middle. Rows of different heights
+     * therefore do not trade places back and forth under a still pointer.
+     */
     fun target(): EntityId? {
         val carried = gameId ?: return null
         val (top, bottom) = drawnAt[carried] ?: return null
-        val middle = (top + bottom) / 2 + offset
+        val middle = startTop + pulled + (bottom - top) / 2
+        val (over, span) = drawnAt.entries.firstOrNull { (id, span) -> id != carried && middle in span.first..span.second } ?: return null
+        val overMiddle = (span.first + span.second) / 2
+        val below = span.first >= bottom
+        return over.takeIf { (below && middle >= overMiddle) || (!below && middle <= overMiddle) }
+    }
+
+    /**
+     * The row the carried one is over as it is let go, or null if only its own place.
+     *
+     * Over, not past the middle: letting go on top of a row puts the game there,
+     * as it always has, even where the pointer stopped a little short of the
+     * middle the live reordering waits for.
+     */
+    fun dropTarget(): EntityId? {
+        val carried = gameId ?: return null
+        val (top, bottom) = drawnAt[carried] ?: return null
+        val middle = startTop + pulled + (bottom - top) / 2
         return drawnAt.entries.firstOrNull { (id, span) -> id != carried && middle in span.first..span.second }?.key
     }
 
     fun finish() {
         gameId = null
-        offset = 0f
+        pulled = 0f
     }
 }
 
@@ -1507,7 +1541,9 @@ private fun GameOrderHandle(
         modifier =
             Modifier
                 .width(OrderNumberWidth)
+                .heightIn(min = OrderHandleHeight)
                 .focusOutline(ComposerShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = HANDLE_GROUND_ALPHA), ComposerShape)
                 .pointerHoverIcon(PointerIcon.Hand)
                 .semantics { contentDescription = description }
                 .focusable()
@@ -1532,34 +1568,50 @@ private fun GameOrderHandle(
                         onDrag = { change, amount ->
                             change.consume()
                             drag.moveBy(amount.y)
+                            // The others make way as it goes, so the order a drop
+                            // will make is on the screen before it is made.
+                            drag.target()?.let { target -> controller.carryGame(row.gameId, target) }
                         },
                         onDragEnd = {
-                            val target = drag.target()
+                            drag.dropTarget()?.let { target -> controller.carryGame(row.gameId, target) }
                             drag.finish()
-                            if (target != null) scope.launch { controller.moveGame(row.gameId, target) }
+                            scope.launch { controller.dropCarriedGame() }
                         },
-                        onDragCancel = { drag.finish() },
+                        onDragCancel = {
+                            drag.finish()
+                            controller.cancelCarriedGame()
+                        },
                     )
                 },
     ) {
         Text(
             text = DRAG_MARK,
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.clearAndSetSemantics { },
+            modifier = Modifier.padding(start = 4.dp).clearAndSetSemantics { },
         )
         Text(
             text = label,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.End,
-            modifier = Modifier.weight(1f).clearAndSetSemantics { },
+            modifier = Modifier.weight(1f).padding(end = 6.dp).clearAndSetSemantics { },
         )
     }
 }
 
-/** How much of the name column the number and its handle take. */
-private val OrderNumberWidth = 40.dp
+/**
+ * How much of the name column the number and its handle take.
+ *
+ * Wide and tall enough to take hold of without aiming: the whole of it is the
+ * handle, the mark and the number both, and it is drawn on a ground of its own so
+ * where it starts and ends can be seen.
+ */
+private val OrderNumberWidth = 48.dp
+private val OrderHandleHeight = 40.dp
+
+/** How much of the handle's ground shows through, enough to see without shouting. */
+private const val HANDLE_GROUND_ALPHA = 0.7f
 
 /** Drawn beside the number in the user's own order: the thing to take hold of. */
 private const val DRAG_MARK = "\u2807"
