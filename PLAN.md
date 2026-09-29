@@ -1885,10 +1885,18 @@ Kullanıcı oyunlarını oyun tablosunda **elle sıralar** ve bu sıra korunur.
     göre değil.
 - Sıra yalnız `Benim sıram` düzeninde değiştirilir. `A–Z`'de bir yer oyunun adına
   aittir; tutamaklar gösterilmez ve ekran bunu bir cümleyle söyler.
-  - **Fare:** numara aynı zamanda tutamaktır. Satır ondan tutulup yukarı veya
-    aşağı taşınır; taşınan satır imleci izler ve diğerlerinin üstünde çizilir.
-    Başka bir satırın üstünde bırakılınca oyun o satırın yerine geçer; aradaki
-    oyunlar birbirine göre sıralarını korur.
+  - **Fare:** numara aynı zamanda tutamaktır. Tutamak, kaydırma işareti ile
+    numarayı içeren, kendi zemini olan en az `48 × 40 dp`'lik bir alandır;
+    nişan almadan tutulabilir. Satır ondan tutulup yukarı veya aşağı taşınır;
+    taşınan satır imleci izler ve diğerlerinin üstünde çizilir.
+  - Taşırken diğer oyunlar **canlı** yer değiştirir: taşınan satır başka bir
+    satırın ortasına ulaşınca o satır yol verir ve numaralar da buna göre
+    değişir. Böylece bırakınca oluşacak sıra bırakmadan önce görülür. Bu sırada
+    hiçbir şey yazılmaz.
+  - Bırakınca görünen sıra ve numaralar kaydedilir (`game-order.json`). Bir
+    satırın üstünde bırakmak, ortasına tam ulaşılmamış olsa da oyunu o satırın
+    yerine koyar. Sürükleme iptal edilirse sürüklemeden önceki sıra geri gelir.
+    Aradaki oyunlar birbirine göre sıralarını korur.
   - **Klavye:** tutamak Tab ile odaklanır; yukarı ve aşağı ok tuşları oyunu bir
     yer taşır. "Bir yer", ekranda görünen komşuya göredir: bir filtre açıkken
     görünmeyen bir oyunla yer değiştirmek hiçbir şey olmamış gibi görünürdü.

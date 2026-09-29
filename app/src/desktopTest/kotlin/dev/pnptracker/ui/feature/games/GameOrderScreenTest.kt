@@ -200,6 +200,53 @@ class GameOrderScreenTest {
     }
 
     @Test
+    fun `while a game is carried the others make way, and the order is kept when it is let go`() {
+        RealStack().use { stack ->
+            val (screen, table) = open(stack)
+            screen.use {
+                theExample(screen, table)
+                screen.settle("the example is on disk") { Files.exists(orderFile) }
+                val onDisk = Files.readAllBytes(orderFile)
+                val handle = handleOf(screen, "3. sıradaki Sky Team")
+                val onto = handleOf(screen, "1. sıradaki Harmonies")
+
+                screen.pressAt(handle.center)
+                screen.moveTo(from = handle.center, to = Offset(handle.center.x, onto.center.y - 10f), steps = 8)
+
+                // Still held: the order a drop would make is already on the screen,
+                // numbers and all, and nothing has been written.
+                assertEquals(listOf("1 Sky Team", "2 Harmonies", "3 Catan"), shown(table))
+                assertTrue(onDisk.contentEquals(Files.readAllBytes(orderFile)), "the order was written before the row was let go")
+
+                screen.releaseAt(Offset(handle.center.x, onto.center.y - 10f))
+                screen.settle("the order is on disk") { !onDisk.contentEquals(Files.readAllBytes(orderFile)) }
+                assertEquals(listOf("1 Sky Team", "2 Harmonies", "3 Catan"), shown(table))
+                val kept = runBlocking { DesktopGameOrderStore(orderFile).read() }
+                assertEquals(listOf("Sky Team", "Harmonies", "Catan").map { idOf(table, it) }, kept.gameIds)
+            }
+        }
+    }
+
+    @Test
+    fun `the handle is big enough to take hold of without aiming`() {
+        RealStack().use { stack ->
+            val (screen, table) = open(stack)
+            screen.use {
+                theExample(screen, table)
+                val handle = handleOf(screen, "1. sıradaki Harmonies")
+
+                assertTrue(handle.width >= 48f - 1f, "the handle is too narrow: $handle")
+                assertTrue(handle.height >= 40f - 1f, "the handle is too short: $handle")
+            }
+        }
+    }
+
+    private fun handleOf(
+        screen: ComposeSceneHarness,
+        spoken: String,
+    ) = screen.nodes().first { node -> node.contentDescriptions().any { it.startsWith(spoken) } }.boundsInRoot
+
+    @Test
     fun `in the alphabetical layout there is nothing to take hold of`() {
         RealStack().use { stack ->
             val (screen, table) = open(stack)

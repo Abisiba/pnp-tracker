@@ -25,6 +25,7 @@ import dev.pnptracker.domain.games.DocumentChange
 import dev.pnptracker.domain.games.DocumentEditRefusal
 import dev.pnptracker.domain.games.GameArrangement
 import dev.pnptracker.domain.games.GameCompletionSnapshot
+import dev.pnptracker.domain.games.GameOrder
 import dev.pnptracker.domain.games.GameOrderStore
 import dev.pnptracker.domain.games.GameSetupException
 import dev.pnptracker.domain.games.GameTableRow
@@ -209,6 +210,43 @@ class GameTableController(
         state = state.copy(order = moved).redrawn()
         gameOrder.write(moved)
     }
+
+    /**
+     * Shows [gameId] where [target] is while the row is still being carried (PLAN 12.18).
+     *
+     * The rows and their numbers move as the pointer does, so the order that
+     * letting go will make is on the screen before it is made. Nothing is
+     * written: [dropCarriedGame] keeps it and [cancelCarriedGame] puts back the
+     * order the drag started from.
+     */
+    fun carryGame(
+        gameId: EntityId,
+        target: EntityId,
+    ) {
+        if (!canReorder) return
+        val moved = state.order.moved(gameId, target, allRows)
+        if (moved.gameIds == state.order.sequenceFor(allRows)) return
+        if (orderBeforeCarry == null) orderBeforeCarry = state.order
+        state = state.copy(order = moved).redrawn()
+    }
+
+    /** Keeps the order a drag has made, as the row is let go. */
+    suspend fun dropCarriedGame() {
+        val before = orderBeforeCarry ?: return
+        orderBeforeCarry = null
+        if (state.order.sequenceFor(allRows) == before.sequenceFor(allRows)) return
+        gameOrder.write(state.order)
+    }
+
+    /** Puts back the order the drag started from, when it did not end in a drop. */
+    fun cancelCarriedGame() {
+        val before = orderBeforeCarry ?: return
+        orderBeforeCarry = null
+        state = state.copy(order = before).redrawn()
+    }
+
+    /** The order before a drag began moving rows, until it is dropped or cancelled. */
+    private var orderBeforeCarry: GameOrder? = null
 
     /**
      * Moves [gameId] one place up among the games on screen — the keyboard's way.
