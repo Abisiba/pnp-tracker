@@ -1902,13 +1902,19 @@ Kullanıcı oyunlarını oyun tablosunda **elle sıralar** ve bu sıra korunur.
     numarayı içeren, kendi zemini olan en az `48 × 40 dp`'lik bir alandır;
     nişan almadan tutulabilir. Satır ondan tutulup yukarı veya aşağı taşınır;
     taşınan satır imleci izler ve diğerlerinin üstünde çizilir.
-  - Taşırken diğer oyunlar **canlı** yer değiştirir: taşınan satır başka bir
-    satırın ortasına ulaşınca o satır yol verir ve numaralar da buna göre
-    değişir. Böylece bırakınca oluşacak sıra bırakmadan önce görülür. Bu sırada
-    hiçbir şey yazılmaz.
+  - Taşırken diğer oyunlar **canlı** yer değiştirir. Hedef, imlecin listede
+    bulunduğu satırdan hesaplanır: imleç bir sonraki satırın sınırını geçince o
+    satır yol verir, numaralar da buna göre değişir. Küçük bir çekiş hiçbir şeyi
+    taşımaz, her geçilen sınır oyunu bir yer taşır; farklı yükseklikteki satırlar
+    boş duran imlecin altında gidip gelmez. Böylece bırakınca oluşacak sıra
+    bırakmadan önce görülür. Bu sırada hiçbir şey yazılmaz.
+  - Konumlar her an listenin kendi yerleşiminden okunur ve imleç pencereye göre
+    ölçülür; liste taşıma sırasında kaydırma yerini korur. (Önceki sürümde
+    satırların bildirdiği eski konumlar ve ilk satır taşınınca listenin onu
+    izleyerek kayması yüzünden 1. oyun biraz aşağı çekilince 8. sıraya
+    atlayabiliyordu.)
   - Bırakınca görünen sıra ve numaralar kaydedilir (`game-order.json`). Bir
-    satırın üstünde bırakmak, ortasına tam ulaşılmamış olsa da oyunu o satırın
-    yerine koyar. Sürükleme iptal edilirse sürüklemeden önceki sıra geri gelir.
+    satırın üstünde bırakmak oyunu o satırın yerine koyar. Sürükleme iptal edilirse sürüklemeden önceki sıra geri gelir.
     Aradaki oyunlar birbirine göre sıralarını korur.
   - **Klavye:** tutamak Tab ile odaklanır; yukarı ve aşağı ok tuşları oyunu bir
     yer taşır. "Bir yer", ekranda görünen komşuya göredir: bir filtre açıkken

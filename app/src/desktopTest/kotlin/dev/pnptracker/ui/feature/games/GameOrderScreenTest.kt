@@ -228,6 +228,88 @@ class GameOrderScreenTest {
     }
 
     @Test
+    fun `pulling the first game a little past the second moves it one place and no further`() {
+        RealStack().use { stack ->
+            val (screen, table) = open(stack)
+            screen.use {
+                addGames(screen, table, *TEN)
+                val names = shown(table).map { it.substringAfter(' ') }
+                val first = handleOf(screen, "1. sıradaki ${names[0]}")
+                val second = handleOf(screen, "2. sıradaki ${names[1]}")
+                val rowStep = second.top - first.top
+
+                // Just past the middle of the second row, slowly, as a hand does.
+                screen.pressAt(first.center)
+                val to = Offset(first.center.x, first.center.y + rowStep * 0.7f)
+                screen.moveTo(from = first.center, to = to, steps = 12)
+                screen.render()
+
+                val during = shown(table)
+                assertEquals("2 ${names[0]}", during[1], "while held the first game went to the wrong place: $during")
+                assertEquals("1 ${names[1]}", during[0], "while held: $during")
+
+                screen.releaseAt(to)
+                screen.settle("the drop is kept") { Files.exists(orderFile) }
+                val after = shown(table)
+                assertEquals(listOf(names[1], names[0]) + names.drop(2), after.map { it.substringAfter(' ') }, "after the drop: $after")
+            }
+        }
+    }
+
+    @Test
+    fun `a slow pull down two rows and a bit moves the game two places, one boundary at a time`() {
+        // The reported fault: the first game, pulled a little way down, landed
+        // in eighth place. Every step of the pull is looked at, not only the end.
+        RealStack().use { stack ->
+            val (screen, table) = open(stack)
+            screen.use {
+                addGames(screen, table, *TEN)
+                val names = shown(table).map { it.substringAfter(' ') }
+                val first = handleOf(screen, "1. sıradaki ${names[0]}")
+                val rowStep = handleOf(screen, "2. sıradaki ${names[1]}").top - first.top
+
+                screen.pressAt(first.center)
+                var at = first.center
+                var place = 0
+                (1..48).forEach { step ->
+                    val next = Offset(first.center.x, first.center.y + rowStep * 2.4f * step / 48f)
+                    screen.moveTo(from = at, to = next, steps = 1)
+                    at = next
+                    val now = rowsOf(table).indexOfFirst { it.gameName == names[0] }
+                    assertTrue(now == place || now == place + 1, "step $step jumped from place ${place + 1} to ${now + 1}: ${shown(table)}")
+                    place = now
+                }
+                screen.releaseAt(at)
+                screen.render()
+
+                assertEquals(listOf(names[1], names[2], names[0]) + names.drop(3), shown(table).map { it.substringAfter(' ') })
+                assertEquals((1..10).toList(), shown(table).map { it.substringBefore(' ').toInt() }, "the numbers are not 1 to 10 in order")
+            }
+        }
+    }
+
+    @Test
+    fun `a small pull that does not reach the next row moves nothing`() {
+        RealStack().use { stack ->
+            val (screen, table) = open(stack)
+            screen.use {
+                addGames(screen, table, *TEN)
+                val before = shown(table)
+                val first = handleOf(screen, before[0].replace(" ", ". sıradaki "))
+                val second = handleOf(screen, before[1].replace(" ", ". sıradaki "))
+                val to = Offset(first.center.x, first.center.y + (second.top - first.top) * 0.3f)
+
+                screen.pressAt(first.center)
+                screen.moveTo(from = first.center, to = to, steps = 6)
+                assertEquals(before, shown(table), "a small pull moved a game")
+                screen.releaseAt(to)
+                screen.render()
+                assertEquals(before, shown(table), "a small pull moved a game once let go")
+            }
+        }
+    }
+
+    @Test
     fun `the handle is big enough to take hold of without aiming`() {
         RealStack().use { stack ->
             val (screen, table) = open(stack)
@@ -268,5 +350,9 @@ class GameOrderScreenTest {
                 assertEquals(listOf("1 Harmonies", "2 Catan", "3 Sky Team"), shown(table))
             }
         }
+    }
+
+    private companion object {
+        val TEN = arrayOf("Azul", "Brass", "Catan", "Dune", "Everdell", "Food Chain", "Gloomhaven", "Hanabi", "Inis", "Jaipur")
     }
 }
