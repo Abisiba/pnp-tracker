@@ -446,6 +446,16 @@ import dev.pnptracker.resources.pool_intro_card
 import dev.pnptracker.resources.pool_intro_special
 import dev.pnptracker.resources.pool_intro_three_d
 import dev.pnptracker.resources.pool_loading
+import dev.pnptracker.resources.pool_missing_action
+import dev.pnptracker.resources.pool_missing_action_description
+import dev.pnptracker.resources.pool_missing_cancel
+import dev.pnptracker.resources.pool_missing_field
+import dev.pnptracker.resources.pool_missing_hint
+import dev.pnptracker.resources.pool_missing_invalid
+import dev.pnptracker.resources.pool_missing_over_total
+import dev.pnptracker.resources.pool_missing_refused
+import dev.pnptracker.resources.pool_missing_save
+import dev.pnptracker.resources.pool_missing_title
 import dev.pnptracker.resources.pool_section_awaiting_color
 import dev.pnptracker.resources.pool_section_multicolor
 import dev.pnptracker.resources.pool_section_single_color
@@ -471,11 +481,12 @@ import dev.pnptracker.resources.pool_stage_increase
 import dev.pnptracker.resources.pool_stage_invalid
 import dev.pnptracker.resources.pool_stage_no_total
 import dev.pnptracker.resources.pool_stage_of_total
-import dev.pnptracker.resources.pool_stage_order
 import dev.pnptracker.resources.pool_stage_over_total
 import dev.pnptracker.resources.pool_stage_panel_title
 import dev.pnptracker.resources.pool_stage_save
 import dev.pnptracker.resources.pool_stage_stale
+import dev.pnptracker.resources.pool_stage_sum
+import dev.pnptracker.resources.pool_stage_sum_over
 import dev.pnptracker.resources.pool_stage_unavailable
 import dev.pnptracker.resources.pool_task_color_current
 import dev.pnptracker.resources.pool_task_colors
@@ -1276,7 +1287,20 @@ object Strings {
         val stageHint = Res.string.pool_stage_hint
         val stageInvalid = Res.string.pool_stage_invalid
         val stageOverTotal = Res.string.pool_stage_over_total
-        val stageOrder = Res.string.pool_stage_order
+        val stageSum = Res.string.pool_stage_sum
+        val stageSumOver = Res.string.pool_stage_sum_over
+
+        /** Setting how many pieces a task is short of, from its card. */
+        val missingAction = Res.string.pool_missing_action
+        val missingActionDescription = Res.string.pool_missing_action_description
+        val missingTitle = Res.string.pool_missing_title
+        val missingField = Res.string.pool_missing_field
+        val missingSave = Res.string.pool_missing_save
+        val missingCancel = Res.string.pool_missing_cancel
+        val missingHint = Res.string.pool_missing_hint
+        val missingInvalid = Res.string.pool_missing_invalid
+        val missingOverTotal = Res.string.pool_missing_over_total
+        val missingRefused = Res.string.pool_missing_refused
         val stageStale = Res.string.pool_stage_stale
         val stageUnavailable = Res.string.pool_stage_unavailable
         val stageNoTotal = Res.string.pool_stage_no_total

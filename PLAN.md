@@ -503,17 +503,24 @@ Kart görevleri üç aşamalıdır:
 2. Lamine edildi
 3. Kesildi
 
-Her aşama ayrı tamamlanan adet tutar.
+Her aşama, o aşamada duran parçaların adedini tutar; bir parça yalnız
+ulaştığı aşamada sayılır.
 
 Kurallar:
 
 ```text
-0 <= kesilen <= lamineEdilen <= basılan <= toplam
+0 <= basılan, lamineEdilen, kesilen
+basılan + lamineEdilen + kesilen <= toplam
 ```
 
-- Sonraki aşamadaki adet önceki aşamayı geçemez.
-- Bütün aşamalar toplam adede ulaştığında kart görevi tamamlanır.
-- Aşama başına eksik sayı `toplam - aşamaTamamlanan` olarak türetilir.
+- Üç sayının toplamı görevin adedini geçemez: adet 5 iken `5 + 5 + 5`
+  kaydedilemez. Kural hem ekranda (anlaşılır uyarı) hem yazma sınırında
+  doğrulanır.
+- Bütün parçalar son aşamaya (Kesildi) ulaştığında kart görevi tamamlanır.
+- Bir aşamadan geçmiş parça sayısı, o aşamadaki ve sonraki aşamalardaki
+  parçaların toplamıdır; rozet ilk tamamlanmamış aşama için bunu gösterir.
+- Bu kuraldan önce kaydedilmiş, toplamı adedi aşan sayaçlar sessizce
+  değiştirilmez; aşama düzenleyicisi bunu söyler ve kullanıcı orada düzeltir.
 - Toplam adet bilinmiyorsa kullanıcı önce toplamı girmeli veya görevi checklist moduna çevirmelidir.
 
 ### 7.3 Açılır rozet
@@ -522,15 +529,16 @@ Dar görev satırında küçük bir rozet gösterilir:
 
 ```text
 Bird Cards
-[Laminasyon: 167/170 · 3 eksik]
+[Lamine edildi: 167/170 · 3 kaldı]
 ```
 
 Rozet tıklanınca genişler ve üç aşamanın sayaçları düzenlenebilir:
 
 ```text
-Basıldı        170/170
-Lamine edildi  167/170
+Basıldı          3/170
+Lamine edildi   17/170
 Kesildi        150/170
+Aşamalardaki parça: 170 / 170
 ```
 
 Rozet şu aşamayı göstermelidir:
@@ -1429,6 +1437,10 @@ Yeni yazılan addan görev (Enter):
   de alt satıra geçer. Hücrenin üstünde bir görev veya renk paneli açıkken
   `Ctrl+Enter` o panelin kaydıdır. `Escape` vazgeçer.
 - Pencerede adet ve görev notu girilir. Renk seçimi yalnız 3D Baskı'dadır.
+- Pencerenin alanlarında `Enter` görevi kaydeder (`Görevi kaydet` ile aynı);
+  `Ctrl+Enter` gerekmez ama kaydetmeye devam eder. Görev notunda yeni satır
+  `Shift+Enter` iledir. Düğme veya renk seçiliyken `Enter` o düğmeye/renge
+  basar. `Escape` pencereyi kapatır.
 - Pencere açıkken hiçbir şey yazılmaz. `Görevi kaydet`, hücrenin yeni metnini ve
   yeni addan görevi **tek transaction**'da yazar: metin hücre düzenleyicisinin
   kendi kaydıyla kaydedilir, görev de aynı transaction içinde seçimden görev
@@ -1596,6 +1608,14 @@ alta, tek blok hâlinde durur; aynı rengin görevleri sütunlara dağıtılmaz.
 grupları yan yana yerleşir, sütun sayısından fazla grup varsa sonraki sıraya
 geçer. Kartlar, Mukavva ve Özel'de görev kartları aynı geniş düzende, renk
 grubu olmadan sıra sıra dizilir.
+
+Dört havuzda da kartın başında oyun adı kalın ve rahat okunur boyuttadır; uzun ad
+kesilmez, alt satıra geçer. Her kartta `Eksik adedi` denetimi vardır: görevin şu
+anki eksik parça adedi yazılır veya düzenlenir (`Enter` kaydeder, `Esc`
+vazgeçer). Aynı görev güncellenir; yeni görev oluşturulmaz. Artış eksik/hatalı
+bildirimi, azalış eksik giderildi olarak aynı transaction'larla yazılır, bu
+yüzden sonuç kartta ve oyun tablosunda hemen görünür ve geçmiş tutarlı kalır.
+Eksik adedi görevin adedini geçemez.
 
 Aktif görevler aşağıdaki sırayla gösterilir:
 

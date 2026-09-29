@@ -355,7 +355,7 @@ class ImportConfirmationCarryTest {
         }
 
     @Test
-    fun `an accepted marker counts a card pipeline all the way up`() =
+    fun `an accepted marker puts every piece of a card pipeline at the last step`() =
         runBlocking<Unit> {
             val fixture = given(columnType = CellColumnType.CARD)
             val draftId =
@@ -373,7 +373,7 @@ class ImportConfirmationCarryTest {
             assertTrue(task.isCompleted)
             assertFalse(task.primaryBatchCompleted, "a card task was given a 3D print run")
             assertEquals(
-                listOf(ProductionStage.PRINT to 170, ProductionStage.LAMINATE to 170, ProductionStage.CUT to 170),
+                listOf(ProductionStage.PRINT to 0, ProductionStage.LAMINATE to 0, ProductionStage.CUT to 170),
                 database.taskProgressDao().stagesOfTask(task.id).map { it.stage to it.completedQuantity },
             )
         }
@@ -403,7 +403,7 @@ class ImportConfirmationCarryTest {
         }
 
     @Test
-    fun `an accepted marker counts a board pipeline all the way up`() =
+    fun `an accepted marker puts every piece of a board pipeline at the last step`() =
         runBlocking<Unit> {
             val fixture = given(columnType = CellColumnType.BOARD)
             val draftId =
@@ -418,7 +418,7 @@ class ImportConfirmationCarryTest {
             fixture.confirm()
 
             assertEquals(
-                listOf(ProductionStage.PRINT to 16, ProductionStage.GLUE to 16, ProductionStage.CUT to 16),
+                listOf(ProductionStage.PRINT to 0, ProductionStage.GLUE to 0, ProductionStage.CUT to 16),
                 database.taskProgressDao().stagesOfTask(taskOf(draftId).id).map { it.stage to it.completedQuantity },
             )
         }

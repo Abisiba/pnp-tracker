@@ -192,18 +192,18 @@ class StageRollbackTest {
     @Test
     fun `a pipeline finished by the save is undone whole when the task will not take it`() =
         runBlocking<Unit> {
-            val taskId = aCardAt(print = TOTAL, laminate = TOTAL, cut = 19)
+            val taskId = aCardAt(print = 0, laminate = 1, cut = TOTAL - 1)
             driver.failOn { it.contains("UPDATE tasks SET") && it.contains("is_completed") }
 
             assertFailsWith<SQLiteException> {
-                progress.setStageQuantities(taskId, mapOf(ProductionStage.CUT to TOTAL), clock)
+                progress.setStageQuantities(taskId, mapOf(ProductionStage.LAMINATE to 0, ProductionStage.CUT to TOTAL), clock)
             }
 
             driver.disarm()
             // The one that would have finished the task. Both halves of finishing
             // it are gone, so nothing is left claiming a pipeline that is not
             // there or a task that is not done.
-            assertEquals(listOf(TOTAL, TOTAL, 19), pipelineOf(taskId))
+            assertEquals(listOf(0, 1, TOTAL - 1), pipelineOf(taskId))
             val task = assertNotNull(progress.taskById(taskId))
             assertFalse(task.isCompleted)
             assertNull(task.completedAt)
@@ -291,5 +291,5 @@ class StageRollbackTest {
         }
 }
 
-/** What the pipelines here count up to. */
-private const val TOTAL = 20
+/** Roomy enough that every picture used here holds no more pieces than the task needs. */
+private const val TOTAL = 60

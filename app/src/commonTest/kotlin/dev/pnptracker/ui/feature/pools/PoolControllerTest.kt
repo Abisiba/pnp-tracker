@@ -1005,52 +1005,54 @@ class PoolControllerTest {
         }
 
     @Test
-    fun `an arrow keeps working while the draft is out of order`() =
+    fun `counters written under the old reading open as they are, said to be over the total`() =
         withCardPool { controller, card ->
             controller.beginStageEdit(card)
-            // The print run behind the lamination: the state PLAN 7.2 will not
-            // have saved, and the one a user typing towards 10 or 20 for all
-            // three has to pass through.
-            controller.editStageDraft(ProductionStage.PRINT, "8")
 
+            // 15 + 10 + 5 is thirty pieces for a task of twenty: stored that way
+            // before each counter meant the pieces at its own step. Nothing is
+            // changed behind the user's back; the panel says so and lets them fix it.
             val open = stagePanel(controller)
-            assertTrue(open.isOutOfOrder, "a print run behind the lamination was not noticed")
-            // Both arrows still move it. Asking the ordering rule here took both
-            // of them away — every single step left the picture just as wrong —
-            // and left a user working by keyboard with nowhere to go.
-            assertTrue(controller.stageStepAllowed(ProductionStage.PRINT, 1), "the way out was taken away")
-            assertTrue(controller.stageStepAllowed(ProductionStage.PRINT, -1), "the way back was taken away")
+            assertEquals(mapOf(ProductionStage.PRINT to "15", ProductionStage.LAMINATE to "10", ProductionStage.CUT to "5"), open.draft)
+            assertEquals(30L, open.typedPieces)
+            assertTrue(open.isOverTotal, "thirty pieces for a task of twenty were not noticed")
+            assertTrue(progress.staged.isEmpty(), "opening the panel wrote to the database")
+            // Both arrows still move it, so the keyboard alone can fix it.
+            assertTrue(controller.stageStepAllowed(ProductionStage.PRINT, 1), "the way up was taken away")
+            assertTrue(controller.stageStepAllowed(ProductionStage.PRINT, -1), "the way down was taken away")
         }
 
     @Test
-    fun `the keyboard alone climbs out of an order the pipeline may not be saved in`() =
+    fun `the keyboard alone brings the counters back within the total`() =
         withCardPool { controller, card ->
             controller.beginStageEdit(card)
-            controller.editStageDraft(ProductionStage.PRINT, "8")
 
             // Nothing but the arrow, the way a user with no mouse would do it.
-            repeat(2) {
-                assertTrue(controller.stageStepAllowed(ProductionStage.PRINT, 1))
-                controller.stepStageDraft(ProductionStage.PRINT, 1)
+            repeat(10) {
+                assertTrue(controller.stageStepAllowed(ProductionStage.PRINT, -1))
+                controller.stepStageDraft(ProductionStage.PRINT, -1)
             }
 
             val open = stagePanel(controller)
-            assertEquals("10", open.draft[ProductionStage.PRINT])
-            assertFalse(open.isOutOfOrder, "the arrows could not reach a pipeline that may be saved")
+            assertEquals("5", open.draft[ProductionStage.PRINT])
+            assertFalse(open.isOverTotal, "the arrows could not reach counters that may be saved")
 
             controller.saveStages()
-            assertEquals(at(10, 10, 5), progress.staged.single().targets)
+            assertEquals(at(5, 10, 5), progress.staged.single().targets)
         }
 
     @Test
-    fun `an out of order draft is said to be so before it is ever sent`() =
+    fun `a draft over the total is said to be so before it is ever sent`() =
         withCardPool { controller, card ->
             controller.beginStageEdit(card)
-            assertFalse(stagePanel(controller).isOutOfOrder)
+            controller.editStageDraft(ProductionStage.PRINT, "5")
+            controller.editStageDraft(ProductionStage.LAMINATE, "5")
+            controller.editStageDraft(ProductionStage.CUT, "5")
+            assertFalse(stagePanel(controller).isOverTotal, "fifteen pieces of twenty were called too many")
 
             controller.editStageDraft(ProductionStage.CUT, "11")
 
-            assertTrue(stagePanel(controller).isOutOfOrder, "the cut passing the lamination went unremarked")
+            assertTrue(stagePanel(controller).isOverTotal, "twenty-one pieces of twenty went unremarked")
             assertTrue(progress.staged.isEmpty(), "noticing it wrote to the database")
         }
 
@@ -1113,7 +1115,7 @@ class PoolControllerTest {
     @Test
     fun `a refused save keeps the panel, the draft and the counts it was opened on`() =
         withCardPool { controller, card ->
-            progress.outcome = TaskProgressOutcome.Refused(TaskProgressFailure.STAGE_ORDER_VIOLATED)
+            progress.outcome = TaskProgressOutcome.Refused(TaskProgressFailure.STAGES_EXCEED_REQUIRED)
             controller.beginStageEdit(card)
             controller.editStageDraft(ProductionStage.PRINT, "8")
 
@@ -1122,7 +1124,7 @@ class PoolControllerTest {
             val open = stagePanel(controller)
             assertEquals("8", open.draft[ProductionStage.PRINT], "the refusal threw away what had been typed")
             assertEquals(StageSnapshot(CARD_TOTAL, at(15, 10, 5)), open.expected)
-            assertEquals(TaskProgressFailure.STAGE_ORDER_VIOLATED, open.failure)
+            assertEquals(TaskProgressFailure.STAGES_EXCEED_REQUIRED, open.failure)
             assertFalse(open.isSaving)
         }
 
@@ -1130,13 +1132,13 @@ class PoolControllerTest {
     fun `a refusal names the step it is about`() =
         withCardPool { controller, card ->
             controller.beginStageEdit(card)
-            progress.outcome = TaskProgressOutcome.Refused(TaskProgressFailure.STAGE_ORDER_VIOLATED)
+            progress.outcome = TaskProgressOutcome.Refused(TaskProgressFailure.STAGES_EXCEED_REQUIRED)
             controller.editStageDraft(ProductionStage.PRINT, "8")
             controller.saveStages()
             assertEquals(
-                ProductionStage.LAMINATE,
+                ProductionStage.PRINT,
                 stagePanel(controller).invalidStage,
-                "the step that passed the one before it was not named",
+                "a refusal about the three together did not send the keyboard to the first",
             )
 
             progress.outcome = TaskProgressOutcome.Refused(TaskProgressFailure.STAGE_QUANTITY_EXCEEDS_REQUIRED)

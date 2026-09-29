@@ -690,13 +690,13 @@ class GameTableLayoutTest {
                 .substringBefore("private fun sentenceOf(")
         // PLAN 12.7 gives such a task one total and one counter, so there is one
         // of each field here and no row to repeat them in.
-        listOf("quantityLabel", "notesLabel").forEach { field ->
-            assertEquals(
-                1,
-                Regex("Strings\\.CellTask\\.$field").findAll(fields).count(),
-                "$field is asked for more than once for one task",
-            )
-        }
+        assertEquals(
+            1,
+            Regex("Strings\\.CellTask\\.quantityLabel").findAll(fields).count(),
+            "the total is asked for more than once for one task",
+        )
+        // The note is the window's one note field, drawn by the one function.
+        assertEquals(1, Regex("ComposerNotesField\\(").findAll(fields).count(), "the note is asked for more than once for one task")
         assertTrue("Strings.CellTask.rowTitle" !in fields, "one task is drawn as a numbered row of several")
         val colors = source.substringAfter("private fun MulticolorColors(").substringBefore("private fun MulticolorWork(")
         assertTrue("controller::toggleMulticolorColor" in colors, "the colours cannot be chosen")

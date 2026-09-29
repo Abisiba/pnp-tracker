@@ -167,7 +167,7 @@ class TaskHistoryTest {
 
             progress.setStageQuantities(
                 taskId,
-                mapOf(ProductionStage.PRINT to 60, ProductionStage.LAMINATE to 30),
+                mapOf(ProductionStage.PRINT to 30, ProductionStage.LAMINATE to 20),
                 clock,
             )
 
@@ -177,8 +177,8 @@ class TaskHistoryTest {
             val moves = history.eventsOfTask(taskId).filter { it.kind == HistoryEventKind.TASK_STAGE_QUANTITY_CHANGED }
             assertEquals(
                 mapOf<ProductionStage?, Pair<Int?, Int?>>(
-                    ProductionStage.PRINT to (0 to 60),
-                    ProductionStage.LAMINATE to (0 to 30),
+                    ProductionStage.PRINT to (0 to 30),
+                    ProductionStage.LAMINATE to (0 to 20),
                 ),
                 moves.associate { it.stage to (it.previousQuantity to it.newQuantity) },
             )
@@ -209,9 +209,13 @@ class TaskHistoryTest {
             assertFailsWith<TaskProgressException> {
                 progress.setStageQuantity(taskId, ProductionStage.PRINT, 61, clock)
             }
-            // A later step may not stand above an earlier one.
+            // The steps together may not hold more pieces than the task needs.
             assertFailsWith<TaskProgressException> {
-                progress.setStageQuantity(taskId, ProductionStage.CUT, 5, clock)
+                progress.setStageQuantities(
+                    taskId,
+                    mapOf(ProductionStage.PRINT to 30, ProductionStage.LAMINATE to 30, ProductionStage.CUT to 1),
+                    clock,
+                )
             }
 
             assertEquals(emptyList(), history.eventsOfTask(taskId), "a refused move was recorded")
@@ -239,22 +243,29 @@ class TaskHistoryTest {
         }
 
     @Test
-    fun `a pipeline counted all the way up records the movements and the finish`() =
+    fun `a pipeline with every piece through records the movements and the finish`() =
         runBlocking<Unit> {
             val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 4)
+            progress.setStageQuantities(
+                taskId,
+                mapOf(ProductionStage.PRINT to 2, ProductionStage.LAMINATE to 1, ProductionStage.CUT to 1),
+                clock,
+            )
 
             progress.setStageQuantities(
                 taskId,
-                mapOf(ProductionStage.PRINT to 4, ProductionStage.LAMINATE to 4, ProductionStage.CUT to 4),
+                mapOf(ProductionStage.PRINT to 0, ProductionStage.LAMINATE to 0, ProductionStage.CUT to 4),
                 clock,
             )
 
             // Counted rather than listed: everything one transaction writes shares
             // its moment, so within a single save there is no order between the
             // lines to assert — and none to show the user either.
+            // Three steps moved in each of the two saves, and the second one
+            // finished the task.
             assertEquals(
                 mapOf(
-                    HistoryEventKind.TASK_STAGE_QUANTITY_CHANGED to 3,
+                    HistoryEventKind.TASK_STAGE_QUANTITY_CHANGED to 6,
                     HistoryEventKind.TASK_COMPLETED to 1,
                 ),
                 kindsOf(taskId).groupingBy { it }.eachCount(),
@@ -265,11 +276,7 @@ class TaskHistoryTest {
     fun `a step dropping back below the total reopens the task and says so`() =
         runBlocking<Unit> {
             val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 4)
-            progress.setStageQuantities(
-                taskId,
-                mapOf(ProductionStage.PRINT to 4, ProductionStage.LAMINATE to 4, ProductionStage.CUT to 4),
-                clock,
-            )
+            progress.setStageQuantity(taskId, ProductionStage.CUT, 4, clock)
 
             progress.setStageQuantity(taskId, ProductionStage.CUT, 1, clock)
 
@@ -438,7 +445,7 @@ class TaskHistoryTest {
             listOf(card, board).forEach { taskId ->
                 progress.setStageQuantities(
                     taskId,
-                    ProductionStage.entries.associateWith { 2 }.filterKeys { it in stagesForTask(taskId) },
+                    stagesForTask(taskId).associateWith { 0 } + (stagesForTask(taskId).last() to 2),
                     clock,
                 )
             }
@@ -704,7 +711,12 @@ class TaskHistoryTest {
             val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 2)
             progress.setStageQuantities(
                 taskId,
-                mapOf(ProductionStage.PRINT to 2, ProductionStage.LAMINATE to 2, ProductionStage.CUT to 2),
+                mapOf(ProductionStage.PRINT to 1, ProductionStage.LAMINATE to 1),
+                clock,
+            )
+            progress.setStageQuantities(
+                taskId,
+                mapOf(ProductionStage.PRINT to 0, ProductionStage.LAMINATE to 0, ProductionStage.CUT to 2),
                 clock,
             )
             progress.reopenTask(taskId, clock)

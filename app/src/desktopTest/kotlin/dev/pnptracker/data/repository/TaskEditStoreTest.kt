@@ -467,9 +467,7 @@ class TaskEditStoreTest {
             addText(cell.id, "60 kart basılacak")
             val taskId = makeTask(game, cell, "kart", quantity = 60, trackingMode = TrackingMode.PIPELINE)
             val clock = StoppedClock(updatedAt)
-            listOf(ProductionStage.PRINT, ProductionStage.LAMINATE, ProductionStage.CUT).forEach { stage ->
-                database.taskProgressDao().setStageQuantity(taskId, stage, 60, clock)
-            }
+            database.taskProgressDao().setStageQuantity(taskId, ProductionStage.CUT, 60, clock)
             val before = assertNotNull(database.taskDao().activeTaskById(taskId))
             assertTrue(before.isCompleted)
 
@@ -488,7 +486,7 @@ class TaskEditStoreTest {
             assertEquals(TaskEditFailure.QUANTITY_LOCKED_BY_COMPLETION, refusal.failure)
             assertEquals(before, database.taskDao().activeTaskById(taskId))
             assertEquals(
-                listOf(60, 60, 60),
+                listOf(0, 0, 60),
                 database.taskProgressDao().stagesOfTask(taskId).map { it.completedQuantity },
                 "the stage counts were moved to fit a new total",
             )
