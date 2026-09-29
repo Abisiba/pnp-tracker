@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -18,8 +19,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridScope
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -29,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.withFrameNanos
@@ -48,13 +52,13 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import dev.pnptracker.domain.colors.ColorSummary
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.ProductionStage
-import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.pools.PoolColor
 import dev.pnptracker.domain.pools.PoolColorGroup
 import dev.pnptracker.domain.pools.PoolModel
@@ -102,9 +106,10 @@ private const val POPOVER_GAP = 4
  * user changes from here goes onto that task through the one editing
  * transaction.
  *
- * A column of cards rather than a table. The table is wide because a game has
- * six cells side by side; a pool holds one kind of thing, so it reads down the
- * page and needs no sideways scrolling at any width.
+ * Cards rather than a table. The table is wide because a game has six cells
+ * side by side; a pool holds one kind of thing, so its cards fill as many
+ * columns as the window has room for and it needs no sideways scrolling at any
+ * width.
  */
 @Composable
 fun PoolScreen(controller: PoolController) {
@@ -114,8 +119,10 @@ fun PoolScreen(controller: PoolController) {
     LaunchedEffect(controller, controller.readAttempt) { controller.observeColorCatalogue() }
 
     val state = controller.state
+    // The whole width, so the cards can use it; only the words and the toolbar
+    // above them keep to a width a line can be read at.
     Column(
-        modifier = Modifier.fillMaxHeight().widthIn(max = MaxContentWidth).padding(24.dp),
+        modifier = Modifier.fillMaxHeight().fillMaxWidth().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
@@ -127,6 +134,7 @@ fun PoolScreen(controller: PoolController) {
             text = stringResource(poolDescriptionOf(state.poolType)),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.widthIn(max = MaxContentWidth),
         )
         PoolToolbar(controller, state)
         when (val content = state.content) {
@@ -177,6 +185,7 @@ private fun PoolToolbar(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier =
             Modifier
+                .widthIn(max = MaxContentWidth)
                 .fillMaxWidth()
                 .closesFilterPanelOnEscape(state.filterSurface == PoolFilterSurface.OPEN, controller::closeFilters),
     ) {
@@ -383,11 +392,17 @@ private fun Message(text: String) {
 }
 
 /**
- * The pool's own rows.
+ * The pool's own cards, spread over the width the window has.
  *
- * The 3D pool is three sections in PLAN 12.10's order; the other three are one
- * list, because PLAN 12.11 to 12.13 describe them by their stages and their kind
- * and none of them carries a colour at all.
+ * As many columns as fit — four in a wide window, fewer as it narrows, one at
+ * the least — so the space beside a single column is not left empty.
+ *
+ * The card pools, the board pool and the special pool are one run of cards,
+ * filled row by row. The 3D pool is laid out by colour instead: each colour is
+ * one block, its heading with every task of that colour under it, one below the
+ * other, and it is the blocks that sit side by side — never one colour's tasks
+ * spread across the columns. The three sections keep PLAN 12.10's order, each
+ * starting on a line of its own.
  *
  * An empty section is left out rather than drawn empty: a heading over nothing
  * says a group exists that does not.
@@ -397,84 +412,108 @@ private fun PoolBody(
     model: PoolModel,
     controller: PoolController,
 ) {
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
-        when (model) {
-            is PoolModel.Flat ->
-                items(
-                    count = model.tasks.size,
-                    key = { model.tasks[it].taskId.toString() },
-                ) { at ->
-                    val task = model.tasks[at]
-                    TaskCard(task = task, card = PoolCardKey(task.taskId), controller = controller)
-                }
-
-            is PoolModel.ThreeD -> {
-                val sections = model.sections
-                if (!sections.awaitingColor.isEmpty) {
-                    item {
-                        SectionHeading(
-                            title = stringResource(Strings.Pool.sectionAwaitingColor),
-                            taskCount = sections.awaitingColor.taskCount,
-                            requiredTotal = sections.awaitingColor.requiredTotal,
-                            missingTotal = sections.awaitingColor.missingTotal,
-                            failureTotal = sections.awaitingColor.failureTotal,
-                        )
-                    }
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val columns = poolColumnsFor(maxWidth)
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(columns),
+            horizontalArrangement = Arrangement.spacedBy(ColumnGap),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            when (model) {
+                is PoolModel.Flat ->
                     items(
-                        count = sections.awaitingColor.tasks.size,
-                        key = {
-                            sections.awaitingColor.tasks[it]
-                                .taskId
-                                .toString()
-                        },
+                        count = model.tasks.size,
+                        key = { model.tasks[it].taskId.toString() },
                     ) { at ->
-                        val task = sections.awaitingColor.tasks[at]
+                        val task = model.tasks[at]
                         TaskCard(task = task, card = PoolCardKey(task.taskId), controller = controller)
                     }
-                }
-                if (sections.singleColorGroups.isNotEmpty()) {
-                    item { SectionTitle(stringResource(Strings.Pool.sectionSingleColor)) }
-                    colorGroups("single", sections.singleColorGroups, controller)
-                }
-                if (sections.multicolorGroups.isNotEmpty()) {
-                    item { SectionTitle(stringResource(Strings.Pool.sectionMulticolor)) }
-                    colorGroups("multi", sections.multicolorGroups, controller)
+
+                is PoolModel.ThreeD -> {
+                    val sections = model.sections
+                    if (!sections.awaitingColor.isEmpty) {
+                        item(key = "awaiting") {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                SectionHeading(
+                                    title = stringResource(Strings.Pool.sectionAwaitingColor),
+                                    taskCount = sections.awaitingColor.taskCount,
+                                    requiredTotal = sections.awaitingColor.requiredTotal,
+                                    missingTotal = sections.awaitingColor.missingTotal,
+                                    failureTotal = sections.awaitingColor.failureTotal,
+                                )
+                                sections.awaitingColor.tasks.forEach { task ->
+                                    key(task.taskId.toString()) {
+                                        TaskCard(task = task, card = PoolCardKey(task.taskId), controller = controller)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (sections.singleColorGroups.isNotEmpty()) {
+                        item(key = "title-single", span = { GridItemSpan(maxLineSpan) }) {
+                            SectionTitle(stringResource(Strings.Pool.sectionSingleColor))
+                        }
+                        colorGroups("single", sections.singleColorGroups, controller)
+                    }
+                    if (sections.multicolorGroups.isNotEmpty()) {
+                        item(key = "title-multi", span = { GridItemSpan(maxLineSpan) }) {
+                            SectionTitle(stringResource(Strings.Pool.sectionMulticolor))
+                        }
+                        colorGroups("multi", sections.multicolorGroups, controller)
+                    }
                 }
             }
         }
     }
 }
 
+/** The narrowest a column of cards is allowed to get before there is one column fewer. */
+internal val MinColumnWidth = 260.dp
+
+/** The room between two columns. */
+private val ColumnGap = 14.dp
+
+/** The most columns a pool is laid out in, however wide the window. */
+internal const val MAX_POOL_COLUMNS = 4
+
+/** How many columns of cards fit in [width]: between one and [MAX_POOL_COLUMNS]. */
+internal fun poolColumnsFor(width: Dp): Int = ((width + ColumnGap) / (MinColumnWidth + ColumnGap)).toInt().coerceIn(1, MAX_POOL_COLUMNS)
+
 /**
- * One colour's heading and the tasks under it.
+ * Every colour group as one block: its heading, then its tasks one under the
+ * other.
  *
  * The key of a card is the colour and the task together, because the same task
  * really is in several of these groups (PLAN 12.10) and a key of the task alone
  * would be the same key twice.
  *
  * [section] is part of both keys for the same reason one step further out: the
- * two sections of the 3D pool are one list, and one colour can head a group in
+ * two sections of the 3D pool are one grid, and one colour can head a group in
  * each of them — grey for a task made only in grey, and grey again for a task
  * made in grey and two others. Keyed by the colour alone, that is the same key
- * twice in one list, which is not a drawing mistake but a crash.
+ * twice in one grid, which is not a drawing mistake but a crash.
  */
-private fun LazyListScope.colorGroups(
+private fun LazyGridScope.colorGroups(
     section: String,
     groups: List<PoolColorGroup>,
     controller: PoolController,
 ) {
     groups.forEach { group ->
-        item(key = "group-$section-" + group.color.colorId) { ColorGroupHeading(group) }
-        items(
-            count = group.tasks.size,
-            key = { at -> "$section-" + group.color.colorId + group.tasks[at].taskId },
-        ) { at ->
-            val task = group.tasks[at]
-            TaskCard(
-                task = task,
-                card = PoolCardKey(task.taskId, group.color.colorId),
-                controller = controller,
-            )
+        item(key = "group-$section-" + group.color.colorId) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ColorGroupHeading(group)
+                group.tasks.indices.forEach { at ->
+                    key("$section-" + group.color.colorId + group.tasks[at].taskId) {
+                        val task = group.tasks[at]
+                        TaskCard(
+                            task = task,
+                            card = PoolCardKey(task.taskId, group.color.colorId),
+                            controller = controller,
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -678,9 +717,6 @@ private fun TaskCard(
                     if (task.stages.isNotEmpty()) {
                         StageBadge(task = task, card = card, controller = controller)
                     }
-                    if (task.trackingMode == TrackingMode.CHECKLIST || task.trackingMode == TrackingMode.COUNTED) {
-                        SpecialFacts(task)
-                    }
                     if (state.finishRefused == task.taskId) {
                         Text(
                             text = stringResource(Strings.Pool.finishRefused),
@@ -836,39 +872,6 @@ private fun TaskFacts(task: PoolTask) {
     }
     if (task.failureTotal > 0) {
         NoteLine(text = stringResource(Strings.Pool.failures, task.failureTotal.toString()), isProblem = false)
-    }
-}
-
-/**
- * What kind of special work this is, and how much of it is left.
- *
- * PLAN 12.13 lets a special task be a checklist or a counted one, and the two
- * are read differently: one is done or not, the other has a number still to go.
- * Which it is is said in words, because the difference is not visible anywhere
- * else on the card.
- */
-@Composable
-private fun SpecialFacts(task: PoolTask) {
-    Text(
-        text =
-            stringResource(
-                if (task.trackingMode == TrackingMode.CHECKLIST) Strings.Pool.checklist else Strings.Pool.counted,
-            ),
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    if (task.trackingMode == TrackingMode.COUNTED && task.requiredQuantity != null) {
-        Text(
-            text =
-                stringResource(
-                    Strings.Pool.remaining,
-                    (task.requiredQuantity - if (task.primaryBatchCompleted) task.requiredQuantity else 0)
-                        .coerceAtLeast(task.currentMissingQuantity)
-                        .toString(),
-                ),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 

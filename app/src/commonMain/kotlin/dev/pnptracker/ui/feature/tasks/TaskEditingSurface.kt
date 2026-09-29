@@ -53,6 +53,7 @@ import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.TrackingMode
 import dev.pnptracker.domain.rules.poolHoldsColors
 import dev.pnptracker.domain.tasks.TaskEditFailure
+import dev.pnptracker.domain.tasks.poolOfTrackingMode
 import dev.pnptracker.domain.tasks.trackingModesOf
 import dev.pnptracker.domain.text.graphemeBoundariesOf
 import dev.pnptracker.ui.Strings
@@ -288,8 +289,7 @@ internal fun TaskEditPanel(
  * share one.
  */
 @Composable
-internal fun poolOf(editor: TaskEditor): PoolType? =
-    remember(editor.trackingMode) { PoolType.entries.firstOrNull { editor.trackingMode in trackingModesOf(it) } }
+internal fun poolOf(editor: TaskEditor): PoolType? = remember(editor.trackingMode) { poolOfTrackingMode(editor.trackingMode) }
 
 /** The tracking modes this task's pool allows, in the order it lists them. */
 @Composable

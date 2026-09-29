@@ -15,8 +15,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -43,7 +41,6 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.pnptracker.AppInfo
-import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.pools.PoolNavigationSummary
 import dev.pnptracker.ui.Strings
 import dev.pnptracker.ui.feature.colors.ColorCatalogueController
@@ -83,9 +80,8 @@ private val SelectionUnderlineWidth = 24.dp
  * under it (PLAN 12.1).
  *
  * There is no sidebar and no home page. The table is the surface the application
- * is worked from, so it gets the whole width, and the five entries above it are
- * the five places PLAN 12.1 names — with the rest of the sections in the menu
- * under `Ayarlar`.
+ * is worked from, so it gets the whole width; the entries above it are the table,
+ * the four pools and `Ayarlar`, whose page holds the rest of the sections.
  */
 @Composable
 fun AppScaffold(
@@ -109,16 +105,6 @@ fun AppScaffold(
 ) {
     LaunchedEffect(poolControllers) { poolControllers.observeNavigationSummary() }
     val summary = poolControllers.summary
-    // The Special pool can stop being reachable while it is the section on
-    // screen: its last task deleted, or the game it was in removed. Standing on a
-    // section nothing can name any more would leave a screen with no way out by
-    // its own name, so the window moves to the 3D pool and says nothing more
-    // about it (PLAN 9 hides the pool; it does not explain the hiding).
-    LaunchedEffect(summary.showsSpecial, navigation.currentScreen) {
-        if (!summary.showsSpecial && navigation.currentScreen == Screen.specialPool) {
-            navigation.navigateTo(Screen.threeDPool)
-        }
-    }
 
     val exportScope = rememberCoroutineScope()
     Surface(modifier = modifier.fillMaxSize()) {
@@ -140,38 +126,32 @@ fun AppScaffold(
                                             exportController.state !is ExportScreenState.ConfirmingOverwrite,
                                     status = { TaskExportStatus(exportController) },
                                 ),
-                            // The only way to the Special pool, because the
-                            // navigation across the top does not carry it.
-                            specialAction = {
-                                if (Screen.specialPool in Screen.offered(summary)) {
-                                    SpecialPoolEntry(
-                                        activeCount = summary.activeCountOf(PoolType.SPECIAL),
-                                        onOpen = { navigation.navigateTo(Screen.specialPool) },
-                                    )
-                                }
-                            },
                         )
-                    Screen.History -> HistoryScreen(historyController)
-                    Screen.Colors -> ColorCatalogueScreen(colorCatalogueController)
+                    Screen.History -> SettingsPage(navigation) { HistoryScreen(historyController) }
+                    Screen.Colors -> SettingsPage(navigation) { ColorCatalogueScreen(colorCatalogueController) }
                     Screen.Settings ->
-                        SettingsScreen(
-                            controller = backupController,
-                            restoreController = restoreController,
-                            retentionController = retentionController,
-                            appearanceController = appearanceController,
-                        )
+                        SettingsPage(navigation) {
+                            SettingsScreen(
+                                controller = backupController,
+                                restoreController = restoreController,
+                                retentionController = retentionController,
+                                appearanceController = appearanceController,
+                            )
+                        }
                     Screen.Import ->
-                        ImportSection(
-                            importController = importController,
-                            reviewController = reviewController,
-                            confirmationController = confirmationController,
-                            rollbackController = rollbackController,
-                            unfinishedController = unfinishedController,
-                            // The section is `İçe/Dışa Aktarma`, so it is where
-                            // the menu under `Ayarlar` reaches the export too; the
-                            // table keeps its own button (PLAN 12.1).
-                            exportAction = { TaskExportAction(exportController) },
-                        )
+                        SettingsPage(navigation) {
+                            ImportSection(
+                                importController = importController,
+                                reviewController = reviewController,
+                                confirmationController = confirmationController,
+                                rollbackController = rollbackController,
+                                unfinishedController = unfinishedController,
+                                // The tab is `İçe/Dışa Aktarma`, so it is where
+                                // the settings page reaches the export too; the
+                                // table keeps its own button (PLAN 12.1).
+                                exportAction = { TaskExportAction(exportController) },
+                            )
+                        }
                     // Keyed by the pool, so moving between two of them starts the
                     // new pool's reads and stops the old one's rather than
                     // leaving both running.
@@ -220,64 +200,70 @@ private fun TopNavigation(
                 modifier = Modifier.padding(end = 12.dp),
             )
             Screen.topLevel.forEach { screen ->
-                if (screen == Screen.Settings) {
-                    SettingsMenu(navigation = navigation)
-                } else {
-                    NavigationEntry(
-                        label = stringResource(textsOf(screen).navigationLabel),
-                        selected = navigation.isCurrent(screen),
-                        activeCount = (screen as? Screen.Pool)?.let { summary.activeCountOf(it.poolType) },
-                        onSelect = { navigation.navigateTo(screen) },
-                    )
-                }
+                NavigationEntry(
+                    label = stringResource(textsOf(screen).navigationLabel),
+                    // `Ayarlar` reads as selected while any of its tabs is open, so
+                    // a user looking at the colours can still see where they are.
+                    selected =
+                        if (screen == Screen.Settings) {
+                            navigation.currentScreen in Screen.underSettings
+                        } else {
+                            navigation.isCurrent(screen)
+                        },
+                    activeCount = (screen as? Screen.Pool)?.let { summary.activeCountOf(it.poolType) },
+                    onSelect = { navigation.navigateTo(screen) },
+                )
             }
         }
     }
 }
 
 /**
- * `Ayarlar`, and the sections that live under it (PLAN 12.1).
+ * The settings page: its own tabs across the top, the open tab under them.
  *
- * The entry reads as selected while any of them is open, so a user looking at the
- * colours can still see which of the five they are inside.
+ * `Ayarlar` in the navigation opens this page straight away rather than a menu.
+ * The tabs are the settings themselves — appearance, backups — and the three
+ * sections about the collection as a whole: import and export, the colours and
+ * the history. They are drawn the way the navigation above them is, so which tab
+ * is open is said by the underline and in words as well as by colour.
  */
 @Composable
-private fun SettingsMenu(navigation: AppNavigationState) {
-    var open by remember { mutableStateOf(false) }
-    val menuLabel = stringResource(Strings.Navigation.settingsMenu)
-    Box {
-        NavigationEntry(
-            label = stringResource(Strings.Navigation.settings),
-            selected = navigation.currentScreen in Screen.underSettings,
-            onSelect = { open = true },
-            contentDescription = menuLabel,
-        )
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+private fun SettingsPage(
+    navigation: AppNavigationState,
+    content: @Composable () -> Unit,
+) {
+    val sectionsLabel = stringResource(Strings.Navigation.settingsSections)
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(start = 24.dp, end = 16.dp, top = 8.dp)
+                    .selectableGroup()
+                    .semantics { contentDescription = sectionsLabel },
+        ) {
             Screen.underSettings.forEach { screen ->
-                val selected = navigation.isCurrent(screen)
-                val selectionText =
-                    stringResource(if (selected) Strings.Accessibility.selected else Strings.Accessibility.notSelected)
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = stringResource(textsOf(screen).navigationLabel),
-                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                        )
-                    },
-                    onClick = {
-                        open = false
-                        navigation.navigateTo(screen)
-                    },
-                    modifier =
-                        Modifier.semantics {
-                            this.selected = selected
-                            stateDescription = selectionText
-                        },
+                NavigationEntry(
+                    label = stringResource(settingsTabLabelOf(screen)),
+                    selected = navigation.isCurrent(screen),
+                    onSelect = { navigation.navigateTo(screen) },
                 )
             }
         }
+        HorizontalDivider()
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) { content() }
     }
 }
+
+/**
+ * What a tab of the settings page is called. The settings' own tab is `Genel`,
+ * because `Ayarlar` is already the name of the whole page.
+ */
+private fun settingsTabLabelOf(screen: Screen) =
+    if (screen == Screen.Settings) Strings.Navigation.settingsGeneral else textsOf(screen).navigationLabel
 
 /**
  * One entry of the navigation.
@@ -296,7 +282,6 @@ private fun NavigationEntry(
     selected: Boolean,
     onSelect: () -> Unit,
     activeCount: Int? = null,
-    contentDescription: String? = null,
 ) {
     val selectionText =
         stringResource(if (selected) Strings.Accessibility.selected else Strings.Accessibility.notSelected)
@@ -313,7 +298,6 @@ private fun NavigationEntry(
                     .semantics {
                         this.selected = selected
                         stateDescription = stateText
-                        if (contentDescription != null) this.contentDescription = contentDescription
                     },
         ) {
             Text(
@@ -339,27 +323,6 @@ private fun NavigationEntry(
                     .height(SelectionUnderlineHeight)
                     .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
                     .clearAndSetSemantics {},
-        )
-    }
-}
-
-/**
- * The way into the Special pool, drawn with the table's own controls.
- *
- * PLAN 9 keeps the pool out of sight until there is special work; PLAN 12.1 keeps
- * it out of the navigation across the top. So it is reached from the table the
- * work is in, and it says how much work that is, the way the sidebar used to.
- */
-@Composable
-private fun SpecialPoolEntry(
-    activeCount: Int,
-    onOpen: () -> Unit,
-) {
-    TextButton(onClick = onOpen, modifier = Modifier.focusOutline(NavigationItemShape)) {
-        Text(
-            text =
-                stringResource(Strings.Table.openSpecial) + " — " +
-                    stringResource(Strings.Pool.navActiveBadge, activeCount.toString()),
         )
     }
 }

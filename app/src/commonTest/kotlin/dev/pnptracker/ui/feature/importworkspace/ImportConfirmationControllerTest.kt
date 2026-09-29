@@ -234,12 +234,9 @@ class ImportConfirmationControllerTest {
         }
 
     @Test
-    fun `a pool with a real choice is left for the user to make`() {
-        assertNull(onlyTrackingModeOf(PoolType.SPECIAL))
-        assertEquals(
-            setOf(TrackingMode.CHECKLIST, TrackingMode.COUNTED),
-            trackingModesOf(PoolType.SPECIAL).toSet(),
-        )
+    fun `the special pool no longer asks how a new task is tracked`() {
+        assertEquals(TrackingMode.COUNTED, onlyTrackingModeOf(PoolType.SPECIAL))
+        assertEquals(listOf(TrackingMode.COUNTED), trackingModesOf(PoolType.SPECIAL))
     }
 
     @Test

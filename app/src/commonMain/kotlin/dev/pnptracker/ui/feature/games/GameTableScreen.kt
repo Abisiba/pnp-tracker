@@ -308,13 +308,6 @@ fun GameTableScreen(
      * files, and so a test of the table needs no exporter at all.
      */
     export: TableExport? = null,
-    /**
-     * The way into the Special pool, drawn with the table's own controls.
-     *
-     * Passed in for the same reason the export action is: the table knows which
-     * work it holds and nothing about where the window can go (PLAN 12.1).
-     */
-    specialAction: @Composable () -> Unit = {},
 ) {
     // Keyed on the attempt as well, so asking again ends the collection a
     // refusal left standing and starts a fresh one (PLAN 14.7.6).
@@ -343,7 +336,6 @@ fun GameTableScreen(
                     controller = controller,
                     state = state,
                     export = export,
-                    specialAction = specialAction,
                 )
                 FailureLine(state.failure)
                 CreatedTaskLine(state.createdTask, controller)
@@ -522,7 +514,6 @@ private fun TableControls(
     controller: GameTableController,
     state: GameTableScreenState,
     export: TableExport?,
-    specialAction: @Composable () -> Unit = {},
 ) {
     val filterButtonFocus = remember { FocusRequester() }
     LaunchedEffect(state.focusRecall) {
@@ -565,7 +556,6 @@ private fun TableControls(
                     Text(text = stringResource(Strings.Table.addGame))
                 }
             }
-            specialAction()
             MoreActions(controller = controller, state = state, export = export)
         }
 
@@ -950,13 +940,14 @@ private fun rememberNeededWidths(rows: List<GameTableRow>): Map<TableColumn, Flo
     val density = LocalDensity.current
     val cellStyle = MaterialTheme.typography.bodyMedium
     val nameStyle = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium)
+    val sourceStyle = missingSourceStyle()
     val missingLabels = rememberMissingLabels()
-    val measured = remember(density, cellStyle, nameStyle) { HashMap<Pair<Boolean, String>, Int>() }
-    return remember(rows, density, cellStyle, nameStyle, missingLabels) {
+    val measured = remember(density, cellStyle, nameStyle, sourceStyle) { HashMap<Pair<MeasuredText, String>, Int>() }
+    return remember(rows, density, cellStyle, nameStyle, sourceStyle, missingLabels) {
         TableColumn.entries.associateWith { column ->
-            widthThatFits(column, rows, density, missingLabels) { text, isName ->
-                measured.getOrPut(isName to text) {
-                    measurer.measure(text, if (isName) nameStyle else cellStyle, softWrap = false).size.width
+            widthThatFits(column, rows, density, missingLabels) { text, kind ->
+                measured.getOrPut(kind to text) {
+                    measurer.measure(text, kind.styleOf(cellStyle, nameStyle, sourceStyle), softWrap = false).size.width
                 }
             }
         }
@@ -1139,10 +1130,47 @@ private fun widthThatFits(
     nameStyle: TextStyle,
     density: Density,
     missingLabels: Map<CellColumnType, String>,
-): Float =
-    widthThatFits(column, rows, density, missingLabels) { text, isName ->
-        measurer.measure(text, if (isName) nameStyle else cellStyle, softWrap = false).size.width
+): Float {
+    val sourceStyle = missingSourceStyleOf(cellStyle)
+    return widthThatFits(column, rows, density, missingLabels) { text, kind ->
+        measurer.measure(text, kind.styleOf(cellStyle, nameStyle, sourceStyle), softWrap = false).size.width
     }
+}
+
+/** Which of the table's text styles a measured piece of text is drawn in. */
+private enum class MeasuredText {
+    CELL,
+    NAME,
+
+    /** The column name that leads a line of the `Eksik` column. */
+    SOURCE,
+    ;
+
+    fun styleOf(
+        cell: TextStyle,
+        name: TextStyle,
+        source: TextStyle,
+    ): TextStyle =
+        when (this) {
+            CELL -> cell
+            NAME -> name
+            SOURCE -> source
+        }
+}
+
+/**
+ * How the column name leading a line of the `Eksik` column is drawn: bold and a
+ * size up from the tasks after it, so where one column's tasks start is seen at
+ * a glance. The tasks keep the cell's own weight.
+ */
+@Composable
+private fun missingSourceStyle(): TextStyle = missingSourceStyleOf(MaterialTheme.typography.bodyMedium)
+
+private fun missingSourceStyleOf(cellStyle: TextStyle): TextStyle =
+    cellStyle.copy(fontSize = cellStyle.fontSize * MISSING_SOURCE_SCALE, fontWeight = FontWeight.Bold)
+
+/** How much bigger the column name is than the tasks after it. */
+private const val MISSING_SOURCE_SCALE = 1.15f
 
 /** [widthThatFits], with the measuring handed in so the table can remember it. */
 private fun widthThatFits(
@@ -1150,22 +1178,32 @@ private fun widthThatFits(
     rows: List<GameTableRow>,
     density: Density,
     missingLabels: Map<CellColumnType, String>,
-    widthOf: (text: String, isName: Boolean) -> Int,
+    widthOf: (text: String, kind: MeasuredText) -> Int,
 ): Float {
-    val texts =
-        if (column == TableColumn.GAME_NAME) {
-            rows.map { it.gameName }
-        } else if (column == TableColumn.MISSING) {
-            rows.flatMap { row -> row.missing.map { missingLineOf(it, missingLabels[it.columnType].orEmpty()) } }
-        } else {
-            val columnType = CellColumnType.entries.first { TableColumn.of(it) == column }
-            rows.flatMap { row -> lineTextsOf(row.cell(columnType)) }
-        }
     val widest =
-        texts
-            .filter { it.isNotBlank() }
-            .maxOfOrNull { text -> widthOf(text, column == TableColumn.GAME_NAME) }
-            ?: 0
+        if (column == TableColumn.MISSING) {
+            // The column name and the tasks after it are drawn in two styles, so
+            // each is measured in its own.
+            rows
+                .flatMap { row -> row.missing }
+                .maxOfOrNull { cell ->
+                    widthOf(missingLabels[cell.columnType].orEmpty() + MISSING_LABEL_GAP, MeasuredText.SOURCE) +
+                        widthOf(missingTasksOf(cell), MeasuredText.CELL)
+                } ?: 0
+        } else {
+            val texts =
+                if (column == TableColumn.GAME_NAME) {
+                    rows.map { it.gameName }
+                } else {
+                    val columnType = CellColumnType.entries.first { TableColumn.of(it) == column }
+                    rows.flatMap { row -> lineTextsOf(row.cell(columnType)) }
+                }
+            val kind = if (column == TableColumn.GAME_NAME) MeasuredText.NAME else MeasuredText.CELL
+            texts
+                .filter { it.isNotBlank() }
+                .maxOfOrNull { text -> widthOf(text, kind) }
+                ?: 0
+        }
     // The room the cell keeps around its text, and the tick the name column
     // draws beside it, are part of what has to fit.
     val padding = if (column == TableColumn.GAME_NAME) NAME_COLUMN_FURNITURE else CELL_FURNITURE
@@ -1202,15 +1240,11 @@ private fun rememberMissingLabels(): Map<CellColumnType, String> =
         .filter { it.holdsTasks }
         .associateWith { stringResource(columnNameOf(it)) }
 
-/** One line of the `Eksik` column as text, which is what its width is measured from. */
-private fun missingLineOf(
-    cell: CellPreview,
-    label: String,
-): String =
-    label + MISSING_LABEL_GAP +
-        cell.segments.joinToString(separator = MISSING_TASK_GAP) { task ->
-            task.text + (task.requiredQuantity?.let { " ×$it" } ?: "") + (noteShownOf(task)?.let { " $it" } ?: "")
-        }
+/** The tasks of one line of the `Eksik` column as text, which is what its width is measured from. */
+private fun missingTasksOf(cell: CellPreview): String =
+    cell.segments.joinToString(separator = MISSING_TASK_GAP) { task ->
+        task.text + (task.requiredQuantity?.let { " ×$it" } ?: "") + (noteShownOf(task)?.let { " $it" } ?: "")
+    }
 
 /** Between a column's name and its first task in the `Eksik` column. */
 private const val MISSING_LABEL_GAP = ": "
@@ -1264,6 +1298,7 @@ private fun MissingCell(
             stringResource(Strings.Table.cellDescription, columnName, spoken.joinToString(separator = "; "))
         }
     val metadata = MaterialTheme.colorScheme.onSurfaceVariant
+    val source = missingSourceStyle()
     val edgeCorner = with(LocalDensity.current) { 3.dp.toPx() }
     val edgeStroke = with(LocalDensity.current) { 1.dp.toPx() }
     Column(
@@ -1289,7 +1324,11 @@ private fun MissingCell(
             val drawn = drawnDocumentOf(cell, withCounts = true, withTicks = false)
             val text =
                 buildAnnotatedString {
-                    withStyle(SpanStyle(color = metadata)) { append(label) }
+                    // The column name bold and a size up; the tasks after it in
+                    // the cell's own weight.
+                    withStyle(SpanStyle(color = metadata, fontSize = source.fontSize, fontWeight = source.fontWeight)) {
+                        append(label)
+                    }
                     append(drawn.text)
                 }
             // The edges that make a colour visible on a ground it matches, moved
@@ -2457,13 +2496,22 @@ private sealed interface CellLine {
  * line breaks, lose the spaces at either end of a line, and a line that holds
  * nothing but a separator — the comma or the `ve` two tasks were written apart
  * by — is not drawn: with every task on its own line it has nothing left to
- * separate. Only the drawing changes; the document, and the editor that shows
- * it, keep every character.
+ * separate. The `Notlar` column holds no tasks, so none of that applies there:
+ * its lines are drawn as written, empty ones included. Only the drawing
+ * changes; the document, and the editor that shows it, keep every character.
  */
 private fun linesOf(cell: CellPreview): List<CellLine> =
     cell.segments.flatMap { segment ->
         if (segment.isTask) {
             listOf(CellLine.Task(segment))
+        } else if (!cell.columnType.holdsTasks) {
+            // A note is drawn as it was written: every line, the empty ones too,
+            // so the gaps the user left between paragraphs are still there.
+            segment.text
+                .lines()
+                .map(String::trimEnd)
+                .dropLastWhile(String::isEmpty)
+                .map { CellLine.Words(it) }
         } else {
             segment.text
                 .lines()

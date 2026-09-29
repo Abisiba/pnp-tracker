@@ -2,6 +2,8 @@ package dev.pnptracker.ui.feature.games
 
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.isSpecified
 import dev.pnptracker.domain.colors.baseColors
 import dev.pnptracker.domain.games.DEFAULT_CELL_COLUMN_WIDTH_DP
 import dev.pnptracker.domain.model.CellColumnType
@@ -169,6 +171,38 @@ class MissingColumnTest {
                 assertFalse("destesi" in said, "plain text was copied into Eksik: $said")
                 assertTrue(screen.missingLine("3D Baskı") != null, "the 3D tasks are not led by their column")
                 assertTrue(screen.missingLine("Kart") != null, "the card tasks are not led by their column")
+            }
+        }
+    }
+
+    @Test
+    fun `the column a line comes from is written bold and larger, and its tasks are not`() {
+        RealStack().use { stack ->
+            open(stack).use { screen ->
+                val gameId = screen.makeGame(stack)
+                screen.tasksIn(stack, gameId, CellColumnType.THREE_D, "Ejderha", listOf("Ejderha"), colored = true)
+                screen.tasksIn(stack, gameId, CellColumnType.CARD, "Gri token", listOf("Gri token"), colored = false)
+                screen.render()
+
+                listOf("3D Baskı" to "Ejderha", "Kart" to "Gri token").forEach { (label, task) ->
+                    val line = screen.missingLine(label) ?: fail("the $label tasks are not in Eksik")
+
+                    fun stylesAt(at: Int) = line.spanStyles.filter { it.start <= at && it.end > at }.map { it.item }
+
+                    val source = stylesAt(0)
+                    assertTrue(
+                        source.any { it.fontWeight == FontWeight.Bold },
+                        "`$label:` is not bold: $source",
+                    )
+                    val size = source.firstNotNullOfOrNull { it.fontSize.takeIf { size -> size.isSpecified } }
+                    assertTrue(size != null && size.value > 14f, "`$label:` is not larger than the tasks: $size")
+
+                    val taskStyles = stylesAt(line.text.indexOf(task))
+                    assertFalse(
+                        taskStyles.any { it.fontWeight == FontWeight.Bold },
+                        "the task `$task` is drawn bold too: $taskStyles",
+                    )
+                }
             }
         }
     }

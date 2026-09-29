@@ -1,5 +1,6 @@
 package dev.pnptracker.ui.feature.pools
 
+import androidx.compose.ui.unit.dp
 import dev.pnptracker.domain.colors.baseColors
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.ProductionStage
@@ -105,12 +106,11 @@ class PoolScreenLayoutTest {
     }
 
     @Test
-    fun `the two kinds of special work are told apart in words`() {
-        val checklist = textOf(Strings.Pool.checklist)
-        val counted = textOf(Strings.Pool.counted)
-
-        assertTrue(checklist != counted, "a checklist and a counted task read the same")
-        assertTrue(checklist.isNotBlank() && counted.isNotBlank())
+    fun `a special task's card is an ordinary card, with no kind of tracking written on it`() {
+        // Special work is made of ordinary tasks now; there is no checklist or
+        // counted kind left to tell apart on the card.
+        assertFalse("SpecialFacts" in screen, "a special card still says which kind of tracking it has")
+        assertFalse("TrackingMode" in screen, "the card is drawn differently by its tracking mode")
     }
 
     @Test
@@ -202,13 +202,35 @@ class PoolScreenLayoutTest {
     // ---------------------------------------------------------- what is drawn
 
     @Test
-    fun `a pool reads down the page and never sideways`() {
-        assertTrue("LazyColumn(" in screen, "the rows do not scroll")
+    fun `a pool fills the width in columns and never scrolls sideways`() {
+        assertTrue("LazyVerticalGrid(" in screen, "the cards do not scroll or are not laid out in columns")
+        assertTrue("GridCells.Fixed(columns)" in screen, "the number of columns is not the one worked out from the width")
         assertTrue(
             "horizontalScroll" !in screen,
             "a pool was made to scroll sideways; a narrow window would hide part of it",
         )
-        assertTrue("fillMaxHeight().widthIn(max = MaxContentWidth)" in screen, "the content is not capped or not tall")
+        assertTrue("fillMaxHeight().fillMaxWidth()" in screen, "the pool does not take the window's whole width")
+    }
+
+    @Test
+    fun `four columns in a wide window, fewer as it narrows, and never none`() {
+        assertEquals(4, poolColumnsFor(1600.dp))
+        assertEquals(4, poolColumnsFor(1232.dp))
+        assertEquals(3, poolColumnsFor(900.dp))
+        assertEquals(2, poolColumnsFor(600.dp))
+        assertEquals(1, poolColumnsFor(400.dp))
+        assertEquals(1, poolColumnsFor(100.dp))
+        assertEquals(MAX_POOL_COLUMNS, poolColumnsFor(5000.dp))
+    }
+
+    @Test
+    fun `a colour's tasks are stacked under its heading and never spread across the columns`() {
+        val groups = screen.substringAfter("private fun LazyGridScope.colorGroups(").substringBefore("@Composable")
+
+        // One grid item per colour, holding the heading and every task of it.
+        assertEquals(1, Regex("""\bitem\(""").findAll(groups).count(), "a colour group is not one block")
+        assertTrue("items(" !in groups, "a colour's tasks are grid items of their own, so they spread across the columns")
+        assertTrue("ColorGroupHeading(group)" in groups && "Column(" in groups, "the tasks are not under their heading")
     }
 
     @Test
@@ -408,27 +430,12 @@ class PoolScreenLayoutTest {
     // ----------------------------------------------------- the navigation
 
     @Test
-    fun `the navigation offers a pool only while it is meant to be there`() {
-        // The three pools that are always there are in the row across the top; the
-        // Special one is offered on the game table, and only while it is offered
-        // at all (PLAN 12.1).
-        assertTrue("Screen.offered(summary)" in scaffold, "the Special entry is drawn whatever the state")
-        assertTrue(
-            "navigation.navigateTo(Screen.threeDPool)" in scaffold,
-            "standing on a pool that stops being offered leaves the window on a section nobody can leave",
-        )
-    }
-
-    @Test
-    fun `the special pool is reached from the game table and nowhere else`() {
-        // PLAN 12.1: it is in neither navigation list, so the table that holds the
-        // work is the way in, and the entry says how much work that is.
-        assertTrue("specialAction = {" in scaffold, "the table is given no way into the Special pool")
-        assertTrue(
-            "navigation.navigateTo(Screen.specialPool)" in scaffold,
-            "the entry on the table does not open the pool",
-        )
-        assertTrue("Strings.Table.openSpecial" in scaffold, "the entry is not named")
+    fun `the special pool is an entry across the top like the other pools`() {
+        // Always there, beside the other three, and no longer a button on the
+        // table that appears once there is special work.
+        assertTrue("Screen.offered" !in scaffold, "the Special entry still depends on there being special work")
+        assertTrue("specialAction" !in scaffold, "the table still carries its own way into the Special pool")
+        assertTrue("Screen.topLevel.forEach" in scaffold, "the navigation does not draw its entries from the one list")
     }
 
     @Test
@@ -441,10 +448,14 @@ class PoolScreenLayoutTest {
     }
 
     @Test
-    fun `import, colours and the history are opened from the menu under the settings`() {
-        assertTrue("SettingsMenu(" in scaffold, "there is no menu under the settings")
-        assertTrue("Screen.underSettings.forEach" in scaffold, "the menu does not offer what the plan puts in it")
-        assertTrue("DropdownMenu(" in scaffold, "the entry opens no menu")
+    fun `the settings entry opens a page whose tabs reach import, colours and the history`() {
+        assertTrue("SettingsPage(" in scaffold, "there is no settings page")
+        assertTrue("Screen.underSettings.forEach" in scaffold, "the page does not offer what belongs in it")
+        assertTrue("DropdownMenu(" !in scaffold, "the settings entry still opens a menu")
+        listOf("Screen.History ->", "Screen.Colors ->", "Screen.Settings ->", "Screen.Import ->").forEach { branch ->
+            val drawn = scaffold.substringAfter(branch).substringBefore("->")
+            assertTrue("SettingsPage(navigation)" in drawn, "$branch is not drawn inside the settings page")
+        }
     }
 
     @Test
