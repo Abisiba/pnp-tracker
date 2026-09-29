@@ -51,15 +51,17 @@ Three things are enough to know:
 ## Screens
 
 The application opens on **Oyunlar** (Games). The single navigation row across
-the top has five sections: **Oyunlar** (Games), **3D Baskı** (3D printing),
-**Kartlar** (Cards), **Mukavva** (Board) and **Ayarlar** (Settings).
+the top has six sections: **Oyunlar** (Games), **3D Baskı** (3D printing),
+**Kartlar** (Cards), **Mukavva** (Board), **Özel** (Special) and **Ayarlar**
+(Settings).
 
-**Ayarlar** opens a menu: **Ayarlar** (Settings), **İçe/Dışa Aktarma**
-(Import/Export), **Renkler** (Colours) and **Geçmiş** (History).
+**Ayarlar** opens the settings page. Its tabs are **Genel** (general: appearance
+and theme, backups), **İçe/Dışa Aktarma** (Import/Export), **Renkler** (Colours)
+and **Geçmiş** (History).
 
-The **Özel** (Special) pool is not in the navigation: once you have a special
-task, an **Özel görevler** entry appears on the game table and says how many
-tasks are open.
+The pool pages use the whole width of the window: up to four columns of task
+cards in a wide window, fewer in a narrow one. In **3D Baskı** each colour is
+its own group, with all of that colour's tasks listed under its heading.
 
 ## Creating a game
 
@@ -84,12 +86,13 @@ Every game has six columns (cells): **3D Baskı**, **Kart**, **Mukavva**,
 **Özel**, **Ödünç Parçalar** (borrowed parts) and **Notlar** (notes). The first
 four feed the pools of the same names. **Ödünç Parçalar** is free text for parts
 borrowed from another game and **Notlar** is free text for anything else;
-neither holds tasks.
+neither holds tasks. **Notlar** is shown exactly as you wrote it, empty lines
+included.
 
 The **Eksik** (missing) column right beside the game's name is not a cell but a
 view: it shows the unfinished tasks of that game's 3D Baskı, Kart, Mukavva and
 Özel columns, in their own colours and with their counts, after each column's
-name. A task finished in its own column leaves Eksik, and comes back if it is
+name in bold. A task finished in its own column leaves Eksik, and comes back if it is
 reopened. Nothing is edited in Eksik; tasks are edited and finished in their own
 cells. A cell holds text, and some words in that text are marked as **tasks**.
 
