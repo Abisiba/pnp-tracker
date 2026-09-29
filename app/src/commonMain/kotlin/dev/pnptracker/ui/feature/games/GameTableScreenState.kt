@@ -644,6 +644,12 @@ data class TaskComposer(
     val isSaving: Boolean = false,
     val failure: TaskFromTextFailure? = null,
     /**
+     * True once a save was asked for — Enter or the button — while the window
+     * still lacked something it needs. The window stays open and says what is
+     * missing, rather than a key press that seemed to do nothing.
+     */
+    val saveRefused: Boolean = false,
+    /**
      * Which row the refusal was about, or null when it was about the whole panel.
      *
      * A batch is several tasks described at once, so "a colour is gone" is only
@@ -681,6 +687,15 @@ data class TaskComposer(
 
     /** Whether the pool this is being written to has colours at all (PLAN 5.10). */
     val holdsColors: Boolean get() = columnType.poolType?.let { poolHoldsColors(it) } == true
+
+    /** True when the task, or one of the tasks, still has no usable quantity. */
+    val lacksQuantity: Boolean
+        get() =
+            if (mode == TaskCreationMode.SINGLE_ITEM_MULTICOLOR) {
+                palette.quantity == null
+            } else {
+                usedRows.isEmpty() || usedRows.any { it.quantity == null }
+            }
 
     /** Every colour the mode being worked in would actually save. */
     val colorsInPlay: List<EntityId>
