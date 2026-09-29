@@ -120,12 +120,23 @@ class FinishedTaskLookTest {
         return gameId to made
     }
 
-    /** The one drawn string that holds a cell's document. */
+    /**
+     * The drawn line of the 3D cell that holds [word].
+     *
+     * Each task is a line of its own (PLAN 12.5), so this is that task's line;
+     * the `Eksik` line that shows the same unfinished task starts with the
+     * column's name and is left out.
+     */
+    private fun ComposeSceneHarness.lineNode(word: String) =
+        nodes().firstOrNull { node ->
+            node.reads(SemanticsProperties.Text).orEmpty().any { it.isTheCellsLine(word) }
+        } ?: fail("no drawn cell holds $word")
+
     private fun ComposeSceneHarness.cellText(word: String): AnnotatedString =
-        nodes()
-            .flatMap { node -> node.reads(SemanticsProperties.Text).orEmpty() }
-            .firstOrNull { word in it.text && it.spanStyles.isNotEmpty() }
-            ?: fail("no drawn cell holds $word")
+        lineNode(word).reads(SemanticsProperties.Text).orEmpty().first { it.isTheCellsLine(word) }
+
+    private fun AnnotatedString.isTheCellsLine(word: String): Boolean =
+        word in text && spanStyles.isNotEmpty() && !text.startsWith("3D Baskı: ")
 
     private fun AnnotatedString.styleOver(word: String) =
         spanStyles.firstOrNull { it.start <= text.indexOf(word) && it.end >= text.indexOf(word) + word.length }
@@ -152,6 +163,7 @@ class FinishedTaskLookTest {
                     }
 
                     val drawn = screen.cellText("Ayı")
+                    val other = screen.cellText("Kuş")
                     assertNull(
                         drawn
                             .styleOver("Ayı")
@@ -160,14 +172,13 @@ class FinishedTaskLookTest {
                         "the finished task is still struck through in $theme",
                     )
                     val finished = drawn.styleOver("Ayı").item.background
-                    val unfinished = drawn.styleOver("Kuş").item.background
+                    val unfinished = other.styleOver("Kuş").item.background
                     assertTrue(finished != unfinished, "finished and unfinished work are drawn on the same ground in $theme")
 
                     assertTrue("Ayı" in drawn.text && "×14" in drawn.text, "the name or the count stopped being readable in $theme")
                     // The count is on the finished ground too, so what is drawn
                     // is one compact surface and not a name with a number
-                    // hanging off it (PLAN 12.5). The cell holds two counts, so
-                    // this is the one after the finished name and not the first.
+                    // hanging off it (PLAN 12.5).
                     val countAt = drawn.text.indexOf("×14", startIndex = drawn.text.indexOf("Ayı"))
                     assertEquals(
                         finished,
@@ -180,21 +191,25 @@ class FinishedTaskLookTest {
     }
 
     @Test
-    fun `finished work is drawn after the work still to do, and the document is untouched`() {
+    fun `a finished task keeps its line and its place, and the document is untouched`() {
         RealStack().use { stack ->
             ComposeSceneHarness(width = 1300, height = 900) { GameTableScreen(stack.table) }.use { screen ->
                 val (gameId, tasks) = screen.twoTasks(stack)
                 val documentBefore = stack.piecesOf(gameId, CellColumnType.THREE_D).map { it.text }
+                val bearBefore = screen.lineNode("Ayı").boundsInRoot
+                val birdBefore = screen.lineNode("Kuş").boundsInRoot
+                assertTrue(bearBefore.bottom <= birdBefore.top + 1f, "the two tasks are not on lines of their own")
 
-                // The first of the two is finished, so what is left to do is now
-                // the second: PLAN 12.5 draws it first.
+                // Only how it is drawn changes (PLAN 12.5): where it is does not.
                 runBlocking { stack.table.toggleTaskCompletion(gameId, CellColumnType.THREE_D, tasks.first()) }
                 screen.settle("the task is finished") {
                     stack.piecesOf(gameId, CellColumnType.THREE_D).any { it.taskId == tasks.first() && it.isCompletedTask }
                 }
 
-                val drawn = screen.cellText("Ayı").text
-                assertTrue(drawn.indexOf("Kuş") < drawn.indexOf("Ayı"), "the finished task is still drawn first: $drawn")
+                // Where it starts, not how wide it is: a finished task draws its
+                // colours as swatches beside its name, which is its look changing.
+                assertEquals(bearBefore.topLeft, screen.lineNode("Ayı").boundsInRoot.topLeft, "the finished task moved")
+                assertEquals(birdBefore, screen.lineNode("Kuş").boundsInRoot, "the task beside it moved")
                 assertEquals(
                     documentBefore,
                     stack.piecesOf(gameId, CellColumnType.THREE_D).map { it.text },
@@ -220,21 +235,25 @@ class FinishedTaskLookTest {
                 }
 
                 val drawn = screen.cellText("Ayı")
+                val other = screen.cellText("Kuş")
                 assertEquals(
-                    drawn.styleOver("Kuş").item.background,
+                    other.styleOver("Kuş").item.background,
                     drawn.styleOver("Ayı").item.background,
                     "a task made active again is still drawn as finished",
                 )
                 // Its count comes off the finished ground with it: nothing about
                 // the task is drawn as finished any more.
                 val countAt = drawn.text.indexOf("×14", startIndex = drawn.text.indexOf("Ayı"))
-                val otherCountAt = drawn.text.indexOf("×14", startIndex = drawn.text.indexOf("Kuş"))
+                val otherCountAt = other.text.indexOf("×14", startIndex = other.text.indexOf("Kuş"))
                 assertEquals(
-                    drawn.styleAt(otherCountAt, "×14".length).background,
+                    other.styleAt(otherCountAt, "×14".length).background,
                     drawn.styleAt(countAt, "×14".length).background,
                     "the count of a reopened task is still drawn on the finished ground",
                 )
-                assertTrue(drawn.text.indexOf("Ayı") < drawn.text.indexOf("Kuş"), "the order the user typed did not come back")
+                assertTrue(
+                    screen.lineNode("Ayı").boundsInRoot.top < screen.lineNode("Kuş").boundsInRoot.top,
+                    "the order the user typed is not the order drawn",
+                )
             }
         }
     }
@@ -259,7 +278,11 @@ class FinishedTaskLookTest {
 
                     val drawn = assertNotNull(screen.cellText("Ayı"), "at ${widthDp}x$heightDp dp the cell is not drawn at all")
                     assertTrue(
-                        drawn.styleOver("Ayı").item.background != drawn.styleOver("Kuş").item.background,
+                        drawn.styleOver("Ayı").item.background !=
+                            screen
+                                .cellText("Kuş")
+                                .styleOver("Kuş")
+                                .item.background,
                         "at ${widthDp}x$heightDp dp finished and unfinished work are drawn on the same ground",
                     )
                     assertTrue("×14" in drawn.text, "at ${widthDp}x$heightDp dp the count stopped being drawn")

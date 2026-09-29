@@ -276,7 +276,13 @@ class CompactCompletedTaskTest {
                 // more. What is at stake is that the work beside it is still drawn,
                 // inside the cell, where the pointer and the keyboard can reach it.
                 val drawn = screen.cellText(LONG_NAME).text
-                val cell = screen.cellNode(LONG_NAME).boundsInRoot
+                // The whole 3D cell, not one task's line: each task has a line of
+                // its own now (PLAN 12.5), so the work beside it is on the next.
+                val cell =
+                    screen
+                        .spokenNodes()
+                        .first { node -> node.contentDescriptions().any { it.startsWith("3D Baskı hücresi: ") } }
+                        .boundsInRoot
                 assertNotNull(screen.taskNode(LONG_NAME), "the finished task is not drawn any more")
                 val beside = assertNotNull(screen.taskNode("Kuş"), "the work beside the finished task was crowded out: $drawn")
                 assertTrue(

@@ -1326,10 +1326,17 @@ Tamamlanan görev:
 - Görev adı, gerekli adedi ve varsa 3D renkleri okunabilir kalır; renk bilgisi
   tamamlanma görünümü uğruna kaybolmaz.
 - Devam eden görevlerin görünümü bundan etkilenmez.
-- Aynı hücrede devam eden görevler önce, tamamlanan görevler sonra çizilir.
-  Bu yalnız okuma yüzeyinin sırasıdır: hücrenin belgesi (`5.5`) ve parçaların
-  `orderIndex` düzeni değişmez, hücre düzenlemeye açıldığında kullanıcı yazdığı
-  sırayı olduğu gibi görür.
+- Tamamlanan görev yerinde kalır: hücrede yazıldığı sırada ve satırda çizilmeye
+  devam eder, yalnız tamamlanma görünümü (kutudaki onay, zemin, renk kareleri)
+  değişir. Hücrenin belgesi (`5.5`) ve parçaların `orderIndex` düzeni değişmez.
+  `Eksik` sütunundan (`12.20`) ise hemen kalkar.
+- Hücrede her görev **kendi satırındadır**: tamamlanma kutusu, ad, adet ve not
+  yan yana başlar. Kutu metnin içinde değil yanındadır; uzun bir ad veya not
+  kaydığında kutunun altına değil kendi ilk harfinin hizasına kayar. Görevlerin
+  arasındaki düz metin kendi satırlarında çizilir; yalnız iki görevi ayıran bir
+  virgül veya `ve` gibi, görevler alt alta gelince ayıracak bir şeyi kalmayan
+  satırlar çizilmez. Bu yalnız çizimdir: düzenleyici belgenin her karakterini
+  gösterir.
 - Görev yeniden açıldığında (`12.10`) hiçbir iz kalmadan normal aktif görünümüne
   döner.
 

@@ -41,7 +41,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.appendInlineContent
@@ -114,8 +113,6 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.Placeholder
-import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
@@ -1105,13 +1102,7 @@ private fun widthThatFits(
             rows.flatMap { row -> row.missing.map { missingLineOf(it, missingLabels[it.columnType].orEmpty()) } }
         } else {
             val columnType = CellColumnType.entries.first { TableColumn.of(it) == column }
-            rows.flatMap { row ->
-                row
-                    .cell(columnType)
-                    .editableText
-                    .lineSequence()
-                    .toList()
-            }
+            rows.flatMap { row -> lineTextsOf(row.cell(columnType)) }
         }
     val widest =
         texts
@@ -1123,6 +1114,23 @@ private fun widthThatFits(
     val padding = if (column == TableColumn.GAME_NAME) NAME_COLUMN_FURNITURE else CELL_FURNITURE
     return with(density) { widest.toDp().value } + padding
 }
+
+/**
+ * The lines a cell is drawn in, as text to measure: each task with its count and
+ * note, led by room the width of its box, and the words between them.
+ */
+private fun lineTextsOf(cell: CellPreview): List<String> =
+    linesOf(cell).map { line ->
+        when (line) {
+            is CellLine.Words -> line.text
+            is CellLine.Task ->
+                TASK_BOX_ROOM + line.segment.text + (line.segment.requiredQuantity?.let { " ×$it" } ?: "") +
+                    (noteShownOf(line.segment)?.let { " $it" } ?: "")
+        }
+    }
+
+/** About as wide as a task's box and the gap after it, when a line is measured. */
+private const val TASK_BOX_ROOM = "\u2003\u2003"
 
 /** The horizontal room a cell keeps for its border and its padding, in dp. */
 private const val CELL_FURNITURE = 32f
@@ -2010,18 +2018,9 @@ private fun drawnDocumentOf(
     val metadata = MaterialTheme.colorScheme.onSurfaceVariant
     val finishedFill = PnpStatus.colors.completedContainer
     val finishedInk = PnpStatus.colors.onCompletedContainer
-    // Finished work last, and only where the cell is being read. PLAN 12.5 puts
-    // what is still to do first; the document itself keeps the order it was
-    // written in, which is what the editor shows and what is stored, because
-    // there the drawn string has to match the cell character for character.
-    val pieces =
-        remember(cell.segments, withCounts) {
-            if (withCounts) {
-                cell.segments.filterNot { it.isCompletedTask } + cell.segments.filter { it.isCompletedTask }
-            } else {
-                cell.segments
-            }
-        }
+    // In the order they were written, finished or not: finishing a task changes
+    // how it is drawn and never where (PLAN 12.5).
+    val pieces = cell.segments
     val paints = pieces.map { if (it.isTask) paintsOf(it) else null }
     val marks =
         pieces.map { segment ->
@@ -2232,7 +2231,6 @@ private fun CellSlot(
     onEdit: () -> Unit,
 ) {
     val columnName = stringResource(columnNameOf(cell.columnType))
-    val drawn = drawnDocumentOf(cell, withCounts = true)
     val editLabel = stringResource(Strings.Cell.editAction, columnName)
     val description =
         if (cell.isEmpty) {
@@ -2242,9 +2240,6 @@ private fun CellSlot(
         }
     var focused by remember { mutableStateOf(false) }
     val cellFocus = remember { FocusRequester() }
-    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
-    val edgeCorner = with(LocalDensity.current) { 3.dp.toPx() }
-    val edgeStroke = with(LocalDensity.current) { 1.dp.toPx() }
 
     Column(
         modifier =
@@ -2304,37 +2299,127 @@ private fun CellSlot(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
-            Box {
-                Text(
-                    text = drawn.text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    // Every line, always: the row grows to hold them and the
-                    // column to what the window can spare (PLAN 12.17). A word
-                    // longer than the column is broken inside itself.
-                    inlineContent = tickContentOf(drawn.tasks, gameId, cell.columnType, controller),
-                    onTextLayout = { layout = it },
-                    modifier =
-                        Modifier.drawBehind {
-                            layout?.let { drawTaskEdges(it, drawn.tasks, edgeCorner, edgeStroke) }
-                        },
-                )
-                // One handle per task, sitting exactly where its word was laid
-                // out. The bounds are the layout's own, so a handle follows its
-                // word when the column scrolls, the window resizes or the text
-                // around it changes — nothing here remembers a coordinate.
-                layout?.let { placed ->
-                    drawn.tasks.forEach { task ->
-                        val boxes = placed.boxesOfRange(task.start, task.end)
-                        if (boxes.isNotEmpty()) {
-                            TaskHandle(
-                                task = task.segment,
-                                boxes = boxes,
-                                gameId = gameId,
-                                columnType = cell.columnType,
-                                state = state,
-                                controller = controller,
-                            )
-                        }
+            // Every task on a line of its own, in the order it was written, and
+            // the words around them on lines of their own too (PLAN 12.5).
+            linesOf(cell).forEach { line ->
+                when (line) {
+                    is CellLine.Words ->
+                        Text(
+                            text = line.text,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+
+                    is CellLine.Task ->
+                        TaskLine(
+                            segment = line.segment,
+                            cell = cell,
+                            gameId = gameId,
+                            state = state,
+                            controller = controller,
+                        )
+                }
+            }
+        }
+    }
+}
+
+/** One line of a cell as the table draws it: a task, or the words between tasks. */
+private sealed interface CellLine {
+    data class Task(
+        val segment: CellSegmentPreview,
+    ) : CellLine
+
+    data class Words(
+        val text: String,
+    ) : CellLine
+}
+
+/**
+ * The lines a cell is drawn in (PLAN 12.5).
+ *
+ * Each task is a line of its own. The plain words between them keep their own
+ * line breaks, lose the spaces at either end of a line, and a line that holds
+ * nothing but a separator — the comma or the `ve` two tasks were written apart
+ * by — is not drawn: with every task on its own line it has nothing left to
+ * separate. Only the drawing changes; the document, and the editor that shows
+ * it, keep every character.
+ */
+private fun linesOf(cell: CellPreview): List<CellLine> =
+    cell.segments.flatMap { segment ->
+        if (segment.isTask) {
+            listOf(CellLine.Task(segment))
+        } else {
+            segment.text
+                .lines()
+                .map { it.trim().trim(',', ';', '/', '+', '&').trim() }
+                .filter { it.isNotEmpty() && it.lowercase() !in LONE_SEPARATORS }
+                .map { CellLine.Words(it) }
+        }
+    }
+
+/** Words that only ever stand between two tasks, and say nothing on a line alone. */
+private val LONE_SEPARATORS = setOf("ve", "ile", "-", "–")
+
+/**
+ * One task on its own line: its box, then its name, count and note.
+ *
+ * The box is beside the words rather than inside them, so a name long enough to
+ * wrap wraps under its own first letter and never under the box. Finishing it
+ * changes the box and the ground and nothing else: the line stays where it was.
+ */
+@Composable
+private fun TaskLine(
+    segment: CellSegmentPreview,
+    cell: CellPreview,
+    gameId: EntityId,
+    state: GameTableScreenState,
+    controller: GameTableController,
+) {
+    val scope = rememberCoroutineScope()
+    val taskId = segment.taskId ?: return
+    val drawn = drawnDocumentOf(cell.copy(segments = listOf(segment)), withCounts = true, withTicks = false)
+    var layout by remember(segment.segmentId) { mutableStateOf<TextLayoutResult?>(null) }
+    val density = LocalDensity.current
+    val style = MaterialTheme.typography.bodyMedium
+    val tickWidth = with(density) { (style.fontSize * TICK_WIDTH.value).toDp() }
+    val lineHeight = with(density) { style.lineHeight.toDp() }
+    val edgeCorner = with(density) { 3.dp.toPx() }
+    val edgeStroke = with(density) { 1.dp.toPx() }
+    Row(verticalAlignment = Alignment.Top) {
+        Box(modifier = Modifier.size(width = tickWidth, height = lineHeight)) {
+            CompletionTick(
+                isCompleted = segment.isCompletedTask,
+                onToggle = { scope.launch { controller.toggleTaskCompletion(gameId, cell.columnType, taskId) } },
+            )
+        }
+        Box(modifier = Modifier.weight(1f).padding(start = TaskLineGap)) {
+            Text(
+                text = drawn.text,
+                style = style,
+                // Every line, always: the row grows to hold them and the column
+                // to what the window can spare (PLAN 12.17). A word longer than
+                // the column is broken inside itself.
+                onTextLayout = { layout = it },
+                modifier =
+                    Modifier.drawBehind {
+                        layout?.let { drawTaskEdges(it, drawn.tasks, edgeCorner, edgeStroke) }
+                    },
+            )
+            // The handle sits exactly where the task's words were laid out, so it
+            // follows them when the column scrolls, the window resizes or the
+            // words wrap — nothing here remembers a coordinate.
+            layout?.let { placed ->
+                drawn.tasks.forEach { task ->
+                    val boxes = placed.boxesOfRange(task.start, task.end)
+                    if (boxes.isNotEmpty()) {
+                        TaskHandle(
+                            task = task.segment,
+                            boxes = boxes,
+                            gameId = gameId,
+                            columnType = cell.columnType,
+                            state = state,
+                            controller = controller,
+                        )
                     }
                 }
             }
@@ -2342,38 +2427,8 @@ private fun CellSlot(
     }
 }
 
-/**
- * One tick for each task drawn in a cell.
- *
- * Built from the same list the handles are, so a task has a tick exactly when it
- * has a word — no separate bookkeeping to fall out of step with the document.
- */
-@Composable
-private fun tickContentOf(
-    tasks: List<DrawnTask>,
-    gameId: EntityId,
-    columnType: CellColumnType,
-    controller: GameTableController,
-): Map<String, InlineTextContent> {
-    val scope = rememberCoroutineScope()
-    return tasks.associate { task ->
-        val taskId = requireNotNull(task.segment.taskId)
-        tickIdOf(taskId) to
-            InlineTextContent(
-                placeholder =
-                    Placeholder(
-                        width = TICK_WIDTH,
-                        height = TICK_HEIGHT,
-                        placeholderVerticalAlign = PlaceholderVerticalAlign.Center,
-                    ),
-            ) {
-                CompletionTick(
-                    isCompleted = task.segment.isCompletedTask,
-                    onToggle = { scope.launch { controller.toggleTaskCompletion(gameId, columnType, taskId) } },
-                )
-            }
-    }
-}
+/** Between a task's box and its name. */
+private val TaskLineGap = 4.dp
 
 /**
  * The box that says whether a piece of work is done, and takes it either way.
