@@ -471,6 +471,140 @@ class TaskFromEnterTest {
         }
     }
 
+    /** Everything a node and the nodes inside it write. */
+    private fun androidx.compose.ui.semantics.SemanticsNode.allWords(): List<String> =
+        reads(SemanticsProperties.Text).orEmpty().map { it.text } + children.flatMap { it.allWords() }
+
+    /** The colour chip in the window drawn with [name]: the pressable node that writes it. */
+    private fun ComposeSceneHarness.colorChipNamed(name: String) =
+        nodes().lastOrNull { node ->
+            node.config.contains(androidx.compose.ui.semantics.SemanticsActions.OnClick) && name in node.allWords()
+        } ?: fail("no colour chip reads `$name`")
+
+    @Test
+    fun `Enter with the keyboard resting on the colour just chosen saves the task in that colour`() {
+        RealStack().use { stack ->
+            open(stack).use { screen ->
+                val gameId = screen.makeGame(stack)
+                screen.typeAndEnter(stack, gameId, CellColumnType.THREE_D, "Ejderha")
+                composerOf(stack)
+                stack.table.editTaskQuantity(0, "3")
+                screen.render()
+
+                // Chosen with the keyboard: from the colour search, Tab onto the
+                // first colour and Space picks it.
+                val wanted =
+                    stack.table.state.colors
+                        .first()
+                val search =
+                    screen.nodes().lastOrNull { node ->
+                        node.config.contains(androidx.compose.ui.semantics.SemanticsActions.RequestFocus) &&
+                            "Renk ara" in node.allWords()
+                    } ?: fail("the window has no colour search")
+                search.reads(androidx.compose.ui.semantics.SemanticsActions.RequestFocus)?.action?.invoke()
+                screen.render()
+                var onColour = false
+                repeat(5) {
+                    if (onColour) return@repeat
+                    screen.tab()
+                    screen.render()
+                    val focused = screen.nodes().lastOrNull { it.reads(SemanticsProperties.Focused) == true }
+                    val words = focused?.allWords().orEmpty()
+                    onColour = wanted.canonicalName in words
+                }
+                assertTrue(onColour, "the keyboard never reached the colour `${wanted.canonicalName}`")
+                screen.press(Key.Spacebar)
+                screen.render()
+                assertEquals(wanted.id, composerOf(stack).usedRows.first().colorId, "Space did not choose the colour")
+
+                // Enter with the keyboard still on that colour: the task is saved,
+                // and the colour is not pressed a second time.
+                screen.press(Key.Enter)
+                screen.settle("the task is made") { stack.table.state.work == null && tasksIn(stack).isNotEmpty() }
+
+                val task = tasksIn(stack).single()
+                assertEquals("Ejderha", task.name)
+                assertEquals(3, task.requiredQuantity)
+                val colours = runBlocking { stack.database.taskColorDao().colorsOfTask(task.id) }.map { it.colorId }
+                assertEquals(listOf(wanted.id), colours, "Enter changed the colour on its way to saving")
+            }
+        }
+    }
+
+    @Test
+    fun `Enter after choosing a colour by pressing it saves the task`() {
+        RealStack().use { stack ->
+            open(stack).use { screen ->
+                val gameId = screen.makeGame(stack)
+                screen.typeAndEnter(stack, gameId, CellColumnType.THREE_D, "Ejderha")
+                composerOf(stack)
+                stack.table.editTaskQuantity(0, "3")
+                screen.render()
+                val wanted =
+                    stack.table.state.colors
+                        .first()
+
+                // Pressed the way a pointer presses it.
+                val pressed =
+                    screen
+                        .colorChipNamed(wanted.canonicalName)
+                        .reads(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+                        ?.action
+                        ?.invoke()
+                assertEquals(true, pressed)
+                screen.render()
+                assertEquals(wanted.id, composerOf(stack).usedRows.first().colorId, "the click did not choose the colour")
+
+                screen.press(Key.Enter)
+                screen.settle("the task is made") { stack.table.state.work == null && tasksIn(stack).isNotEmpty() }
+                val task = tasksIn(stack).single()
+                val colours = runBlocking { stack.database.taskColorDao().colorsOfTask(task.id) }.map { it.colorId }
+                assertEquals(listOf(wanted.id), colours)
+            }
+        }
+    }
+
+    @Test
+    fun `Enter on a window that lacks something keeps it open and says what`() {
+        RealStack().use { stack ->
+            open(stack).use { screen ->
+                val gameId = screen.makeGame(stack)
+                // A 3D task with a count and no colour.
+                screen.typeAndEnter(stack, gameId, CellColumnType.THREE_D, "Ejderha")
+                composerOf(stack)
+                stack.table.editTaskQuantity(0, "3")
+                screen.render()
+                screen.press(Key.Enter)
+                screen.render()
+                assertNotNull(stack.table.state.work as? CellWork.MakingTask, "the window closed without a colour")
+                assertTrue(screen.saying("Bir renk seçin."), "the missing colour is not said")
+                assertEquals(emptyList(), tasksIn(stack))
+            }
+        }
+    }
+
+    @Test
+    fun `Enter on a window with no count keeps it open and says so`() {
+        RealStack().use { stack ->
+            open(stack).use { screen ->
+                val gameId = screen.makeGame(stack)
+                screen.typeAndEnter(stack, gameId, CellColumnType.CARD, "Gri token")
+                composerOf(stack)
+                screen.press(Key.Enter)
+                screen.render()
+                assertNotNull(stack.table.state.work as? CellWork.MakingTask, "the window closed without a count")
+                assertTrue(
+                    screen.saying("Görevi kaydetmek için sıfırdan büyük bir adet yazın."),
+                    "the missing count is not said: ${screen.nodes().flatMap { it.allWords() }.distinct()} / ${composerOf(stack)}",
+                )
+                assertEquals(emptyList(), tasksIn(stack))
+            }
+        }
+    }
+
+    private fun ComposeSceneHarness.saying(sentence: String): Boolean =
+        nodes().any { node -> node.reads(SemanticsProperties.Text).orEmpty().any { it.text == sentence } }
+
     private companion object {
         const val NOTE = "boyası kuruyor"
     }

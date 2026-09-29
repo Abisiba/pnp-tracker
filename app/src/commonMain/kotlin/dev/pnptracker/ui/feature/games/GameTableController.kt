@@ -1309,7 +1309,12 @@ class GameTableController(
     suspend fun saveTask() {
         val making = composing() ?: return
         val composer = making.composer
-        if (composer.isSaving || !composer.canSave) return
+        if (composer.isSaving) return
+        if (!composer.canSave) {
+            // Nothing is written and the window stays open; it says why instead.
+            state = state.copy(work = making.copy(composer = composer.copy(saveRefused = true)))
+            return
+        }
         // A colour the draft still names but the catalogue has lost. The choice
         // is left exactly where the user put it and the save is refused instead,
         // so nothing is written pointing at a colour that is not there.

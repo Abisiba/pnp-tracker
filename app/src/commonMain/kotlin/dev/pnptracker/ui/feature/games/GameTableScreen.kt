@@ -67,7 +67,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -76,7 +75,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -3684,8 +3682,10 @@ private fun TaskComposerWindow(
 ) {
     val scope = rememberCoroutineScope()
     val windowLabel = stringResource(Strings.CellTask.window)
+    // Asked of the controller even when something is missing, so a refused
+    // save is said in the window rather than being a press that did nothing.
     val saveTask = {
-        if (composer.canSave && catalogue.stillHasEvery(composer.colorsInPlay)) {
+        if (catalogue.stillHasEvery(composer.colorsInPlay)) {
             scope.launch { controller.saveTask() }
         } else {
             Unit
@@ -3795,19 +3795,24 @@ private fun TaskComposerBody(
             Modifier
                 .fillMaxSize()
                 // Caught for the whole window rather than for one field in it:
-                // the user may be anywhere in here when they finish. A plain
-                // Enter saves from the window's fields ([savesTaskOnEnter]); on a
-                // button or a colour it still presses that button or colour.
+                // the user may be anywhere in here when they finish. Enter — and
+                // Ctrl+Enter — is the window's save wherever the keyboard is, a
+                // colour or a button included: the press and the release are
+                // both taken here, so a colour the keyboard rests on is never
+                // chosen again by the key that was meant to save. Shift+Enter
+                // is left to the note, where it starts a new line.
                 .onPreviewKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    val enter = event.key == Key.Enter || event.key == Key.NumPadEnter
                     when {
-                        event.key == Key.Escape -> {
-                            controller.cancelTaskComposer()
+                        enter && !event.isShiftPressed && !event.isAltPressed -> {
+                            if (event.type == KeyEventType.KeyDown) onSave()
                             true
                         }
 
-                        event.isCtrlPressed && (event.key == Key.Enter || event.key == Key.NumPadEnter) -> {
-                            onSave()
+                        event.type != KeyEventType.KeyDown -> false
+
+                        event.key == Key.Escape -> {
+                            controller.cancelTaskComposer()
                             true
                         }
 
@@ -3815,9 +3820,7 @@ private fun TaskComposerBody(
                     }
                 },
     ) {
-        CompositionLocalProvider(LocalTaskWindowSave provides onSave) {
-            TaskComposerContent(composer, offered, catalogue, wide, landing, panelFocus, nameLabel, controller, onSave)
-        }
+        TaskComposerContent(composer, offered, catalogue, wide, landing, panelFocus, nameLabel, controller, onSave)
     }
 }
 
@@ -4088,12 +4091,19 @@ private fun TaskComposerActions(
                 !catalogue.stillHasEvery(composer.colorsInPlay) -> stringResource(Strings.CellTask.colorGone)
                 composer.holdsColors && composer.usedRows.any { it.colorId == null } ->
                     stringResource(Strings.CellTask.colorRequired)
+                // A save asked for before the window had what it needs: said
+                // here, so an Enter that did not close the window explains itself.
+                composer.saveRefused && !composer.canSave ->
+                    stringResource(
+                        if (composer.lacksQuantity) Strings.CellTask.quantityRequired else Strings.CellTask.incomplete,
+                    )
                 else -> stringResource(Strings.CellTask.hint)
             }
         NoteLine(
             text = note,
             isProblem =
-                composer.failure != null ||
+                (composer.saveRefused && !composer.canSave) ||
+                    composer.failure != null ||
                     composer.repeatedColorRows.isNotEmpty() ||
                     !catalogue.stillHasEvery(composer.colorsInPlay),
         )
@@ -4343,7 +4353,7 @@ private fun TaskRowColors(
         singleLine = true,
         textStyle = MaterialTheme.typography.bodySmall,
         label = { Text(stringResource(Strings.CellTask.colorSearch)) },
-        modifier = Modifier.fillMaxWidth().savesTaskOnEnter(),
+        modifier = Modifier.fillMaxWidth(),
     )
     ColorList(
         colors = colors,
@@ -4401,8 +4411,7 @@ private fun TaskRowWork(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .then(focus?.let { Modifier.focusRequester(it) } ?: Modifier)
-                .savesTaskOnEnter(),
+                .then(focus?.let { Modifier.focusRequester(it) } ?: Modifier),
     )
     NoteLine(
         text =
@@ -4454,34 +4463,10 @@ private fun TaskRowWork(
 }
 
 /**
- * What Enter in one of the task window's fields does: the window's save, the
- * same as `Görevi kaydet`. Ctrl+Enter is caught by the window before this.
- */
-private val LocalTaskWindowSave = staticCompositionLocalOf<() -> Unit> { {} }
-
-/** Enter in this field saves the task window, as `Görevi kaydet` does. */
-@Composable
-private fun Modifier.savesTaskOnEnter(): Modifier {
-    val save = LocalTaskWindowSave.current
-    return onPreviewKeyEvent { event ->
-        if (event.type == KeyEventType.KeyDown &&
-            (event.key == Key.Enter || event.key == Key.NumPadEnter) &&
-            !event.isShiftPressed &&
-            !event.isAltPressed
-        ) {
-            save()
-            true
-        } else {
-            false
-        }
-    }
-}
-
-/**
  * A task's note in the task window.
  *
- * Enter saves the window like every other field in it, so a new line in the note
- * is Shift+Enter, put in at the caret.
+ * Enter saves the window wherever the keyboard is, so a new line in the note is
+ * Shift+Enter, put in at the caret.
  */
 @Composable
 private fun ComposerNotesField(
@@ -4518,7 +4503,7 @@ private fun ComposerNotesField(
                     } else {
                         false
                     }
-                }.savesTaskOnEnter(),
+                },
     )
 }
 
@@ -4545,7 +4530,7 @@ private fun MulticolorColors(
         singleLine = true,
         textStyle = MaterialTheme.typography.bodySmall,
         label = { Text(stringResource(Strings.CellTask.colorSearch)) },
-        modifier = Modifier.fillMaxWidth().savesTaskOnEnter(),
+        modifier = Modifier.fillMaxWidth(),
     )
     ColorList(
         colors = colors,
@@ -4606,7 +4591,7 @@ private fun MulticolorWork(
         isError = !palette.isQuantityUsable,
         textStyle = MaterialTheme.typography.bodySmall,
         label = { Text(stringResource(Strings.CellTask.quantityLabel)) },
-        modifier = Modifier.fillMaxWidth().savesTaskOnEnter(),
+        modifier = Modifier.fillMaxWidth(),
     )
     NoteLine(
         text =

@@ -353,6 +353,7 @@
     <!-- Game table: the menu anchored to a task -->
     <string name="task_menu_open">%1$s görevini aç</string>
     <string name="task_menu_edit">Düzenle</string>
+    <string name="task_menu_stages">Aşama sayaçları</string>
     <string name="task_menu_convert">Görevi metne dönüştür</string>
     <string name="task_menu_hint">Esc menüyü kapatır.</string>
     <string name="task_menu_complete">Tamamla</string>
@@ -432,6 +433,8 @@
     <string name="cell_task_quantity_label">Gerekli adet</string>
     <string name="cell_task_quantity_hint">Sıfırdan büyük tam sayı; hücrede ×14 gibi görünür.</string>
     <string name="cell_task_quantity_invalid">Adet sıfırdan büyük bir tam sayı olmalı.</string>
+    <string name="cell_task_quantity_required">Görevi kaydetmek için sıfırdan büyük bir adet yazın.</string>
+    <string name="cell_task_incomplete">Görevi kaydetmek için eksik bilgileri tamamlayın.</string>
     <string name="cell_task_notes_label">Not (isteğe bağlı)</string>
     <string name="cell_task_save">Görevi kaydet</string>
     <string name="cell_task_discard">Vazgeç</string>

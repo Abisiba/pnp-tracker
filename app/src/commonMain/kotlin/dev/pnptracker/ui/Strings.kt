@@ -90,6 +90,7 @@ import dev.pnptracker.resources.cell_task_error_segment_gone
 import dev.pnptracker.resources.cell_task_error_segment_not_text
 import dev.pnptracker.resources.cell_task_error_stale
 import dev.pnptracker.resources.cell_task_hint
+import dev.pnptracker.resources.cell_task_incomplete
 import dev.pnptracker.resources.cell_task_mode_label
 import dev.pnptracker.resources.cell_task_mode_many
 import dev.pnptracker.resources.cell_task_mode_many_hint
@@ -104,6 +105,7 @@ import dev.pnptracker.resources.cell_task_quantity_hint
 import dev.pnptracker.resources.cell_task_quantity_invalid
 import dev.pnptracker.resources.cell_task_quantity_label
 import dev.pnptracker.resources.cell_task_quantity_mark
+import dev.pnptracker.resources.cell_task_quantity_required
 import dev.pnptracker.resources.cell_task_row_add
 import dev.pnptracker.resources.cell_task_row_duplicate
 import dev.pnptracker.resources.cell_task_row_floor
@@ -876,6 +878,7 @@ import dev.pnptracker.resources.task_menu_open
 import dev.pnptracker.resources.task_menu_reopen
 import dev.pnptracker.resources.task_menu_report_shortage
 import dev.pnptracker.resources.task_menu_resolve_shortage
+import dev.pnptracker.resources.task_menu_stages
 import dev.pnptracker.resources.task_progress_missing
 import dev.pnptracker.resources.task_reopen_accept
 import dev.pnptracker.resources.task_reopen_body
@@ -1551,6 +1554,8 @@ object Strings {
         val quantityLabel = Res.string.cell_task_quantity_label
         val quantityHint = Res.string.cell_task_quantity_hint
         val quantityInvalid = Res.string.cell_task_quantity_invalid
+        val quantityRequired = Res.string.cell_task_quantity_required
+        val incomplete = Res.string.cell_task_incomplete
         val notesLabel = Res.string.cell_task_notes_label
         val save = Res.string.cell_task_save
         val discard = Res.string.cell_task_discard
@@ -1637,6 +1642,9 @@ object Strings {
         /** Takes the task's name. */
         val open = Res.string.task_menu_open
         val edit = Res.string.task_menu_edit
+
+        /** The card and board steps, opened from the task's menu in a pool. */
+        val stages = Res.string.task_menu_stages
         val convertToText = Res.string.task_menu_convert
         val markUnfinished = Res.string.task_menu_mark_unfinished
         val hint = Res.string.task_menu_hint
