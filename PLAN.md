@@ -1332,7 +1332,10 @@ Tamamlanan görev:
   `Eksik` sütunundan (`12.20`) ise hemen kalkar.
 - Hücrede her görev **kendi satırındadır**: tamamlanma kutusu, ad, adet ve not
   yan yana başlar. Kutu metnin içinde değil yanındadır; uzun bir ad veya not
-  kaydığında kutunun altına değil kendi ilk harfinin hizasına kayar. Görevlerin
+  kaydığında kutunun altına değil kendi ilk harfinin hizasına kayar.
+  Tamamlanan görev bütün renklerini kare olarak çizdiği için, tamamlanmamış
+  görevin satırı bu karelerin genişliğini görünmez olarak baştan ayırır; iki
+  görünüm aynı genişlikte dizilir ve tamamlamak satır eklemez. Görevlerin
   arasındaki düz metin kendi satırlarında çizilir; yalnız iki görevi ayıran bir
   virgül veya `ve` gibi, görevler alt alta gelince ayıracak bir şeyi kalmayan
   satırlar çizilmez. Bu yalnız çizimdir: düzenleyici belgenin her karakterini
