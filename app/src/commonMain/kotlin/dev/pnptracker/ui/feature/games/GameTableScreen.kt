@@ -2014,6 +2014,7 @@ private fun drawnDocumentOf(
     cell: CellPreview,
     withCounts: Boolean,
     withTicks: Boolean = withCounts,
+    reserveFinishedRoom: Boolean = false,
 ): DrawnDocument {
     val metadata = MaterialTheme.colorScheme.onSurfaceVariant
     val finishedFill = PnpStatus.colors.completedContainer
@@ -2154,6 +2155,19 @@ private fun drawnDocumentOf(
                 // work is done or not — and in the state a reader hears on the
                 // task's own node (`TaskHandle`).
                 tasks += DrawnTask(segment = segment, start = start, end = length, stripes = stripes)
+                // Finishing a task draws every one of its colours as a swatch,
+                // which is more than the ones the name was too short to reach.
+                // The difference is kept free, unseen, while it is still to do,
+                // so the line is laid out the same width either way and
+                // finishing it never takes another line (PLAN 12.5).
+                if (reserveFinishedRoom && withCounts && !finished) {
+                    repeat(segment.colors.size - layout.markerSlots.size) {
+                        withStyle(SpanStyle(color = Color.Transparent, background = Color.Transparent)) {
+                            append(MARKER_GAP)
+                            append(MARKER_MARK)
+                        }
+                    }
+                }
             }
         }
     return DrawnDocument(text = text, tasks = tasks)
@@ -2377,7 +2391,8 @@ private fun TaskLine(
 ) {
     val scope = rememberCoroutineScope()
     val taskId = segment.taskId ?: return
-    val drawn = drawnDocumentOf(cell.copy(segments = listOf(segment)), withCounts = true, withTicks = false)
+    val drawn =
+        drawnDocumentOf(cell.copy(segments = listOf(segment)), withCounts = true, withTicks = false, reserveFinishedRoom = true)
     var layout by remember(segment.segmentId) { mutableStateOf<TextLayoutResult?>(null) }
     val density = LocalDensity.current
     val style = MaterialTheme.typography.bodyMedium
@@ -2427,8 +2442,11 @@ private fun TaskLine(
     }
 }
 
-/** Between a task's box and its name. */
-private val TaskLineGap = 4.dp
+/**
+ * Between a task's box and its name: none, because the box already keeps room
+ * around its mark, and every dp here is a dp the words lose on every line.
+ */
+private val TaskLineGap = 0.dp
 
 /**
  * The box that says whether a piece of work is done, and takes it either way.
