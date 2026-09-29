@@ -2,6 +2,7 @@ package dev.pnptracker.ui.feature.games
 
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.text.AnnotatedString
+import dev.pnptracker.domain.colors.baseColors
 import dev.pnptracker.domain.games.DEFAULT_CELL_COLUMN_WIDTH_DP
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
@@ -45,10 +46,10 @@ class MissingColumnTest {
     private fun open(stack: RealStack): ComposeSceneHarness {
         val screen = ComposeSceneHarness(width = 2000, height = 900) { GameTableScreen(stack.table) }
         screen.settle("the table is read") { stack.table.state.rows !is GameTableRowsState.Loading }
-        screen.settle("the colours are read") {
-            stack.table.state.colors
-                .isNotEmpty()
-        }
+        // No wait for the screen's colour list: nothing here chooses a colour from
+        // it. A 3D task is made in a base colour, whose identity is fixed; on the
+        // Windows runner the first test of the class once waited out its whole
+        // budget for that unrelated list.
         return screen
     }
 
@@ -93,11 +94,7 @@ class MissingColumnTest {
                                     TaskDraft(
                                         colorIds =
                                             if (colored) {
-                                                listOf(
-                                                    table.state.colors
-                                                        .first()
-                                                        .id,
-                                                )
+                                                listOf(baseColors.first().id)
                                             } else {
                                                 emptyList()
                                             },
