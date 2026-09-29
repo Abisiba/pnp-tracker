@@ -355,7 +355,7 @@ with the Java runtime inside it; you do not need to install Java.
   release before running it (see the README).
 - Updating means running the newer installer. Uninstall from Windows'
   *Installed apps*; your data in `%LOCALAPPDATA%` and `%APPDATA%` stays.
-- The installer is built and checked automatically on GitHub's Windows runner,
+- The installer is built and checked automatically on GitHub's hosted Windows build machine,
   but it **has not yet been tried by hand on a real Windows 11 installation**.
 
 ## Why your data stays when the package is removed

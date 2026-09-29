@@ -21,7 +21,7 @@ account.
 - **Linux**: `x86_64`, glibc. The interface uses X11 (a Wayland session needs
   XWayland). Built and checked in CI, and used day to day on Garuda Linux.
 - **Windows**: an `x86_64` installer is built and checked automatically on
-  GitHub's Windows runner for every release. It **has not yet been tried by hand
+  GitHub's hosted Windows build machine for every release. It **has not yet been tried by hand
   on a real Windows 11 installation**; treat it as a preview until that has been
   done.
 - **macOS**: there is no macOS version.
@@ -141,7 +141,7 @@ builds the installer and keeps it as a workflow artifact.
 
 A tag of the form `v<version>` runs `.github/workflows/release.yml`: first every
 test, then the Linux archive and the Arch package, then the Windows installer on
-GitHub's Windows runner, then one `SHA256SUMS` covering all of them, and finally
+GitHub's hosted Windows build machine, then one `SHA256SUMS` covering all of them, and finally
 the GitHub release. The packages are published unsigned; they are verified with
 `sha256sum -c SHA256SUMS`.
 
