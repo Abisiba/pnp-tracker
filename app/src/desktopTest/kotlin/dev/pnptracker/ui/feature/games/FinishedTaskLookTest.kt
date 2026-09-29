@@ -117,6 +117,14 @@ class FinishedTaskLookTest {
                 }
             settle("$word is a task") { stack.piecesOf(gameId, CellColumnType.THREE_D).any { it.taskId in made } }
         }
+        // The table knowing about both tasks is not the screen having drawn them:
+        // on the Windows runner the second task's line was not there yet when it
+        // was looked for. So the wait is for the drawn lines themselves.
+        settle("both tasks are drawn on lines of their own") {
+            listOf("Ayı", "Kuş").all { word ->
+                nodes().any { node -> node.reads(SemanticsProperties.Text).orEmpty().any { it.isTheCellsLine(word) } }
+            }
+        }
         return gameId to made
     }
 
