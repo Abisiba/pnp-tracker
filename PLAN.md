@@ -589,11 +589,12 @@ Kart havuzundaki açılır rozet davranışı mukavva havuzunda da kullanılmal�
 
 Davranış:
 
-- Özel görevler checklist veya adetli görev olabilir.
-- Henüz hiç silinmemiş özel görev yokken Özel havuz ana gezinmede ve ana ekran özetlerinde görünmez.
-- İlk özel görev oluşturulduğunda otomatik görünür.
-- Son özel görev tamamlandığında havuz görünür kalır ve aktif görev sayısını `0` gösterir.
-- Havuz ancak içindeki tüm görevler silinirse veya kullanıcı havuzu açıkça gizlerse yeniden saklanır; geçmiş kayıtlar silinmez.
+- Özel görevler diğer havuzlardaki gibi normal görevlerdir: adı ve adedi olan,
+  tek tamamlanan görevler. Yeni görevde `Sayılı`/`Kontrol listesi` seçimi
+  sorulmaz; daha önce kontrol listesi olarak yazılmış kayıtlar olduğu gibi
+  geçerli kalır, silinmez.
+- `Özel` havuzu ana gezinmede diğer üç havuzun yanında **her zaman** görünür;
+  aktif görev sayısını diğerleri gibi gösterir (`0 aktif` dahil).
 
 ## 10. Eksik ve ödünç parça işaretleri
 
@@ -1158,28 +1159,29 @@ game,column,task,pool,colors,required_quantity,status,notes
 
 Birincil masaüstü gezinmesi **üstte tek satırlık** bir gezinmedir. Sol kenar
 çubuğu **yoktur** ve ayrı bir ana sayfa **yoktur**; uygulama `Oyunlar`'da açılır.
-Gezinme beş girişten ibarettir ve bu sayı onu tek satırda tutan şeydir:
+Gezinme altı girişten ibarettir:
 
 - Oyunlar
 - 3D Baskı
 - Kartlar
 - Mukavva
+- Özel
 - Ayarlar
 
-`Ayarlar` girişi bir menü açar. Menünün içeriği, sırayla:
+`Ayarlar` girişi açılır menü göstermez; doğrudan tam bir Ayarlar sayfası açar.
+Sayfanın üstündeki sekmeler, sırayla:
 
-- Ayarlar — ekranın kendisi, içeriği `12.16`'dadır
-- İçe Aktarma
+- Genel — görünüm/tema ve yedekler, içeriği `12.16`'dadır
+- İçe/Dışa Aktarma
 - Renkler
 - Geçmiş
 
-Bu üç bölüm bir tık daha uzaktadır ve **başka hiçbir şeyi değişmez**: aynı
-ekranlar, aynı işlevler.
+Bu üç bölüm Ayarlar sayfasının sekmeleridir ve **başka hiçbir şeyi değişmez**:
+aynı ekranlar, aynı işlevler. Bu sekmelerden biri açıkken üstteki `Ayarlar`
+girişi seçili görünür.
 
-- `Özel` havuzu bu gezinmede **yer almaz**. En az bir silinmemiş özel görev
-  varken **oyun tablosundan** açılır (`9.`) ve tablodaki giriş aktif görev
-  sayısını söyler. Özel iş kalmadığında giriş kaybolur; o havuzda durulmuşsa
-  pencere sessizce 3D havuzuna geçer.
+- `Özel` havuzu diğer havuzlar gibi her zaman gezinmededir (`9.`); oyun
+  tablosunda ayrı bir `Özel görevler` girişi yoktur.
 - Seçili giriş rengin yanı sıra bir **çizgiyle** de belirtilir; hangi bölümün
   açık olduğu renk tek başına taşımaz (`17.`).
 - Gezinme yatay olarak kaydırılabilir, sarmalanmaz: en küçük pencerede büyütülmüş
@@ -1587,6 +1589,14 @@ Havuzlar görevlerin **yansımalarıdır**. Havuz hiçbir zaman yeni veya kopya 
 yazmaz; oyun tablosundaki aynı görevin üretim açısından okunmuş hâlini gösterir.
 Yazma bir havuz ekranından başlatılsa bile aynı `Task` üzerinde gerçekleşir.
 
+Havuz sayfaları pencerenin kullanılabilir genişliğini kullanır: geniş pencerede
+dört sütunlu kart düzeni, daraldıkça daha az sütun (en az bir). 3D Baskı'da
+**her renk kendi grubudur**: rengin başlığı ve o renkteki bütün görevler alt
+alta, tek blok hâlinde durur; aynı rengin görevleri sütunlara dağıtılmaz. Renk
+grupları yan yana yerleşir, sütun sayısından fazla grup varsa sonraki sıraya
+geçer. Kartlar, Mukavva ve Özel'de görev kartları aynı geniş düzende, renk
+grubu olmadan sıra sıra dizilir.
+
 Aktif görevler aşağıdaki sırayla gösterilir:
 
 1. Renk seçilecek görevler — renksiz görevler
@@ -1664,8 +1674,9 @@ Yapıştırıldı → Kesildi biçimindedir.
 
 ### 12.13 Özel Havuz
 
-- Checklist ve adetli görevleri destekler.
-- Boşken görünmez.
+- Normal görevlerden oluşur; görev kartı diğer havuzlarınki gibidir ve izleme
+  türü yazılmaz.
+- Boşken de gezinmede görünür.
 - Görevlerin oyun bağlantısı açıkça gösterilir.
 
 ### 12.14 Renkler
@@ -3948,7 +3959,6 @@ Ek olarak Faz 2 içinde tamamlanacak yardımcı işler:
 - Kart aşama invariantları
 - Mukavva aşama invariantları
 - Eksik kart ayrıntılarının eklenmesi/çözülmesi
-- Hiç silinmemiş özel görev yokken Özel havuzun gizlenmesi
 - Oyun toplu tamamlamanın bütün görev ve aşamaları kapsaması
 - Oyun toplu tamamlamanın kısmi sonuç bırakmaması
 - Bitmemiş iş yokken onay sorulmadan tamamlanması
@@ -4393,10 +4403,9 @@ Beklenti:
 
 ### Senaryo 9 — Özel havuz görünürlüğü
 
-- Hiç özel görev yokken Özel havuza giriş oyun tablosunda görünmez (`12.1`).
-- `8 özel zar` görevi eklenince Özel havuz görünür.
-- Görev tamamlanınca havuz görünür kalır ve `0 aktif` gösterir; geçmiş kaydı korunur.
-- Havuz, tüm özel görevler silinmedikçe veya kullanıcı açıkça gizlemedikçe saklanmaz.
+- Hiç özel görev yokken de `Özel` sekmesi üst gezinmede görünür ve `0 aktif` gösterir (`12.1`).
+- `8 özel zar` görevi eklenince sekmedeki sayı `1 aktif` olur.
+- Görev tamamlanınca `0 aktif` gösterir; geçmiş kaydı korunur.
 
 ### Senaryo 10 — Bilgi eksik görev
 
@@ -4451,8 +4460,7 @@ Beklenti:
 ### UI testleri
 
 - Oyun tablosu ve üç global görünüm
-- Üstteki gezinmenin beş girişi ve `Ayarlar` menüsünün içeriği (`12.1`)
-- Özel havuzun koşullu görünmesi
+- Üstteki gezinmenin altı girişi ve Ayarlar sayfasının sekmeleri (`12.1`)
 - Inline `TaskSegment` görünümü, tik ve tamamlanan görevin yüzeyi
 - Kelimeye çapalı popover
 - `Renk seçilecek` görev bölümü
