@@ -266,6 +266,8 @@ kullanımda hiç satır yazılmaz.
   hücreyi düzenlemeye başlar.
 - **Esc** açık bir menüyü, paneli veya soruyu kapatır ve hiçbir şeyi değiştirmez.
 - **Ctrl+Enter** düzenleme panellerinde kaydeder.
+- Hücre düzenleyicisinde **Enter** kaydeder, **Ctrl+Enter** alt satıra geçer. Bir
+  görev sütununa yeni bir ad yazıp **Enter**'a basarsanız görev penceresi açılır.
 - Geri alınamaz sorularda odak **Vazgeç** üzerinde başlar.
 - Uygulama dar pencerede (640×460) ve büyük sistem yazı tipinde de kullanılabilir;
   bilgi yalnız renkle anlatılmaz, her durumun yazısı vardır.
