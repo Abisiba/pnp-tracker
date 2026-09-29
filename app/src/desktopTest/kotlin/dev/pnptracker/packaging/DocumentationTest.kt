@@ -26,7 +26,7 @@ internal val PLUGIN_TASKS = listOf("run", "check", "clean", "desktopTest", "ktli
  * names and headings in the text are the ones the code uses, every link points
  * at a file that exists, and nothing carries a path or a name of the machine
  * this was written on. The version is never written down: the guides say
- * `<sürüm>` and the one version lives in the build.
+ * `<version>` and the one version lives in the build.
  */
 class DocumentationTest {
     private fun repository(): Path {
@@ -64,27 +64,28 @@ class DocumentationTest {
     fun `the user guide covers every section the work asked for`() {
         val text = Files.readString(guide)
         listOf(
-            "PnP Tracker nedir?",
-            "İlk açılış ve verilerin yeri",
-            "Oyun oluşturma",
-            "Hücre ve görev yapısı",
-            "XLSX ve CSV içe aktarma",
-            "Taslakları inceleme, düzenleme, onaylama ve kaldırma",
-            "Onaylanmış içe aktarmayı geri alma",
-            "Görev ilerlemesi, tamamlanma ve metne dönüştürme",
-            "Arama ve havuz filtreleri",
-            "CSV dışa aktarma",
-            "Manuel yedek oluşturma",
-            "Yedekten geri yükleme ve güvenlik yedeği",
-            "Otomatik yedek sayısı ayarı",
-            "Beklenmeyen kapanış sonrası",
+            "What is PnP Tracker?",
+            "First start and where the data lives",
+            "Creating a game",
+            "Cells and tasks",
+            "Importing XLSX and CSV",
+            "Reviewing, editing, confirming and removing drafts",
+            "Taking back a confirmed import",
+            "Task progress, finishing and turning a task back into text",
+            "Search and pool filters",
+            "Exporting to CSV",
+            "Making a backup by hand",
+            "Restoring a backup, and the safety backup",
+            "How many automatic backups are kept",
+            "After an unexpected shutdown",
             "Veri dosyanızda bir hasar bulundu",
-            "Tanılama kayıtları",
-            "Klavye ve erişilebilirlik",
-            "Linux taşınabilir arşivini çalıştırma",
-            "Garuda/Arch paketini kurma, güncelleme ve kaldırma",
-            "Paket kaldırılınca veriniz neden durur?",
-            "Bilinen sınırlar",
+            "Diagnostic logs",
+            "Keyboard and accessibility",
+            "Running the Linux portable archive",
+            "Installing, updating and removing the Garuda/Arch package",
+            "Why your data stays when the package is removed",
+            "Known limits",
+            "Installing on Windows",
         ).forEach { heading ->
             assertTrue(Regex("^#+ .*${Regex.escape(heading)}", RegexOption.MULTILINE).containsMatchIn(text), "bölüm eksik: $heading")
         }
@@ -208,7 +209,7 @@ class DocumentationTest {
                 )
             }
         }
-        assertTrue("<sürüm>" in Files.readString(guide), "kılavuz sürümü değişken olarak anmıyor")
+        assertTrue("<version>" in Files.readString(guide), "kılavuz sürümü değişken olarak anmıyor")
     }
 
     @Test
