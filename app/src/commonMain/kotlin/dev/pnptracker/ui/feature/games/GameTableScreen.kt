@@ -8,10 +8,13 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitVerticalTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.verticalDrag
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -35,7 +38,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListItemInfo
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.onClick
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
@@ -60,7 +66,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -98,9 +103,10 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -867,8 +873,16 @@ private fun Table(
         ) {
             TableHeader(widths = widths, controller = controller, rows = rows)
             HorizontalDivider(modifier = Modifier.width(widths.table))
-            val drag = remember { RowDrag() }
-            LazyColumn(modifier = Modifier.width(widths.table).fillMaxHeight()) {
+            val list = rememberLazyListState()
+            val drag = remember(list) { RowDrag(list) }
+            LazyColumn(
+                state = list,
+                modifier =
+                    Modifier
+                        .width(widths.table)
+                        .fillMaxHeight()
+                        .onGloballyPositioned { drag.listTop = it.positionInRoot().y },
+            ) {
                 items(rows, key = { it.gameId.value }) { row ->
                     RowWithItsOwnHeight(row = row, controller = controller, state = state, widths = widths, drag = drag)
                     HorizontalDivider(modifier = Modifier.width(widths.table))
@@ -1021,7 +1035,6 @@ private fun RowWithItsOwnHeight(
             Modifier
                 .width(widths.table)
                 .onSizeChanged { measured = with(density) { it.height.toDp().value } }
-                .onGloballyPositioned { drag.place(row.gameId, it.boundsInRoot().top, it.boundsInRoot().bottom) }
                 // The row being carried follows the pointer and is drawn above the
                 // others, so where it is going is something the user can see. It is
                 // not raised off the page: the table stays a grid even while a row
@@ -1432,83 +1445,112 @@ private fun GameNameCell(
 }
 
 /**
- * Where a row is being carried to, while it is being carried.
+ * Where a row is being carried to, while it is being carried (PLAN 12.18).
  *
- * Only the screen's business: which row the pointer has, how far it has pulled
- * it, and where every row sits in the list, so the row it is over can be found.
- * The rows move out of its way as it goes — the controller lays them out in the
- * order a drop would make — so where the carried row belongs changes under it;
- * it is drawn where the pointer holds it, however far that is from its place.
- * Nothing here is written anywhere.
+ * Everything is read from the list's own layout of the moment — which rows are
+ * on screen, where and how tall — and from where the pointer is in the list, so
+ * nothing here can go stale. It used to keep every row's last position as it was
+ * reported by the row, and that went wrong in two ways at once: the list keeps
+ * its first visible row in place when that row moves, so carrying the first game
+ * down scrolled the whole list under the pointer; and rows that had scrolled out
+ * kept the positions they had had. The target was then worked out from places no
+ * row was at any more, and one small pull could send a game to eighth place.
+ *
+ * Nothing here is written anywhere; the order is the controller's.
  */
-private class RowDrag {
+private class RowDrag(
+    private val list: LazyListState,
+) {
     var gameId: EntityId? by mutableStateOf(null)
         private set
-    private var startTop = 0f
-    private var pulled by mutableStateOf(0f)
-    private val drawnAt = mutableStateMapOf<EntityId, Pair<Float, Float>>()
 
-    /** Where a row sits in the list, before anything is drawn out of place. */
-    fun place(
+    /** Where the list's top is in the window, so a pointer can be put in the list. */
+    var listTop = 0f
+
+    /** How far down its row the pointer took it. */
+    private var intoRow = 0f
+
+    /** Where the pointer is now, measured down the list from its top. */
+    private var pointer by mutableStateOf(0f)
+
+    private fun itemOf(gameId: EntityId): LazyListItemInfo? = list.layoutInfo.visibleItemsInfo.firstOrNull { it.key == gameId.value }
+
+    /**
+     * Takes hold of [gameId] where the button went down, [downY] in the window.
+     *
+     * Measured in the window and not in the handle: the handle is inside the row
+     * being carried, and a row that follows the pointer never sees the pointer
+     * move.
+     */
+    fun start(
         gameId: EntityId,
-        top: Float,
-        bottom: Float,
+        downY: Float,
     ) {
-        if (drawnAt[gameId] != top to bottom) drawnAt[gameId] = top to bottom
-    }
-
-    fun start(gameId: EntityId) {
+        val item = itemOf(gameId) ?: return
         this.gameId = gameId
-        startTop = drawnAt[gameId]?.first ?: 0f
-        pulled = 0f
+        pointer = downY - listTop
+        intoRow = pointer - item.offset
     }
 
-    fun moveBy(delta: Float) {
-        pulled += delta
+    /** The pointer is at [y] in the window now. */
+    fun pointAt(y: Float) {
+        pointer = y - listTop
     }
 
-    /** How far [gameId] is drawn from its place: the carried row follows the pointer. */
+    /** How far [gameId] is drawn from its place: the carried row stays under the pointer. */
     fun shiftOf(gameId: EntityId): Float {
         if (gameId != this.gameId) return 0f
-        val place = drawnAt[gameId]?.first ?: return 0f
-        return startTop + pulled - place
+        val item = itemOf(gameId) ?: return 0f
+        return pointer - intoRow - item.offset
     }
 
     /**
-     * The row the carried one has passed the middle of, or null if none.
+     * The row the pointer has crossed into, or null while it is over its own.
      *
-     * The middle, reached or passed, and not merely the edge: once two rows have changed places the
-     * carried one is over its own place again, so the next change needs the
-     * pointer to go on past the next row's middle. Rows of different heights
-     * therefore do not trade places back and forth under a still pointer.
+     * A row changes places with the carried one once the pointer is over it far
+     * enough that, after the change, the pointer is over the carried row again:
+     * for rows of the same height that is the moment the pointer crosses the
+     * boundary between them. So a small pull moves nothing, each boundary crossed
+     * moves the game one place, and rows of different heights never trade places
+     * back and forth under a still pointer.
      */
     fun target(): EntityId? {
-        val carried = gameId ?: return null
-        val (top, bottom) = drawnAt[carried] ?: return null
-        val middle = startTop + pulled + (bottom - top) / 2
-        val (over, span) = drawnAt.entries.firstOrNull { (id, span) -> id != carried && middle in span.first..span.second } ?: return null
-        val overMiddle = (span.first + span.second) / 2
-        val below = span.first >= bottom
-        return over.takeIf { (below && middle >= overMiddle) || (!below && middle <= overMiddle) }
+        val carried = gameId?.let(::itemOf) ?: return null
+        val over = overRow(carried) ?: return null
+        val below = over.index > carried.index
+        val crossed =
+            if (below) {
+                pointer >= over.offset + over.size - carried.size
+            } else {
+                pointer < over.offset + carried.size
+            }
+        return EntityId.parse(over.key.toString()).takeIf { crossed }
     }
 
-    /**
-     * The row the carried one is over as it is let go, or null if only its own place.
-     *
-     * Over, not past the middle: letting go on top of a row puts the game there,
-     * as it always has, even where the pointer stopped a little short of the
-     * middle the live reordering waits for.
-     */
+    /** The row the pointer is over as it is let go: letting go on a row puts the game there. */
     fun dropTarget(): EntityId? {
-        val carried = gameId ?: return null
-        val (top, bottom) = drawnAt[carried] ?: return null
-        val middle = startTop + pulled + (bottom - top) / 2
-        return drawnAt.entries.firstOrNull { (id, span) -> id != carried && middle in span.first..span.second }?.key
+        val carried = gameId?.let(::itemOf) ?: return null
+        return overRow(carried)?.let { EntityId.parse(it.key.toString()) }
+    }
+
+    private fun overRow(carried: LazyListItemInfo): LazyListItemInfo? =
+        list.layoutInfo.visibleItemsInfo.firstOrNull { item ->
+            item.key != carried.key && pointer >= item.offset && pointer < item.offset + item.size
+        }
+
+    /**
+     * Keeps the list where it is while the rows change places.
+     *
+     * Left to itself the list follows its first visible row when that row moves,
+     * which is right for a list that changes under the user and wrong for one the
+     * user is rearranging by hand: the rows would slide away under the pointer.
+     */
+    fun holdTheList() {
+        list.requestScrollToItem(list.firstVisibleItemIndex, list.firstVisibleItemScrollOffset)
     }
 
     fun finish() {
         gameId = null
-        pulled = 0f
     }
 }
 
@@ -1544,6 +1586,8 @@ private fun GameOrderHandle(
         return
     }
     val description = stringResource(Strings.Table.moveGameDescription, label, row.gameName)
+    // The handle's own place in the window, to put the pointer in the window.
+    var handle by remember { mutableStateOf<LayoutCoordinates?>(null) }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier =
@@ -1570,26 +1614,40 @@ private fun GameOrderHandle(
 
                         else -> false
                     }
-                }.pointerInput(row.gameId) {
-                    detectDragGestures(
-                        onDragStart = { drag.start(row.gameId) },
-                        onDrag = { change, amount ->
-                            change.consume()
-                            drag.moveBy(amount.y)
-                            // The others make way as it goes, so the order a drop
-                            // will make is on the screen before it is made.
-                            drag.target()?.let { target -> controller.carryGame(row.gameId, target) }
-                        },
-                        onDragEnd = {
-                            drag.dropTarget()?.let { target -> controller.carryGame(row.gameId, target) }
+                }.onGloballyPositioned { handle = it }
+                .pointerInput(row.gameId) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        val inWindow = { at: Offset -> handle?.localToRoot(at)?.y }
+                        val downY = inWindow(down.position) ?: return@awaitEachGesture
+                        val moved =
+                            awaitVerticalTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
+                                ?: return@awaitEachGesture
+                        drag.start(row.gameId, downY)
+                        inWindow(moved.position)?.let(drag::pointAt)
+                        val finished =
+                            verticalDrag(moved.id) { change ->
+                                change.consume()
+                                inWindow(change.position)?.let(drag::pointAt)
+                                // The others make way as it goes, so the order a
+                                // drop will make is on the screen before it is made.
+                                drag.target()?.let { target ->
+                                    drag.holdTheList()
+                                    controller.carryGame(row.gameId, target)
+                                }
+                            }
+                        if (finished) {
+                            drag.dropTarget()?.let { target ->
+                                drag.holdTheList()
+                                controller.carryGame(row.gameId, target)
+                            }
                             drag.finish()
                             scope.launch { controller.dropCarriedGame() }
-                        },
-                        onDragCancel = {
+                        } else {
                             drag.finish()
                             controller.cancelCarriedGame()
-                        },
-                    )
+                        }
+                    }
                 },
     ) {
         Text(
