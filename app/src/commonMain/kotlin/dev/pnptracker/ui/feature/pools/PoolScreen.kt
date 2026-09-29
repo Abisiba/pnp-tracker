@@ -1039,16 +1039,18 @@ private val STAGE_LABEL_WIDTH = 96.dp
 private val STAGE_FIELD_WIDTH = 84.dp
 
 /**
- * The stage the work has reached, its counters when asked for, and the panel
- * that changes them (PLAN 7.3, 12.11).
+ * The stage the work has reached, every counter, and the way to change them
+ * (PLAN 7.3, 12.11) — all on the card, finished or not.
  *
- * The badge names the first step that is not finished and how far it has got,
- * because that is the one thing the user is about to work on. When they all are,
- * it says so instead. A task nobody has given a total to has nothing for a step
- * to count up to (PLAN 7.2), so it is told that rather than shown `0/0`.
+ * The first line names the first step that is not finished and how far it has
+ * got, because that is the one thing the user is about to work on. When they all
+ * are, it says so instead. A task nobody has given a total to has nothing for a
+ * step to count up to (PLAN 7.2), so it is told that rather than shown `0/0`.
  *
- * Its own named control rather than part of the card, so the keyboard reaches
- * the task and the detail separately instead of one swallowing the other.
+ * The counters used to fold away behind that line, which read as a status and
+ * not as something to press, so they were easy to lose; they are shown
+ * outright now. `Aşamaları düzenle` is its own control, so the keyboard reaches
+ * it apart from the card.
  */
 @Composable
 private fun StageBadge(
@@ -1056,7 +1058,6 @@ private fun StageBadge(
     card: PoolCardKey,
     controller: PoolController,
 ) {
-    val showing = controller.isShowingStages(task.taskId)
     val editing = controller.state.work as? PoolWork.EditingStages
     val editingHere = editing?.task?.taskId == task.taskId
     val total = task.requiredQuantity
@@ -1091,21 +1092,17 @@ private fun StageBadge(
             total == null -> stringResource(Strings.Pool.stageBadgeUnknown)
             else -> unfinished ?: stringResource(Strings.Pool.stageAllDone)
         }
-    val toggle =
-        stringResource(
-            if (showing) Strings.Pool.stageDetailsClose else Strings.Pool.stageDetailsOpen,
-            state,
-            task.name,
-        )
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        TextButton(
-            onClick = { controller.toggleStageDetails(task.taskId) },
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-            modifier = Modifier.focusOutline(CardShape).semantics { contentDescription = toggle },
-        ) {
-            Text(text = label, style = MaterialTheme.typography.labelMedium)
-        }
-        if (!showing) return@Column
+        // Where the steps stand, then every counter and the way to change them,
+        // always in sight: a finished task shows its counters too, so they can
+        // be read and corrected without first finding a control to unfold.
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(start = 8.dp).semantics { contentDescription = state },
+        )
         if (editing != null && editingHere) {
             StagePanel(open = editing, controller = controller)
             return@Column
@@ -1529,6 +1526,17 @@ private fun TaskMenuActions(
         modifier = Modifier.fillMaxWidth().focusOutline(CardShape).semantics { contentDescription = edit },
     ) {
         Text(text = edit, style = MaterialTheme.typography.labelMedium)
+    }
+    // The card and board steps, from the menu as well as from the card: the
+    // counters of a finished task are reached the same way as an open one's.
+    if (work.task.stages.isNotEmpty() && work.task.requiredQuantity != null) {
+        val stages = stringResource(Strings.TaskMenu.stages)
+        TextButton(
+            onClick = { controller.beginStageEditFromMenu() },
+            modifier = Modifier.fillMaxWidth().focusOutline(CardShape).semantics { contentDescription = stages },
+        ) {
+            Text(text = stages, style = MaterialTheme.typography.labelMedium)
+        }
     }
     TextButton(
         onClick = { controller.beginConvertToText() },

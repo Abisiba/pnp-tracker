@@ -276,11 +276,13 @@ class PoolScreenLayoutTest {
     }
 
     @Test
-    fun `the stage details are a control of their own with a name`() {
+    fun `the counters are on the card, and changing them is a control of its own`() {
         val badge = screen.substringAfter("private fun StageBadge(").substringBefore("/**\n * The three counters")
 
-        assertTrue("contentDescription = toggle" in badge, "the disclosure has no accessible name")
-        assertTrue("controller.toggleStageDetails" in badge)
+        // Shown outright rather than folded behind a line that reads as a status.
+        assertTrue("controller.toggleStageDetails" !in badge, "the counters are folded away again")
+        assertTrue("isShowingStages" !in badge, "the counters are still shown only when unfolded")
+        assertTrue("task.stages.forEach" in badge, "the counters are not written on the card")
         assertTrue("controller.beginStageEdit(card)" in badge, "the counters cannot be opened to be changed")
         // Everything below is a later step's and would be a dead control here.
         listOf("completePrimaryBatch", "reportFailure", "setManuallyCompleted", "Checkbox").forEach {
