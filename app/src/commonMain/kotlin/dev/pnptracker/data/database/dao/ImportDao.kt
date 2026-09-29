@@ -2440,7 +2440,10 @@ abstract class ImportDao {
             check(pipeline.map { it.stage } == stagesOf(piece.poolType)) {
                 "The task $taskId has the pipeline ${pipeline.map { it.stage }} for a ${piece.poolType} task."
             }
-            check(pipeline.all { it.completedQuantity == piece.stageCount }) {
+            check(
+                pipeline.dropLast(1).all { it.completedQuantity == 0 } &&
+                    pipeline.lastOrNull()?.completedQuantity.let { it == null || it == piece.stageCount },
+            ) {
                 "The task $taskId has a pipeline at ${pipeline.map { it.completedQuantity }}."
             }
         }

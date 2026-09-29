@@ -233,24 +233,24 @@ class GameCompletionTest {
         }
 
     @Test
-    fun `a card pipeline is counted all the way up`() =
+    fun `a card pipeline has every piece put through to the last step`() =
         runBlocking<Unit> {
             val fixture = aGameCalled()
             val task = fixture.writing(poolType = PoolType.CARD, trackingMode = TrackingMode.PIPELINE)
             progress.setStageQuantities(
                 task.id,
-                mapOf(ProductionStage.PRINT to 15, ProductionStage.LAMINATE to 10, ProductionStage.CUT to 5),
+                mapOf(ProductionStage.PRINT to 9, ProductionStage.LAMINATE to 6, ProductionStage.CUT to 3),
                 clock,
             )
 
             finish(fixture.gameId)
 
-            assertEquals(listOf(20, 20, 20), pipelineOf(task.id))
+            assertEquals(listOf(0, 0, 20), pipelineOf(task.id))
             assertTrue(taskById(task.id).isCompleted)
         }
 
     @Test
-    fun `a board pipeline is counted all the way up`() =
+    fun `a board pipeline has every piece put through to the last step`() =
         runBlocking<Unit> {
             val fixture = aGameCalled()
             val task = fixture.writing(poolType = PoolType.BOARD, trackingMode = TrackingMode.PIPELINE)
@@ -258,12 +258,12 @@ class GameCompletionTest {
 
             finish(fixture.gameId)
 
-            assertEquals(listOf(20, 20, 20), pipelineOf(task.id))
+            assertEquals(listOf(0, 0, 20), pipelineOf(task.id))
             assertTrue(taskById(task.id).isCompleted)
         }
 
     @Test
-    fun `a pipeline nobody has started is counted all the way up too`() =
+    fun `a pipeline nobody has started has every piece put through too`() =
         runBlocking<Unit> {
             val fixture = aGameCalled()
             val task = fixture.writing(poolType = PoolType.CARD, trackingMode = TrackingMode.PIPELINE)
@@ -271,7 +271,7 @@ class GameCompletionTest {
 
             finish(fixture.gameId)
 
-            assertEquals(listOf(20, 20, 20), pipelineOf(task.id))
+            assertEquals(listOf(0, 0, 20), pipelineOf(task.id))
         }
 
     @Test
@@ -382,7 +382,9 @@ class GameCompletionTest {
                     add(gameById(fixture.gameId).updatedAt)
                     add(taskById(owing.id).completedAt)
                     add(taskById(owing.id).updatedAt)
-                    addAll(progress.stagesOfTask(owing.id).map { it.updatedAt })
+                    // The step that moved; the earlier ones hold no pieces before
+                    // or after, so there is nothing to write to them.
+                    add(progress.stagesOfTask(owing.id).last().updatedAt)
                     add(progress.progressEventsOfTask(owing.id).last { it.kind == ProgressEventKind.SHORTAGE_RESOLVED }.recordedAt)
                 }
             assertEquals(setOf(updatedAt), moments.toSet(), "one transaction wrote several times: $moments")
@@ -681,7 +683,7 @@ class GameCompletionTest {
             assertTrue(finish(fixture.gameId, expected = snapshotOf(fixture.gameId)))
 
             assertTrue(gameById(fixture.gameId).isManuallyCompleted)
-            assertEquals(listOf(20, 20, 20), pipelineOf(card.id))
+            assertEquals(listOf(0, 0, 20), pipelineOf(card.id))
         }
 
     @Test
@@ -691,7 +693,7 @@ class GameCompletionTest {
             val card = fixture.writing(poolType = PoolType.CARD, trackingMode = TrackingMode.PIPELINE)
             progress.setStageQuantities(
                 card.id,
-                mapOf(ProductionStage.PRINT to 15, ProductionStage.LAMINATE to 10, ProductionStage.CUT to 5),
+                mapOf(ProductionStage.PRINT to 9, ProductionStage.LAMINATE to 6, ProductionStage.CUT to 3),
                 StoppedClock(createdAt),
             )
 
@@ -702,7 +704,7 @@ class GameCompletionTest {
                 listOf(ProductionStage.PRINT, ProductionStage.LAMINATE, ProductionStage.CUT),
                 stages.sortedBy { it.orderIndex }.map { it.stage },
             )
-            assertEquals(listOf(15, 10, 5), stages.sortedBy { it.orderIndex }.map { it.completedQuantity })
+            assertEquals(listOf(9, 6, 3), stages.sortedBy { it.orderIndex }.map { it.completedQuantity })
         }
 
     @Test

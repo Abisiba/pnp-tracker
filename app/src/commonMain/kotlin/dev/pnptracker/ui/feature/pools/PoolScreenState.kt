@@ -177,23 +177,56 @@ sealed interface PoolWork {
         /** Whether one box holds something that is not a count this step could stand at. */
         fun isUnusable(stage: ProductionStage): Boolean = isUnusableQuantity(draft[stage].orEmpty())
 
+        /** How many pieces the typed counters describe together, counting a box that is not a number as none. */
+        val typedPieces: Long get() = steps.sumOf { draft[it]?.toIntOrNull()?.toLong() ?: 0L }
+
         /**
-         * Whether the draft as it stands describes a pipeline that cannot have
-         * happened, a later step standing further on than an earlier one.
-         *
-         * Said while it is being typed rather than only when the save comes
-         * back, because the arrows are allowed to pass through it: reaching
-         * `10/10/5` from `8/10/5` means moving the first step twice, and the
-         * halfway point is a state the finished target is not.
+         * Whether the typed counters together hold more pieces than the task
+         * needs — `5 + 5 + 5` for a task of five. Said while it is typed, and
+         * refused again by the save.
          */
-        val isOutOfOrder: Boolean
-            get() =
-                steps.zipWithNext().any { (earlier, later) ->
-                    val before = draft[earlier]?.toIntOrNull() ?: return@any false
-                    val after = draft[later]?.toIntOrNull() ?: return@any false
-                    after > before
-                }
+        val isOverTotal: Boolean get() = total?.let { typedPieces > it } == true
     }
+
+    /**
+     * How many pieces one task is short of, being set from its card.
+     *
+     * Opened on the number the task owes now and saved as the number the user
+     * wants it to owe; the difference is written as a shortage reported or made
+     * good on the same task, so the history still adds up and no task is made.
+     */
+    data class EditingMissing(
+        override val card: PoolCardKey,
+        override val task: PoolTask,
+        /** What the task owed when this was opened; the difference is measured from it. */
+        val openedOn: Int,
+        val typed: String,
+        /** The name the movement will be written under, kept so a retry is the same movement. */
+        val eventId: EntityId,
+        val isSaving: Boolean = false,
+        val problem: MissingProblem? = null,
+    ) : PoolWork {
+        override val parent: PoolWork? get() = null
+        override val hasUnsavedChanges: Boolean get() = typed != openedOn.toString()
+
+        /** The number typed, or null when it is not a count of pieces. */
+        val wanted: Int? get() = typed.trim().toIntOrNull()?.takeIf { it >= 0 }
+
+        /** What the task owes at most: its total, when it has one. */
+        val limit: Int? get() = task.requiredQuantity
+    }
+}
+
+/** Why a missing count set from a card was not saved. */
+enum class MissingProblem {
+    /** Not a number of pieces. */
+    INVALID,
+
+    /** More than the task needs in total. */
+    OVER_TOTAL,
+
+    /** The write was refused; the draft is kept for another go. */
+    REFUSED,
 }
 
 /**
@@ -260,6 +293,7 @@ data class PoolScreenState(
                 is PoolWork.ConfirmingConvert -> open.isSaving
                 is PoolWork.ConfirmingReopen -> open.isSaving
                 is PoolWork.EditingStages -> open.isSaving
+                is PoolWork.EditingMissing -> open.isSaving
                 else -> false
             }
 

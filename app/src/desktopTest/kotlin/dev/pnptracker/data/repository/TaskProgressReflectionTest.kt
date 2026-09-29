@@ -762,8 +762,8 @@ class TaskProgressReflectionTest {
             progress.setStageQuantities(
                 taskId,
                 mapOf(
-                    ProductionStage.PRINT to 20,
-                    ProductionStage.LAMINATE to 20,
+                    ProductionStage.PRINT to 0,
+                    ProductionStage.LAMINATE to 0,
                     ProductionStage.CUT to 20,
                 ),
                 clock,

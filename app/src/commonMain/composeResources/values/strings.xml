@@ -436,7 +436,7 @@
     <string name="cell_task_save">Görevi kaydet</string>
     <string name="cell_task_discard">Vazgeç</string>
     <string name="cell_task_saving">Görev kaydediliyor…</string>
-    <string name="cell_task_hint">Ctrl+Enter kaydeder, Esc pencereyi kapatır.</string>
+    <string name="cell_task_hint">Enter görevi kaydeder, Shift+Enter nota yeni satır ekler, Esc pencereyi kapatır.</string>
 
     <!-- Game table: a task standing in a cell -->
     <string name="cell_task_quantity_mark">×%1$d</string>
@@ -842,7 +842,7 @@
     <string name="pool_stage_all_done">Bütün aşamalar tamamlandı</string>
     <string name="pool_stage_count">%1$s: %2$s</string>
     <string name="pool_stage_count_of">%1$s: %2$s / %3$s</string>
-    <string name="pool_stage_badge_of">%1$s: %2$s/%3$s · %4$s eksik</string>
+    <string name="pool_stage_badge_of">%1$s: %2$s/%3$s · %4$s kaldı</string>
     <string name="pool_stage_badge_unknown">Adet belirtilmemiş</string>
     <string name="pool_stage_edit">Aşamaları düzenle</string>
     <string name="pool_stage_edit_task">Görevi düzenle</string>
@@ -853,10 +853,21 @@
     <string name="pool_stage_of_total">/ %1$s</string>
     <string name="pool_stage_save">Kaydet</string>
     <string name="pool_stage_cancel">Vazgeç</string>
-    <string name="pool_stage_hint">Üç aşama birlikte kaydedilir. Ctrl+Enter kaydeder, Esc vazgeçer.</string>
+    <string name="pool_stage_hint">Her parça yalnız bulunduğu aşamada sayılır; üç aşama birlikte kaydedilir. Enter kaydeder, Esc vazgeçer.</string>
     <string name="pool_stage_invalid">Aşama sayısı olarak bir adet yazın.</string>
     <string name="pool_stage_over_total">Bir aşama görevin toplam adedini geçemez.</string>
-    <string name="pool_stage_order">Sonraki aşama önceki aşamayı geçemez.</string>
+    <string name="pool_stage_sum">Aşamalardaki parça: %1$s / %2$s</string>
+    <string name="pool_stage_sum_over">Üç aşamanın toplamı görevin adedini geçemez. Her parçayı yalnız bulunduğu aşamada sayın.</string>
+    <string name="pool_missing_action">Eksik adedi</string>
+    <string name="pool_missing_action_description">%1$s görevinin eksik adedini düzenle</string>
+    <string name="pool_missing_title">Eksik parça adedi</string>
+    <string name="pool_missing_field">%1$s görevinde eksik parça, en fazla %2$s</string>
+    <string name="pool_missing_save">Kaydet</string>
+    <string name="pool_missing_cancel">Vazgeç</string>
+    <string name="pool_missing_hint">Görevin şu anki eksik adedini yazın; 0 eksikleri kapatır. Enter kaydeder, Esc vazgeçer.</string>
+    <string name="pool_missing_invalid">Eksik adedi olarak 0 veya daha büyük bir sayı yazın.</string>
+    <string name="pool_missing_over_total">Eksik adedi görevin adedini (%1$s) geçemez.</string>
+    <string name="pool_missing_refused">Eksik adedi kaydedilemedi. Yeniden deneyin.</string>
     <string name="pool_stage_stale">Bu görevin adedi veya aşamaları başka bir işlemle değişti. Paneli kapatıp yeniden açın.</string>
     <string name="pool_stage_unavailable">Bu görev artık burada değil.</string>
     <string name="pool_stage_no_total">Aşama sayaçları için önce görevin toplam adedi gerekiyor.</string>

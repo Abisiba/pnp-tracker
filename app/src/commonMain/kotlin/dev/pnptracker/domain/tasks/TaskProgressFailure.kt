@@ -52,15 +52,14 @@ enum class TaskProgressFailure {
     REQUIRED_QUANTITY_UNKNOWN,
 
     /**
-     * A stage was asked to go further than the stage before it.
+     * The steps together were asked to hold more pieces than the task needs.
      *
-     * PLAN 7.2 writes the rule as `0 <= cut <= laminated <= printed <= total`;
-     * a piece cannot be cut before it is printed. Kept apart from
+     * Each step counts the pieces standing at it, so one piece is counted once;
+     * with five to make, `5 + 5 + 5` would be fifteen pieces. Kept apart from
      * [STAGE_QUANTITY_EXCEEDS_REQUIRED] and [INVALID_QUANTITY] because what the
-     * user has to do about each is different: reorder the steps, lower the
-     * amount, or type a number at all.
+     * user has to do about each is different.
      */
-    STAGE_ORDER_VIOLATED,
+    STAGES_EXCEED_REQUIRED,
 
     /** A stage was asked to count further than the task needs in total. */
     STAGE_QUANTITY_EXCEEDS_REQUIRED,

@@ -4,6 +4,7 @@ import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.PoolType
 import dev.pnptracker.domain.model.ProductionStage
 import dev.pnptracker.domain.model.TrackingMode
+import dev.pnptracker.domain.tasks.StageRules
 
 /** One colour a pool task is made in, as the pool shows it. */
 data class PoolColor(
@@ -78,18 +79,29 @@ data class PoolTask(
     /**
      * The first stage that is not finished, or null when they all are.
      *
-     * Finished means the whole required quantity has been through it. A task
-     * with no required quantity has nothing to measure a stage against, so any
-     * work at all counts it as begun and only the last stage having some counts
-     * it as done — PLAN's pipeline invariant orders the stages, and reading them
-     * in order is what makes the first gap the answer.
+     * A counter counts the pieces standing at its step ([StageRules]), so the
+     * pieces that have been through a step are the ones standing there and the
+     * ones further on. A step is finished when the whole required quantity has
+     * been through it. A task with no required quantity has nothing to measure a
+     * step against, so a step counts as finished once any piece is at it or past
+     * it.
      */
     val firstUnfinishedStage: ProductionStage?
-        get() =
-            stages
-                .firstOrNull { stage ->
-                    requiredQuantity?.let { stage.completedQuantity < it } ?: (stage.completedQuantity == 0)
-                }?.stage
+        get() {
+            val counts = stages.map { it.completedQuantity }
+            return stages
+                .filterIndexed { index, _ ->
+                    val passed = StageRules.passedThrough(counts, index)
+                    requiredQuantity?.let { passed < it } ?: (passed == 0L)
+                }.firstOrNull()
+                ?.stage
+        }
+
+    /** How many pieces have been through [stage]: those at it and those further on. */
+    fun passedThrough(stage: ProductionStage): Long {
+        val index = stages.indexOfFirst { it.stage == stage }
+        return if (index < 0) 0 else StageRules.passedThrough(stages.map { it.completedQuantity }, index)
+    }
 
     /** Where the first unfinished stage sits in the pipeline; last when there is none. */
     val stageRank: Int

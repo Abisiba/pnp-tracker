@@ -184,8 +184,19 @@ game table.
   button that finishes it with a single press.
 - **Eksik/hatalı bildir** (report missing or failed): records how many 3D prints
   came out wrong; you close it later with **Eksik giderildi** (resolved).
-- **Stages**: card and board tasks keep the next production stage (print,
-  lamination, cutting) and how many have passed it.
+- **Eksik adedi** (missing count): on every pool card (3D Baskı, Kartlar,
+  Mukavva, Özel) you can type how many pieces the task is short of now, or change
+  that number; **Enter** saves. The same task is updated — no new task is made —
+  and the number shows at once on the card (for example *3 eksik*) and in the game
+  table.
+- **Stages**: card and board tasks have three counters (for cards **Basıldı**,
+  **Lamine edildi**, **Kesildi**). Each counts the pieces standing at that step,
+  so one piece is counted once and the three together can never be more than the
+  task's quantity: with 5 pieces, `5 + 5 + 5` is refused and the most they can add
+  up to is 5. The task is finished when all of its pieces are at the last step.
+  Counters saved before this rule are left as they are; the stage editor says
+  when they add up to too many, and you fix them there. **Enter** saves the
+  counters.
 - **Görevi metne dönüştür** (turn into text): leaves the word in the cell as
   plain text; its colour, quantity and stages are no longer kept as a task. This
   cannot be undone; the production history is not deleted, but the task leaves
@@ -314,6 +325,8 @@ wrong writes no line at all.
 - **Ctrl+Enter** saves in editing panels.
 - In a cell editor, **Enter** saves and **Ctrl+Enter** starts a new line. Type a
   new name into a task column and press **Enter**, and the task window opens.
+- In the task window, **Enter** in a field saves the task (**Görevi kaydet**);
+  **Shift+Enter** starts a new line in the note, and **Esc** gives up.
 - In questions that cannot be undone, focus starts on **Vazgeç** (cancel).
 - The application works in a small window (640×460) and with large system
   fonts; no information is given by colour alone, every state has words.

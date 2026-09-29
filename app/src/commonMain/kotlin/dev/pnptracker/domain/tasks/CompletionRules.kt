@@ -23,9 +23,9 @@ object CompletionRules {
     ): Boolean = alreadyMade || poolType == PoolType.THREE_D
 
     /**
-     * What each stage of a finished task's pipeline should read.
+     * How many pieces a finished task's pipeline has at its last step.
      *
-     * The whole total, so a finished pipeline is finished at every step. With no
+     * The whole total, so every piece is through ([StageRules]). With no
      * total there is nothing for a stage to reach — PLAN 6.4 leaves such a task to
      * be finished by hand — so the pipeline is left where it stands.
      */

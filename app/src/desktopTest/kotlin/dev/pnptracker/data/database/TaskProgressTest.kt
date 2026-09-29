@@ -712,36 +712,50 @@ class TaskProgressTest {
         }
 
     @Test
-    fun `a stage cannot pass the one before it`() =
+    fun `the steps together cannot hold more pieces than the task needs`() =
         runBlocking<Unit> {
-            // PLAN 7.2: 0 <= cut <= laminated <= printed <= total.
-            val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 170, name = "Bird Cards")
-            progress.setStageQuantity(taskId, ProductionStage.PRINT, 170, clock)
-            progress.setStageQuantity(taskId, ProductionStage.LAMINATE, 167, clock)
+            // Each counter is the pieces standing at its step, so with five to
+            // make `5 + 5 + 5` is fifteen pieces and is refused at the write.
+            val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 5, name = "Bird Cards")
+            progress.setStageQuantity(taskId, ProductionStage.PRINT, 5, clock)
 
-            val refusal =
+            val one =
                 assertFailsWith<TaskProgressException> {
-                    progress.setStageQuantity(taskId, ProductionStage.CUT, 168, clock)
+                    progress.setStageQuantity(taskId, ProductionStage.LAMINATE, 5, clock)
                 }
+            assertEquals(TaskProgressFailure.STAGES_EXCEED_REQUIRED, one.failure)
 
-            assertEquals(TaskProgressFailure.STAGE_ORDER_VIOLATED, refusal.failure)
-            assertEquals(listOf(170, 167, 0), progress.stagesOfTask(taskId).map { it.completedQuantity })
+            val all =
+                assertFailsWith<TaskProgressException> {
+                    progress.setStageQuantities(
+                        taskId,
+                        mapOf(ProductionStage.PRINT to 5, ProductionStage.LAMINATE to 5, ProductionStage.CUT to 5),
+                        clock,
+                    )
+                }
+            assertEquals(TaskProgressFailure.STAGES_EXCEED_REQUIRED, all.failure)
+            assertEquals(listOf(5, 0, 0), progress.stagesOfTask(taskId).map { it.completedQuantity }, "a refused save moved a counter")
+
+            // Five pieces spread over the steps is exactly what may be saved.
+            progress.setStageQuantities(
+                taskId,
+                mapOf(ProductionStage.PRINT to 2, ProductionStage.LAMINATE to 2, ProductionStage.CUT to 1),
+                clock,
+            )
+            assertEquals(listOf(2, 2, 1), progress.stagesOfTask(taskId).map { it.completedQuantity })
+            assertFalse(taskOf(taskId).isCompleted, "a task with pieces still waiting at earlier steps finished")
         }
 
     @Test
-    fun `a stage cannot be pulled back below the one after it`() =
+    fun `a later step may count more pieces than an earlier one`() =
         runBlocking<Unit> {
+            // No ordering between the counters any more: most of the pieces can
+            // already be cut while a few still wait to be laminated.
             val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 170, name = "Bird Cards")
-            progress.setStageQuantity(taskId, ProductionStage.PRINT, 170, clock)
-            progress.setStageQuantity(taskId, ProductionStage.LAMINATE, 167, clock)
             progress.setStageQuantity(taskId, ProductionStage.CUT, 150, clock)
+            progress.setStageQuantity(taskId, ProductionStage.LAMINATE, 10, clock)
 
-            val refusal =
-                assertFailsWith<TaskProgressException> {
-                    progress.setStageQuantity(taskId, ProductionStage.LAMINATE, 140, clock)
-                }
-
-            assertEquals(TaskProgressFailure.STAGE_ORDER_VIOLATED, refusal.failure)
+            assertEquals(listOf(0, 10, 150), progress.stagesOfTask(taskId).map { it.completedQuantity })
         }
 
     @Test
@@ -781,14 +795,14 @@ class TaskProgressTest {
         }
 
     @Test
-    fun `every stage reaching the total finishes the task`() =
+    fun `every piece reaching the last step finishes the task`() =
         runBlocking<Unit> {
             val taskId = aTaskIn(PoolType.BOARD, requiredQuantity = 16, name = "Plaj tile")
             progress.setStageQuantity(taskId, ProductionStage.PRINT, 16, clock)
-            progress.setStageQuantity(taskId, ProductionStage.GLUE, 16, clock)
+            progress.setStageQuantities(taskId, mapOf(ProductionStage.PRINT to 0, ProductionStage.GLUE to 16), clock)
             assertFalse(taskOf(taskId).isCompleted, "the task finished before it was cut")
 
-            progress.setStageQuantity(taskId, ProductionStage.CUT, 16, clock)
+            progress.setStageQuantities(taskId, mapOf(ProductionStage.GLUE to 0, ProductionStage.CUT to 16), clock)
 
             val task = taskOf(taskId)
             assertTrue(task.isCompleted)
@@ -802,9 +816,7 @@ class TaskProgressTest {
             // PLAN 6.4 does not let the finished mark stand against counters that
             // now disagree with it.
             val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 4, name = "Bird Cards")
-            listOf(ProductionStage.PRINT, ProductionStage.LAMINATE, ProductionStage.CUT).forEach {
-                progress.setStageQuantity(taskId, it, 4, clock)
-            }
+            progress.setStageQuantity(taskId, ProductionStage.CUT, 4, clock)
             assertTrue(taskOf(taskId).isCompleted)
 
             progress.setStageQuantity(taskId, ProductionStage.CUT, 3, clock)
@@ -840,14 +852,14 @@ class TaskProgressTest {
         }
 
     @Test
-    fun `finishing a card task fills its pipeline so nothing contradicts it`() =
+    fun `finishing a card task puts every piece at the last step so nothing contradicts it`() =
         runBlocking<Unit> {
             val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 170, name = "Bird Cards")
             progress.setStageQuantity(taskId, ProductionStage.PRINT, 170, clock)
 
             progress.completeTask(taskId, clock, ids)
 
-            assertEquals(listOf(170, 170, 170), progress.stagesOfTask(taskId).map { it.completedQuantity })
+            assertEquals(listOf(0, 0, 170), progress.stagesOfTask(taskId).map { it.completedQuantity })
         }
 
     @Test
@@ -968,14 +980,12 @@ class TaskProgressTest {
             // either step — which of them has to be redone is a judgement PLAN
             // leaves to a later step, and guessing it here would be inventing.
             val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 4, name = "Bird Cards")
-            listOf(ProductionStage.PRINT, ProductionStage.LAMINATE, ProductionStage.CUT).forEach {
-                progress.setStageQuantity(taskId, it, 4, clock)
-            }
+            progress.setStageQuantity(taskId, ProductionStage.CUT, 4, clock)
             assertTrue(taskOf(taskId).isCompleted)
 
             progress.reportFailure(ids.newId(), taskId, 2, clock, cardReference = "Bird #7")
             assertFalse(taskOf(taskId).isCompleted, "a reprint report left the task finished")
-            assertEquals(listOf(4, 4, 4), progress.stagesOfTask(taskId).map { it.completedQuantity })
+            assertEquals(listOf(0, 0, 4), progress.stagesOfTask(taskId).map { it.completedQuantity })
 
             assertTrue(progress.resolveShortage(ids.newId(), taskId, 2, clock))
 
@@ -1005,15 +1015,14 @@ class TaskProgressTest {
         runBlocking<Unit> {
             val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 4, name = "Bird Cards")
             progress.setStageQuantity(taskId, ProductionStage.PRINT, 4, clock)
-            progress.setStageQuantity(taskId, ProductionStage.LAMINATE, 4, clock)
             progress.reportFailure(ids.newId(), taskId, 1, clock)
 
-            assertTrue(progress.setStageQuantity(taskId, ProductionStage.CUT, 4, clock))
+            assertTrue(progress.setStageQuantities(taskId, mapOf(ProductionStage.PRINT to 0, ProductionStage.CUT to 4), clock))
 
             val task = taskOf(taskId)
             assertFalse(task.isCompleted, "a task owing a reprint was finished by its last stage")
             assertEquals(1, task.currentMissingQuantity)
-            assertEquals(listOf(4, 4, 4), progress.stagesOfTask(taskId).map { it.completedQuantity })
+            assertEquals(listOf(0, 0, 4), progress.stagesOfTask(taskId).map { it.completedQuantity })
         }
 
     @Test
@@ -1379,9 +1388,9 @@ class TaskProgressTest {
     @Test
     fun `a total lowered under an open panel is refused as stale and not as too large`() =
         runBlocking<Unit> {
-            // Low enough that the total may really be brought down to twelve:
-            // the form will not take a total below the furthest step.
-            val taskId = aCardAt(8, 8, 5)
+            // Few enough pieces that the total may really be brought down to
+            // twelve: the form will not take a total below what the steps hold.
+            val taskId = aCardAt(4, 4, 3)
             val opened = snapshotOf(taskId)
             changeTotalOf(taskId, 12)
 
@@ -1400,7 +1409,7 @@ class TaskProgressTest {
             // the save cannot stand is that the task is no longer the one they
             // typed it against.
             assertEquals(TaskProgressFailure.STALE_STAGE_PROGRESS, refusal.failure)
-            assertEquals(listOf(8, 8, 5), pipelineOf(taskId))
+            assertEquals(listOf(4, 4, 3), pipelineOf(taskId))
             assertEquals(12, taskOf(taskId).requiredQuantity)
         }
 
@@ -1639,7 +1648,7 @@ class TaskProgressTest {
     @Test
     fun `a card pipeline is written in one go`() =
         runBlocking<Unit> {
-            val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 20, name = "Bird Cards")
+            val taskId = aTaskIn(PoolType.CARD, requiredQuantity = 30, name = "Bird Cards")
 
             val changed =
                 progress.setStageQuantities(
@@ -1662,7 +1671,7 @@ class TaskProgressTest {
     @Test
     fun `a board pipeline is written in one go`() =
         runBlocking<Unit> {
-            val taskId = aTaskIn(PoolType.BOARD, requiredQuantity = 20, name = "Plaj tile")
+            val taskId = aTaskIn(PoolType.BOARD, requiredQuantity = 36, name = "Plaj tile")
 
             progress.setStageQuantities(
                 taskId,
@@ -1675,24 +1684,24 @@ class TaskProgressTest {
         }
 
     @Test
-    fun `a pipeline that reaches the total by a route of its own is still allowed`() =
+    fun `pieces moved from one step to the next in one save are allowed`() =
         runBlocking<Unit> {
-            // Lowering the print run and the cut together describes a state the
-            // rule allows; saving a step at a time would refuse it on the way,
-            // because the cut would stand above the print run in between.
-            val taskId = aCardAt(20, 20, 20)
+            // Moving pieces on: fewer printed and waiting, more cut. Saved a step
+            // at a time, raising the cut first would hold too many pieces on the
+            // way; saved together it is the state the user described.
+            val taskId = aCardAt(30, 5, 5)
 
             progress.setStageQuantities(
                 taskId,
-                mapOf(ProductionStage.PRINT to 8, ProductionStage.LAMINATE to 8, ProductionStage.CUT to 8),
+                mapOf(ProductionStage.PRINT to 8, ProductionStage.LAMINATE to 8, ProductionStage.CUT to 24),
                 clock,
             )
 
-            assertEquals(listOf(8, 8, 8), pipelineOf(taskId))
+            assertEquals(listOf(8, 8, 24), pipelineOf(taskId))
         }
 
     @Test
-    fun `a target that breaks the order writes none of its steps`() =
+    fun `a target over the total writes none of its steps`() =
         runBlocking<Unit> {
             val taskId = aCardAt(15, 10, 5)
             val before = clock.reads
@@ -1701,12 +1710,12 @@ class TaskProgressTest {
                 assertFailsWith<TaskProgressException> {
                     progress.setStageQuantities(
                         taskId,
-                        mapOf(ProductionStage.PRINT to 8),
+                        mapOf(ProductionStage.PRINT to 30),
                         clock,
                     )
                 }
 
-            assertEquals(TaskProgressFailure.STAGE_ORDER_VIOLATED, refusal.failure)
+            assertEquals(TaskProgressFailure.STAGES_EXCEED_REQUIRED, refusal.failure)
             assertEquals(listOf(15, 10, 5), pipelineOf(taskId), "a refused save moved a counter")
             assertEquals(before, clock.reads, "a refused save read the clock")
         }
@@ -1789,7 +1798,7 @@ class TaskProgressTest {
 
             mapOf(
                 -1 to TaskProgressFailure.INVALID_QUANTITY,
-                21 to TaskProgressFailure.STAGE_QUANTITY_EXCEEDS_REQUIRED,
+                CARD_TOTAL + 1 to TaskProgressFailure.STAGE_QUANTITY_EXCEEDS_REQUIRED,
             ).forEach { (amount, expected) ->
                 val refusal =
                     assertFailsWith<TaskProgressException> {
@@ -1801,9 +1810,9 @@ class TaskProgressTest {
         }
 
     @Test
-    fun `a pipeline counted all the way up finishes the task`() =
+    fun `a pipeline with every piece at the last step finishes the task`() =
         runBlocking<Unit> {
-            val taskId = aCardAt(20, 20, 20)
+            val taskId = aCardAt(0, 0, CARD_TOTAL)
 
             val task = checkNotNull(progress.taskById(taskId))
             assertTrue(task.isCompleted)
@@ -1814,14 +1823,14 @@ class TaskProgressTest {
     @Test
     fun `pulling a finished pipeline back opens the task again`() =
         runBlocking<Unit> {
-            val taskId = aCardAt(20, 20, 20)
+            val taskId = aCardAt(0, 0, CARD_TOTAL)
 
-            progress.setStageQuantities(taskId, mapOf(ProductionStage.CUT to 19), clock)
+            progress.setStageQuantities(taskId, mapOf(ProductionStage.LAMINATE to 1, ProductionStage.CUT to CARD_TOTAL - 1), clock)
 
             val task = checkNotNull(progress.taskById(taskId))
             assertFalse(task.isCompleted)
             assertNull(task.completedAt)
-            assertEquals(listOf(20, 20, 19), pipelineOf(taskId))
+            assertEquals(listOf(0, 1, CARD_TOTAL - 1), pipelineOf(taskId))
         }
 
     @Test
@@ -1833,8 +1842,8 @@ class TaskProgressTest {
             progress.setStageQuantities(
                 taskId,
                 mapOf(
-                    ProductionStage.PRINT to 20,
-                    ProductionStage.LAMINATE to 20,
+                    ProductionStage.PRINT to 0,
+                    ProductionStage.LAMINATE to 0,
                     ProductionStage.CUT to 20,
                 ),
                 clock,
@@ -1845,7 +1854,7 @@ class TaskProgressTest {
             progress.resolveShortage(ids.newId(), taskId, 4, clock)
 
             assertTrue(checkNotNull(progress.taskById(taskId)).isCompleted, "making good the last of it did not finish it")
-            assertEquals(listOf(20, 20, 20), pipelineOf(taskId), "settling the debt moved the pipeline")
+            assertEquals(listOf(0, 0, 20), pipelineOf(taskId), "settling the debt moved the pipeline")
         }
 
     @Test
@@ -2031,8 +2040,12 @@ class TaskProgressTest {
         }
 }
 
-/** What the pipeline fixtures below count up to, unless one says otherwise. */
-private const val CARD_TOTAL = 20
+/**
+ * The total the card tasks here are made with. Roomy enough that the counters
+ * used throughout — 15, 10 and 5 pieces at the three steps — fit inside it,
+ * since the steps together may not hold more pieces than the task needs.
+ */
+private const val CARD_TOTAL = 40
 
 /** Far enough past any real step that a pipeline can be rewritten through it. */
 private const val PARKED_ORDER = 100

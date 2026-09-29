@@ -70,8 +70,9 @@ abstract class TaskEditDao {
     @Query("SELECT id FROM colors")
     abstract suspend fun allColorIds(): List<EntityId>
 
-    @Query("SELECT COALESCE(MAX(completed_quantity), 0) FROM task_stages WHERE task_id = :taskId")
-    abstract suspend fun furthestStageOf(taskId: EntityId): Int
+    /** How many pieces the task's pipeline counts, all steps together (see StageRules). */
+    @Query("SELECT COALESCE(SUM(completed_quantity), 0) FROM task_stages WHERE task_id = :taskId")
+    abstract suspend fun piecesInPipelineOf(taskId: EntityId): Long
 
     @Query("SELECT COUNT(*) FROM task_stages WHERE task_id = :taskId")
     abstract suspend fun stageCountOf(taskId: EntityId): Int
@@ -292,9 +293,14 @@ abstract class TaskEditDao {
         if (requiredQuantity != null && requiredQuantity <= 0) refuse(TaskEditFailure.INVALID_REQUIRED_QUANTITY)
         if (requiredQuantity != null) {
             if (requiredQuantity < task.currentMissingQuantity) refuse(TaskEditFailure.QUANTITY_BELOW_PROGRESS)
-            if (requiredQuantity < furthestStageOf(taskId)) refuse(TaskEditFailure.QUANTITY_BELOW_PROGRESS)
         }
         val changesTotal = requiredQuantity != task.requiredQuantity
+        // A new total has to hold the pieces the pipeline already counts. Only
+        // asked when the total moves, so a task whose older counters add up to
+        // more than it needs can still have its name or notes changed.
+        if (changesTotal && requiredQuantity != null && requiredQuantity < piecesInPipelineOf(taskId)) {
+            refuse(TaskEditFailure.QUANTITY_BELOW_PROGRESS)
+        }
         if (changesTotal && task.isCompleted && stageCountOf(taskId) > 0) {
             refuse(TaskEditFailure.QUANTITY_LOCKED_BY_COMPLETION)
         }

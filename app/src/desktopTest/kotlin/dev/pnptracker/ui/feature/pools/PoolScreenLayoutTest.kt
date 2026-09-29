@@ -253,6 +253,16 @@ class PoolScreenLayoutTest {
     }
 
     @Test
+    fun `the game name on a card is bold and read at a glance`() {
+        val card = screen.substringAfter("private fun TaskCard(").substringBefore("private fun FinishButton(")
+        val game = card.substringAfter("text = task.gameName,").substringBefore(")")
+
+        assertTrue("typography.titleMedium" in game, "the game name is still drawn small: $game")
+        assertTrue("FontWeight.Bold" in game, "the game name is not bold: $game")
+        assertTrue("maxLines" !in game, "a long game name is cut rather than wrapped")
+    }
+
+    @Test
     fun `a card is one thing to press and one thing to hear`() {
         val card = screen.substringAfter("private fun TaskCard(").substringBefore("private fun ColorChips(")
 
@@ -379,16 +389,18 @@ class PoolScreenLayoutTest {
             "import dev.pnptracker.ui.feature.tasks.TaskEditPanel" in screen,
             "the form is not the shared one",
         )
-        // The pool has fields of its own only inside the pipeline panel, where
-        // they count pieces. A field anywhere else would be a second place to
-        // type what the shared form already asks for.
+        // The pool has fields of its own only where it counts pieces: the step
+        // counter and the missing count. A field anywhere else would be a second
+        // place to type what the shared form already asks for.
         val row = screen.substringAfter("private fun StageRow(").substringBefore("/** What a refused pipeline")
+        val missing = screen.substringAfter("private fun MissingPanel(").substringBefore("/** How wide a step's name")
         assertEquals(
-            1,
+            2,
             Regex("""OutlinedTextField\(""").findAll(screen).count(),
             "the pool grew a field of its own beside the shared form",
         )
-        assertTrue("OutlinedTextField(" in row, "the only field the pool has is not the step counter")
+        assertTrue("OutlinedTextField(" in row, "the step counter has no field")
+        assertTrue("OutlinedTextField(" in missing, "the missing count has no field")
     }
 
     @Test
@@ -614,9 +626,15 @@ class PoolScreenLayoutTest {
     }
 
     @Test
-    fun `the pool still offers nothing that belongs to a later step`() {
-        listOf("setManuallyCompleted", "setGameCompleted", "reportFailure", "resolveShortage").forEach {
-            assertTrue(it !in screen && it !in controller, "the pool offers $it, which belongs to a later step")
+    fun `the pool offers nothing that belongs elsewhere`() {
+        listOf("setManuallyCompleted", "setGameCompleted").forEach {
+            assertTrue(it !in screen && it !in controller, "the pool offers $it, which belongs elsewhere")
+        }
+        // The missing count is set from the card through the same two writes the
+        // table uses, and the screen itself reaches neither.
+        listOf("reportFailure", "resolveShortage").forEach {
+            assertTrue(it in controller, "the missing count does not go through $it")
+            assertTrue(it !in screen, "the screen writes $it itself")
         }
     }
 

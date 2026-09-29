@@ -397,6 +397,69 @@ class TaskFromEnterTest {
         }
     }
 
+    @Test
+    fun `Enter in the task window saves the task, with no Ctrl needed`() {
+        RealStack().use { stack ->
+            open(stack).use { screen ->
+                val gameId = screen.makeGame(stack)
+                // The first Enter opens the window over the name, as before.
+                screen.typeAndEnter(stack, gameId, CellColumnType.CARD, "Gri token")
+                composerOf(stack)
+                assertEquals(emptyList(), tasksIn(stack), "the first Enter made the task instead of opening the window")
+
+                stack.table.editTaskQuantity(0, "4")
+                screen.render()
+                // The keyboard is in the window's first field; plain Enter saves.
+                screen.press(Key.Enter)
+                screen.settle("the task is made") { stack.table.state.work == null && tasksIn(stack).isNotEmpty() }
+
+                val task = tasksIn(stack).single()
+                assertEquals("Gri token", task.name)
+                assertEquals(4, task.requiredQuantity)
+                assertEquals(listOf(task.id), stack.piecesOf(gameId, CellColumnType.CARD).mapNotNull { it.taskId })
+            }
+        }
+    }
+
+    @Test
+    fun `Enter on a window that is not ready yet saves nothing and keeps the window`() {
+        RealStack().use { stack ->
+            open(stack).use { screen ->
+                val gameId = screen.makeGame(stack)
+                screen.typeAndEnter(stack, gameId, CellColumnType.CARD, "Gri token")
+                composerOf(stack)
+                // No count typed: the save is refused where the user can see it.
+                screen.press(Key.Enter)
+                screen.render()
+
+                assertNotNull(stack.table.state.work as? CellWork.MakingTask, "the window closed on a task it could not save")
+                assertEquals(emptyList(), tasksIn(stack))
+            }
+        }
+    }
+
+    @Test
+    fun `Escape still gives the window up, and its hint says Enter saves`() {
+        RealStack().use { stack ->
+            open(stack).use { screen ->
+                val gameId = screen.makeGame(stack)
+                screen.typeAndEnter(stack, gameId, CellColumnType.CARD, "Gri token")
+                composerOf(stack)
+                val texts = screen.nodes().flatMap { node -> node.reads(SemanticsProperties.Text).orEmpty().map { it.text } }
+                assertTrue(texts.any { "Enter görevi kaydeder" in it }, "the window's hint does not say Enter saves: $texts")
+                assertFalse(texts.any { "Ctrl+Enter kaydeder" in it }, "the window still says Ctrl+Enter is needed")
+
+                screen.press(Key.Escape)
+                screen.render()
+
+                val editor =
+                    stack.table.state.work as? CellWork.WritingText ?: fail("Escape did not give the window up: ${stack.table.state.work}")
+                assertEquals("Gri token", editor.draft)
+                assertEquals(emptyList(), tasksIn(stack))
+            }
+        }
+    }
+
     private companion object {
         const val NOTE = "boyası kuruyor"
     }

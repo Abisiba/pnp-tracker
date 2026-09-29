@@ -327,6 +327,9 @@ class PoolController(
             // against — replacing either would turn a stale save into a silent
             // overwrite of whatever arrived.
             is PoolWork.EditingStages -> copy(task = task)
+            // The same for the missing count: the number typed and the number it
+            // was opened on stay the user's.
+            is PoolWork.EditingMissing -> copy(task = task)
         }
 
     /** The task by that identity as the pool now holds it, or null when it is gone. */
@@ -541,17 +544,93 @@ class PoolController(
                     open.steps.firstOrNull { (open.draft[it]?.toIntOrNull() ?: 0) > total }
                 }
 
-            TaskProgressFailure.STAGE_ORDER_VIOLATED ->
-                open.steps
-                    .zipWithNext()
-                    .firstOrNull { (earlier, later) ->
-                        val before = open.draft[earlier]?.toIntOrNull() ?: 0
-                        val after = open.draft[later]?.toIntOrNull() ?: 0
-                        after > before
-                    }?.second
+            // About the three together, so the keyboard goes back to the first.
+            TaskProgressFailure.STAGES_EXCEED_REQUIRED -> open.steps.firstOrNull()
 
             else -> null
         }
+
+    // --------------------------------------------------- the missing count
+
+    /**
+     * Opens the missing count of one task, from its card.
+     *
+     * Any pool: a piece can be short on a 3D print, a card, a board or a special
+     * task alike. Refused while something else is open, the same as the menu is.
+     */
+    fun beginMissingEdit(card: PoolCardKey) {
+        if (state.work != null) return
+        val task = taskOf(card.taskId) ?: return
+        cardToFocus = card
+        state =
+            state.copy(
+                work =
+                    PoolWork.EditingMissing(
+                        card = card,
+                        task = task,
+                        openedOn = task.currentMissingQuantity,
+                        typed = task.currentMissingQuantity.toString(),
+                        eventId = idGenerator.newId(),
+                    ),
+                focusRecall = state.focusRecall + 1,
+            )
+    }
+
+    /** Types into the missing count. Digits only, so nothing else can be sent. */
+    fun editMissingDraft(typed: String) {
+        val open = state.work as? PoolWork.EditingMissing ?: return
+        if (open.isSaving) return
+        state = state.copy(work = open.copy(typed = quantityDigitsOf(typed), problem = null))
+    }
+
+    /**
+     * Saves the missing count as typed.
+     *
+     * The task itself is updated, never a new one made: a higher number is
+     * written as a shortage reported on the task and a lower one as a shortage
+     * made good, through the same transactions the game table uses, so the
+     * table's `Eksik` and the history follow at once. Making the last of it good
+     * can finish the task, as it does from the table.
+     */
+    suspend fun saveMissing() {
+        val open = state.work as? PoolWork.EditingMissing ?: return
+        if (open.isSaving) return
+        val wanted = open.wanted
+        if (wanted == null) {
+            state = state.copy(work = open.copy(problem = MissingProblem.INVALID))
+            return
+        }
+        val limit = open.limit
+        if (limit != null && wanted > limit) {
+            state = state.copy(work = open.copy(problem = MissingProblem.OVER_TOTAL))
+            return
+        }
+        val change = wanted - open.openedOn
+        if (change == 0) {
+            state = state.copy(work = null, focusRecall = state.focusRecall + 1)
+            return
+        }
+        state = state.copy(work = open.copy(isSaving = true, problem = null))
+        val outcome =
+            if (change > 0) {
+                taskProgress.reportFailure(eventId = open.eventId, taskId = open.task.taskId, quantity = change)
+            } else {
+                taskProgress.resolveShortage(eventId = open.eventId, taskId = open.task.taskId, quantity = -change)
+            }
+        val current = state.work as? PoolWork.EditingMissing
+        state =
+            when (outcome) {
+                is TaskProgressOutcome.Done, TaskProgressOutcome.AlreadySo ->
+                    state.copy(work = if (current != null) null else state.work, focusRecall = state.focusRecall + 1)
+
+                is TaskProgressOutcome.Refused ->
+                    if (current == null) {
+                        state
+                    } else {
+                        state.copy(work = current.copy(isSaving = false, problem = MissingProblem.REFUSED))
+                    }
+            }
+    }
 
     // ----------------------------------------------------- working on a task
 
@@ -663,6 +742,8 @@ class PoolController(
             // The pipeline panel is its own control on the card, opened without
             // a menu ever being shown, so there is none behind it.
             is PoolWork.EditingStages -> null
+            // So is the missing count's.
+            is PoolWork.EditingMissing -> null
             null -> null
         }
 

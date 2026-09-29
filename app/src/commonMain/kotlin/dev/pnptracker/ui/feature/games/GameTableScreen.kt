@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -66,6 +67,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -74,6 +76,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -3793,8 +3796,8 @@ private fun TaskComposerBody(
                 .fillMaxSize()
                 // Caught for the whole window rather than for one field in it:
                 // the user may be anywhere in here when they finish. A plain
-                // Enter still reaches the field it was typed in, so a note keeps
-                // its lines.
+                // Enter saves from the window's fields ([savesTaskOnEnter]); on a
+                // button or a colour it still presses that button or colour.
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when {
@@ -3812,89 +3815,107 @@ private fun TaskComposerBody(
                     }
                 },
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(TaskWindowPadding),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                text = stringResource(Strings.CellTask.panelTitle),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            // A name of any length stays in its own place. PLAN 12.6 will not
-            // have the window grow around what was selected, and a title that
-            // pushed the form down would leave a user who selected a sentence
-            // with no form at all.
-            Box(modifier = Modifier.fillMaxWidth().heightIn(max = TaskNameHeight).verticalScroll(rememberScrollState())) {
-                Text(
-                    text = composer.name,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.semantics { contentDescription = "$nameLabel: ${composer.name}" },
-                )
-            }
+        CompositionLocalProvider(LocalTaskWindowSave provides onSave) {
+            TaskComposerContent(composer, offered, catalogue, wide, landing, panelFocus, nameLabel, controller, onSave)
         }
-        HorizontalDivider()
+    }
+}
 
-        Box(modifier = Modifier.weight(1f)) {
-            if (wide) {
-                Row(modifier = Modifier.fillMaxSize()) {
-                    Column(
-                        modifier =
-                            Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .verticalScroll(rememberScrollState())
-                                .padding(TaskWindowPadding),
-                        verticalArrangement = Arrangement.spacedBy(3.dp),
-                    ) {
-                        ComposerWorkSide(composer = composer, landing = landing, focus = panelFocus, controller = controller)
-                    }
-                    VerticalDivider()
-                    Column(
-                        modifier =
-                            Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .verticalScroll(rememberScrollState())
-                                .padding(TaskWindowPadding),
-                        verticalArrangement = Arrangement.spacedBy(3.dp),
-                    ) {
-                        ComposerColorSide(
-                            composer = composer,
-                            offered = offered,
-                            catalogue = catalogue,
-                            controller = controller,
-                        )
-                    }
-                }
-            } else {
-                // Too narrow for two columns, so one: the same parts in the same
-                // order, under one another.
+/** The title, the two sides and the actions of the task window. */
+@Composable
+private fun ColumnScope.TaskComposerContent(
+    composer: TaskComposer,
+    offered: List<ColorSummary>,
+    catalogue: List<ColorSummary>,
+    wide: Boolean,
+    landing: Int,
+    panelFocus: FocusRequester,
+    nameLabel: String,
+    controller: GameTableController,
+    onSave: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(TaskWindowPadding),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = stringResource(Strings.CellTask.panelTitle),
+            style = MaterialTheme.typography.titleMedium,
+        )
+        // A name of any length stays in its own place. PLAN 12.6 will not
+        // have the window grow around what was selected, and a title that
+        // pushed the form down would leave a user who selected a sentence
+        // with no form at all.
+        Box(modifier = Modifier.fillMaxWidth().heightIn(max = TaskNameHeight).verticalScroll(rememberScrollState())) {
+            Text(
+                text = composer.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.semantics { contentDescription = "$nameLabel: ${composer.name}" },
+            )
+        }
+    }
+    HorizontalDivider()
+
+    Box(modifier = Modifier.weight(1f)) {
+        if (wide) {
+            Row(modifier = Modifier.fillMaxSize()) {
                 Column(
                     modifier =
                         Modifier
-                            .fillMaxSize()
+                            .weight(1f)
+                            .fillMaxHeight()
                             .verticalScroll(rememberScrollState())
                             .padding(TaskWindowPadding),
                     verticalArrangement = Arrangement.spacedBy(3.dp),
                 ) {
                     ComposerWorkSide(composer = composer, landing = landing, focus = panelFocus, controller = controller)
-                    if (composer.holdsColors) {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        ComposerColorSide(
-                            composer = composer,
-                            offered = offered,
-                            catalogue = catalogue,
-                            controller = controller,
-                        )
-                    }
+                }
+                VerticalDivider()
+                Column(
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .verticalScroll(rememberScrollState())
+                            .padding(TaskWindowPadding),
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    ComposerColorSide(
+                        composer = composer,
+                        offered = offered,
+                        catalogue = catalogue,
+                        controller = controller,
+                    )
+                }
+            }
+        } else {
+            // Too narrow for two columns, so one: the same parts in the same
+            // order, under one another.
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(TaskWindowPadding),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                ComposerWorkSide(composer = composer, landing = landing, focus = panelFocus, controller = controller)
+                if (composer.holdsColors) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    ComposerColorSide(
+                        composer = composer,
+                        offered = offered,
+                        catalogue = catalogue,
+                        controller = controller,
+                    )
                 }
             }
         }
-
-        HorizontalDivider()
-        TaskComposerActions(composer = composer, catalogue = catalogue, controller = controller, onSave = onSave)
     }
+
+    HorizontalDivider()
+    TaskComposerActions(composer = composer, catalogue = catalogue, controller = controller, onSave = onSave)
 }
 
 /**
@@ -4322,7 +4343,7 @@ private fun TaskRowColors(
         singleLine = true,
         textStyle = MaterialTheme.typography.bodySmall,
         label = { Text(stringResource(Strings.CellTask.colorSearch)) },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().savesTaskOnEnter(),
     )
     ColorList(
         colors = colors,
@@ -4377,7 +4398,11 @@ private fun TaskRowWork(
         isError = !draft.isQuantityUsable,
         textStyle = MaterialTheme.typography.bodySmall,
         label = { Text(stringResource(Strings.CellTask.quantityLabel)) },
-        modifier = Modifier.fillMaxWidth().then(focus?.let { Modifier.focusRequester(it) } ?: Modifier),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .then(focus?.let { Modifier.focusRequester(it) } ?: Modifier)
+                .savesTaskOnEnter(),
     )
     NoteLine(
         text =
@@ -4421,17 +4446,79 @@ private fun TaskRowWork(
         }
     }
 
-    OutlinedTextField(
-        value = draft.notes,
-        onValueChange = { controller.editTaskNotes(row, it) },
+    ComposerNotesField(
+        notes = draft.notes,
         enabled = !composer.isSaving,
-        // A note has lines like any other note, and Enter makes one here too.
+        onChange = { controller.editTaskNotes(row, it) },
+    )
+}
+
+/**
+ * What Enter in one of the task window's fields does: the window's save, the
+ * same as `Görevi kaydet`. Ctrl+Enter is caught by the window before this.
+ */
+private val LocalTaskWindowSave = staticCompositionLocalOf<() -> Unit> { {} }
+
+/** Enter in this field saves the task window, as `Görevi kaydet` does. */
+@Composable
+private fun Modifier.savesTaskOnEnter(): Modifier {
+    val save = LocalTaskWindowSave.current
+    return onPreviewKeyEvent { event ->
+        if (event.type == KeyEventType.KeyDown &&
+            (event.key == Key.Enter || event.key == Key.NumPadEnter) &&
+            !event.isShiftPressed &&
+            !event.isAltPressed
+        ) {
+            save()
+            true
+        } else {
+            false
+        }
+    }
+}
+
+/**
+ * A task's note in the task window.
+ *
+ * Enter saves the window like every other field in it, so a new line in the note
+ * is Shift+Enter, put in at the caret.
+ */
+@Composable
+private fun ComposerNotesField(
+    notes: String,
+    enabled: Boolean,
+    onChange: (String) -> Unit,
+) {
+    var field by remember { mutableStateOf(TextFieldValue(notes, TextRange(notes.length))) }
+    // What the draft holds wins over what this field last had, so a note changed
+    // from elsewhere is shown as it now is.
+    val shown = if (field.text == notes) field else TextFieldValue(notes, TextRange(notes.length))
+    OutlinedTextField(
+        value = shown,
+        onValueChange = { typed ->
+            field = typed
+            if (typed.text != notes) onChange(typed.text)
+        },
+        enabled = enabled,
         singleLine = false,
         minLines = 1,
         maxLines = 3,
         textStyle = MaterialTheme.typography.bodySmall,
         label = { Text(stringResource(Strings.CellTask.notesLabel)) },
-        modifier = Modifier.fillMaxWidth(),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .onPreviewKeyEvent { event ->
+                    val enter = event.key == Key.Enter || event.key == Key.NumPadEnter
+                    if (event.type == KeyEventType.KeyDown && enter && event.isShiftPressed) {
+                        val broken = shown.text.replaceRange(shown.selection.min, shown.selection.max, "\n")
+                        field = TextFieldValue(broken, TextRange(shown.selection.min + 1))
+                        onChange(broken)
+                        true
+                    } else {
+                        false
+                    }
+                }.savesTaskOnEnter(),
     )
 }
 
@@ -4458,7 +4545,7 @@ private fun MulticolorColors(
         singleLine = true,
         textStyle = MaterialTheme.typography.bodySmall,
         label = { Text(stringResource(Strings.CellTask.colorSearch)) },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().savesTaskOnEnter(),
     )
     ColorList(
         colors = colors,
@@ -4519,7 +4606,7 @@ private fun MulticolorWork(
         isError = !palette.isQuantityUsable,
         textStyle = MaterialTheme.typography.bodySmall,
         label = { Text(stringResource(Strings.CellTask.quantityLabel)) },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().savesTaskOnEnter(),
     )
     NoteLine(
         text =
@@ -4539,16 +4626,10 @@ private fun MulticolorWork(
         )
     }
 
-    OutlinedTextField(
-        value = palette.notes,
-        onValueChange = controller::editMulticolorNotes,
+    ComposerNotesField(
+        notes = palette.notes,
         enabled = !composer.isSaving,
-        singleLine = false,
-        minLines = 1,
-        maxLines = 3,
-        textStyle = MaterialTheme.typography.bodySmall,
-        label = { Text(stringResource(Strings.CellTask.notesLabel)) },
-        modifier = Modifier.fillMaxWidth(),
+        onChange = controller::editMulticolorNotes,
     )
 }
 

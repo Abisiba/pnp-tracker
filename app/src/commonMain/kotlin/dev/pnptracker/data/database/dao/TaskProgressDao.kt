@@ -22,6 +22,7 @@ import dev.pnptracker.domain.model.ProgressEventKind
 import dev.pnptracker.domain.model.hasStages
 import dev.pnptracker.domain.model.stagesOf
 import dev.pnptracker.domain.tasks.CompletionRules
+import dev.pnptracker.domain.tasks.StageRules
 import dev.pnptracker.domain.tasks.StageSnapshot
 import dev.pnptracker.domain.tasks.TaskProgressException
 import dev.pnptracker.domain.tasks.TaskProgressFailure
@@ -602,8 +603,14 @@ abstract class TaskProgressDao {
         moment: Instant,
     ) {
         plan.stageTarget?.let { total ->
-            stages.forEach { stage ->
-                if (stage.completedQuantity != total) writeStage(task.id, stage.stage, total, moment)
+            // Every piece at the last step. A pipeline that already reads as
+            // finished is left exactly as it is, older counters included.
+            val counts = stages.map { it.completedQuantity }
+            if (!StageRules.isFinished(counts, total)) {
+                val finished = StageRules.finishedCounts(stages.size, total)
+                stages.forEachIndexed { index, stage ->
+                    if (stage.completedQuantity != finished[index]) writeStage(task.id, stage.stage, finished[index], moment)
+                }
             }
         }
         writeProgress(
@@ -942,7 +949,8 @@ abstract class TaskProgressDao {
      * described — raising the print run before the cut has been lowered — and
      * would leave the first steps written when a later one turned out not to fit.
      *
-     * Nothing is moved that the user did not move. PLAN 7.2's rule is checked
+     * Nothing is moved that the user did not move. The rule that the steps
+     * together hold no more pieces than the task needs ([StageRules]) is checked
      * against the state they asked for as a whole; a target that breaks it is
      * refused entirely rather than repaired by pulling the steps after it down,
      * which would throw away counts they never touched.
@@ -957,8 +965,8 @@ abstract class TaskProgressDao {
      * answered with what actually happened rather than with a complaint about a
      * number the user typed against the old one.
      *
-     * Every step reaching the total finishes the task, and a step dropping back
-     * below it reopens the task, because PLAN 6.4 does not let the finished mark
+     * Every piece reaching the last step finishes the task, and the last step
+     * dropping back below the total reopens it, because PLAN 6.4 does not let the finished mark
      * stand against counters that disagree with it.
      *
      * @param targets what each named step should stand at; steps left out keep
@@ -986,7 +994,7 @@ abstract class TaskProgressDao {
 
         // Read once, in the order the steps are worked in, and check that what
         // came back really is this pool's pipeline. Everything below counts on
-        // position, so a row missing or doubled would make the ordering rule
+        // position, so a row missing or doubled would make the rule
         // check something other than what it says it checks.
         val stages = stagesOfTask(taskId)
         if (stages.map { it.stage } != pipeline) refuse(TaskProgressFailure.STAGE_PIPELINE_BROKEN)
@@ -1018,10 +1026,13 @@ abstract class TaskProgressDao {
         // of half-applied ones.
         val wanted =
             stages.map { row -> targets[row.stage]?.let { row.copy(completedQuantity = it) } ?: row }
-        wanted.zipWithNext { earlier, later ->
-            if (later.completedQuantity > earlier.completedQuantity) {
-                refuse(TaskProgressFailure.STAGE_ORDER_VIOLATED)
-            }
+        // Each step counts the pieces standing at it, so together they may not
+        // hold more pieces than the task needs. Checked on the whole picture the
+        // user sent: counters written under the older reading, where every step
+        // ran up to the total, are only ever corrected by the user sending new
+        // ones, never here behind their back.
+        if (!StageRules.fitsTotal(wanted.map { it.completedQuantity }, total)) {
+            refuse(TaskProgressFailure.STAGES_EXCEED_REQUIRED)
         }
 
         // Kept beside the count each step came from, because that is what the
@@ -1098,8 +1109,8 @@ abstract class TaskProgressDao {
      * work itself is complete.
      *
      * * A 3D task is measured by its one print run (PLAN 6.2).
-     * * A card or board task is measured by its pipeline: every stage counted up
-     *   to the total (PLAN 7.2, 8). With no total given there is nothing to
+     * * A card or board task is measured by its pipeline: every piece through
+     *   the last step ([StageRules.isFinished], PLAN 7.2, 8). With no total given there is nothing to
      *   count up to, so it cannot finish on its own — PLAN 6.4 leaves that case
      *   to the user finishing it by hand, which [completeTask] is.
      * * A special task is measured by nothing the database knows (PLAN 9), so it
@@ -1112,7 +1123,7 @@ abstract class TaskProgressDao {
         when (task.poolType) {
             PoolType.THREE_D -> task.primaryBatchCompleted
             PoolType.CARD, PoolType.BOARD ->
-                task.requiredQuantity?.let { total -> stages.all { it.completedQuantity == total } } == true
+                task.requiredQuantity?.let { total -> StageRules.isFinished(stages.map { it.completedQuantity }, total) } == true
             PoolType.SPECIAL -> false
         }
 
@@ -1270,11 +1281,6 @@ abstract class TaskProgressDao {
         check(task.currentMissingQuantity <= outstanding) {
             "The task $taskId owes ${task.currentMissingQuantity} but its history accounts for $outstanding."
         }
-        stages.zipWithNext { earlier, later ->
-            check(later.completedQuantity <= earlier.completedQuantity) {
-                "The task $taskId has ${later.stage} ahead of ${earlier.stage}."
-            }
-        }
         // PLAN 6.4: the finished mark is the real state and may not contradict
         // the counters. So a finished task has to have done the work its own
         // pool measures it by — and only that. Asking a special task for a
@@ -1290,7 +1296,7 @@ abstract class TaskProgressDao {
                     // With no total given there is nothing for a stage to reach,
                     // and PLAN 6.4 leaves that task to be finished by hand.
                     task.requiredQuantity?.let { total ->
-                        check(stages.all { it.completedQuantity == total }) {
+                        check(StageRules.isFinished(stages.map { it.completedQuantity }, total)) {
                             "The finished task $taskId has a pipeline at " +
                                 "${stages.map { it.completedQuantity }} of $total."
                         }
