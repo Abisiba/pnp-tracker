@@ -273,24 +273,72 @@ class TaskFromEnterTest {
     }
 
     @Test
-    fun `Shift and Enter still breaks the line, and Enter with nothing new does too`() {
+    fun `Ctrl and Enter breaks the line and saves nothing, in every kind of cell`() {
+        RealStack().use { stack ->
+            open(stack).use { screen ->
+                val gameId = screen.makeGame(stack)
+                listOf(CellColumnType.THREE_D, CellColumnType.NOTES, CellColumnType.BORROWED).forEach { column ->
+                    stack.table.beginEditing(gameId, column)
+                    screen.settle("the editor opens") { stack.table.state.work is CellWork.WritingText }
+                    stack.table.editCellText("Kutu")
+                    screen.render()
+                    screen.press(Key.Enter, ctrl = true)
+                    screen.render()
+
+                    val editor = stack.table.state.work as? CellWork.WritingText ?: fail("Ctrl+Enter closed the $column editor")
+                    assertTrue("\n" in editor.draft, "Ctrl+Enter made no line in $column: ${editor.draft}")
+                    assertEquals("Kutu", editor.draft.replace("\n", ""), "Ctrl+Enter changed the words in $column")
+                    assertEquals(emptyList(), stack.piecesOf(gameId, column), "Ctrl+Enter saved $column")
+                    stack.table.cancelEditing()
+                    screen.render()
+                }
+                assertEquals(emptyList(), tasksIn(stack))
+            }
+        }
+    }
+
+    @Test
+    fun `Enter saves the notes and the borrowed parts`() {
+        RealStack().use { stack ->
+            open(stack).use { screen ->
+                val gameId = screen.makeGame(stack)
+                screen.typeAndEnter(stack, gameId, CellColumnType.NOTES, "Kutusu ezik")
+                screen.settle("the notes are saved") { stack.table.state.work == null }
+                screen.typeAndEnter(stack, gameId, CellColumnType.BORROWED, "Zarlar Wingspan'den")
+                screen.settle("the borrowed parts are saved") { stack.table.state.work == null }
+
+                val row = stack.rows().single()
+                assertEquals("Kutusu ezik", row.cell(CellColumnType.NOTES).editableText)
+                assertEquals("Zarlar Wingspan'den", row.cell(CellColumnType.BORROWED).editableText)
+                assertEquals(emptyList(), tasksIn(stack), "Enter in a note made a task")
+            }
+        }
+    }
+
+    @Test
+    fun `Enter in a task column with nothing new typed saves the cell`() {
         RealStack().use { stack ->
             open(stack).use { screen ->
                 val gameId = screen.makeGame(stack)
                 stack.table.beginEditing(gameId, CellColumnType.THREE_D)
                 screen.settle("the editor opens") { stack.table.state.work is CellWork.WritingText }
-                stack.table.editCellText("Ejderha")
-                screen.render()
-                screen.press(Key.Enter, shift = true)
-                screen.render()
+                stack.table.editCellText("Kule ve sur")
+                runBlocking { stack.table.saveEditing() }
+                screen.settle("the words are saved") { stack.table.state.work == null }
 
-                assertTrue(stack.table.state.work is CellWork.WritingText, "Shift and Enter opened the task window")
+                // Something taken away is no new name, so Enter is a save.
+                screen.typeAndEnter(stack, gameId, CellColumnType.THREE_D, "Kule")
+                screen.settle("the cell is saved") { stack.table.state.work == null }
 
-                // In the notes there is no task to make: Enter is a line break.
-                stack.table.cancelEditing()
-                screen.render()
-                screen.typeAndEnter(stack, gameId, CellColumnType.NOTES, "Kutusu ezik")
-                assertTrue(stack.table.state.work is CellWork.WritingText, "Enter in the notes opened a task window")
+                assertEquals(
+                    "Kule",
+                    stack
+                        .rows()
+                        .single()
+                        .cell(CellColumnType.THREE_D)
+                        .editableText,
+                )
+                assertEquals(emptyList(), tasksIn(stack))
             }
         }
     }

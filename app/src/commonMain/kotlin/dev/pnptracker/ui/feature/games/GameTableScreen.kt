@@ -2701,8 +2701,9 @@ private fun CellEditorSlot(
             // into the text as it stands, and a keystroke would move the words
             // out from under the selection the user made.
             readOnly = composer != null || creator != null,
-            // A note has lines, so Enter makes one. Nothing here parses what is
-            // typed or pasted: the text is stored as the user left it.
+            // A note has lines; Ctrl+Enter makes one, and Enter saves. Nothing
+            // here parses what is typed or pasted: the text is stored as the
+            // user left it.
             singleLine = false,
             minLines = 2,
             maxLines = EDITOR_LINES,
@@ -2747,24 +2748,41 @@ private fun CellEditorSlot(
                                 true
                             }
 
-                            event.isCtrlPressed && (event.key == Key.Enter || event.key == Key.NumPadEnter) -> {
+                            // With a panel open over the cell, Ctrl+Enter is still
+                            // that panel's save.
+                            event.isCtrlPressed &&
+                                (event.key == Key.Enter || event.key == Key.NumPadEnter) &&
+                                (composer != null || creator != null) -> {
                                 when {
                                     creator != null -> saveColor()
-                                    composer != null -> saveTask()
-                                    else -> save()
+                                    else -> saveTask()
                                 }
                                 true
                             }
 
-                            // Enter on a name just typed into a task column opens
-                            // the task window over it, without saving and
-                            // selecting it first (PLAN 12.6). Anywhere else, and
-                            // with Shift always, it is a line break as before.
+                            // Ctrl+Enter, and Shift+Enter as well, is a line break
+                            // at the caret: a cell's note still has lines (PLAN 12.4).
+                            (event.isCtrlPressed || event.isShiftPressed) &&
+                                (event.key == Key.Enter || event.key == Key.NumPadEnter) -> {
+                                if (!editor.isSaving) {
+                                    val broken = field.text.replaceRange(field.selection.min, field.selection.max, "\n")
+                                    field = TextFieldValue(broken, TextRange(field.selection.min + 1))
+                                    chosen = null
+                                    controller.editCellText(broken)
+                                }
+                                true
+                            }
+
+                            // Enter saves the cell. In a task column, a name typed a
+                            // moment ago opens the task window over it instead,
+                            // without saving and selecting it first (PLAN 12.6).
                             (event.key == Key.Enter || event.key == Key.NumPadEnter) &&
-                                !event.isShiftPressed &&
                                 !event.isAltPressed &&
                                 composer == null &&
-                                creator == null -> controller.beginTaskFromTypedName()
+                                creator == null -> {
+                                if (!controller.beginTaskFromTypedName()) save()
+                                true
+                            }
 
                             else -> false
                         }

@@ -1396,8 +1396,11 @@ Yeni yazılan addan görev (Enter):
 - Yeni ad, düzenleyici açıldığından beri metne **eklenen** tek parçadır; çevresindeki
   boşluklar ve satır sonları ada dahil değildir. Metinden bir şey silinmişse,
   yalnız boşluk yazılmışsa veya ad birden fazla satıra yayılıyorsa bu bir yeni
-  ad sayılmaz ve `Enter` eskisi gibi satır sonu ekler. `Shift+Enter` her zaman
-  satır sonudur. `Notlar` ve `Ödünç Parçalar` hücrelerinde `Enter` değişmez.
+  ad sayılmaz ve `Enter` hücreyi kaydeder.
+- Bütün hücre düzenleyicilerinde (görev sütunları, `Notlar`, `Ödünç Parçalar`)
+  `Enter` kaydeder, `Ctrl+Enter` imlecin yerinde alt satıra geçer; `Shift+Enter`
+  de alt satıra geçer. Hücrenin üstünde bir görev veya renk paneli açıkken
+  `Ctrl+Enter` o panelin kaydıdır. `Escape` vazgeçer.
 - Pencerede adet ve görev notu girilir. Renk seçimi yalnız 3D Baskı'dadır.
 - Pencere açıkken hiçbir şey yazılmaz. `Görevi kaydet`, hücrenin yeni metnini ve
   yeni addan görevi **tek transaction**'da yazar: metin hücre düzenleyicisinin

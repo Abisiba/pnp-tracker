@@ -337,7 +337,7 @@
     <!-- Game table: writing in a cell -->
     <string name="cell_edit">Düzenle</string>
     <string name="cell_edit_action">%1$s hücresini düzenle</string>
-    <string name="cell_editor_hint">Enter satır ekler, Ctrl+Enter kaydeder, Esc vazgeçer.</string>
+    <string name="cell_editor_hint">Enter kaydeder, Ctrl+Enter alt satıra geçer, Esc vazgeçer.</string>
     <string name="cell_save">Kaydet</string>
     <string name="cell_discard">Vazgeç</string>
     <string name="cell_saving">Kaydediliyor…</string>
