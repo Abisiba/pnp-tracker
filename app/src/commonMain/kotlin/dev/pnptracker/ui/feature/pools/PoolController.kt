@@ -402,6 +402,16 @@ class PoolController(
     }
 
     /**
+     * Opens the counters of the task whose menu is open, closing the menu: the
+     * counters are drawn on the card, under the task, not over it.
+     */
+    fun beginStageEditFromMenu() {
+        val menu = state.work as? PoolWork.Menu ?: return
+        state = state.copy(work = null)
+        beginStageEdit(menu.card)
+    }
+
+    /**
      * Types into one step's box. Digits only, so nothing else can be sent.
      *
      * Nothing is cut short. A count is an [Int] and the largest one is ten

@@ -196,7 +196,9 @@ game table.
   up to is 5. The task is finished when all of its pieces are at the last step.
   Counters saved before this rule are left as they are; the stage editor says
   when they add up to too many, and you fix them there. **Enter** saves the
-  counters.
+  counters. The three counters and **Aşamaları düzenle** are always shown on
+  card and board cards, finished tasks included (use the **Tamamlandı** filter);
+  the card's menu also has **Aşama sayaçları**.
 - **Görevi metne dönüştür** (turn into text): leaves the word in the cell as
   plain text; its colour, quantity and stages are no longer kept as a task. This
   cannot be undone; the production history is not deleted, but the task leaves
@@ -325,7 +327,9 @@ wrong writes no line at all.
 - **Ctrl+Enter** saves in editing panels.
 - In a cell editor, **Enter** saves and **Ctrl+Enter** starts a new line. Type a
   new name into a task column and press **Enter**, and the task window opens.
-- In the task window, **Enter** in a field saves the task (**Görevi kaydet**);
+- In the task window, **Enter** saves the task (**Görevi kaydet**) wherever the
+  focus is, even on a colour; choose colours with the mouse or with Tab and
+  Space. If something is missing the window stays open and says what.
   **Shift+Enter** starts a new line in the note, and **Esc** gives up.
 - In questions that cannot be undone, focus starts on **Vazgeç** (cancel).
 - The application works in a small window (640×460) and with large system

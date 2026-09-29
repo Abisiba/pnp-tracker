@@ -1437,10 +1437,12 @@ Yeni yazılan addan görev (Enter):
   de alt satıra geçer. Hücrenin üstünde bir görev veya renk paneli açıkken
   `Ctrl+Enter` o panelin kaydıdır. `Escape` vazgeçer.
 - Pencerede adet ve görev notu girilir. Renk seçimi yalnız 3D Baskı'dadır.
-- Pencerenin alanlarında `Enter` görevi kaydeder (`Görevi kaydet` ile aynı);
+- Pencerenin neresinde odak olursa olsun `Enter` görevi kaydeder (`Görevi
+  kaydet` ile aynı); odak bir rengin üzerindeyken de rengi yeniden seçmez.
   `Ctrl+Enter` gerekmez ama kaydetmeye devam eder. Görev notunda yeni satır
-  `Shift+Enter` iledir. Düğme veya renk seçiliyken `Enter` o düğmeye/renge
-  basar. `Escape` pencereyi kapatır.
+  `Shift+Enter` iledir. Renk fareyle veya klavye gezinmesiyle (Tab, Boşluk)
+  seçilir. Eksik bilgi varsa pencere açık kalır ve neyin eksik olduğunu yazar.
+  `Escape` pencereyi kapatır.
 - Pencere açıkken hiçbir şey yazılmaz. `Görevi kaydet`, hücrenin yeni metnini ve
   yeni addan görevi **tek transaction**'da yazar: metin hücre düzenleyicisinin
   kendi kaydıyla kaydedilir, görev de aynı transaction içinde seçimden görev
@@ -1682,9 +1684,12 @@ basılırsa basılsın tamamlanan aynı tek görevdir.
 
 ### 12.11 Kart Havuzu
 
-- Kart görevleri açılır aşama rozetiyle gösterilir.
-- Rozet ilk tamamlanmamış aşamayı veya `Tamamlandı` durumunu gösterir.
-- Aşama sayaçları rozet genişletildiğinde düzenlenir.
+- Kart görevlerinde aşama özeti, üç aşama sayacı ve `Aşamaları düzenle`
+  kartta her zaman görünür; görev tamamlanmış olsa da (`Tamamlandı` filtresi)
+  sayaçlar görülür ve düzenlenebilir. Kartın menüsünde de `Aşama sayaçları`
+  vardır.
+- Özet satırı ilk tamamlanmamış aşamayı veya `Tamamlandı` durumunu gösterir.
+- Aşama sayaçları `Aşamaları düzenle` ile düzenlenir.
 - Eksik kart ayrıntıları isteğe bağlıdır.
 
 ### 12.12 Mukavva Havuzu

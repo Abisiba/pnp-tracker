@@ -314,6 +314,69 @@ class PoolCardWorkTest {
     }
 
     @Test
+    fun `the counters are on every card and board card, finished or not, and can be changed from the card or its menu`() {
+        RealStack().use { stack ->
+            tableOf(stack).use { table ->
+                listOf(
+                    Triple(PoolType.CARD, CellColumnType.CARD, listOf("Basıldı", "Lamine edildi", "Kesildi")),
+                    Triple(PoolType.BOARD, CellColumnType.BOARD, listOf("Basıldı", "Yapıştırıldı", "Kesildi")),
+                ).forEach { (poolType, column, steps) ->
+                    val (_, taskId) = makeTask(stack, column, "Parça", quantity = 5, table)
+                    val pool = stack.pools.of(poolType)
+                    ComposeSceneHarness(width = 1600, height = 1000) { PoolScreen(pool) }.use { screen ->
+                        screen.settle("the task is in the pool") { stack.cardsIn(poolType).any { it.first.taskId == taskId } }
+
+                        // Nothing unfolded: every counter and the way to change them are there.
+                        steps.forEach { step ->
+                            assertTrue(step + ": 0 / 5" in screen.texts(), "$poolType: `$step` is not on the card: ${screen.texts()}")
+                        }
+                        assertTrue("Aşamaları düzenle" in screen.texts(), "$poolType: the counters cannot be changed from the card")
+
+                        // Finished: shown under Tamamlandı with the counters it finished at.
+                        runBlocking {
+                            stack.taskProgress.completeTask(
+                                taskId,
+                                dev.pnptracker.domain.model.IdGenerator.Random
+                                    .newId(),
+                            )
+                        }
+                        pool.showState(dev.pnptracker.domain.search.TaskStateFilter.COMPLETED)
+                        screen.settle("the finished task is shown") {
+                            stack.cardsIn(poolType).any { it.first.taskId == taskId && it.second.isCompleted }
+                        }
+                        assertTrue(
+                            steps.last() + ": 5 / 5" in screen.texts(),
+                            "$poolType: a finished task's counters are not shown: ${screen.texts()}",
+                        )
+                        assertTrue("Aşamaları düzenle" in screen.texts(), "$poolType: a finished task's counters cannot be changed")
+
+                        // From the card's own menu as well.
+                        val card = stack.cardsIn(poolType).first { it.first.taskId == taskId }.first
+                        pool.openTaskMenu(card)
+                        screen.render()
+                        assertTrue(screen.click("Aşama sayaçları"), "$poolType: the task's menu has no way to the counters")
+                        screen.settle("the counters open") { pool.state.work is PoolWork.EditingStages }
+                        val open = pool.state.work as PoolWork.EditingStages
+                        assertEquals(steps.size, open.draft.size)
+                        assertEquals("5", open.draft[open.steps.last()], "$poolType: the counters did not open on what is stored")
+                        // The sum rule still holds when changing a finished task's counters.
+                        open.steps.forEach { pool.editStageDraft(it, "5") }
+                        screen.render()
+                        screen.press(Key.Enter)
+                        screen.settle("the save comes back") { (pool.state.work as? PoolWork.EditingStages)?.isSaving == false }
+                        assertEquals(
+                            TaskProgressFailure.STAGES_EXCEED_REQUIRED,
+                            (pool.state.work as PoolWork.EditingStages).failure,
+                        )
+                        pool.closeInnermost()
+                        screen.render()
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `counters saved under the old reading are left alone until the user fixes them`() {
         RealStack().use { stack ->
             tableOf(stack).use { table ->
