@@ -1,8 +1,9 @@
 # Faz 3 / İş 16 — a tagged release. The tag decides: only `v<project.version>`
 # may publish, and the version lives in app/build.gradle.kts alone. Nothing is
-# built until the whole test suite has passed, nothing is published until both
-# packages have been built and checked, and the packages are unsigned — there is
-# no signing key, so SHA256SUMS is what a download is verified against.
+# built until the whole test suite has passed, nothing is published until the
+# Linux archive, the Arch package and the Windows installer have been built and
+# checked, and the packages are unsigned — there is no signing key, so one
+# SHA256SUMS covering all three is what a download is verified against.
 #
 # Running this by hand (workflow_dispatch) verifies the release path without
 # publishing anything: the publish job only runs for a pushed tag.
@@ -182,9 +183,82 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+  windows:
+    name: windows installer
+    needs: verify
+    # The installer can only be made on Windows, so GitHub's Windows runner makes
+    # it — the same task the CI Windows job runs, with the Java runtime inside
+    # one .exe. The tests already passed in `verify`; this job builds and checks
+    # the installer and proves no real user folder was touched on the way.
+    runs-on: windows-2025
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Kaynağı al
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: JDK 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Gradle wrapper'ını doğrula
+        uses: gradle/actions/wrapper-validation@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Gradle önbelleği
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+
+      - name: Kurucuyu üret ve doğrula
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\gradlew.bat :app:verifyWindowsPackage `
+            --no-daemon --no-parallel --max-workers=1 `
+            '-Dorg.gradle.jvmargs=-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8'
+          $installers = @(Get-ChildItem app\build\windows\dist -Filter *.exe)
+          if ($installers.Count -ne 1) { throw "expected exactly one installer, found $($installers.Count)" }
+          Get-FileHash -Algorithm SHA256 $installers[0].FullName | Format-List
+
+      - name: Kurucuyu üreten aracın sürümü
+        # The WiX jpackage really used is the one the Compose plugin fetched
+        # during the build (PLAN 14.8.6); its version is recorded, not assumed.
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $found = Get-ChildItem -Path build, app\build, $env:GRADLE_USER_HOME -Recurse -Filter candle.exe -ErrorAction SilentlyContinue
+          if (-not $found) { throw "the tool that built the installer was not found, so its version cannot be recorded" }
+          foreach ($candle in $found) {
+            Write-Output $candle.FullName
+            & $candle.FullName -? | Select-Object -First 1
+          }
+
+      - name: Uygulama gerçek bir kullanıcı dizini açmadı
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($path in @("$env:LOCALAPPDATA\pnp-tracker", "$env:APPDATA\pnp-tracker")) {
+            if (Test-Path $path) { throw "$path was created by the run" }
+          }
+
+      - name: Kurucu
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-windows-installer
+          path: app/build/windows/dist/*.exe
+          retention-days: 7
+          if-no-files-found: error
+
   publish:
     name: github release
-    needs: package
+    needs:
+      - package
+      - windows
     if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -198,6 +272,26 @@ jobs:
         with:
           name: release-artifacts
           path: release
+
+      - name: Windows kurucusunu al
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-windows-installer
+          path: windows
+
+      - name: Kurucuyu yayına ve özetlere ekle
+        # One checksum file for the whole release: the installer's line is added
+        # to the one the Linux job wrote, and the file is checked end to end below.
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          installer="pnp-tracker-${version}-windows-x86_64.exe"
+          test "$(find windows -maxdepth 1 -name '*.exe' | wc -l)" -eq 1
+          test -f "windows/$installer"
+          cp "windows/$installer" release/
+          cd release
+          sha256sum "$installer" >> SHA256SUMS
+          LC_ALL=C sort -k 2 -o SHA256SUMS SHA256SUMS
 
       - name: Özetleri yeniden doğrula
         run: |
@@ -220,25 +314,31 @@ jobs:
 
       - name: Yayın notları
         # Written here from the checksum file alone: no build log, no path of
-        # the runner, no user content.
+        # the runner, no user content. In English, for whoever finds the page.
         run: |
           set -euo pipefail
           {
-            printf '## %s\n\n' "$GITHUB_REF_NAME"
-            printf 'Linux, x86_64. Java kurulumu gerekmez; çalışma ortamı paketin içindedir.\n\n'
-            printf '| Dosya | Kime |\n| --- | --- |\n'
-            printf '| `%s` | her dağıtım; açıp `bin/pnp-tracker` ile çalıştırın |\n' \
+            printf '## PnP Production Tracker %s\n\n' "$GITHUB_REF_NAME"
+            printf 'An offline desktop application for tracking print-and-play board game production.\n'
+            printf 'Its interface is in Turkish. No package needs Java to be installed: the runtime is inside.\n\n'
+            printf '| File | For |\n| --- | --- |\n'
+            printf '| `%s` | 64-bit Windows; run it to install. Built and checked on GitHub'"'"'s Windows runner, **not yet tried by hand on a real Windows 11 installation**. |\n' \
+              "$(awk '/\.exe$/ {print $2}' release/SHA256SUMS)"
+            printf '| `%s` | any Linux distribution, x86_64; unpack and run `bin/pnp-tracker` |\n' \
               "$(awk '/\.tar\.gz$/ {print $2}' release/SHA256SUMS)"
-            printf '| `%s` | Garuda ve Arch; `pacman -U` |\n\n' \
+            printf '| `%s` | Garuda and Arch; `pacman -U` |\n\n' \
               "$(awk '/\.pkg\.tar\.zst$/ {print $2}' release/SHA256SUMS)"
-            printf 'Paketler **imzasız** dağıtılır. İndirdikten sonra doğrulayın:\n\n'
-            printf '```bash\nsha256sum -c SHA256SUMS\n```\n\n'
+            printf 'The *Source code* archives GitHub adds below are the repository'"'"'s source, not an installer.\n\n'
+            printf 'The packages are **unsigned**, so Windows SmartScreen may warn about an unknown publisher.\n'
+            printf 'Verify what you downloaded before running it:\n\n'
+            printf '```bash\nsha256sum -c SHA256SUMS --ignore-missing\n```\n\n'
+            printf 'On Windows: `Get-FileHash -Algorithm SHA256 <file>` and compare with the line below.\n\n'
             printf '```text\n'
             cat release/SHA256SUMS
             printf '```\n\n'
-            printf 'Kurulum, kullanım ve içe aktarma: `kullanim-kilavuzu.md` ve `ornek-ice-aktarma.md`.\n'
-            printf 'Lisans: MIT (`LICENSE`). Gömülü çalışma ortamı ve kütüphaneler kendi\n'
-            printf 'lisanslarıyla gelir (`THIRD_PARTY_NOTICES.md`).\n'
+            printf 'Installing, using and importing: `kullanim-kilavuzu.md` (user guide) and `ornek-ice-aktarma.md` (import guide).\n'
+            printf 'Licence: MIT (`LICENSE`). The bundled runtime and libraries come with their own\n'
+            printf 'licences (`THIRD_PARTY_NOTICES.md`).\n'
           } > notes.md
           cat notes.md
 
@@ -249,7 +349,7 @@ jobs:
           set -euo pipefail
           gh release create "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
-            --title "PnP Üretim Takipçisi $GITHUB_REF_NAME" \
+            --title "PnP Production Tracker $GITHUB_REF_NAME" \
             --notes-file notes.md \
             --verify-tag \
             release/*
