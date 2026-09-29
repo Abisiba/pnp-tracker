@@ -55,7 +55,7 @@ class WorkflowsTest {
         assertEquals("verify", ci["name"])
         assertEquals("release", release["name"])
         assertEquals(listOf("check", "windows"), jobs(ci).keys.toList())
-        assertEquals(listOf("verify", "package", "publish"), jobs(release).keys.toList())
+        assertEquals(listOf("verify", "package", "windows", "publish"), jobs(release).keys.toList())
         assertTrue(everyStep(ci).all { "name" in it }, "adı olmayan adım var")
         assertTrue(everyStep(release).all { "name" in it }, "adı olmayan adım var")
     }
@@ -272,7 +272,8 @@ class WorkflowsTest {
     fun `nothing is published before the tests and the packages`() {
         val releaseJobs = jobs(release)
         assertEquals("verify", releaseJobs.getValue("package")["needs"], "paketleme işi testleri beklemiyor")
-        assertEquals("package", releaseJobs.getValue("publish")["needs"], "yayın işi paketleri beklemiyor")
+        assertEquals("verify", releaseJobs.getValue("windows")["needs"], "Windows kurucusu testleri beklemiyor")
+        assertEquals(listOf("package", "windows"), releaseJobs.getValue("publish")["needs"], "yayın işi paketleri ve kurucuyu beklemiyor")
         val condition = releaseJobs.getValue("publish").getValue("if").toString()
         assertTrue("github.event_name == 'push'" in condition, "elle çalıştırma da yayın yapabiliyor")
         assertTrue("refs/tags/v" in condition, "etiketsiz bir ref de yayın yapabiliyor")
@@ -317,13 +318,38 @@ class WorkflowsTest {
         // The names the checksum file will carry are the package names.
         assertTrue("""archiveFileName.set("${'$'}linuxPackageName-linux-${'$'}linuxArch.tar.gz")""" in build, "arşiv adı değişmiş")
         assertTrue("""pnp-tracker-${'$'}{project.version}-1-${'$'}linuxArch.pkg.tar.zst""" in build, "Arch paketi adı değişmiş")
-        // And the release notes read those two names out of the checksum file.
+        // And the release notes read those names out of the checksum file.
         val notes = commandsOf(release).single { "notes.md" in it && "gh release create" !in it }
         // The two names are read out of SHA256SUMS, so the notes can never name a file the release does not carry.
         assertTrue("""/\.tar\.gz${'$'}/""" in notes, "yayın notları arşivi özet dosyasından okumuyor")
         assertTrue("""/\.pkg\.tar\.zst${'$'}/""" in notes, "yayın notları Arch paketini özet dosyasından okumuyor")
-        assertTrue("imzasız" in notes && "sha256sum -c SHA256SUMS" in notes, "yayın notları imzasızlığı ve doğrulamayı söylemiyor")
+        assertTrue("""/\.exe${'$'}/""" in notes, "yayın notları Windows kurucusunu özet dosyasından okumuyor")
+        assertTrue("unsigned" in notes && "sha256sum -c SHA256SUMS" in notes, "yayın notları imzasızlığı ve doğrulamayı söylemiyor")
+        // In English, honest about Windows, and not selling the source archive as an installer.
+        assertTrue("not yet tried by hand on a real Windows 11 installation" in notes, "notlar Windows'un elle denenmediğini söylemiyor")
+        assertTrue("not an installer" in notes, "notlar kaynak kodu arşivini kurucudan ayırmıyor")
+        val create = commandsOf(release).single { "gh release create" in it }
+        assertTrue("""--title "PnP Production Tracker ${'$'}GITHUB_REF_NAME"""" in create, "yayın başlığı İngilizce değil")
         assertTrue(commandsOf(release).count { "sha256sum -c SHA256SUMS" in it } >= 2, "özetler yayından önce iki kez doğrulanmıyor")
+    }
+
+    @Test
+    fun `the Windows installer is built on Windows and goes into the same release and checksum file`() {
+        val windows = jobs(release).getValue("windows")
+        assertEquals("windows-2025", windows["runs-on"], "kurucu Windows koşucusunda üretilmiyor")
+        val commands = steps(windows).mapNotNull { it["run"] as String? }
+        assertTrue(commands.any { "verifyWindowsPackage" in it }, "yayındaki kurucu doğrulanmıyor")
+        assertTrue(commands.any { "candle.exe" in it }, "kurucuyu üreten aracın sürümü kaydedilmiyor")
+        assertTrue(commands.any { "\$env:LOCALAPPDATA" in it && "\$env:APPDATA" in it }, "gerçek kullanıcı klasörü denetlenmiyor")
+        val upload = steps(windows).single { (it["with"] as? Map<*, *>)?.get("name") == "release-windows-installer" }
+        assertEquals("app/build/windows/dist/*.exe", (upload["with"] as Map<*, *>)["path"], "yüklenen kurucu değil")
+        // Added to the release directory and to the one SHA256SUMS, then checked end to end.
+        val add = commandsOf(release).single { "windows-x86_64.exe" in it && ">> SHA256SUMS" in it }
+        assertTrue("cp \"windows/${'$'}installer\" release/" in add, "kurucu yayına eklenmiyor")
+        val publish = steps(jobs(release).getValue("publish")).mapNotNull { it["run"] as String? }
+        val addAt = publish.indexOfFirst { ">> SHA256SUMS" in it }
+        val checkAt = publish.indexOfFirst { "sha256sum -c SHA256SUMS" in it }
+        assertTrue(addAt in 0 until checkAt, "kurucu özetlere eklendikten sonra özetler doğrulanmıyor")
     }
 
     @Test
