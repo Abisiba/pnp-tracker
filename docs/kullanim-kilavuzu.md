@@ -1,343 +1,403 @@
-# PnP Üretim Takipçisi — Kullanım Kılavuzu
+# PnP Üretim Takipçisi — User Guide
 
-Bu kılavuz uygulamayı ilk kez kullanan biri içindir. Ekranların ne işe yaradığını
-ve günlük işlerin nasıl yapıldığını anlatır.
+This guide is for someone using the application for the first time. It explains
+what each screen is for and how everyday work is done.
 
-## PnP Tracker nedir?
+The application's interface is in Turkish. This guide names every screen and
+button by its Turkish label, exactly as it appears on screen, with an English
+explanation beside it.
 
-PnP (print and play) masa oyunlarını kendiniz üretirken yapılacak işleri takip
-eden, tamamen yerel çalışan bir Linux masaüstü uygulamasıdır. 3D baskı, kart
-laminasyonu, mukavva kesimi ve özel parçalar için hangi oyunda ne kaldığını
-gösterir.
+## What is PnP Tracker?
 
-- İnternete çıkmaz, hesap istemez, hiçbir veriyi dışarı göndermez.
-- Bütün veriler bilgisayarınızda, sizin kullanıcı dizinlerinizde durur.
-- Elinizdeki Excel veya CSV listesini içe aktarabilir, kendi listenizi de
-  sıfırdan kurabilirsiniz.
+A desktop application, running entirely on your own computer, that keeps track
+of the work involved in making print-and-play (PnP) board games yourself. It
+shows what is left to do in each game for 3D printing, card lamination, board
+cutting and special parts.
 
-## İlk açılış ve verilerin yeri
+- It never goes online, asks for no account and sends no data anywhere.
+- All data stays on your computer, in your own user folders.
+- You can import the Excel or CSV list you already have, or build your own list
+  from scratch.
 
-Uygulama ilk açıldığında veri dosyasını kendisi oluşturur. Bir şey sormaz.
+## First start and where the data lives
 
-| Ne | Nerede |
+The application creates its data file itself the first time it starts. It asks
+nothing.
+
+On Linux:
+
+| What | Where |
 | --- | --- |
-| Veritabanı ve yedekler | `$XDG_DATA_HOME/pnp-tracker/` (tanımsızsa `~/.local/share/pnp-tracker/`) |
-| Ayarlar | `$XDG_CONFIG_HOME/pnp-tracker/settings.json` (tanımsızsa `~/.config/pnp-tracker/`) |
-| Tanılama kayıtları | `$XDG_STATE_HOME/pnp-tracker/logs/` (tanımsızsa `~/.local/state/pnp-tracker/logs/`) |
+| Database and backups | `$XDG_DATA_HOME/pnp-tracker/` (if unset, `~/.local/share/pnp-tracker/`) |
+| Settings | `$XDG_CONFIG_HOME/pnp-tracker/settings.json` (if unset, `~/.config/pnp-tracker/`) |
+| Diagnostic logs | `$XDG_STATE_HOME/pnp-tracker/logs/` (if unset, `~/.local/state/pnp-tracker/logs/`) |
 
-Bilmeniz yeterli olan üç şey:
+On Windows:
 
-- Uygulamayı kaldırmak bu dizinleri silmez; verileriniz durur.
-- Uygulamanın kurulduğu klasöre (taşınabilir arşiv ya da `/opt/pnp-tracker`)
-  hiçbir şey yazılmaz.
-- Verinizi taşımak isterseniz yol, uygulamadan yedek alıp yeni makinede geri
-  yüklemektir (aşağıda).
-
-## Ekranlar
-
-Uygulama **Oyunlar**'da açılır. Üstteki tek satırlık gezinmede beş bölüm vardır:
-**Oyunlar**, **3D Baskı**, **Kartlar**, **Mukavva** ve **Ayarlar**.
-
-**Ayarlar** bir menü açar: **Ayarlar**, **İçe/Dışa Aktarma**, **Renkler** ve
-**Geçmiş**.
-
-**Özel** havuzu gezinmede yer almaz: özel bir göreviniz olduğunda oyun tablosunda
-**Özel görevler** girişi belirir ve kaç görevin açık olduğunu söyler.
-
-## Oyun oluşturma
-
-1. **Oyunlar** bölümüne geçin.
-2. **Yeni oyun oluştur** düğmesine basın.
-3. Oyunun adını yazın ve **Oyunu kaydet** deyin.
-
-Oyun tablosunda her oyun bir satırdır. Satırın üstündeki **Görünüm** seçicisiyle
-*Devam Eden*, *Tamamlanan* ve *Tümü* arasında geçebilirsiniz.
-
-Bir oyunu bitirdiğinizde satırındaki **Tamamlandı olarak işaretle** ile
-işaretleyebilirsiniz. Bu yalnızca sizin kararınızdır: görevleri ve hücreleri
-değiştirmez.
-
-## Hücre ve görev yapısı
-
-Her oyunun altı sütunu (hücresi) vardır: **3D Baskı**, **Kart**, **Mukavva**,
-**Özel**, **Ödünç Parçalar** ve **Notlar**. İlk dördü aynı adlı havuzları
-besler. **Ödünç Parçalar** başka bir oyundan ödünç alınan parçalar için,
-**Notlar** her türlü not için serbest metindir; ikisi de görev tutmaz.
-
-Oyun adının hemen yanındaki **Eksik** sütunu bir hücre değil, bir görünümdür: o
-oyunun 3D Baskı, Kart, Mukavva ve Özel sütunlarındaki tamamlanmamış görevleri,
-kendi renkleri ve adetleriyle, sütun adlarının ardından gösterir. Bir görevi
-kendi sütununda tamamladığınızda Eksik'ten kalkar, yeniden açtığınızda geri
-gelir. Eksik'te düzenleme yapılmaz; görevler kendi hücrelerinde düzenlenir ve
-tamamlanır. Hücrenin içi yazıdır; o yazının içinde bazı
-kelimeler **görev** olarak işaretlenir.
-
-(Excel dosyasındaki başlıklar farklıdır: orada aynı sütunlar *3D Print*,
-*Laminasyon*, *Mukavva*, *Özel* diye geçer — bkz. örnek içe aktarma belgesi.)
-
-- **Hücre**: oyunun bir sütunundaki yazının tamamı.
-- **Görev**: o yazının içinden seçilmiş, takip edilen iş. Rengi, adedi ve üretim
-  aşamaları olabilir.
-
-Bir görevi açmak için hücredeki görev parçasına tıklayın ya da klavyeyle üstüne
-gelip Enter'a basın. Açılan menüde **Düzenle**, **Tamamla**, **Eksik/hatalı
-bildir** ve **Görevi metne dönüştür** vardır.
-
-## XLSX ve CSV içe aktarma
-
-**İçe/Dışa Aktarma** bölümünde **Excel veya CSV dosyası seç** ile başlarsınız.
-
-- **Excel (.xlsx)**: yedi sütunlu referans düzeni beklenir (Oyun, 3D Print,
-  Laminasyon, Mukavva, Özel, Eksik, Ödünç Parçalar). Hücre renkleri ve zengin
-  metin okunur.
-- **CSV (.csv)**: `game`, `source_type` ve `raw_text` sütunları zorunludur.
-  Ayırıcı virgül ya da noktalı virgül olabilir.
-
-Biçimlerin tam kuralları, örnek dosya ve hata örnekleri için
-[örnek içe aktarma belgesine](ornek-ice-aktarma.md) bakın.
-
-Dosyayı seçtiğinizde uygulama bir **özet** gösterir: kaç ham hücre kaydedilecek,
-kaç oyun adı hücresi algılandı, hangi sütunda kaç hücre var. Bu adımda **hiçbir
-oyun, hücre veya görev oluşturulmaz**. **Taslak olarak kaydet** dediğinizde
-yalnız ham hücreler taslak olarak saklanır.
-
-Aynı dosyayı daha önce içe aktardıysanız uygulama bunu söyler ve yine de yeni bir
-taslak oluşturmak isteyip istemediğinizi sorar.
-
-## Taslakları inceleme, düzenleme, onaylama ve kaldırma
-
-Onaylanmamış içe aktarmalar **Devam eden içe aktarmalar** listesinde durur.
-Kaynak dosya silinmiş ya da değişmiş olsa bile kaldığınız yerden devam
-edebilirsiniz.
-
-İnceleme ekranında her ham hücre için:
-
-- metnin içinden görev olacak kısmı seçersiniz;
-- görevin havuzunu, adedini ve rengini belirlersiniz;
-- uygulamanın önerilerini (baştaki sayı adet olabilir, `**` "bitti" anlamına
-  gelebilir, tanıdık renk adları) kabul eder ya da değiştirirsiniz.
-
-Öneriler yalnızca öneridir: hiçbiri siz onaylamadan hiçbir şeye uygulanmaz.
-
-**Onayla** dediğinizde görevler, hücre metinleri ve oyunlar tek bir işlemde
-yazılır. Onaydan hemen önce uygulama kendiliğinden bir yedek alır; yedek
-alınamazsa onay hiç başlamaz.
-
-Bir taslağı istemiyorsanız **Kaldır** ile silebilirsiniz; bu yalnız o taslağın
-satırlarını siler.
-
-Kayıtları birbiriyle uyuşmayan taslaklar ayrı bir bölümde, uyarıyla ve yalnız
-**Kaldır** seçeneğiyle gösterilir. Böyle bir taslak onaylanamaz.
-
-## Onaylanmış içe aktarmayı geri alma
-
-**Onaylanmış içe aktarmalar** listesinden **Geri al** ile, bir içe aktarmanın
-oluşturduğu her şeyi tek seferde kaldırabilirsiniz. Uygulama önce ne olacağını
-gösterir: kaç görev kaldırılacak, kaç hücre eski metnine dönecek.
-
-Geri alma **tamamı ya da hiçbiri**dir; tek tek görev seçilemez. Şu durumlarda
-reddedilir ve hiçbir şey değişmez:
-
-| Durum | Neden |
+| What | Where |
 | --- | --- |
-| Oluşturduğu görevlerden biri sonradan düzenlendi | Sizin emeğinizi geri almamak için |
-| Yazdığı hücrelerden birinin metni sonradan değişti | Aynı nedenle |
-| İçe aktarma zaten geri alınmış | İkinci kez geri alınamaz |
-| Hücrelerin önceki metni kaydedilmemiş (eski içe aktarma) | Güvenli geri alma kanıtlanamaz |
-| İçe aktarmanın kayıt izi eksik | Hangi görevlerin ona ait olduğu güvenle belirlenemez |
+| Database and backups | `%LOCALAPPDATA%\pnp-tracker\data\` |
+| Settings | `%APPDATA%\pnp-tracker\` |
+| Diagnostic logs and table layout | `%LOCALAPPDATA%\pnp-tracker\state\` |
 
-Oyunların "tamamlandı" işaretleri geri alınmaz; isterseniz oyun tablosundan
-kendiniz kaldırırsınız.
+Three things are enough to know:
 
-## Görev ilerlemesi, tamamlanma ve metne dönüştürme
+- Uninstalling the application does not delete these folders; your data stays.
+- Nothing is ever written to the folder the application is installed in (the
+  portable archive, `/opt/pnp-tracker`, or the Windows install folder).
+- To move your data, take a backup in the application and restore it on the new
+  machine (see below).
 
-- **Tamamla / Yeniden aç**: görevin bittiğini işaretler ya da geri alır.
-- **Eksik/hatalı bildir**: 3D baskıda başarısız çıkan adedi kaydeder; daha sonra
-  **Eksik giderildi** ile kapatırsınız.
-- **Aşamalar**: kart ve mukavva görevlerinde sıradaki üretim aşaması (baskı,
-  laminasyon, kesim) ve kaç adedin o aşamayı geçtiği tutulur.
-- **Görevi metne dönüştür**: kelimeyi hücrede düz metin olarak bırakır; rengi,
-  adedi ve aşamaları artık görev olarak tutulmaz. Bu işlem geri alınamaz; üretim
-  geçmişi silinmez ama görev listelerinden çıkar.
+## Screens
 
-## Arama ve havuz filtreleri
+The application opens on **Oyunlar** (Games). The single navigation row across
+the top has five sections: **Oyunlar** (Games), **3D Baskı** (3D printing),
+**Kartlar** (Cards), **Mukavva** (Board) and **Ayarlar** (Settings).
 
-Oyun tablosunda arama kutusu, oyun adı ve hücre metinlerinde arar. Havuz
-ekranlarında görevler renge ve duruma göre gruplanır:
+**Ayarlar** opens a menu: **Ayarlar** (Settings), **İçe/Dışa Aktarma**
+(Import/Export), **Renkler** (Colours) and **Geçmiş** (History).
 
-- **Renk seçilecek**, **Tek renkli**, **Tek öge çok renk** bölümleri;
-- her grup için görev sayısı, toplam adet, eksik ve hatalı kayıt sayısı.
+The **Özel** (Special) pool is not in the navigation: once you have a special
+task, an **Özel görevler** entry appears on the game table and says how many
+tasks are open.
 
-Arama ve filtreler yalnız ekranda ne gördüğünüzü değiştirir; verilerinize ve dışa
-aktarılan dosyaya dokunmaz.
+## Creating a game
 
-## CSV dışa aktarma
+1. Go to **Oyunlar**.
+2. Press **Yeni oyun oluştur** (new game) — on the game table this is the
+   **Oyun ekle** button in the toolbar.
+3. Type the game's name and choose **Oyunu kaydet** (save game).
 
-**Ayarlar → İçe/Dışa Aktarma → Görevleri CSV'ye aktar** ile ya da Oyunlar
-ekranında araç çubuğunun **⋯** menüsünden bütün görevleri tek dosyaya
-yazarsınız.
+Each game is one row of the game table. The toolbar above it lets you search,
+switch between *Devam Eden* (in progress), *Tamamlanan* (finished) and *Tümü*
+(all), order the games by your own order or A–Z, and open the filters. The
+**⋯** menu at its end fits a column to its content, resets the cell sizes and
+exports the tasks.
 
-- Ekrandaki arama ve filtreler dosyanın kapsamını değiştirmez: her zaman bütün
-  görevler yazılır.
-- Sütunlar: `game, column, task, pool, colors, required_quantity, status, notes`.
-- Dosya UTF-8'dir ve Excel'in doğru açması için BOM ile başlar.
-- Aynı veriden her zaman aynı dosya üretilir.
-- `=`, `+`, `-`, `@` ile başlayan metinlerin başına, tablo programları onları
-  formül sanmasın diye tek tırnak eklenir. Veritabanınızdaki metin değişmez.
+When a game is done you can mark it with **Tamamlandı olarak işaretle** (mark as
+finished) on its row. This is your decision alone: it changes no task and no
+cell.
 
-## Manuel yedek oluşturma
+## Cells and tasks
 
-**Ayarlar → Yedek oluştur**: bütün veriniz tek bir `.json` dosyasına yazılır.
-Dosyanın adı varsayılan olarak `pnp-yedek-<tarih>.json` gelir ve seçtiğiniz
-klasöre kaydedilir — harici bir disk de seçebilirsiniz.
+Every game has six columns (cells): **3D Baskı**, **Kart**, **Mukavva**,
+**Özel**, **Ödünç Parçalar** (borrowed parts) and **Notlar** (notes). The first
+four feed the pools of the same names. **Ödünç Parçalar** is free text for parts
+borrowed from another game and **Notlar** is free text for anything else;
+neither holds tasks.
 
-Yedek; oyunları, hücre metinlerini, görevleri, renkleri, üretim ilerlemesini,
-geçmişi ve içe aktarma kayıtlarını içerir.
+The **Eksik** (missing) column right beside the game's name is not a cell but a
+view: it shows the unfinished tasks of that game's 3D Baskı, Kart, Mukavva and
+Özel columns, in their own colours and with their counts, after each column's
+name. A task finished in its own column leaves Eksik, and comes back if it is
+reopened. Nothing is edited in Eksik; tasks are edited and finished in their own
+cells. A cell holds text, and some words in that text are marked as **tasks**.
 
-## Yedekten geri yükleme ve güvenlik yedeği
+(The headings in the Excel file are different: there the same columns are
+called *3D Print*, *Laminasyon*, *Mukavva* and *Özel* — see the import guide.)
 
-**Ayarlar → Yedekten geri yükle** ile bir yedek dosyası seçersiniz. Uygulama:
+- **Cell**: all the text in one column of a game.
+- **Task**: a piece of work picked out of that text and tracked. It can have a
+  colour, a quantity and production stages.
 
-1. dosyayı denetler (bozuk, eksik ya da başka bir uygulamanın dosyasıysa reddeder
-   ve hiçbir şeye dokunmaz);
-2. ne olacağını sorar: seçtiğiniz yedek **bütün verinin yerine geçer**;
-3. **Geri yükle** derseniz önce mevcut verinizin güvenlik yedeğini
-   `pnp-oncesi-…json` adıyla yedek klasörüne yazar;
-4. ancak güvenlik yedeği yazıldıktan sonra geri yüklemeyi yapar.
+To open a task, click its words in the cell, or reach it with the keyboard and
+press Enter. The menu that opens offers **Düzenle** (edit), **Tamamla**
+(finish), **Eksik/hatalı bildir** (report missing or failed) and **Görevi metne
+dönüştür** (turn the task back into text).
 
-Bir şey ters giderse veriniz işlemden önceki hâlinde kalır ve ekran size güvenlik
-yedeğinin adını söyler.
+## Importing XLSX and CSV
 
-Kayıtları kendi içinde çelişen bir yedek, soru sorulmadan önce reddedilir;
-verileriniz olduğu gibi kalır.
+In **İçe/Dışa Aktarma**, start with **Excel veya CSV dosyası seç** (choose an
+Excel or CSV file).
 
-## Otomatik yedek sayısı ayarı
+- **Excel (.xlsx)**: the seven-column reference layout is expected (Oyun,
+  3D Print, Laminasyon, Mukavva, Özel, Eksik, Ödünç Parçalar). Cell colours and
+  rich text are read.
+- **CSV (.csv)**: the `game`, `source_type` and `raw_text` columns are required.
+  The separator may be a comma or a semicolon.
 
-Uygulama bazı işlemlerden önce kendiliğinden yedek alır: içe aktarma onayından
-önce, geri yüklemeden önce ve veri dosyası yeni sürüme taşınmadan önce.
+For the exact rules of both formats, an example file and examples of rejected
+rows, see the [import guide](ornek-ice-aktarma.md).
 
-**Ayarlar → Otomatik yedeklerin saklanması** bölümünde kaç tanesinin saklanacağını
-belirlersiniz (1–50, varsayılan 7). Sayı üç tür için ayrı ayrı uygulanır. Kendi
-aldığınız yedekler bu sayıya dâhil değildir ve hiçbir zaman kendiliğinden
-silinmez. Sayıyı azaltmak dosyaları o anda silmez.
+When you choose a file the application shows a **summary**: how many raw cells
+will be saved, how many game-name cells were found, how many cells each column
+has. **No game, cell or task is created** at this step. **Taslak olarak kaydet**
+(save as draft) stores only the raw cells, as a draft.
 
-## Beklenmeyen kapanış sonrası
+If you have imported the same file before, the application says so and asks
+whether you still want a new draft.
 
-Bilgisayar kapanır ya da uygulama beklenmedik biçimde sonlanırsa, yeniden
-açtığınızda kaldığınız yerden devam edersiniz. Yarım kalan bir yazma işlemi ya
-tamamen yazılmış ya da hiç yazılmamış olur; ikisinin arası olmaz. Onaylanmamış
-bir içe aktarma taslağı **Devam eden içe aktarmalar** listesinde durur.
+## Reviewing, editing, confirming and removing drafts
 
-Uygulama bir "kurtarma" ekranı açmaz, işaret dosyası bırakmaz ve sizden bir şey
-onarmanızı istemez.
+Imports that are not confirmed yet stay in the **Devam eden içe aktarmalar**
+(imports in progress) list. You can carry on where you left off even if the
+source file has since been deleted or changed.
 
-## "Veri dosyanızda bir hasar bulundu" ekranı görülürse
+On the review screen, for each raw cell you:
 
-Uygulama her açılışta veri dosyasını hızlıca denetler. Dosya hasarlıysa
-**PNP açılamadı** başlıklı bir ekran gösterir ve veri dosyasını **açmaz**.
+- select the part of the text that becomes a task;
+- choose the task's pool, quantity and colour;
+- accept or change the application's suggestions (a number at the start may be
+  the quantity, `**` may mean "done", familiar colour names).
 
-Bu durumda:
+Suggestions are only suggestions: none of them is applied to anything until you
+confirm.
 
-1. Veri dosyasını ve yedek klasörünüzü **silmeyin, taşımayın, onarmaya
-   çalışmayın**. Uygulama da bunların hiçbirini yapmaz.
-2. Yedek klasörünüzdeki yedekler olduğu gibi durur.
-3. Elinizdeki en yeni yedekle yeni bir kurulumda devam edebilirsiniz; hasarlı
-   dosyayı silmeden önce mutlaka bir kopyasını saklayın.
-4. Yardım isterken ekrandaki cümleyi ve aşağıdaki tanılama kaydının son
-   satırlarını iletmek yeterlidir.
+**Onayla** (confirm) writes the tasks, the cell texts and the games in one
+single operation. Right before confirming, the application takes a backup on its
+own; if that backup cannot be taken, the confirmation does not start at all.
 
-## Tanılama kayıtları
+A draft you do not want can be deleted with **Kaldır** (remove); this deletes
+only that draft's rows.
 
-Bir şey ters gittiğinde uygulama kısa, teknik olmayan bir kayıt satırı yazar:
+Drafts whose records contradict each other are shown in a separate section,
+with a warning, and offer only **Kaldır**. Such a draft cannot be confirmed.
+
+## Taking back a confirmed import
+
+From the **Onaylanmış içe aktarmalar** (confirmed imports) list, **Geri al**
+(take back) removes everything one import created, in one go. The application
+first shows what will happen: how many tasks will be removed and how many cells
+will return to their earlier text.
+
+Taking back is **all or nothing**; single tasks cannot be picked. It is refused,
+and nothing changes, when:
+
+| Situation | Why |
+| --- | --- |
+| One of the tasks it created was edited later | So your own work is never undone |
+| The text of one of the cells it wrote changed later | For the same reason |
+| The import has already been taken back | It cannot be taken back twice |
+| The cells' earlier text was not recorded (an old import) | A safe take-back cannot be proven |
+| The import's record trail is incomplete | Which tasks belong to it cannot be told safely |
+
+Games' "finished" marks are not taken back; you can remove them yourself on the
+game table.
+
+## Task progress, finishing and turning a task back into text
+
+- **Tamamla / Yeniden aç** (finish / reopen): marks the task done, or takes that
+  back. In the **3D Baskı** pool each unfinished task also has a **Tamamla**
+  button that finishes it with a single press.
+- **Eksik/hatalı bildir** (report missing or failed): records how many 3D prints
+  came out wrong; you close it later with **Eksik giderildi** (resolved).
+- **Stages**: card and board tasks keep the next production stage (print,
+  lamination, cutting) and how many have passed it.
+- **Görevi metne dönüştür** (turn into text): leaves the word in the cell as
+  plain text; its colour, quantity and stages are no longer kept as a task. This
+  cannot be undone; the production history is not deleted, but the task leaves
+  the task lists.
+
+A note added to a task is shown in brackets beside the task's name and count,
+in its own column and in Eksik.
+
+## Search and pool filters
+
+On the game table, the search box searches game names and cell texts. On the
+pool screens tasks are grouped by colour and state:
+
+- the **Renk seçilecek** (colour to be chosen), **Tek renkli** (single colour)
+  and **Tek öge çok renk** (one item, several colours) sections;
+- for each group, the number of tasks, the total quantity, and how many missing
+  and failed records there are.
+
+Search and filters change only what you see on screen; they never touch your
+data or the exported file.
+
+## Exporting to CSV
+
+**Ayarlar → İçe/Dışa Aktarma → Görevleri CSV’ye aktar** (export tasks to CSV),
+or the **⋯** menu in the game table's toolbar, writes every task to a single
+file.
+
+- The search and filters on screen do not change what the file covers: every
+  task is always written.
+- Columns: `game, column, task, pool, colors, required_quantity, status, notes`.
+- The file is UTF-8 and starts with a BOM so Excel opens it correctly.
+- The same data always gives the same file.
+- Text beginning with `=`, `+`, `-` or `@` gets a single quote in front of it so
+  spreadsheet programs do not take it for a formula. The text in your database
+  does not change.
+
+## Making a backup by hand
+
+**Ayarlar → Yedek oluştur** (make a backup): all your data is written to one
+`.json` file. The file is named `pnp-yedek-<date>.json` by default and saved in
+the folder you choose — an external disk works too.
+
+A backup holds the games, cell texts, tasks, colours, production progress, the
+history and the import records.
+
+## Restoring a backup, and the safety backup
+
+**Ayarlar → Yedekten geri yükle** (restore from backup) lets you choose a backup
+file. The application:
+
+1. checks the file (a damaged or incomplete file, or one from another
+   application, is refused and nothing is touched);
+2. asks what will happen: the chosen backup **replaces all of your data**;
+3. when you choose **Geri yükle** (restore), first writes a safety backup of
+   your current data into the backup folder, named `pnp-oncesi-…json`;
+4. restores only after the safety backup has been written.
+
+If anything goes wrong, your data stays as it was before, and the screen tells
+you the safety backup's name.
+
+A backup whose records contradict each other is refused before any question is
+asked; your data stays as it is.
+
+## How many automatic backups are kept
+
+The application takes a backup by itself before some operations: before an
+import is confirmed, before a restore, and before the data file is moved to a
+new version.
+
+In **Ayarlar → Otomatik yedeklerin saklanması** (keeping automatic backups) you
+choose how many are kept (1–50, 7 by default). The number applies to each of the
+three kinds separately. Backups you make yourself do not count towards it and
+are never deleted by the application. Lowering the number does not delete files
+there and then.
+
+## After an unexpected shutdown
+
+If the computer shuts down or the application ends unexpectedly, you carry on
+where you left off when you open it again. A write that was cut short is either
+fully written or not written at all; there is nothing in between. An import
+draft that was not confirmed stays in the **Devam eden içe aktarmalar** list.
+
+The application opens no "recovery" screen, leaves no marker file and asks you
+to repair nothing.
+
+## If the "Veri dosyanızda bir hasar bulundu" screen appears (the data file is damaged)
+
+Every time it starts, the application quickly checks the data file. If the file
+is damaged it shows a screen titled **PNP açılamadı** (PNP could not be opened)
+and does **not** open the data file.
+
+In that case:
+
+1. **Do not delete, move or try to repair** the data file or your backup
+   folder. The application does none of these either.
+2. The backups in your backup folder stay exactly as they are.
+3. You can carry on with your newest backup in a new installation; keep a copy
+   of the damaged file before you delete it.
+4. When asking for help, the sentence on the screen and the last lines of the
+   diagnostic log below are enough.
+
+## Diagnostic logs
+
+When something goes wrong, the application writes a short, non-technical log
+line:
 
 ```
 $XDG_STATE_HOME/pnp-tracker/logs/
 ```
 
-Bu kayıtlar en çok 5 dosya × 1 MiB yer kaplar ve eskiyen dosya kendiliğinden
-silinir. İçinde **oyun adı, görev metni, not, dosya adı, yol, kullanıcı adı,
-kimlik numarası, SQL ya da hata mesajı bulunmaz**: yalnız ne tür bir sınırın
-aşıldığı, hangi işlemde olduğu ve hatanın sınıf adı yazılır. Başarılı bir
-kullanımda hiç satır yazılmaz.
+(On Windows, under `%LOCALAPPDATA%\pnp-tracker\state\`.)
 
-## Klavye ve erişilebilirlik
+These logs take at most 5 files × 1 MiB and the oldest file is deleted by
+itself. They contain **no game name, task text, note, file name, path, user
+name, identifier, SQL or error message**: only what kind of limit was reached,
+in which operation, and the error's class name. A session in which nothing goes
+wrong writes no line at all.
 
-- **Tab** ve **Shift+Tab** ile bütün ekranlarda dolaşabilirsiniz; odak kenar
-  çubuğuna geri döner, hiçbir yerde takılıp kalmaz.
-- **Enter** veya **Space** seçili öğeyi açar; tabloda **Enter** ya da **F2**
-  hücreyi düzenlemeye başlar.
-- **Esc** açık bir menüyü, paneli veya soruyu kapatır ve hiçbir şeyi değiştirmez.
-- **Ctrl+Enter** düzenleme panellerinde kaydeder.
-- Hücre düzenleyicisinde **Enter** kaydeder, **Ctrl+Enter** alt satıra geçer. Bir
-  görev sütununa yeni bir ad yazıp **Enter**'a basarsanız görev penceresi açılır.
-- Geri alınamaz sorularda odak **Vazgeç** üzerinde başlar.
-- Uygulama dar pencerede (640×460) ve büyük sistem yazı tipinde de kullanılabilir;
-  bilgi yalnız renkle anlatılmaz, her durumun yazısı vardır.
+## Keyboard and accessibility
 
-## Linux taşınabilir arşivini çalıştırma
+- **Tab** and **Shift+Tab** move through every screen; focus comes back to the
+  navigation and never gets stuck anywhere.
+- **Enter** or **Space** opens the selected item; in the table, **Enter** or
+  **F2** starts editing a cell.
+- **Esc** closes an open menu, panel or question and changes nothing.
+- **Ctrl+Enter** saves in editing panels.
+- In a cell editor, **Enter** saves and **Ctrl+Enter** starts a new line. Type a
+  new name into a task column and press **Enter**, and the task window opens.
+- In questions that cannot be undone, focus starts on **Vazgeç** (cancel).
+- The application works in a small window (640×460) and with large system
+  fonts; no information is given by colour alone, every state has words.
 
-Java kurmanız gerekmez; çalışma ortamı arşivin içindedir.
+## Running the Linux portable archive
+
+You do not need to install Java; the runtime is inside the archive.
 
 ```bash
-tar -xzf pnp-tracker-<sürüm>-linux-x86_64.tar.gz
-cd pnp-tracker-<sürüm>
+tar -xzf pnp-tracker-<version>-linux-x86_64.tar.gz
+cd pnp-tracker-<version>
 ./bin/pnp-tracker
 ```
 
-Arşivi istediğiniz klasöre açabilirsiniz. Uygulama açıldığı klasöre yazmaz;
-verileriniz yine XDG dizinlerinize gider. Klasörü silmek verinizi silmez.
+You can unpack the archive into any folder. The application does not write to
+the folder it runs from; your data still goes to your XDG folders. Deleting the
+folder does not delete your data.
 
-## Garuda/Arch paketini kurma, güncelleme ve kaldırma
+## Installing, updating and removing the Garuda/Arch package
 
 ```bash
-sudo pacman -U pnp-tracker-<sürüm>-1-x86_64.pkg.tar.zst   # kurulum ve güncelleme
-pnp-tracker                                                # komut satırından açma
-sudo pacman -R pnp-tracker                                 # kaldırma
+sudo pacman -U pnp-tracker-<version>-1-x86_64.pkg.tar.zst   # install and update
+pnp-tracker                                                  # open from the command line
+sudo pacman -R pnp-tracker                                   # remove
 ```
 
-Uygulama `/opt/pnp-tracker` altına kurulur, başlatıcı `/usr/bin/pnp-tracker`
-olur ve menüde **PnP Üretim Takipçisi** olarak görünür. Güncelleme, yeni sürümün
-paketini aynı `pacman -U` komutuyla kurmaktır; veriniz olduğu yerde kalır.
+The application is installed under `/opt/pnp-tracker`, the launcher is
+`/usr/bin/pnp-tracker`, and it appears in the menu as **PnP Üretim Takipçisi**.
+Updating means installing the new version's package with the same `pacman -U`
+command; your data stays where it is.
 
-## Paket kaldırılınca veriniz neden durur?
+## Installing on Windows
 
-Paket yalnızca uygulamanın kendi dosyalarını (`/opt/pnp-tracker`, başlatıcı,
-menü girdisi, simge) kurar ve kaldırırken yalnız onları siler. Verileriniz
-uygulamanın kurulduğu yerde değil, sizin kullanıcı dizinlerinizde durur; bir
-paket yöneticisi oraya dokunmaz. Böylece kaldırıp yeniden kurduğunuzda
-kaldığınız yerden devam edersiniz.
+The Windows installer, `pnp-tracker-<version>-windows-x86_64.exe`, is one file
+with the Java runtime inside it; you do not need to install Java.
 
-Veriyi de silmek isterseniz bu **ayrı ve elle** yapılan bir iştir:
+- Run the installer. It installs for your user only (no administrator rights),
+  lets you choose the folder, and adds a Start menu entry and a desktop
+  shortcut named **PnP Üretim Takipçisi**.
+- The installer is **not signed**, so Windows SmartScreen may warn that it comes
+  from an unknown publisher. Check the file against `SHA256SUMS` from the same
+  release before running it (see the README).
+- Updating means running the newer installer. Uninstall from Windows'
+  *Installed apps*; your data in `%LOCALAPPDATA%` and `%APPDATA%` stays.
+- The installer is built and checked automatically on GitHub's Windows runner,
+  but it **has not yet been tried by hand on a real Windows 11 installation**.
 
-1. Önce uygulamadan **Yedek oluştur** ile yedek alın ve yedeği başka bir yere
-   kopyalayın.
-2. Silmeden önce yolun doğru olduğunu görün:
+## Why your data stays when the package is removed
+
+The package installs only the application's own files (`/opt/pnp-tracker`, the
+launcher, the menu entry, the icon) and removes only those. Your data is not
+where the application is installed but in your own user folders, which a package
+manager does not touch. So when you remove and reinstall, you carry on where you
+left off.
+
+Deleting the data as well is a **separate job, done by hand**:
+
+1. First take a backup with **Yedek oluştur** and copy it somewhere else.
+2. Before deleting, see that the path is the right one:
 
    ```bash
    ls -la "${XDG_DATA_HOME:-$HOME/.local/share}/pnp-tracker"
    ```
 
-3. Listeyi gördükten ve doğru dizin olduğuna emin olduktan sonra dizini kendi
-   dosya yöneticinizle silin. Ayar ve tanılama dizinleri de aynı biçimde
-   kontrol edilerek silinebilir.
+3. Only after seeing the list and being sure it is the right folder, delete it
+   with your own file manager. The settings and diagnostic folders can be
+   checked and deleted the same way.
 
-## Bilinen sınırlar
+## Known limits
 
-- Yalnız Linux, yalnız `x86_64` ve glibc. Windows ve macOS sürümü yoktur.
-- Arayüz X11 kullanır; Wayland oturumunda XWayland gerekir.
-- Tek kullanıcı, tek kopya: aynı veriyle iki uygulama penceresi aynı anda
-  çalışamaz. İkinci kopya açılmaz ve bunu söyler.
-- Senkronizasyon, bulut ve çoklu cihaz yoktur; veri taşımanın yolu yedektir.
-- Uygulama arayüzü Türkçedir.
+- Linux: `x86_64` with glibc; the interface uses X11, so a Wayland session needs
+  XWayland.
+- Windows: an `x86_64` installer is published, but it has not yet been tried on
+  a real Windows 11 machine. There is no macOS version.
+- One user, one copy: two windows of the application cannot run on the same
+  data at the same time. A second copy does not open, and says so.
+- No sync, no cloud, no multiple devices; a backup is the way to move data.
+- The application's interface is in Turkish.
 
-## Lisans
+## Licence
 
-Uygulamanın kendi kaynak kodu MIT lisanslıdır; metin deponun kökündeki
-[`LICENSE`](../LICENSE) dosyasındadır. Kurulu pakette aynı metin
-`/usr/share/licenses/pnp-tracker/LICENSE` ve `/opt/pnp-tracker/LICENSE`
-yollarında durur.
+The application's own source code is under the MIT licence; the text is in the
+[`LICENSE`](../LICENSE) file at the root of the repository. In the installed
+package the same text is at `/usr/share/licenses/pnp-tracker/LICENSE` and
+`/opt/pnp-tracker/LICENSE`.
 
-Uygulamayla birlikte gelen Java çalışma ortamı ve üçüncü taraf kütüphaneler
-kendi lisanslarıyla dağıtılır; MIT lisansı onları kapsamaz. Hangi bileşenin
-geldiği ve lisans metinlerinin nerede durduğu paketin içindeki
-`THIRD_PARTY_NOTICES.md` dosyasında yazar.
+The Java runtime and the third-party libraries that come with the application
+are distributed under their own licences; the MIT licence does not cover them.
+Which components come with it, and where their licence texts are, is written in
+the `THIRD_PARTY_NOTICES.md` file inside the package.

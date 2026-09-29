@@ -1,57 +1,61 @@
-# Örnek içe aktarma belgesi
+# Import Guide and Examples
 
-Bu belge, uygulamanın **gerçekten kabul ettiği** dosya biçimlerini anlatır.
-Buradaki kurallar uygulamanın okuyucusundan alınmıştır; örnek CSV dosyası
-depoda durur ve olduğu gibi içe aktarılabilir:
+This document describes the file formats the application **really accepts**.
+The rules here are taken from the application's own reader; the example CSV file
+is in the repository and can be imported as it is:
 
 - [`ornek-ice-aktarma.csv`](ornek-ice-aktarma.csv)
 
-İçe aktarma hiçbir zaman kendiliğinden oyun, hücre veya görev oluşturmaz. Dosya
-okunur, ham hücreler taslak olarak kaydedilir ve her şey sizin onayınızla yazılır.
+An import never creates games, cells or tasks by itself. The file is read, its
+raw cells are saved as a draft, and everything is written only with your
+confirmation.
 
-## İki biçim, tek yol
+The application's interface is in Turkish; screens and buttons are named here by
+their Turkish labels.
+
+## Two formats, one path
 
 | | XLSX | CSV |
 | --- | --- | --- |
-| Sütunlar | Yedi sütunlu referans düzeni, başlık satırından tanınır | `game`, `source_type`, `raw_text` başlıkları |
-| Sayfa | Birden çok çalışma sayfası olabilir, hangisinin okunacağı sorulur | Tek mantıksal sayfa; sayfa adı dosya adıdır |
-| Renk | Hücre dolgusu ve zengin metin renkleri okunur | Renk yoktur |
-| "Tamamlandı" ipucu | Yeşil hücre ipucu olabilir | Yeşil hücre ipucu **hiç oluşmaz** |
-| Formül | Hücrenin görünen değeri okunur | Her hücre düz metindir |
-| Kodlama | Excel'in kendi kodlaması | Katı UTF-8; tek BOM atılır |
+| Columns | The seven-column reference layout, recognised from the header row | The `game`, `source_type`, `raw_text` headers |
+| Sheets | There may be several worksheets; you are asked which one to read | One logical sheet; its name is the file name |
+| Colour | Cell fill and rich-text colours are read | No colour |
+| "Finished" hint | A green cell may give a hint | A green-cell hint **never** appears |
+| Formulas | The cell's displayed value is read | Every cell is plain text |
+| Encoding | Excel's own | Strict UTF-8; a single BOM is dropped |
 
-Her iki biçim de aynı yere varır: ham hücreler → taslak → inceleme → onay.
+Both formats end up in the same place: raw cells → draft → review → confirm.
 
-## CSV kuralları
+## CSV rules
 
 ```text
-zorunlu başlıklar : game, source_type, raw_text
-sütun sırası      : serbest; fazladan sütunlar yoksayılır
-ayırıcı           : virgül veya noktalı virgül (başlık satırından bulunur)
-kodlama           : UTF-8; baştaki tek BOM atılır
-boş satır         : atlanır
-hücre metni       : kırpılmaz, olduğu gibi saklanır
-aynı satırlar     : tekilleştirilmez
-= + - @ ile başlayan hücreler : düz metin olarak kalır
+required headers : game, source_type, raw_text
+column order     : free; extra columns are ignored
+separator        : comma or semicolon (found from the header row)
+encoding         : UTF-8; a single leading BOM is dropped
+empty rows       : skipped
+cell text        : not trimmed, stored as it is
+identical rows   : not de-duplicated
+cells starting with = + - @ : stay plain text
 ```
 
-`source_type` sütununda şu değerler geçerlidir (büyük/küçük harf ve boşluk fark
-etmez):
+These values are valid in the `source_type` column (case and surrounding spaces
+do not matter):
 
-| Değer | Anlamı | Excel'deki karşılığı |
+| Value | Meaning | In Excel |
 | --- | --- | --- |
-| `GAME` | Satır oyunun adını taşır | Oyun |
-| `THREE_D` | 3D baskı işi | 3D Print |
-| `CARD` | Kart / laminasyon işi | Laminasyon |
-| `BOARD` | Mukavva işi | Mukavva |
-| `SPECIAL` | Diğer özel parçalar | Özel |
-| `MISSING` | Eksik parça notu | Eksik |
-| `BORROWED` | Ödünç verilen/alınan parça | Ödünç Parçalar |
+| `GAME` | The row carries the game's name | Oyun |
+| `THREE_D` | 3D printing work | 3D Print |
+| `CARD` | Card / lamination work | Laminasyon |
+| `BOARD` | Board work | Mukavva |
+| `SPECIAL` | Other special parts | Özel |
+| `MISSING` | A note about a missing part | Eksik |
+| `BORROWED` | A part lent or borrowed | Ödünç Parçalar |
 
-Excel başlıklarının kendileri de yazılabilir: `source_type` sütununa `Laminasyon`
-yazmak `CARD` demekle aynıdır.
+The Excel headings themselves may be written too: `Laminasyon` in the
+`source_type` column means the same as `CARD`.
 
-## Örnek CSV
+## Example CSV
 
 ```csv
 game,source_type,raw_text
@@ -68,77 +72,86 @@ Ark Nova,CARD,"=1+1 yazan kart, düz metin olarak kalır"
 Ark Nova,SPECIAL,Özel: skor defteri
 ```
 
-Bu dosyadan iki oyun ve dokuz ham hücre çıkar. Hiçbiri onaylanana kadar
-veritabanına görev olarak yazılmaz.
+This file gives two games and nine raw cells. None of them is written to the
+database as a task until it is confirmed.
 
-### Örnekteki ayrıntılar
+### Details in the example
 
-- **Türkçe karakterler**: `YEŞİL`, `SİYAH`, `Özel`, `Kumaş` olduğu gibi korunur;
-  büyük/küçük harf dönüşümü yapılmaz.
-- **Adet önerisi**: metin bir sayıyla başlıyorsa (`15 KIRMIZI**`) o sayı adet
-  önerisi olur. Metnin ortasındaki sayılar adet sayılmaz: `Ticket to Ride 1910`
-  bin dokuz yüz on adet demek değildir. `0` adet sayılmaz.
-- **`**` işareti**: "bu kısım bitti" anlamına gelen ipucudur. Metinde olduğu gibi
-  saklanır, inceleme ekranında gösterilmez. Tek `*` işaret değildir; `****` iki
-  işarettir.
-- **Renk adları**: `KIRMIZI`, `YEŞİL`, `SİYAH`, `BEYAZ` gibi tanıdık adlar renk
-  önerisi üretir. Öneridir; rengi siz seçersiniz.
-- **Virgül içeren hücre**: tırnak içine alınır (`"15 KIRMIZI**, 19 YEŞİL"`).
-- **Formül gibi görünen hücre**: `=1+1 yazan kart…` dört karakteriyle birlikte
-  düz metin kalır; hiçbir yerde hesaplanmaz.
-- **Boş hücre**: `raw_text` boş bırakılamaz (aşağıya bakın). Bir oyunda bir sütun
-  yoksa o satırı hiç yazmayın.
+- **Turkish letters**: `YEŞİL`, `SİYAH`, `Özel`, `Kumaş` are kept exactly as
+  they are; no case conversion is done.
+- **Quantity suggestion**: if the text starts with a number (`15 KIRMIZI**`),
+  that number is suggested as the quantity. Numbers in the middle of the text are
+  not quantities: `Ticket to Ride 1910` does not mean one thousand nine hundred
+  and ten. `0` is not a quantity.
+- **The `**` mark**: a hint meaning "this part is done". It is kept in the text
+  as it is and not shown on the review screen. A single `*` is not a mark; `****`
+  is two marks.
+- **Colour names**: familiar names such as `KIRMIZI` (red), `YEŞİL` (green),
+  `SİYAH` (black) and `BEYAZ` (white) produce a colour suggestion. It is only a
+  suggestion; you choose the colour.
+- **A cell containing a comma**: is put in quotes (`"15 KIRMIZI**, 19 YEŞİL"`).
+- **A cell that looks like a formula**: `=1+1 yazan kart…` stays plain text with
+  all of its characters; it is never calculated anywhere.
+- **An empty cell**: `raw_text` cannot be left empty (see below). If a game has
+  nothing in a column, leave that row out altogether.
 
-## Hatalı satır örnekleri
+## Examples of rejected rows
 
-Uygulama hatayı satır numarasıyla söyler ve **hiçbir şey kaydetmez** — dosyanın
-son satırındaki bir hata bile dosyanın tamamını geçersiz kılar.
+The application reports the error with its row number and **saves nothing** —
+even an error on the file's last row makes the whole file invalid.
 
-| Örnek | Sonuç |
+| Example | Result |
 | --- | --- |
-| `Harmonies,THREE_D` (eksik alan) | Satır, başlıkla aynı sayıda alan taşımıyor: tırtıklı satır reddi |
-| `Harmonies,,15 KIRMIZI` | Zorunlu değer boş: `source_type` boş olamaz |
-| `Harmonies,3D_YAZICI,15 KIRMIZI` | Tanınmayan `source_type`; uygulama tahmin etmez |
-| `game,game,raw_text` başlığı | Aynı zorunlu sütun iki kez |
-| `oyun,tur,metin` başlığı | Zorunlu sütun eksik |
-| `Harmonies,THREE_D,"15 KIRMIZI` | Kapanmamış tırnak |
-| `Harmonies,THREE_D,15 "KIRMIZI"` | Tırnakla başlamayan alanın içinde tırnak |
-| Hem virgül hem noktalı virgülle okunabilen başlık | İki ayırıcı da geçerli: dosya reddedilir, tahmin yapılmaz |
+| `Harmonies,THREE_D` (a missing field) | The row does not have as many fields as the header: rejected as a ragged row |
+| `Harmonies,,15 KIRMIZI` | A required value is empty: `source_type` cannot be empty |
+| `Harmonies,3D_YAZICI,15 KIRMIZI` | Unknown `source_type`; the application does not guess |
+| a `game,game,raw_text` header | The same required column twice |
+| an `oyun,tur,metin` header | A required column is missing |
+| `Harmonies,THREE_D,"15 KIRMIZI` | An unclosed quote |
+| `Harmonies,THREE_D,15 "KIRMIZI"` | A quote inside a field that does not start with one |
+| A header readable with both commas and semicolons | Both separators are possible: the file is rejected, nothing is guessed |
 
-## Formül enjeksiyonu koruması — kullanıcı açısından
+## Formula-injection protection, from the user's side
 
-Bir hücreye `=`, `+`, `-` ya da `@` ile başlayan bir şey yazdıysanız:
+If you wrote something starting with `=`, `+`, `-` or `@` into a cell:
 
-- **İçe aktarırken** bu metin olduğu gibi saklanır. Uygulama onu hesaplamaz,
-  değiştirmez ve formül olarak görmez.
-- **Dışa aktarırken** (Görevleri CSV'ye aktar) uygulama dosyaya yazarken metnin
-  başına tek tırnak ekler. Böylece dosyayı Excel veya LibreOffice ile açtığınızda
-  program onu formül sanıp çalıştırmaz. Uygulamadaki metniniz değişmez; koruma
-  yalnız dosyadadır.
+- **On import** the text is stored as it is. The application does not calculate
+  it, change it or treat it as a formula.
+- **On export** (Görevleri CSV’ye aktar — export tasks to CSV) the application
+  puts a single quote in front of it when writing the file. So when you open the
+  file in Excel or LibreOffice, the program does not take it for a formula and
+  run it. Your text in the application does not change; the protection is only
+  in the file.
 
-## XLSX düzeni
+## XLSX layout
 
-Referans çalışma sayfası yedi sütunludur ve başlık satırından tanınır:
+The reference worksheet has seven columns and is recognised from its header
+row:
 
 ```text
 Oyun | 3D Print | Laminasyon | Mukavva | Özel | Eksik | Ödünç Parçalar
 ```
 
-- Oyun adı sütununda yazan satır o satırdan sonraki işlerin hangi oyuna ait
-  olduğunu belirler.
-- Hücre renkleri okunur; yeşil bir oyun hücresi "bu oyun tamamlanmış olabilir"
-  ipucu üretir. İpucu onay bekler, kendiliğinden uygulanmaz.
-- Zengin metin içindeki renkli parçalar korunur.
-- Gizli sayfalar da seçilebilir; uygulama sayfanın gizli olduğunu söyler.
-- Başlık satırı tanınmazsa dosya reddedilir ve hiçbir hücre kaydedilmez.
+- A row with something in the game-name column decides which game the work on
+  the rows after it belongs to.
+- Cell colours are read; a green game cell gives the hint "this game may be
+  finished". The hint waits for your confirmation and is never applied by
+  itself.
+- Coloured pieces inside rich text are kept.
+- Hidden sheets can be chosen too; the application says the sheet is hidden.
+- If the header row is not recognised, the file is rejected and no cell is
+  saved.
 
-Depodaki `app/src/desktopTest/resources/sample-import.xlsx` dosyası bu düzende,
-anonimleştirilmiş küçük bir örnektir ve doğrulama turlarında kullanılabilir.
+`app/src/desktopTest/resources/sample-import.xlsx` in the repository is a small,
+anonymised example in this layout, and can be used for verification rounds.
 
-## İçe aktardıktan sonra
+## After importing
 
-1. **İçe/Dışa Aktarma** ekranında taslağı açın.
-2. Her ham hücrede görev olacak kısmı seçin; havuzu, adedi ve rengi belirleyin.
-3. **Onayla** deyin. Onaydan hemen önce uygulama kendiliğinden yedek alır.
-4. Sonuç beklediğiniz gibi değilse **Onaylanmış içe aktarmalar** listesinden
-   **Geri al** ile tamamını geri alabilirsiniz (koşulları kullanım kılavuzundadır).
+1. Open the draft on the **İçe/Dışa Aktarma** (Import/Export) screen.
+2. In each raw cell, select the part that becomes a task; choose its pool,
+   quantity and colour.
+3. Choose **Onayla** (confirm). Right before confirming, the application takes a
+   backup by itself.
+4. If the result is not what you expected, you can take the whole import back
+   with **Geri al** from the **Onaylanmış içe aktarmalar** (confirmed imports)
+   list (the conditions are in the user guide).

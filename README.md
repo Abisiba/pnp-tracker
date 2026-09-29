@@ -1,56 +1,87 @@
-# PnP Üretim Takipçisi
+# PnP Üretim Takipçisi (PnP Production Tracker)
 
-PnP masa oyunları için 3D baskı, kart, mukavva ve özel üretim işlerini takip eden,
-tamamen yerel ve çevrimdışı çalışan Linux masaüstü uygulaması.
+A desktop application that keeps track of 3D printing, card, board and special
+production work for print-and-play (PnP) board games. It runs entirely on your
+own computer and works offline.
 
-Ürün kapsamı, veri modeli ve geliştirme fazları için `PLAN.md` dosyasına bakın.
+The application's interface is in Turkish. The product scope, data model and
+development phases are in `PLAN.md` (also in Turkish).
 
-## Ne yapar?
+## What does it do?
 
-Bir PnP oyununun basılacak, laminasyonlanacak ve mukavvaya kaplanacak işlerini
-oyun oyun, hücre hücre takip eder: elinizdeki Excel veya CSV listesini içe
-aktarır, ham metinden onayınızla görev üretir, ilerlemeyi ve eksik parçaları
-kaydeder, sonucu CSV'ye aktarır. Veri yalnız sizin bilgisayarınızda durur;
-uygulama ağa çıkmaz, hesap istemez.
+It follows the work a PnP game needs — what to print, what to laminate, what to
+glue onto board — game by game and cell by cell: it imports the Excel or CSV
+list you already have, turns raw text into tasks only with your confirmation,
+records progress and missing parts, and exports the result to CSV. Your data
+stays on your computer; the application never goes online and asks for no
+account.
 
-## Desteklenen platform
+## Supported platforms
 
-Linux, `x86_64`, glibc. Arayüz X11 kullanır (Wayland oturumunda XWayland
-gerekir). Windows ve macOS sürümü yoktur.
+- **Linux**: `x86_64`, glibc. The interface uses X11 (a Wayland session needs
+  XWayland). Built and checked in CI, and used day to day on Garuda Linux.
+- **Windows**: an `x86_64` installer is built and checked automatically on
+  GitHub's Windows runner for every release. It **has not yet been tried by hand
+  on a real Windows 11 installation**; treat it as a preview until that has been
+  done.
+- **macOS**: there is no macOS version.
 
-## Hazır paketler
+## Downloads
 
-| Tür | Dosya | Kime |
+Every release on the [Releases](https://github.com/Abisiba/pnp-tracker/releases) page carries:
+
+| Kind | File | For |
 | --- | --- | --- |
-| Taşınabilir arşiv | `pnp-tracker-<sürüm>-linux-<mimari>.tar.gz` | her Linux dağıtımı; açıp çalıştırın |
-| Arch paketi | `pnp-tracker-<sürüm>-1-<mimari>.pkg.tar.zst` | Garuda ve Arch; `pacman -U` |
+| Windows installer | `pnp-tracker-<version>-windows-x86_64.exe` | 64-bit Windows; run it to install (not yet tried on a real Windows 11 machine) |
+| Portable archive | `pnp-tracker-<version>-linux-x86_64.tar.gz` | any Linux distribution; unpack and run |
+| Arch package | `pnp-tracker-<version>-1-x86_64.pkg.tar.zst` | Garuda and Arch; `pacman -U` |
+| Checksums | `SHA256SUMS` | verifying every file above |
 
-İkisi de Java kurulumu gerektirmez: çalışma ortamı paketin içindedir. Paketler
-imzasız dağıtılır; doğrulanmaları yayımlanan SHA-256 özetiyledir.
+None of them needs Java to be installed: the Java runtime is inside each
+package. The *Source code (zip)* and *Source code (tar.gz)* links GitHub adds to
+every release are the repository's source code, not an installer.
 
-## Belgeler
+The packages are **not signed**. Verify a download against `SHA256SUMS` from the
+same release:
 
-- [Kullanım kılavuzu](docs/kullanim-kilavuzu.md) — uygulamayı ilk kez kullananlar için.
-- [Örnek içe aktarma belgesi](docs/ornek-ice-aktarma.md) — XLSX ve CSV biçimleri,
-  örnek dosya ve hatalı satır örnekleri.
-- [Temiz Garuda doğrulaması](packaging/verify/README.md) — paketin temiz bir sanal
-  makinede kurulum, güncelleme ve kaldırma turu.
-- [Katkı yönergeleri](CONTRIBUTING.md) — geliştirme ortamı, test komutları,
-  geçici XDG kuralı ve commit beklentileri.
+```bash
+sha256sum -c SHA256SUMS --ignore-missing
+```
 
-## Gereksinimler
+On Windows, compare the output of this PowerShell command with the `.exe` line
+in `SHA256SUMS`:
+
+```powershell
+Get-FileHash -Algorithm SHA256 .\pnp-tracker-<version>-windows-x86_64.exe
+```
+
+Because the installer is unsigned, Windows SmartScreen may warn that it comes
+from an unknown publisher.
+
+## Documentation
+
+- [User guide](docs/kullanim-kilavuzu.md) — for someone using the application
+  for the first time, including installing on Linux, Arch and Windows.
+- [Import guide](docs/ornek-ice-aktarma.md) — the XLSX and CSV formats, an
+  example file and examples of rejected rows.
+- [Clean Garuda verification](packaging/verify/README.md) — installing,
+  updating and removing the package on a clean virtual machine (in Turkish).
+- [Contributing](CONTRIBUTING.md) — development setup, test commands, the
+  temporary XDG rule and commit expectations (in Turkish).
+
+## Requirements for building
 
 - JDK 21
 
-## Kaynaktan doğrulama
+## Checking from source
 
 ```bash
 ./gradlew run
 ./gradlew clean check
 ```
 
-`check`, ktlint denetimini ve bütün testleri çalıştırır. Bellek sınırlı bir
-makinede ve sürekli tümleştirmede koşan biçimi:
+`check` runs ktlint and every test. The form that runs on a machine with little
+memory, and in continuous integration:
 
 ```bash
 ./gradlew clean check --rerun-tasks --no-daemon --no-parallel --max-workers=1 \
@@ -58,51 +89,73 @@ makinede ve sürekli tümleştirmede koşan biçimi:
   -Dorg.gradle.jvmargs="-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8"
 ```
 
-## Linux paketi
+## Linux package
 
-Sürüm tek yerde, `app/build.gradle.kts` içindeki `version` değerindedir; paket,
-arşiv ve uygulama sürümü oradan türetilir.
-
-```bash
-./gradlew :app:packageLinuxArchive   # app/build/linux/dist/pnp-tracker-<sürüm>-linux-<mimari>.tar.gz
-./gradlew :app:verifyLinuxPackage    # arşivi denetler ve depo dışından çalıştırır (ekran gerekir)
-```
-
-Arşiv, Java kurulumu gerektirmeyen kendi başına bir uygulama dizinidir
-(`pnp-tracker-<sürüm>/bin/pnp-tracker`); içinde yalnız gereken modülleri taşıyan
-bir Java çalışma ortamı bulunur.
-
-## Garuda/Arch paketi
+The version lives in one place, the `version` value in `app/build.gradle.kts`;
+the package, the archive and the application's version all come from it.
 
 ```bash
-./gradlew :app:packageArch           # app/build/arch/dist/pnp-tracker-<sürüm>-1-<mimari>.pkg.tar.zst
-./gradlew :app:verifyArchPackage     # paketi geçici bir köke açar, denetler ve çalıştırır (ekran gerekir)
-sudo pacman -U app/build/arch/dist/pnp-tracker-<sürüm>-1-<mimari>.pkg.tar.zst
+./gradlew :app:packageLinuxArchive   # app/build/linux/dist/pnp-tracker-<version>-linux-<arch>.tar.gz
+./gradlew :app:verifyLinuxPackage    # checks the archive and runs it from outside the repository (needs a display)
 ```
 
-Paket, yukarıdaki arşivi `packaging/arch/PKGBUILD` ile `makepkg`'e verir; uygulama
-yeniden derlenmez. Uygulama `/opt/pnp-tracker` altına, başlatıcı
-`/usr/bin/pnp-tracker`, masaüstü girdisi ve simge freedesktop konumlarına kurulur.
-Sistemde Java gerekmez; veriler yine kullanıcının XDG dizinlerindedir.
+The archive is a self-contained application folder that needs no Java
+installation (`pnp-tracker-<version>/bin/pnp-tracker`); it carries a Java
+runtime with only the modules it needs.
 
-## Sürekli tümleştirme
+## Garuda/Arch package
 
-Her pull request ve `main`'e her push, `.github/workflows/ci.yml` ile yukarıdaki
-bellek sınırlı `check` komutunu koşar; izinler salt okunurdur ve testler geçici
-XDG dizinleriyle çalışır. `v<sürüm>` biçimindeki bir etiket
-`.github/workflows/release.yml` ile önce bütün testleri, sonra iki paketi ve
-`SHA256SUMS` dosyasını üretir. Paketler imzasız yayımlanır; doğrulama
-`sha256sum -c SHA256SUMS` ile yapılır.
+```bash
+./gradlew :app:packageArch           # app/build/arch/dist/pnp-tracker-<version>-1-<arch>.pkg.tar.zst
+./gradlew :app:verifyArchPackage     # unpacks the package into a temporary root, checks it and runs it (needs a display)
+sudo pacman -U app/build/arch/dist/pnp-tracker-<version>-1-<arch>.pkg.tar.zst
+```
 
-## Geliştirme durumu
+The package hands the archive above to `makepkg` through
+`packaging/arch/PKGBUILD`; the application is not built again. It is installed
+under `/opt/pnp-tracker`, with the launcher at `/usr/bin/pnp-tracker` and the
+desktop entry and icon in the freedesktop locations. No Java is needed on the
+system; the data still lives in the user's XDG folders.
 
-Uygulama kullanılabilir durumdadır: veri modeli, içe aktarma, görev takibi, yedekleme/geri yükleme ve paketleme tamamdır. Temiz bir
-Garuda ortamındaki kurulum turu (`packaging/verify/`) henüz koşulmamıştır ve
-sürekli tümleştirme yapılandırması gerçek bir depoda henüz çalıştırılmamıştır. Sıradaki işler `PLAN.md` `18.` bölümündedir.
+## Windows installer
 
-## Lisans
+The installer can only be built on Windows:
 
-Uygulamanın kendi kaynak kodu MIT lisanslıdır — [`LICENSE`](LICENSE). Paketle
-birlikte gelen Java çalışma ortamı ve üçüncü taraf kütüphaneler kendi
-lisanslarıyla dağıtılır; hangi bileşenin geldiği paketin içindeki
-`THIRD_PARTY_NOTICES.md` dosyasında yazar.
+```powershell
+.\gradlew.bat :app:packageWindows         # app\build\windows\dist\pnp-tracker-<version>-windows-x86_64.exe
+.\gradlew.bat :app:verifyWindowsPackage   # builds it and checks what it carries
+```
+
+It installs per user, lets you choose the folder, and adds a Start menu entry
+and a desktop shortcut. Data lives under `%LOCALAPPDATA%\pnp-tracker` and
+`%APPDATA%\pnp-tracker`, never in the install folder. The installer is not
+byte-for-byte reproducible between builds, so compare it only with the checksum
+published beside it.
+
+## Continuous integration and releases
+
+Every pull request and every push to `main` runs the memory-limited `check`
+above through `.github/workflows/ci.yml`, on Linux and on Windows; permissions
+are read-only and the tests use temporary data folders. The Windows job also
+builds the installer and keeps it as a workflow artifact.
+
+A tag of the form `v<version>` runs `.github/workflows/release.yml`: first every
+test, then the Linux archive and the Arch package, then the Windows installer on
+GitHub's Windows runner, then one `SHA256SUMS` covering all of them, and finally
+the GitHub release. The packages are published unsigned; they are verified with
+`sha256sum -c SHA256SUMS`.
+
+## Status
+
+The application is usable: the data model, import, task tracking,
+backup/restore and packaging are complete. Still to do: a hand-run installation
+round on a real Windows 11 machine, and the clean Garuda installation round in
+`packaging/verify/`. The next items are in section `18.` of `PLAN.md`.
+
+## Licence
+
+The application's own source code is under the MIT licence —
+[`LICENSE`](LICENSE). The Java runtime and the third-party libraries shipped
+with the packages are distributed under their own licences; which components
+are included is written in the `THIRD_PARTY_NOTICES.md` file inside each
+package.
