@@ -31,6 +31,7 @@ import kotlin.test.fail
 class TaskFromEnterTest {
     private fun ComposeSceneHarness.settle(
         what: String,
+        seen: () -> Any? = { null },
         done: () -> Boolean,
     ) {
         repeat(200) {
@@ -41,7 +42,9 @@ class TaskFromEnterTest {
             }
             Thread.sleep(10)
         }
-        fail("never happened: $what")
+        // What stood in the way, said with the failure, so a refusal seen only
+        // on another machine names itself rather than leaving a bare timeout.
+        fail("never happened: $what" + (seen()?.let { " — $it" } ?: ""))
     }
 
     private fun open(
@@ -127,7 +130,15 @@ class TaskFromEnterTest {
                 stack.table.editTaskNotes(0, NOTE)
                 screen.render()
                 assertTrue(screen.click("Görevi kaydet"), "there is no save in the window")
-                screen.settle("the task is made") { stack.table.state.work == null && tasksIn(stack).isNotEmpty() }
+                screen.settle(
+                    "the task is made",
+                    seen = {
+                        val composer = (stack.table.state.work as? CellWork.MakingTask)?.composer
+                        "work: ${stack.table.state.work?.let { it::class.simpleName }}, canSave: ${composer?.canSave}, " +
+                            "isSaving: ${composer?.isSaving}, failure: ${composer?.failure}, " +
+                            "stranded: ${stack.table.state.strandedColorIds}, tasks: ${tasksIn(stack).size}"
+                    },
+                ) { stack.table.state.work == null && tasksIn(stack).isNotEmpty() }
 
                 val task = tasksIn(stack).single()
                 assertEquals("Ejderha", task.name)
