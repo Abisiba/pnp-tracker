@@ -254,14 +254,18 @@ class HistoryScreenLayoutTest {
     // ---------------------------------------------------------- what it is not
 
     @Test
-    fun `nothing on this screen can write`() {
+    fun `nothing on this screen can write a history line`() {
         // The section is handed a source that only observes, and neither the
         // screen nor the controller reaches past it. A save here would make the
         // history a second record, free to disagree with what happened.
-        listOf("insert", "update", "delete", "softDelete", "Store(", "Dao(").forEach { verb ->
+        listOf(".insert", ".update", ".delete", ".softDelete", "Store(", "Dao(").forEach { verb ->
             assertFalse(verb in controller, "the history controller is doing something with `$verb`")
             assertFalse(verb in screen, "the history screen is doing something with `$verb`")
         }
+        // The one thing done from here is `Geri al` on a deleted game, and it goes
+        // through the game store's own transaction, which appends its own line.
+        assertEquals(1, Regex("games\\.[a-zA-Z]+\\(").findAll(controller).count(), "the controller does more than restore a game")
+        assertTrue("games.restoreGame(" in controller)
         assertFalse("Insert" in dao, "the history DAO has grown a way to write")
         assertFalse("UPDATE history_events" in dao)
         assertFalse("DELETE FROM history_events" in dao)

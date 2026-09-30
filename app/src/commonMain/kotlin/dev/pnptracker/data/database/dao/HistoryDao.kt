@@ -73,6 +73,7 @@ interface HistoryDao {
                history_events.occurred_at AS occurred_at,
                games.id AS game_id,
                games.name AS game_name,
+               games.deleted_at IS NOT NULL AS game_is_deleted,
                tasks.id AS task_id,
                tasks.name AS task_name,
                history_events.stage AS stage,

@@ -86,6 +86,30 @@ When a game is done you can mark it with **Tamamlandı olarak işaretle** (mark 
 finished) on its row. This is your decision alone: it changes no task and no
 cell.
 
+## Deleting a game and bringing it back
+
+Each game's number at the start of its row is also its handle. Drag it up or
+down to move the game; a short click on it (or Enter or Space when it has the
+keyboard) opens the game's menu instead. A small shake of the mouse while
+clicking does not start a move. In the A–Z order the number cannot be dragged,
+but it still opens the menu.
+
+Choose **Oyunu sil** (delete game) in the menu. The application asks
+“*Harmonies* silinsin mi?” with the game's name; **Vazgeç** (cancel), Escape or
+clicking elsewhere changes nothing. **Evet, sil** removes the game from the table
+and from the pools, and the history records **Oyun silindi**. Nothing is erased:
+the game's cells and tasks are kept as they were.
+
+To bring it back, open **Ayarlar → Geçmiş** and press **Geri al** (undo) under
+the game's **Oyun silindi** line. The same game comes back — same cells, same
+tasks — and the history records **Oyun geri alındı**. If a game has been deleted
+more than once, only its latest deletion offers **Geri al**. If another game has
+since been given the same name, the restored game keeps its name anyway (game
+names do not have to be unique) and the history page tells you so; double-click
+either name in the table to rename one of them. A game comes back to its old
+place in your order, unless you have moved games since, in which case it comes
+back at the end.
+
 ## Cells and tasks
 
 Every game has six columns (cells): **3D Baskı**, **Kart**, **Mukavva**,

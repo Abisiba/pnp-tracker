@@ -37,6 +37,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.pnptracker.domain.games.GameSetupFailure
 import dev.pnptracker.domain.history.HistoryChange
 import dev.pnptracker.domain.history.HistoryEntry
 import dev.pnptracker.domain.history.HistoryGame
@@ -67,12 +68,12 @@ private const val PAGE_OVERLAP = 0.9f
 /**
  * What has happened, newest first (PLAN 12.15).
  *
- * A reading and nothing else. There is no control on this screen that changes a
- * record, and there is nothing behind one either: the section is given a source
- * that can only observe, so a screen that wanted to write would have nothing to
- * write with. PLAN 5.12 makes the history something appended by the transaction
- * that caused it, and a screen that could edit it would make it a second,
- * disagreeing record.
+ * A reading of a record nobody edits. There is no control on this screen that
+ * changes a line: the lines come from a source that can only observe, and PLAN
+ * 5.12 makes the history something appended by the transaction that caused it.
+ * The one control that does anything is `Geri al` on a deleted game's line, and
+ * what it does is bring the game back — a new act, written with a line of its
+ * own — rather than touch the line it sits on.
  *
  * A column down the page rather than a table. Every line is one sentence about
  * one thing, and a sentence reads better on a line of its own than in a cell.
@@ -97,6 +98,7 @@ fun HistoryScreen(controller: HistoryController) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         HistoryToolbar(controller, state)
+        state.restoreNotice?.let { notice -> RestoreNoticeLine(notice, controller::dismissRestoreNotice) }
         when (val content = state.content) {
             HistoryContentState.Loading -> Message(stringResource(Strings.History.loading))
             HistoryContentState.Failed -> Message(stringResource(Strings.History.error))
@@ -113,7 +115,7 @@ fun HistoryScreen(controller: HistoryController) {
                         )
 
                     content.log.isEmpty -> Message(stringResource(Strings.History.empty))
-                    else -> HistoryList(content.shown)
+                    else -> HistoryList(content.shown, state, controller)
                 }
         }
     }
@@ -277,7 +279,11 @@ private fun GameChoice(
  * keyboard is.
  */
 @Composable
-private fun HistoryList(entries: List<HistoryEntry>) {
+private fun HistoryList(
+    entries: List<HistoryEntry>,
+    state: HistoryScreenState,
+    controller: HistoryController,
+) {
     val label = stringResource(Strings.History.listLabel)
     val listState = rememberLazyListState()
     LazyColumn(
@@ -297,6 +303,7 @@ private fun HistoryList(entries: List<HistoryEntry>) {
             key = { _, entry -> entry.id.toString() },
         ) { index, entry ->
             HistoryRow(entry)
+            if (state.canRestore(entry)) RestoreGameButton(entry, state, controller)
             if (index < entries.lastIndex) HorizontalDivider()
         }
     }
@@ -358,6 +365,75 @@ private fun HistoryRow(entry: HistoryEntry) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.clearAndSetSemantics {},
             )
+        }
+    }
+}
+
+/**
+ * `Geri al` under a deleted game's line: brings the game back as it was.
+ *
+ * Its own control after the line rather than part of it, so the line is still
+ * read out as one sentence and the button as one action — and so Tab reaches it.
+ */
+@Composable
+private fun RestoreGameButton(
+    entry: HistoryEntry,
+    state: HistoryScreenState,
+    controller: HistoryController,
+) {
+    val scope = rememberCoroutineScope()
+    val gameName = entry.gameName ?: stringResource(Strings.History.gameUnknown)
+    val label = stringResource(Strings.History.restoreGame)
+    val description = stringResource(Strings.History.restoreGameDescription, gameName)
+    TextButton(
+        onClick = { scope.launch { controller.restoreGame(entry) } },
+        enabled = state.restoring == null,
+        modifier = Modifier.focusOutline(ChipShape).semantics { contentDescription = description },
+    ) {
+        Text(text = label, style = MaterialTheme.typography.labelLarge)
+    }
+}
+
+/**
+ * How the last `Geri al` went, said under the toolbar until it is put away.
+ *
+ * A game that comes back to a table where another game already has its name is
+ * said plainly: names are not unique (PLAN 12.3), so nothing was refused or
+ * renamed, and the user is the one to decide whether the two need telling apart.
+ */
+@Composable
+private fun RestoreNoticeLine(
+    notice: GameRestoreNotice,
+    onDismiss: () -> Unit,
+) {
+    val text =
+        when (notice) {
+            is GameRestoreNotice.Restored ->
+                if (notice.namesakes > 0) {
+                    stringResource(Strings.History.restoredGameNamesake, notice.gameName)
+                } else {
+                    stringResource(Strings.History.restoredGame, notice.gameName)
+                }
+
+            is GameRestoreNotice.Failed ->
+                stringResource(
+                    if (notice.failure == GameSetupFailure.GAME_NOT_AVAILABLE) {
+                        Strings.History.restoreGameGone
+                    } else {
+                        Strings.History.restoreGameFailed
+                    },
+                )
+        }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (notice is GameRestoreNotice.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        val dismiss = stringResource(Strings.History.restoreNoticeDismiss)
+        TextButton(onClick = onDismiss, modifier = Modifier.focusOutline(ChipShape).semantics { contentDescription = dismiss }) {
+            Text(text = dismiss, style = MaterialTheme.typography.labelLarge)
         }
     }
 }

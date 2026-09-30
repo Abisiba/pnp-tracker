@@ -17,6 +17,7 @@ import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.gestures.verticalDrag
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -107,6 +108,7 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -1613,6 +1615,7 @@ private fun GameNameCell(
             GameOrderHandle(
                 row = row,
                 number = state.numbers[row.gameId],
+                state = state,
                 controller = controller,
                 drag = drag,
             )
@@ -1773,114 +1776,267 @@ private class RowDrag(
 }
 
 /**
- * A game's number, and the handle the game is moved by (PLAN 12.18).
+ * A game's number, the handle the game is moved by (PLAN 12.18), and its menu.
  *
  * The number is the game's place in the user's order and it is drawn in both
  * layouts — reading the table alphabetically renumbers nothing.
  *
  * In the user's own order the number is also the handle. The pointer takes the row
  * by it and carries it up or down; letting go over another row puts the game where
- * that row was. The keyboard reaches it with Tab and moves the game one place with
- * the up and down arrows. In the alphabetical layout it is only a number: a place
- * there is the name's, so there is nothing to move.
+ * that row was. A carry starts only once the pointer has gone further than the
+ * platform's touch slop, so a hand that shakes a little on a click moves nothing.
+ * A click that stays put — pressed and let go without leaving the slop — opens the
+ * game's menu instead. The keyboard reaches it with Tab, moves the game one place
+ * with the up and down arrows, and opens the menu with Enter or Space.
+ *
+ * In the alphabetical layout a place is the name's, so there is nothing to move:
+ * the number is only a number, but it still opens the menu the same ways.
  */
 @Composable
 private fun GameOrderHandle(
     row: GameTableRow,
     number: Int?,
+    state: GameTableScreenState,
     controller: GameTableController,
     drag: RowDrag,
 ) {
     val scope = rememberCoroutineScope()
     val label = number?.toString().orEmpty()
-    if (!controller.canReorder) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.End,
-            modifier = Modifier.width(OrderNumberWidth).clearAndSetSemantics { },
-        )
-        return
-    }
-    val description = stringResource(Strings.Table.moveGameDescription, label, row.gameName)
+    val canMove = controller.canReorder
+    val description =
+        stringResource(if (canMove) Strings.Table.moveGameDescription else Strings.Table.gameMenuDescription, label, row.gameName)
     // The handle's own place in the window, to put the pointer in the window.
     var handle by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier =
-            Modifier
-                .width(OrderNumberWidth)
-                .heightIn(min = OrderHandleHeight)
-                .focusOutline(ComposerShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = HANDLE_GROUND_ALPHA), ComposerShape)
-                .pointerHoverIcon(PointerIcon.Hand)
-                .semantics { contentDescription = description }
-                .focusable()
-                .onPreviewKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    when (event.key) {
-                        Key.DirectionUp -> {
-                            scope.launch { controller.moveGameUp(row.gameId) }
+    val openMenu = { controller.openGameMenu(row.gameId) }
+    Box {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier =
+                Modifier
+                    .width(OrderNumberWidth)
+                    .heightIn(min = OrderHandleHeight)
+                    .focusOutline(ComposerShape)
+                    .then(
+                        if (canMove) {
+                            Modifier.background(
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = HANDLE_GROUND_ALPHA),
+                                ComposerShape,
+                            )
+                        } else {
+                            Modifier
+                        },
+                    ).pointerHoverIcon(PointerIcon.Hand)
+                    .semantics {
+                        contentDescription = description
+                        onClick {
+                            openMenu()
                             true
                         }
+                    }.focusable()
+                    .onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        when (event.key) {
+                            Key.DirectionUp -> {
+                                if (canMove) scope.launch { controller.moveGameUp(row.gameId) }
+                                canMove
+                            }
 
-                        Key.DirectionDown -> {
-                            scope.launch { controller.moveGameDown(row.gameId) }
-                            true
+                            Key.DirectionDown -> {
+                                if (canMove) scope.launch { controller.moveGameDown(row.gameId) }
+                                canMove
+                            }
+
+                            Key.Enter, Key.NumPadEnter, Key.Spacebar -> {
+                                openMenu()
+                                true
+                            }
+
+                            else -> false
                         }
-
-                        else -> false
-                    }
-                }.onGloballyPositioned { handle = it }
-                .pointerInput(row.gameId) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown()
-                        val inWindow = { at: Offset -> handle?.localToRoot(at)?.y }
-                        val downY = inWindow(down.position) ?: return@awaitEachGesture
-                        val moved =
-                            awaitVerticalTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
-                                ?: return@awaitEachGesture
-                        drag.start(row.gameId, downY)
-                        inWindow(moved.position)?.let(drag::pointAt)
-                        val finished =
-                            verticalDrag(moved.id) { change ->
-                                change.consume()
-                                inWindow(change.position)?.let(drag::pointAt)
-                                // The others make way as it goes, so the order a
-                                // drop will make is on the screen before it is made.
-                                drag.target()?.let { target ->
+                    }.onGloballyPositioned { handle = it }
+                    .pointerInput(row.gameId, canMove) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown()
+                            val inWindow = { at: Offset -> handle?.localToRoot(at)?.y }
+                            val downY = inWindow(down.position) ?: return@awaitEachGesture
+                            val moved =
+                                if (canMove) {
+                                    awaitVerticalTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
+                                } else {
+                                    null
+                                }
+                            if (moved == null) {
+                                // Not a carry. A press let go where it went down is
+                                // a click, and a click opens the menu; one that
+                                // wandered off sideways, or was taken by something
+                                // else, is nothing at all.
+                                val up =
+                                    if (canMove) {
+                                        currentEvent.changes.firstOrNull { it.id == down.id }?.takeIf { it.changedToUp() }
+                                    } else {
+                                        waitForUpOrCancellation()
+                                    }
+                                if (up != null &&
+                                    !up.isConsumed &&
+                                    (up.position - down.position).getDistance() <= viewConfiguration.touchSlop
+                                ) {
+                                    up.consume()
+                                    openMenu()
+                                }
+                                return@awaitEachGesture
+                            }
+                            drag.start(row.gameId, downY)
+                            inWindow(moved.position)?.let(drag::pointAt)
+                            val finished =
+                                verticalDrag(moved.id) { change ->
+                                    change.consume()
+                                    inWindow(change.position)?.let(drag::pointAt)
+                                    // The others make way as it goes, so the order a
+                                    // drop will make is on the screen before it is made.
+                                    drag.target()?.let { target ->
+                                        drag.holdTheList()
+                                        controller.carryGame(row.gameId, target)
+                                    }
+                                }
+                            if (finished) {
+                                drag.dropTarget()?.let { target ->
                                     drag.holdTheList()
                                     controller.carryGame(row.gameId, target)
                                 }
+                                drag.finish()
+                                scope.launch { controller.dropCarriedGame() }
+                            } else {
+                                drag.finish()
+                                controller.cancelCarriedGame()
                             }
-                        if (finished) {
-                            drag.dropTarget()?.let { target ->
-                                drag.holdTheList()
-                                controller.carryGame(row.gameId, target)
-                            }
-                            drag.finish()
-                            scope.launch { controller.dropCarriedGame() }
-                        } else {
-                            drag.finish()
-                            controller.cancelCarriedGame()
                         }
-                    }
-                },
+                    },
+        ) {
+            if (canMove) {
+                Text(
+                    text = DRAG_MARK,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 4.dp).clearAndSetSemantics { },
+                )
+            }
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (canMove) FontWeight.SemiBold else null,
+                color = if (canMove) Color.Unspecified else MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.End,
+                modifier = Modifier.weight(1f).padding(end = 6.dp).clearAndSetSemantics { },
+            )
+        }
+        GameMenu(row = row, state = state, controller = controller)
+        state.confirmingDeletionOf(row.gameId)?.let { GameDeletionPopover(confirming = it, controller = controller) }
+    }
+}
+
+/** The game's menu: for now, the one thing done to a whole game that has no other home. */
+@Composable
+private fun GameMenu(
+    row: GameTableRow,
+    state: GameTableScreenState,
+    controller: GameTableController,
+) {
+    val deleteLabel = stringResource(Strings.Table.deleteGame)
+    DropdownMenu(expanded = state.gameMenuOf(row.gameId) != null, onDismissRequest = controller::closeGameMenu) {
+        DropdownMenuItem(
+            text = { Text(deleteLabel, color = MaterialTheme.colorScheme.error) },
+            onClick = controller::beginGameDeletion,
+            modifier = Modifier.semantics { contentDescription = deleteLabel },
+        )
+    }
+}
+
+/**
+ * `Oyunu sil`'s question, hanging off the handle it was asked from.
+ *
+ * The game is named, and what deleting does is said: it leaves the table and the
+ * pools, nothing under it is erased, and the history can bring it back.
+ * `Vazgeç`, Escape and clicking away all close it and write nothing.
+ */
+@Composable
+private fun GameDeletionPopover(
+    confirming: RowWork.ConfirmingGameDeletion,
+    controller: GameTableController,
+) {
+    val gap = with(LocalDensity.current) { PopoverGap.roundToPx() }
+    val provider = remember(gap) { AnchoredAboveWord(gap) }
+    val focus = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(confirming.gameId) { runCatching { focus.requestFocus() } }
+    Popup(
+        popupPositionProvider = provider,
+        onDismissRequest = controller::cancelGameDeletion,
+        properties = PopupProperties(focusable = true),
     ) {
-        Text(
-            text = DRAG_MARK,
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 4.dp).clearAndSetSemantics { },
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.End,
-            modifier = Modifier.weight(1f).padding(end = 6.dp).clearAndSetSemantics { },
-        )
+        Surface(
+            shape = ComposerShape,
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            modifier =
+                Modifier
+                    .widthIn(max = PopoverWidth)
+                    .focusRequester(focus)
+                    .focusable()
+                    .onPreviewKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
+                            controller.cancelGameDeletion()
+                            true
+                        } else {
+                            false
+                        }
+                    },
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = stringResource(Strings.Table.deleteGameQuestion, confirming.gameName),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Text(
+                    text = stringResource(Strings.Table.deleteGameExplanation),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                val yes = stringResource(Strings.Table.deleteGameYes)
+                val no = stringResource(Strings.Table.deleteGameNo)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = { scope.launch { controller.confirmGameDeletion() } },
+                        enabled = !confirming.isSaving,
+                        modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = yes },
+                    ) {
+                        Text(text = yes, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+                    }
+                    TextButton(
+                        onClick = controller::cancelGameDeletion,
+                        enabled = !confirming.isSaving,
+                        modifier = Modifier.focusOutline(ComposerShape).semantics { contentDescription = no },
+                    ) {
+                        Text(text = no, style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+                confirming.failure?.let { failure ->
+                    NoteLine(
+                        text =
+                            stringResource(
+                                if (failure == GameSetupFailure.GAME_NOT_AVAILABLE) {
+                                    Strings.Table.deleteGameGone
+                                } else {
+                                    Strings.Table.deleteGameFailed
+                                },
+                            ),
+                        isProblem = true,
+                    )
+                }
+            }
+        }
     }
 }
 

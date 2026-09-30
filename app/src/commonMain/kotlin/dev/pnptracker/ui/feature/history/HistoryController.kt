@@ -8,6 +8,10 @@ import dev.pnptracker.domain.diagnostics.DiagnosticArea
 import dev.pnptracker.domain.diagnostics.Diagnostics
 import dev.pnptracker.domain.diagnostics.readShownAsFailed
 import dev.pnptracker.domain.diagnostics.recordSafely
+import dev.pnptracker.domain.games.GameRestoreOutcome
+import dev.pnptracker.domain.games.GameRestoring
+import dev.pnptracker.domain.games.GameSetupException
+import dev.pnptracker.domain.history.HistoryEntry
 import dev.pnptracker.domain.history.HistoryFilter
 import dev.pnptracker.domain.history.HistoryLog
 import dev.pnptracker.domain.history.HistoryPeriod
@@ -19,10 +23,11 @@ import kotlinx.coroutines.flow.collect
 /**
  * The history section: what has happened, and which part of it is being read.
  *
- * Read only, all the way down. There is no save, no retry that writes and no
- * action that touches a record — the screen's whole job is to show what was
- * recorded, and PLAN 5.12 makes that record something appended by the
- * transaction that caused it and never edited afterwards.
+ * No line is ever changed from here — PLAN 5.12 makes the record something
+ * appended by the transaction that caused it and never edited afterwards. The
+ * one thing this section does besides reading is bring a deleted game back
+ * ([restoreGame]), and that is a new act written by its own transaction with a
+ * line of its own, not an edit of the line it was asked from.
  *
  * The reading is a stream, so a task finished in the pool while this section is
  * open appears here without anything having to remember to reload. The filters
@@ -33,6 +38,8 @@ class HistoryController(
     private val history: HistorySource,
     private val clock: kotlin.time.Clock = kotlin.time.Clock.System,
     private val diagnostics: Diagnostics = Diagnostics.None,
+    /** What brings a deleted game back; a history with none offers nothing to take back. */
+    private val games: GameRestoring = GameRestoring.Unavailable,
 ) {
     var state: HistoryScreenState by mutableStateOf(HistoryScreenState())
         private set
@@ -54,6 +61,37 @@ class HistoryController(
             diagnostics.recordSafely { readShownAsFailed(DiagnosticArea.HISTORY, failure) }
             state = state.copy(content = HistoryContentState.Failed)
         }
+    }
+
+    /**
+     * Brings back the game [entry] says was deleted, as the same game (PLAN 12.15).
+     *
+     * Only from a line that can still be taken back, and once: a second press
+     * arriving while the first is in flight finds it restoring and does nothing.
+     * The line that says so arrives through the reading, like every other one;
+     * what is said here is only how it went, and whether another game in the
+     * table now has the same name.
+     */
+    suspend fun restoreGame(entry: HistoryEntry) {
+        if (state.restoring != null || !state.canRestore(entry)) return
+        val gameId = entry.gameId ?: return
+        state = state.copy(restoring = gameId, restoreNotice = null)
+        val notice =
+            try {
+                when (val outcome = games.restoreGame(gameId)) {
+                    is GameRestoreOutcome.Restored -> GameRestoreNotice.Restored(outcome.name, outcome.namesakes)
+                    // Brought back already, from somewhere else: nothing to say.
+                    GameRestoreOutcome.AlreadyThere -> null
+                }
+            } catch (refusal: GameSetupException) {
+                GameRestoreNotice.Failed(refusal.failure)
+            }
+        state = state.copy(restoring = null, restoreNotice = notice)
+    }
+
+    /** Clears what the last `Geri al` said. */
+    fun dismissRestoreNotice() {
+        state = state.copy(restoreNotice = null)
     }
 
     /** Shows one game's lines, or every game's when [gameId] is null. */
