@@ -8,6 +8,7 @@ import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.platform.settings.DesktopGameOrderStore
 import dev.pnptracker.ui.ComposeSceneHarness
 import dev.pnptracker.ui.RealStack
+import dev.pnptracker.ui.WatchedGameOrderStore
 import dev.pnptracker.ui.contentDescriptions
 import dev.pnptracker.ui.reads
 import kotlinx.coroutines.runBlocking
@@ -66,8 +67,12 @@ class GameOrderScreenTest {
     /** What the table shows, top to bottom, as `number name`. */
     private fun shown(table: GameTableController) = rowsOf(table).map { "${table.state.numbers[it.gameId]} ${it.gameName}" }
 
+    /** The store of the table opened last, watched so a test waits on its writes and not on the file. */
+    private lateinit var orderStore: WatchedGameOrderStore
+
     private fun open(stack: RealStack): Pair<ComposeSceneHarness, GameTableController> {
-        val table = stack.tableControllerWith(order = DesktopGameOrderStore(orderFile))
+        orderStore = WatchedGameOrderStore(DesktopGameOrderStore(orderFile))
+        val table = stack.tableControllerWith(order = orderStore)
         val screen = ComposeSceneHarness(width = 1500, height = 900) { GameTableScreen(table) }
         screen.settle("the table is read") { table.state.rows !is GameTableRowsState.Loading }
         return screen to table
@@ -219,7 +224,10 @@ class GameOrderScreenTest {
                 assertTrue(onDisk.contentEquals(Files.readAllBytes(orderFile)), "the order was written before the row was let go")
 
                 screen.releaseAt(Offset(handle.center.x, onto.center.y - 10f))
-                screen.settle("the order is on disk") { !onDisk.contentEquals(Files.readAllBytes(orderFile)) }
+                // Waited on through the store, then read once: reading the file
+                // while it is replaced makes Windows refuse the write (WatchedWrites).
+                screen.settle("the order is written") { orderStore.writes.settledOn(table.state.order) }
+                assertFalse(onDisk.contentEquals(Files.readAllBytes(orderFile)), "the drop was not written")
                 assertEquals(listOf("1 Sky Team", "2 Harmonies", "3 Catan"), shown(table))
                 val kept = runBlocking { DesktopGameOrderStore(orderFile).read() }
                 assertEquals(listOf("Sky Team", "Harmonies", "Catan").map { idOf(table, it) }, kept.gameIds)
