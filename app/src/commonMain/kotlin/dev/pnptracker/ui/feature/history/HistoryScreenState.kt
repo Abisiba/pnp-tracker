@@ -29,16 +29,22 @@ sealed interface HistoryContentState {
         /**
          * The `Oyun silindi` lines that can still be taken back.
          *
-         * One per deleted game at most: the newest line about the game being
-         * deleted or brought back, and only while it is a deletion and the game
-         * is still deleted. An older deletion that was already taken back once
-         * is history, and offering it again would offer the same thing twice.
+         * One per deleted game at most, and only while the game is still
+         * deleted: its newest deletion, which is the one in force. An older
+         * deletion was already taken back once, and offering it again would
+         * offer the same thing twice.
+         *
+         * Only deletion lines are compared. A deletion, a restore and another
+         * deletion made within one millisecond share a moment, and lines that
+         * share a moment are ordered by identity, which says nothing about which
+         * came first — so "the newest of the deletions and restores" could be a
+         * restore and offer nothing. Whether the game is deleted now is read
+         * from the game itself instead.
          */
         val restorableLines: Set<EntityId> by lazy {
             log.entries
-                .filter { it.change == HistoryChange.GameDeleted || it.change == HistoryChange.GameRestored }
-                .distinctBy { it.gameId }
                 .filter { it.change == HistoryChange.GameDeleted && it.gameIsDeleted && it.gameId != null }
+                .distinctBy { it.gameId }
                 .map { it.id }
                 .toSet()
         }

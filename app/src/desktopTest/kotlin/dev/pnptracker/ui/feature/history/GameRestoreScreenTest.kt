@@ -1,8 +1,10 @@
 package dev.pnptracker.ui.feature.history
 
+import dev.pnptracker.data.database.StoppedClock
 import dev.pnptracker.data.database.aTask
 import dev.pnptracker.data.database.activePoolTasks
 import dev.pnptracker.data.database.insertGameCellAndTask
+import dev.pnptracker.data.repository.GameSetupStore
 import dev.pnptracker.data.repository.GameTableStore
 import dev.pnptracker.data.repository.HistoryStore
 import dev.pnptracker.data.repository.PoolStore
@@ -18,6 +20,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.test.fail
+import kotlin.time.Instant
 
 /**
  * `Geri al` on a deleted game's line in the history (PLAN 12.15).
@@ -26,6 +29,8 @@ import kotlin.test.fail
  * is read from the database the table and the pools read from.
  */
 class GameRestoreScreenTest {
+    private val moment = Instant.fromEpochMilliseconds(1_781_000_000_000)
+
     private fun ComposeSceneHarness.settle(
         what: String,
         done: () -> Boolean,
@@ -123,6 +128,29 @@ class GameRestoreScreenTest {
             screen.use {
                 screen.settle("the history is shown") { screen.restoreButtons().isNotEmpty() }
                 assertEquals(listOf("Harmonies oyununu geri al"), screen.restoreButtons(), "an older deletion is offered back too")
+            }
+        }
+    }
+
+    @Test
+    fun `a deletion, a restore and a deletion in one moment still offer the deletion back`() {
+        // What a fast machine's clock does (seen on Windows CI): three acts in one
+        // millisecond. Lines sharing a moment are ordered by identity, which says
+        // nothing about which came first, so this repeats with fresh identities.
+        repeat(8) {
+            RealStack().use { stack ->
+                val setup = GameSetupStore(stack.database.gameDao(), stack.database.gameCellDao(), clock = StoppedClock(moment))
+                val gameId = gameWithTask(stack, "Harmonies")
+                runBlocking {
+                    setup.deleteGame(gameId)
+                    setup.restoreGame(gameId)
+                    setup.deleteGame(gameId)
+                }
+                val controller = HistoryController(HistoryStore(stack.database.historyDao()), games = setup)
+                ComposeSceneHarness(width = 1000, height = 900) { HistoryScreen(controller) }.use { screen ->
+                    screen.settle("the history is read") { controller.state.content is HistoryContentState.Content }
+                    assertEquals(listOf("Harmonies oyununu geri al"), screen.restoreButtons(), "the deletion in force is not offered back")
+                }
             }
         }
     }
