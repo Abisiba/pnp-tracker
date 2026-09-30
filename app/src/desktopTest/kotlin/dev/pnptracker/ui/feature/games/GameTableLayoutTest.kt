@@ -902,8 +902,16 @@ class GameTableLayoutTest {
         assertTrue("width(width)" in cell, "the tick moved out of the name column")
         // Still five cell columns beside the name, so the tick cost the table no
         // width and nothing moved out of reach in a narrow window.
+        // The row draws exactly the table's columns, in the order the user
+        // arranged them, and none of them is a tick of its own.
         assertTrue(
-            "widths.values.sum()" in source && "CellColumnType.entries.forEach" in source,
+            "widths.values.sum()" in source && "widths.order.forEach" in source,
+            "the table grew a column of its own for the tick",
+        )
+        assertEquals(
+            listOf("GAME_NAME", "MISSING", "THREE_D", "CARD", "BOARD", "SPECIAL", "BORROWED", "NOTES"),
+            dev.pnptracker.domain.games.TableColumn.entries
+                .map { it.name },
             "the table grew a column of its own for the tick",
         )
         val tick = source.substringAfter("private fun GameCompletionTick(").substringBefore("private fun GameCompletionPopover(")

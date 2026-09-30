@@ -37,6 +37,19 @@ enum class TableColumn {
     NOTES,
     ;
 
+    /** The cell this column draws. The name and `Eksik` columns hold none and must not be asked. */
+    val cellColumnType: CellColumnType
+        get() =
+            when (this) {
+                THREE_D -> CellColumnType.THREE_D
+                CARD -> CellColumnType.CARD
+                BOARD -> CellColumnType.BOARD
+                SPECIAL -> CellColumnType.SPECIAL
+                BORROWED -> CellColumnType.BORROWED
+                NOTES -> CellColumnType.NOTES
+                GAME_NAME, MISSING -> error("$this holds no cell")
+            }
+
     companion object {
         /** The column a cell of [columnType] is drawn in. */
         fun of(columnType: CellColumnType): TableColumn =
@@ -74,6 +87,13 @@ data class TableSizes(
     val columnWidths: Map<TableColumn, Float> = emptyMap(),
     val rowHeights: Map<EntityId, Float> = emptyMap(),
     val problem: TableSizesProblem? = null,
+    /**
+     * The order the columns are drawn in, left to right: every column once.
+     *
+     * A view setting like the widths, and nothing else: moving a column changes
+     * where it is drawn, never a game, a cell or a task.
+     */
+    val columnOrder: List<TableColumn> = DEFAULT_COLUMN_ORDER,
 ) {
     /** The width [column] is drawn at, which is always usable. */
     fun widthOf(column: TableColumn): Float = columnWidths[column] ?: defaultWidthOf(column)
@@ -109,17 +129,42 @@ data class TableSizes(
         height: Float,
     ): TableSizes = copy(rowHeights = rowHeights + (gameId to height.coerceAtLeast(MINIMUM_ROW_HEIGHT_DP)))
 
+    /**
+     * The same sizes with [column] moved to [index] in the order, the columns
+     * between shifting over by one. An index past either end is held to it.
+     */
+    fun withColumnMoved(
+        column: TableColumn,
+        index: Int,
+    ): TableSizes {
+        val without = columnOrder - column
+        val at = index.coerceIn(0, without.size)
+        return copy(columnOrder = without.take(at) + column + without.drop(at))
+    }
+
+    /** The same sizes with the columns back in the table's own order, widths and heights kept. */
+    fun withDefaultOrder(): TableSizes = copy(columnOrder = DEFAULT_COLUMN_ORDER)
+
+    /** True when the columns are drawn in the table's own order. */
+    val hasDefaultOrder: Boolean get() = columnOrder == DEFAULT_COLUMN_ORDER
+
     /** The same sizes without the rows of games that are not in [games]. */
     fun prunedTo(games: Set<EntityId>): TableSizes = copy(rowHeights = rowHeights.filterKeys { it in games })
 
     /** True when nothing here differs from the table's own defaults. */
-    val isDefault: Boolean get() = columnWidths.isEmpty() && rowHeights.isEmpty()
+    val isDefault: Boolean get() = hasDefaultSizes && hasDefaultOrder
+
+    /** True when no width and no height differs from the defaults, whatever the order. */
+    val hasDefaultSizes: Boolean get() = columnWidths.isEmpty() && rowHeights.isEmpty()
 
     companion object {
         /** Nothing chosen: the table as it has always been drawn. */
         val Default: TableSizes = TableSizes()
     }
 }
+
+/** The order the table has always drawn its columns in: Oyun, Eksik, then the six cells. */
+val DEFAULT_COLUMN_ORDER: List<TableColumn> = TableColumn.entries.toList()
 
 /** The width a column is drawn at when nobody has chosen one. */
 fun defaultWidthOf(column: TableColumn): Float =
@@ -139,6 +184,13 @@ internal data class TableSizesDocumentV1(
     val formatVersion: Int,
     val columnWidths: Map<String, Float>,
     val rowHeights: Map<String, Float>,
+    /**
+     * The columns in the order they are drawn, by name; absent or null when it
+     * is the table's own order. Added to the same version because it is
+     * optional: a file written before it existed reads as the default order,
+     * and an older build reading a newer file ignores it.
+     */
+    val columnOrder: List<String>? = null,
 )
 
 /**
@@ -203,6 +255,14 @@ fun tableSizesIn(text: String): TableSizes {
             }
         sizes = sizes.withRow(gameId, height)
     }
+    document.columnOrder?.let { names ->
+        // Every column exactly once, or the document is not one this writes.
+        val order = names.map { name -> columnNames[name] ?: return TableSizes(problem = TableSizesProblem.NOT_THE_EXPECTED_SHAPE) }
+        if (order.size != TableColumn.entries.size || order.toSet() != TableColumn.entries.toSet()) {
+            return TableSizes(problem = TableSizesProblem.NOT_THE_EXPECTED_SHAPE)
+        }
+        sizes = sizes.copy(columnOrder = order)
+    }
     return sizes
 }
 
@@ -219,6 +279,7 @@ fun tableSizesDocumentFor(sizes: TableSizes): String =
             formatVersion = TABLE_SIZES_FORMAT_VERSION,
             columnWidths = sizes.columnWidths.entries.associate { (column, width) -> column.name to width },
             rowHeights = sizes.rowHeights.entries.associate { (gameId, height) -> gameId.toString() to height },
+            columnOrder = sizes.columnOrder.takeUnless { sizes.hasDefaultOrder }?.map { it.name },
         ),
     )
 

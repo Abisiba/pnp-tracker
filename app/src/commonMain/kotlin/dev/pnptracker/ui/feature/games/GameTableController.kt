@@ -333,10 +333,38 @@ class GameTableController(
         writeSizes(kept)
     }
 
-    /** Puts every column and every row back to the table's own defaults. */
+    /**
+     * Puts every column width and every row height back to the table's own
+     * defaults. The order of the columns is its own setting and is kept; the
+     * way back from that is [resetColumnOrder].
+     */
     suspend fun resetSizes() {
-        state = state.copy(sizes = TableSizes.Default)
-        writeSizes(TableSizes.Default)
+        val reset = TableSizes.Default.copy(columnOrder = state.sizes.columnOrder)
+        state = state.copy(sizes = reset)
+        writeSizes(reset)
+    }
+
+    /**
+     * Moves [column] to [index] while its heading is still being dragged, so the
+     * table shows the order it would have if let go now.
+     *
+     * Nothing is written here, as with a resize: [rememberSizes] is what the end
+     * of the drag calls. Only where the column is drawn changes — no game, cell
+     * or task is touched.
+     */
+    fun moveColumn(
+        column: TableColumn,
+        index: Int,
+    ) {
+        val moved = state.sizes.withColumnMoved(column, index)
+        if (moved != state.sizes) state = state.copy(sizes = moved)
+    }
+
+    /** Puts the columns back in the table's own order and remembers it; widths and heights are kept. */
+    suspend fun resetColumnOrder() {
+        val reset = state.sizes.withDefaultOrder()
+        state = state.copy(sizes = reset)
+        writeSizes(reset)
     }
 
     /**
