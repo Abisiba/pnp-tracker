@@ -73,8 +73,14 @@ its own group, with all of that colour's tasks listed under its heading.
 Each game is one row of the game table. The toolbar above it lets you search,
 switch between *Devam Eden* (in progress), *Tamamlanan* (finished) and *Tümü*
 (all), order the games by your own order or A–Z, and open the filters. The
-**⋯** menu at its end fits a column to its content, resets the cell sizes and
-exports the tasks.
+**⋯** menu at its end fits a column to its content, resets the cell sizes, puts
+the columns back in their default order (**Varsayılan sıraya dön**) and exports
+the tasks.
+
+Every column — Oyun, Eksik, 3D Baskı, Kart, Mukavva, Özel, Ödünç Parçalar and
+Notlar — can be moved by dragging its heading sideways. The columns make way
+while you drag; when you let go the order is saved and kept the next time the
+application opens. It is only a view setting: no game, cell or task changes.
 
 When a game is done you can mark it with **Tamamlandı olarak işaretle** (mark as
 finished) on its row. This is your decision alone: it changes no task and no

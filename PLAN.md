@@ -1896,7 +1896,14 @@ sütun genişlikleri ve satır yükseklikleri kullanıcının kendi ölçülerid
   kurallarına uyar. Tabloya yeni Tab durağı **eklenmez**: yoğun bir tablonun
   odak sırası, altı ayırıcı durağıyla bozulmaz.
 - `Hücre boyutlarını sıfırla` bütün sütunları ve bütün satırları varsayılan
-  ölçülere döndürür.
+  ölçülere döndürür; sütunların sırasına dokunmaz.
+- **Sütun sırası:** Bütün sütunlar (Oyun, Eksik, 3D Baskı, Kart, Mukavva, Özel,
+  Ödünç Parçalar, Notlar) başlığından yana sürüklenerek yeniden sıralanır.
+  Sürüklerken sütunlar yer değiştirir ve satırlar yeni sırayla çizilir;
+  bırakınca sıra ölçülerle aynı dosyaya kaydedilir ve uygulama yeniden
+  açıldığında korunur. İlk açılışta sıra bugünkü sıradır. `⋯` menüsündeki
+  `Varsayılan sıraya dön` sırayı geri alır, genişlik ve yükseklikleri korur.
+  Yalnız görünüm ayarıdır; oyunları, hücreleri veya görevleri değiştirmez.
 
 **Nerede saklanır**
 

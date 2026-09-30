@@ -10,9 +10,11 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.awaitVerticalTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.gestures.verticalDrag
 import androidx.compose.foundation.horizontalScroll
@@ -157,6 +159,7 @@ import dev.pnptracker.domain.games.CellPreview
 import dev.pnptracker.domain.games.CellSegmentPreview
 import dev.pnptracker.domain.games.CellTextFailure
 import dev.pnptracker.domain.games.DEFAULT_CELL_COLUMN_WIDTH_DP
+import dev.pnptracker.domain.games.DEFAULT_COLUMN_ORDER
 import dev.pnptracker.domain.games.DEFAULT_GAME_COLUMN_WIDTH_DP
 import dev.pnptracker.domain.games.GameArrangement
 import dev.pnptracker.domain.games.GameSetupFailure
@@ -218,6 +221,8 @@ import org.jetbrains.compose.resources.stringResource
 @Immutable
 private class DrawnWidths(
     private val widths: Map<TableColumn, Float>,
+    /** The columns left to right, as the user has arranged them. */
+    val order: List<TableColumn> = DEFAULT_COLUMN_ORDER,
 ) {
     /** How wide [column] is drawn. */
     fun of(column: TableColumn): Dp = widths.getValue(column).dp
@@ -227,6 +232,74 @@ private class DrawnWidths(
 
     /** The whole table: the name column and every cell column. */
     val table: Dp = widths.values.sum().dp
+
+    /** Where [column] starts, from the table's left edge. */
+    fun startOf(column: TableColumn): Dp =
+        order
+            .takeWhile { it != column }
+            .sumOf { widths.getValue(it).toDouble() }
+            .toFloat()
+            .dp
+
+    /** The column drawn at [x] from the table's left edge, or null past either end. */
+    fun columnAt(x: Dp): TableColumn? {
+        var edge = 0.dp
+        order.forEach { column ->
+            edge += of(column)
+            if (x < edge) return column.takeIf { x >= 0.dp }
+        }
+        return null
+    }
+}
+
+/**
+ * A column heading being carried to a new place (PLAN 12.17).
+ *
+ * The heading follows the pointer. The order itself changes as the pointer
+ * passes into another column's room, so the rows under the heading move with it
+ * and what is on screen is the order the table would be left in.
+ */
+private class ColumnDrag {
+    /** The column being carried, or null when nothing is. */
+    var carried: TableColumn? by mutableStateOf(null)
+        private set
+
+    /** Where the pointer is, from the table's left edge. */
+    private var pointer: Dp by mutableStateOf(0.dp)
+
+    /** How far into the heading the pointer took hold of it. */
+    private var grip: Dp = 0.dp
+
+    fun start(
+        column: TableColumn,
+        at: Dp,
+        widths: DrawnWidths,
+    ) {
+        carried = column
+        pointer = at
+        grip = at - widths.startOf(column)
+    }
+
+    fun follow(
+        at: Dp,
+        widths: DrawnWidths,
+        controller: GameTableController,
+    ) {
+        val column = carried ?: return
+        pointer = at
+        val over = widths.columnAt(at) ?: return
+        if (over != column) controller.moveColumn(column, widths.order.indexOf(over))
+    }
+
+    fun stop() {
+        carried = null
+    }
+
+    /** How far [column]'s heading is drawn from its place: the pointer's lead, for the carried one. */
+    fun shiftOf(
+        column: TableColumn,
+        widths: DrawnWidths,
+    ): Dp = if (column == carried) pointer - grip - widths.startOf(column) else 0.dp
 }
 
 /** How wide a boundary is to grab. Wide enough to hit, narrow enough not to be in the way. */
@@ -412,6 +485,7 @@ private fun MoreActions(
     val moreLabel = stringResource(Strings.Table.moreActions)
     val fitLabel = stringResource(Strings.Table.fitColumn)
     val resetLabel = stringResource(Strings.Table.resetSizes)
+    val orderLabel = stringResource(Strings.Table.resetColumnOrder)
     val exportLabel = stringResource(Strings.Export.action)
     var open by remember { mutableStateOf(false) }
     var choosingColumn by remember { mutableStateOf(false) }
@@ -435,7 +509,7 @@ private fun MoreActions(
         }
         DropdownMenu(expanded = open, onDismissRequest = close) {
             if (choosingColumn) {
-                TableColumn.entries.forEach { column ->
+                state.sizes.columnOrder.forEach { column ->
                     val name = stringResource(headingOf(column))
                     DropdownMenuItem(
                         text = { Text(name) },
@@ -462,8 +536,17 @@ private fun MoreActions(
                         close()
                         scope.launch { controller.resetSizes() }
                     },
-                    enabled = !state.sizes.isDefault,
+                    enabled = !state.sizes.hasDefaultSizes,
                     modifier = Modifier.semantics { contentDescription = resetLabel },
+                )
+                DropdownMenuItem(
+                    text = { Text(orderLabel) },
+                    onClick = {
+                        close()
+                        scope.launch { controller.resetColumnOrder() }
+                    },
+                    enabled = !state.sizes.hasDefaultOrder,
+                    modifier = Modifier.semantics { contentDescription = orderLabel },
                 )
                 if (export != null) {
                     DropdownMenuItem(
@@ -897,7 +980,7 @@ private fun Table(
         val available = maxWidth.value
         val widths =
             remember(sizes, needed, available) {
-                DrawnWidths(fittedWidths(TableColumn.entries.associateWith(sizes::widthOf), needed, available))
+                DrawnWidths(fittedWidths(TableColumn.entries.associateWith(sizes::widthOf), needed, available), sizes.columnOrder)
             }
         Column(
             modifier =
@@ -967,14 +1050,48 @@ private fun TableHeader(
     val nameStyle = MaterialTheme.typography.bodyMedium
     val missingLabels = rememberMissingLabels()
     val drawn by rememberUpdatedState(widths)
+    val scope = rememberCoroutineScope()
+    val move = remember { ColumnDrag() }
     Box(modifier = Modifier.width(widths.table)) {
-        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-            HeaderCell(text = stringResource(Strings.Columns.game), width = widths.of(TableColumn.GAME_NAME))
-            HeaderCell(text = stringResource(Strings.Columns.missing), width = widths.of(TableColumn.MISSING))
-            CellColumnType.entries.forEach { columnType ->
+        // A heading is carried to a new place by dragging it sideways; the
+        // columns make way as it passes the middle of each one, so the order it
+        // would be left in is the order on screen, rows and all. Letting go is
+        // what remembers it. The edges drawn over the headings below still
+        // resize: a drag that starts on an edge is theirs.
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+                    .pointerHoverIcon(PointerIcon.Hand)
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = true)
+                            val grabbed = drawn.columnAt(with(density) { down.position.x.toDp() }) ?: return@awaitEachGesture
+                            val slop =
+                                awaitHorizontalTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
+                                    ?: return@awaitEachGesture
+                            move.start(grabbed, with(density) { down.position.x.toDp() }, drawn)
+                            move.follow(with(density) { slop.position.x.toDp() }, drawn, controller)
+                            horizontalDrag(slop.id) { change ->
+                                change.consume()
+                                move.follow(with(density) { change.position.x.toDp() }, drawn, controller)
+                            }
+                            move.stop()
+                            // Remembered however the drag ended: the order on
+                            // screen is the one the user left.
+                            scope.launch { controller.rememberSizes() }
+                        }
+                    },
+        ) {
+            widths.order.forEach { column ->
                 HeaderCell(
-                    text = stringResource(columnNameOf(columnType)),
-                    width = widths.of(TableColumn.of(columnType)),
+                    text = stringResource(headingOf(column)),
+                    width = widths.of(column),
+                    modifier =
+                        Modifier
+                            .zIndex(if (move.carried == column) 1f else 0f)
+                            .graphicsLayer { translationX = with(density) { move.shiftOf(column, drawn).toPx() } },
                 )
             }
         }
@@ -985,7 +1102,7 @@ private fun TableHeader(
         // take the whole window and leave the rows below it nothing.
         Box(modifier = Modifier.matchParentSize()) {
             var edge = 0.dp
-            TableColumn.entries.forEach { column ->
+            widths.order.forEach { column ->
                 edge += widths.of(column)
                 ColumnBoundary(
                     column = column,
@@ -1353,6 +1470,7 @@ private fun MissingCell(
 private fun HeaderCell(
     text: String,
     width: androidx.compose.ui.unit.Dp,
+    modifier: Modifier = Modifier,
 ) {
     Text(
         text = text,
@@ -1360,7 +1478,7 @@ private fun HeaderCell(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         // Wrapped rather than cut: a heading in a column dragged narrow still
         // says which column it is (PLAN 12.17).
-        modifier = Modifier.width(width).padding(horizontal = 12.dp),
+        modifier = modifier.width(width).padding(horizontal = 12.dp),
     )
 }
 
@@ -1402,41 +1520,57 @@ private fun TableRow(
                 .height(IntrinsicSize.Min)
                 .background(background),
     ) {
-        GameNameCell(
-            row = row,
-            stateText = stateText,
-            description = description,
-            state = state,
-            controller = controller,
-            width = widths.of(TableColumn.GAME_NAME),
-            drag = drag,
-        )
-        MissingCell(row = row, width = widths.of(TableColumn.MISSING))
-        CellColumnType.entries.forEach { columnType ->
-            val cell = row.cell(columnType)
-            val writing = state.writingIn(row.gameId, columnType)
-            if (writing == null) {
-                CellSlot(
-                    cell = cell,
-                    gameId = row.gameId,
-                    state = state,
-                    controller = controller,
-                    width = widths.of(TableColumn.of(columnType)),
-                    onEdit = { controller.beginEditing(row.gameId, columnType) },
-                )
-            } else {
-                CellEditorSlot(
-                    cell = cell,
-                    width = widths.of(TableColumn.of(columnType)),
-                    editor = writing,
-                    composer = state.composingIn(row.gameId, columnType)?.composer,
-                    creator = state.creatingColorIn(row.gameId, columnType),
-                    catalogue = state.colors,
-                    focusRecall = state.focusRecall,
-                    controller = controller,
-                )
+        widths.order.forEach { column ->
+            when (column) {
+                TableColumn.GAME_NAME ->
+                    GameNameCell(
+                        row = row,
+                        stateText = stateText,
+                        description = description,
+                        state = state,
+                        controller = controller,
+                        width = widths.of(TableColumn.GAME_NAME),
+                        drag = drag,
+                    )
+
+                TableColumn.MISSING -> MissingCell(row = row, width = widths.of(TableColumn.MISSING))
+                else -> TableCell(row = row, columnType = column.cellColumnType, state = state, controller = controller, widths = widths)
             }
         }
+    }
+}
+
+/** One cell of a row: what it holds, or its editor while it is being written in. */
+@Composable
+private fun TableCell(
+    row: GameTableRow,
+    columnType: CellColumnType,
+    state: GameTableScreenState,
+    controller: GameTableController,
+    widths: DrawnWidths,
+) {
+    val cell = row.cell(columnType)
+    val writing = state.writingIn(row.gameId, columnType)
+    if (writing == null) {
+        CellSlot(
+            cell = cell,
+            gameId = row.gameId,
+            state = state,
+            controller = controller,
+            width = widths.of(TableColumn.of(columnType)),
+            onEdit = { controller.beginEditing(row.gameId, columnType) },
+        )
+    } else {
+        CellEditorSlot(
+            cell = cell,
+            width = widths.of(TableColumn.of(columnType)),
+            editor = writing,
+            composer = state.composingIn(row.gameId, columnType)?.composer,
+            creator = state.creatingColorIn(row.gameId, columnType),
+            catalogue = state.colors,
+            focusRecall = state.focusRecall,
+            controller = controller,
+        )
     }
 }
 

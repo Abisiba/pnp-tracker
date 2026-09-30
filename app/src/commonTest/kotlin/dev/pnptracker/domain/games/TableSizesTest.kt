@@ -223,4 +223,43 @@ class TableSizesTest {
         assertEquals(120f, sizes.widthOf(TableColumn.CARD))
         assertEquals(tableSizesDocumentFor(TableSizes.Default.withColumn(TableColumn.CARD, 120f)), tableSizesDocumentFor(sizes))
     }
+
+    @Test
+    fun `the columns start in today's order and a moved one pushes the others over`() {
+        assertEquals(TableColumn.entries.toList(), TableSizes.Default.columnOrder)
+        val moved = TableSizes.Default.withColumnMoved(TableColumn.NOTES, 0)
+        assertEquals(listOf(TableColumn.NOTES) + (TableColumn.entries - TableColumn.NOTES), moved.columnOrder)
+        assertFalse(moved.isDefault)
+        assertTrue(moved.hasDefaultSizes, "moving a column changed a size")
+        // Past either end is held to it; every column stays exactly once.
+        val far = moved.withColumnMoved(TableColumn.GAME_NAME, 99)
+        assertEquals(TableColumn.GAME_NAME, far.columnOrder.last())
+        assertEquals(TableColumn.entries.toSet(), far.columnOrder.toSet())
+        assertEquals(TableColumn.entries.size, far.columnOrder.size)
+        assertEquals(TableSizes.Default, far.withDefaultOrder())
+    }
+
+    @Test
+    fun `the order goes to the file and comes back, and a file from before it reads as today's order`() {
+        val sizes = TableSizes.Default.withColumn(TableColumn.CARD, 150f).withColumnMoved(TableColumn.MISSING, 7)
+        assertEquals(sizes, tableSizesIn(tableSizesDocumentFor(sizes)))
+
+        val older = tableSizesIn("""{"formatVersion":1,"columnWidths":{"CARD":150.0},"rowHeights":{}}""")
+        assertNull(older.problem)
+        assertEquals(TableColumn.entries.toList(), older.columnOrder)
+        assertEquals(150f, older.widthOf(TableColumn.CARD))
+    }
+
+    @Test
+    fun `an order that is not every column exactly once is not our document`() {
+        listOf(
+            """["NOTES"]""",
+            """["GAME_NAME","GAME_NAME","THREE_D","CARD","BOARD","SPECIAL","BORROWED","NOTES"]""",
+            """["GAME_NAME","MISSING","THREE_D","CARD","BOARD","SPECIAL","BORROWED","NOT_A_COLUMN"]""",
+        ).forEach { order ->
+            val read = tableSizesIn("""{"formatVersion":1,"columnWidths":{},"rowHeights":{},"columnOrder":$order}""")
+            assertEquals(TableSizesProblem.NOT_THE_EXPECTED_SHAPE, read.problem, "$order was taken")
+            assertEquals(TableColumn.entries.toList(), read.columnOrder)
+        }
+    }
 }

@@ -830,6 +830,7 @@ import dev.pnptracker.resources.table_more_actions
 import dev.pnptracker.resources.table_move_game_description
 import dev.pnptracker.resources.table_rename_game
 import dev.pnptracker.resources.table_rename_saving
+import dev.pnptracker.resources.table_reset_column_order
 import dev.pnptracker.resources.table_reset_sizes
 import dev.pnptracker.resources.table_row_completed
 import dev.pnptracker.resources.table_row_description
@@ -1467,6 +1468,7 @@ object Strings {
         val cellDescription = Res.string.table_cell_description
         val fitColumn = Res.string.table_fit_column
         val resetSizes = Res.string.table_reset_sizes
+        val resetColumnOrder = Res.string.table_reset_column_order
 
         /** The `⋯` menu at the end of the table's toolbar, as a reader hears it. */
         val moreActions = Res.string.table_more_actions
