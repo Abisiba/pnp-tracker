@@ -1743,6 +1743,24 @@ TASK_ROLLED_BACK     geri alınan her görev için bir satır
 Bu olaylar da geçmişin geri kalanı gibi append-only'dur ve silinmez. Engellenmiş
 bir geri alma hiçbir olay yazmaz: gerçekleşmemiş bir işlem geçmişe girmez.
 
+Silinen oyunu geri alma:
+
+- `Oyun silindi` satırının altında **Geri al** düğmesi bulunur. Düğme yalnız oyun
+  hâlâ silinmişse ve bu satır oyunun en yeni silme/geri alma satırıysa gösterilir;
+  aynı oyun birkaç kez silinip geri alındıysa yalnız son silme geri alınabilir.
+- Geri almak oyunun tombstone'unu kaldırır (`deleted_at` boşaltılır) ve aynı
+  işlemde bir `GAME_RESTORED` satırı (`Oyun geri alındı`) yazar. Oyun **aynı
+  kimlik, hücreler ve görevlerle** döner; silme bunların hiçbirine dokunmamıştır.
+  Oyun silinmeden önce ayrıca silinmiş bir görev silinmiş kalır.
+- Geçmiş satırları değişmez: geri alma bir satırı düzenlemez, kendi satırını ekler.
+- **Ad çakışması:** oyun adları benzersiz değildir (`12.3`), bu yüzden geri
+  alma bir ad çakışması yüzünden reddedilmez ve oyunun adı değiştirilmez. Tabloda
+  aynı adda (A–Z düzeninin karşılaştırdığı gibi, Türkçe büyük/küçük harf farkı
+  gözetmeden) başka bir oyun varsa ekran bunu açıkça söyler ve birinin adının
+  tabloda çift tıklayarak değiştirilebileceğini hatırlatır.
+- Geri gelen oyun, silindikten sonra sıra değiştirilmediyse `12.18`'deki eski
+  yerine, değiştirildiyse sıranın sonuna gelir.
+
 ### 12.16 Ayarlar
 
 `12.1`'in saydığı `Ayarlar` ekranı, yedekleme işiyle birlikte gerçek bir gezinme
@@ -1974,6 +1992,17 @@ Kullanıcı oyunlarını oyun tablosunda **elle sıralar** ve bu sıra korunur.
   - Bırakınca görünen sıra ve numaralar kaydedilir (`game-order.json`). Bir
     satırın üstünde bırakmak oyunu o satırın yerine koyar. Sürükleme iptal edilirse sürüklemeden önceki sıra geri gelir.
     Aradaki oyunlar birbirine göre sıralarını korur.
+  - **Oyun menüsü:** tutamağa kısa tıklamak (basıp imleç dokunma eşiğinin
+    dışına çıkmadan bırakmak) oyunun menüsünü açar; eşiği aşan bir çekiş
+    menüyü açmaz, taşımaya başlar. Böylece tıklarken eldeki küçük titreme ne
+    sıralama başlatır ne de sırayı yazar. Tutamak odaktayken `Enter` veya
+    `Boşluk` da menüyü açar. `A–Z` düzeninde numara tutamak değildir ama menüyü
+    aynı yollarla açar. Menüde **Oyunu sil** bulunur; seçilince oyunun adıyla
+    onay sorulur (`“Harmonies” silinsin mi?`). `Vazgeç`, `Escape` veya dışarı
+    tıklamak hiçbir şey yazmaz. `Evet, sil` oyunu `5.2`'deki tombstone ile
+    siler (`GameDao.softDelete`): oyun tablodan ve havuzlardan kalkar, hücreleri
+    ve görevleri fiziksel olarak silinmez ve aynı işlemde `Oyun silindi` geçmiş
+    satırı yazılır. Geri alma `12.15`'tedir.
   - **Klavye:** tutamak Tab ile odaklanır; yukarı ve aşağı ok tuşları oyunu bir
     yer taşır. "Bir yer", ekranda görünen komşuya göredir: bir filtre açıkken
     görünmeyen bir oyunla yer değiştirmek hiçbir şey olmamış gibi görünürdü.

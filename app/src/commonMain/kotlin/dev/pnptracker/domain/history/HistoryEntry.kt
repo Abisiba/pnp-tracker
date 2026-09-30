@@ -104,4 +104,11 @@ data class HistoryEntry(
     val gameName: String? = null,
     val taskId: EntityId? = null,
     val taskName: String? = null,
+    /**
+     * Whether the game is deleted *now*, whatever the line says happened then.
+     *
+     * The one fact about the present a line carries, because it is what decides
+     * whether a `Oyun silindi` line can still be taken back (PLAN 12.15).
+     */
+    val gameIsDeleted: Boolean = false,
 )

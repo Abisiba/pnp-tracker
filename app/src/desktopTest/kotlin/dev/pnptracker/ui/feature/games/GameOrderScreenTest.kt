@@ -337,8 +337,10 @@ class GameOrderScreenTest {
                 table.arrange(GameArrangement.ALPHABETICAL)
                 screen.render()
 
+                // The number still opens the game's menu (Oyunu sil), but nothing
+                // offers to carry a game.
                 assertFalse(
-                    screen.nodes().any { node -> node.contentDescriptions().any { "sıradaki" in it } },
+                    screen.nodes().any { node -> node.contentDescriptions().any { "oyununu taşı" in it } },
                     "a handle is still offered where a place is the name's",
                 )
                 assertTrue(screen.writtenText().any { "Benim sıram'a dönün" in it }, "the reason is not said")

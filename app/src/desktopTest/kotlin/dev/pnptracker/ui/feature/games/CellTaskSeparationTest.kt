@@ -18,6 +18,7 @@ import dev.pnptracker.domain.games.CellSegmentPreview
 import dev.pnptracker.domain.games.CellSummary
 import dev.pnptracker.domain.games.GameCompletionSnapshot
 import dev.pnptracker.domain.games.GameRenameOutcome
+import dev.pnptracker.domain.games.GameRestoreOutcome
 import dev.pnptracker.domain.games.GameSummary
 import dev.pnptracker.domain.games.GameTableRow
 import dev.pnptracker.domain.games.TaskColorPreview
@@ -196,6 +197,10 @@ class CellTaskSeparationTest {
             gameId: EntityId,
             isCompleted: Boolean,
         ) = Unit
+
+        override suspend fun deleteGame(gameId: EntityId) = error("This screen never deletes a game.")
+
+        override suspend fun restoreGame(gameId: EntityId): GameRestoreOutcome = error("This screen never restores a game.")
     }
 
     private class FakeCells : CellTextEditing {

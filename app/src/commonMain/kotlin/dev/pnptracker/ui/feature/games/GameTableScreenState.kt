@@ -360,6 +360,32 @@ sealed interface RowWork {
     }
 
     /**
+     * The game's own menu, open over the handle it was asked from (PLAN 12.18).
+     *
+     * A short click on the handle opens it, and so do Enter and Space on it; a
+     * drag from the same handle is still a move. Nothing is decided by opening it.
+     */
+    data class GameMenu(
+        override val gameId: EntityId,
+        val gameName: String,
+    ) : RowWork
+
+    /**
+     * Asking whether the game really is to be deleted, with its name said.
+     *
+     * It replaces the menu it was asked from rather than standing on it, so
+     * `Vazgeç`, Escape and clicking away all close it outright — and none of the
+     * three writes anything. `Evet, sil` tombstones the game (PLAN 5.2), and the
+     * history offers it back.
+     */
+    data class ConfirmingGameDeletion(
+        override val gameId: EntityId,
+        val gameName: String,
+        val isSaving: Boolean = false,
+        val failure: GameSetupFailure? = null,
+    ) : RowWork
+
+    /**
      * Giving a game another name, in the cell the name is written in (PLAN 12.3).
      *
      * [originalName] is what the game is called now, kept beside the draft rather
@@ -975,6 +1001,11 @@ data class GameTableScreenState(
     fun renamingOf(gameId: EntityId): RowWork.RenamingGame? = (rowWork as? RowWork.RenamingGame)?.takeIf { it.gameId == gameId }
 
     /** The confirmation open on this row, if there is one. */
+    fun gameMenuOf(gameId: EntityId): RowWork.GameMenu? = (rowWork as? RowWork.GameMenu)?.takeIf { it.gameId == gameId }
+
+    fun confirmingDeletionOf(gameId: EntityId): RowWork.ConfirmingGameDeletion? =
+        (rowWork as? RowWork.ConfirmingGameDeletion)?.takeIf { it.gameId == gameId }
+
     fun confirmingCompletionOf(gameId: EntityId): RowWork.ConfirmingGameCompletion? =
         (rowWork as? RowWork.ConfirmingGameCompletion)?.takeIf { it.gameId == gameId }
 

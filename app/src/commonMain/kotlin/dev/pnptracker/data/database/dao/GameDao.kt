@@ -50,7 +50,7 @@ interface GameDao {
     ): Int
 
     /**
-     * Appends one line to the history. Only [softDelete] below has one to write.
+     * Appends one line to the history. Only [softDelete] and [restore] below have one to write.
      *
      * Public because a Room interface has no other visibility to offer, not
      * because anything outside this file should call it. There is no update and
@@ -88,6 +88,45 @@ interface GameDao {
                 id = eventId,
                 kind = HistoryEventKind.GAME_DELETED,
                 occurredAt = deletedAt,
+                gameId = id,
+            ),
+        )
+        return changed
+    }
+
+    @Query("UPDATE games SET deleted_at = NULL, updated_at = :restoredAt WHERE id = :id AND deleted_at IS NOT NULL")
+    suspend fun clearGameTombstone(
+        id: EntityId,
+        restoredAt: Instant,
+    ): Int
+
+    /**
+     * Brings a deleted game back into view, and records that it happened (PLAN 12.15).
+     *
+     * The counterpart of [softDelete]: only the tombstone is lifted, so the game
+     * comes back as the same row — the same identity, name, cells, tasks and
+     * completion it had. Nothing below the game was touched by the deletion and
+     * nothing below it is touched here; a task the user had deleted on its own
+     * before stays deleted.
+     *
+     * Restoring a game that is not deleted changes nothing and writes no history
+     * line, for the reason [softDelete] gives. Both writes are one transaction.
+     *
+     * @return how many rows changed: 1 when the game came back, 0 otherwise.
+     */
+    @Transaction
+    suspend fun restore(
+        id: EntityId,
+        restoredAt: Instant,
+        eventId: EntityId = IdGenerator.Random.newId(),
+    ): Int {
+        val changed = clearGameTombstone(id, restoredAt)
+        if (changed == 0) return 0
+        appendHistoryEvent(
+            HistoryEventEntity(
+                id = eventId,
+                kind = HistoryEventKind.GAME_RESTORED,
+                occurredAt = restoredAt,
                 gameId = id,
             ),
         )

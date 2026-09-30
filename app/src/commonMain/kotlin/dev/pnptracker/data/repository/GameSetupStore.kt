@@ -10,9 +10,12 @@ import dev.pnptracker.domain.diagnostics.recordSafely
 import dev.pnptracker.domain.diagnostics.storageWriteFailed
 import dev.pnptracker.domain.games.CellSummary
 import dev.pnptracker.domain.games.GameRenameOutcome
+import dev.pnptracker.domain.games.GameRestoreOutcome
+import dev.pnptracker.domain.games.GameRestoring
 import dev.pnptracker.domain.games.GameSetupException
 import dev.pnptracker.domain.games.GameSetupFailure
 import dev.pnptracker.domain.games.GameSummary
+import dev.pnptracker.domain.games.sameGameName
 import dev.pnptracker.domain.model.CellColumnType
 import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.domain.model.IdGenerator
@@ -27,7 +30,7 @@ import kotlin.time.Clock
  * by an import: a game exists because someone typed it, which is what keeps
  * `sourceImportBatchId` meaningful as a record of where a game came from.
  */
-interface GameSetup {
+interface GameSetup : GameRestoring {
     /** Every game the user still has, newest edits included, ordered for the list. */
     fun observeGames(): Flow<List<GameSummary>>
 
@@ -85,6 +88,18 @@ interface GameSetup {
         gameId: EntityId,
         isCompleted: Boolean,
     )
+
+    /**
+     * Takes a game out of view, leaving its record behind (PLAN 5.2).
+     *
+     * Only the game is tombstoned; its cells and tasks are left exactly as they
+     * are, and leave the table and the pools because their game has. The history
+     * gets its line in the same transaction, and [restoreGame] undoes it.
+     *
+     * @throws GameSetupException if the game is gone already, or the change did
+     *   not reach the database.
+     */
+    suspend fun deleteGame(gameId: EntityId)
 }
 
 class GameSetupStore(
@@ -187,6 +202,33 @@ class GameSetupStore(
                 throw GameSetupException(GameSetupFailure.COULD_NOT_SAVE, cause)
             }
         if (changed == 0) throw GameSetupException(GameSetupFailure.GAME_NOT_AVAILABLE)
+    }
+
+    override suspend fun deleteGame(gameId: EntityId) {
+        val changed =
+            try {
+                gameDao.softDelete(id = gameId, deletedAt = clock.now(), eventId = idGenerator.newId())
+            } catch (cause: SQLiteException) {
+                diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.GAME_SETUP, GameSetupFailure.COULD_NOT_SAVE, cause) }
+                throw GameSetupException(GameSetupFailure.COULD_NOT_SAVE, cause)
+            }
+        if (changed == 0) throw GameSetupException(GameSetupFailure.GAME_NOT_AVAILABLE)
+    }
+
+    override suspend fun restoreGame(gameId: EntityId): GameRestoreOutcome {
+        val changed =
+            try {
+                gameDao.restore(id = gameId, restoredAt = clock.now(), eventId = idGenerator.newId())
+            } catch (cause: SQLiteException) {
+                diagnostics.recordSafely { storageWriteFailed(DiagnosticArea.GAME_SETUP, GameSetupFailure.COULD_NOT_SAVE, cause) }
+                throw GameSetupException(GameSetupFailure.COULD_NOT_SAVE, cause)
+            }
+        val game = gameDao.gameByIdIncludingDeleted(gameId) ?: throw GameSetupException(GameSetupFailure.GAME_NOT_AVAILABLE)
+        if (changed == 0) return GameRestoreOutcome.AlreadyThere
+        // Names are not unique (PLAN 12.3), so a namesake is told about rather
+        // than refused or renamed: the user decides whether the two need telling apart.
+        val namesakes = gameDao.activeGames().count { it.id != gameId && sameGameName(it.name, game.name) }
+        return GameRestoreOutcome.Restored(name = game.name, namesakes = namesakes)
     }
 
     private fun requireUsableName(

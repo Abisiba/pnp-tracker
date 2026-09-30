@@ -339,6 +339,13 @@ import dev.pnptracker.resources.history_moment
 import dev.pnptracker.resources.history_period_all
 import dev.pnptracker.resources.history_period_month
 import dev.pnptracker.resources.history_period_week
+import dev.pnptracker.resources.history_restore_game
+import dev.pnptracker.resources.history_restore_game_description
+import dev.pnptracker.resources.history_restore_game_failed
+import dev.pnptracker.resources.history_restore_game_gone
+import dev.pnptracker.resources.history_restore_notice_dismiss
+import dev.pnptracker.resources.history_restored_game
+import dev.pnptracker.resources.history_restored_game_namesake
 import dev.pnptracker.resources.history_shown_count
 import dev.pnptracker.resources.history_summary_game
 import dev.pnptracker.resources.history_summary_period
@@ -816,6 +823,13 @@ import dev.pnptracker.resources.table_complete_game_question
 import dev.pnptracker.resources.table_complete_game_unfinished
 import dev.pnptracker.resources.table_complete_game_yes
 import dev.pnptracker.resources.table_completed_mark
+import dev.pnptracker.resources.table_delete_game
+import dev.pnptracker.resources.table_delete_game_explanation
+import dev.pnptracker.resources.table_delete_game_failed
+import dev.pnptracker.resources.table_delete_game_gone
+import dev.pnptracker.resources.table_delete_game_no
+import dev.pnptracker.resources.table_delete_game_question
+import dev.pnptracker.resources.table_delete_game_yes
 import dev.pnptracker.resources.table_empty_completed
 import dev.pnptracker.resources.table_empty_completed_hint
 import dev.pnptracker.resources.table_empty_library
@@ -824,6 +838,7 @@ import dev.pnptracker.resources.table_empty_ongoing
 import dev.pnptracker.resources.table_empty_ongoing_hint
 import dev.pnptracker.resources.table_empty_tick
 import dev.pnptracker.resources.table_fit_column
+import dev.pnptracker.resources.table_game_menu_description
 import dev.pnptracker.resources.table_label
 import dev.pnptracker.resources.table_loading
 import dev.pnptracker.resources.table_more_actions
@@ -1047,6 +1062,13 @@ object Strings {
         val lineTaskConverted = Res.string.history_line_task_converted
         val lineGameDeleted = Res.string.history_line_game_deleted
         val lineGameRestored = Res.string.history_line_game_restored
+        val restoreGame = Res.string.history_restore_game
+        val restoreGameDescription = Res.string.history_restore_game_description
+        val restoredGame = Res.string.history_restored_game
+        val restoredGameNamesake = Res.string.history_restored_game_namesake
+        val restoreGameFailed = Res.string.history_restore_game_failed
+        val restoreGameGone = Res.string.history_restore_game_gone
+        val restoreNoticeDismiss = Res.string.history_restore_notice_dismiss
         val lineImportConfirmed = Res.string.history_line_import_confirmed
         val lineImportRolledBack = Res.string.history_line_import_rolled_back
         val lineTaskRolledBack = Res.string.history_line_task_rolled_back
@@ -1446,6 +1468,14 @@ object Strings {
 
         /** Takes the game's number and its name. */
         val moveGameDescription = Res.string.table_move_game_description
+        val gameMenuDescription = Res.string.table_game_menu_description
+        val deleteGame = Res.string.table_delete_game
+        val deleteGameQuestion = Res.string.table_delete_game_question
+        val deleteGameExplanation = Res.string.table_delete_game_explanation
+        val deleteGameYes = Res.string.table_delete_game_yes
+        val deleteGameNo = Res.string.table_delete_game_no
+        val deleteGameFailed = Res.string.table_delete_game_failed
+        val deleteGameGone = Res.string.table_delete_game_gone
         val loading = Res.string.table_loading
 
         /** Said when storage would not answer the table; never that it is empty. */

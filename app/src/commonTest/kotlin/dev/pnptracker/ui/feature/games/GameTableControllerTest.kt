@@ -21,6 +21,7 @@ import dev.pnptracker.domain.games.CellTextException
 import dev.pnptracker.domain.games.CellTextFailure
 import dev.pnptracker.domain.games.GameCompletionSnapshot
 import dev.pnptracker.domain.games.GameRenameOutcome
+import dev.pnptracker.domain.games.GameRestoreOutcome
 import dev.pnptracker.domain.games.GameSetupException
 import dev.pnptracker.domain.games.GameSetupFailure
 import dev.pnptracker.domain.games.GameSummary
@@ -127,6 +128,15 @@ class GameTableControllerTest {
         ) {
             completionChanges++
         }
+
+        val deleted = mutableListOf<EntityId>()
+
+        override suspend fun deleteGame(gameId: EntityId) {
+            failure?.let { throw GameSetupException(it) }
+            deleted += gameId
+        }
+
+        override suspend fun restoreGame(gameId: EntityId): GameRestoreOutcome = error("The table never restores a game.")
     }
 
     private fun row(
@@ -729,6 +739,66 @@ class GameTableControllerTest {
             }
 
             assertEquals(listOf("Harmonies", "Harmonies"), setup.createdNames)
+        }
+
+    // ------------------------------------------------- a game's menu, and deleting it
+
+    @Test
+    fun `the menu asks before deleting, and Vazgeç deletes nothing`() =
+        runBlocking<Unit> {
+            val setup = FakeSetup()
+            val table = FakeTable(listOf(row("Harmonies")))
+            val controller = controllerOf(table, setup)
+            val collecting = collect(controller)
+            val gameId = assertIs<GameTableRowsState.Content>(controller.state.rows).rows.single().gameId
+
+            controller.openGameMenu(gameId)
+            controller.beginGameDeletion()
+            assertEquals("Harmonies", controller.state.confirmingDeletionOf(gameId)?.gameName)
+            controller.cancelGameDeletion()
+
+            assertNull(controller.state.rowWork)
+            assertEquals(emptyList(), setup.deleted, "Vazgeç deleted the game")
+
+            controller.openGameMenu(gameId)
+            controller.beginGameDeletion()
+            controller.confirmGameDeletion()
+            assertEquals(listOf(gameId), setup.deleted)
+            assertNull(controller.state.rowWork)
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `a refused deletion leaves the question standing with the reason`() =
+        runBlocking<Unit> {
+            val setup = FakeSetup(failure = GameSetupFailure.COULD_NOT_SAVE)
+            val controller = controllerOf(FakeTable(listOf(row("Harmonies"))), setup)
+            val collecting = collect(controller)
+            val gameId = assertIs<GameTableRowsState.Content>(controller.state.rows).rows.single().gameId
+
+            controller.openGameMenu(gameId)
+            controller.beginGameDeletion()
+            controller.confirmGameDeletion()
+
+            val question = assertNotNull(controller.state.confirmingDeletionOf(gameId), "the question vanished with the answer")
+            assertEquals(GameSetupFailure.COULD_NOT_SAVE, question.failure)
+            assertFalse(question.isSaving)
+            collecting.cancelAndJoin()
+        }
+
+    @Test
+    fun `the menu does not open over a game being renamed`() =
+        runBlocking<Unit> {
+            val controller = controllerOf(FakeTable(listOf(row("Harmonies"), row("Catan"))))
+            val collecting = collect(controller)
+            val rows = assertIs<GameTableRowsState.Content>(controller.state.rows).rows
+
+            controller.beginRenaming(rows[0].gameId)
+            controller.openGameMenu(rows[1].gameId)
+
+            assertIs<RowWork.RenamingGame>(controller.state.rowWork)
+            assertTrue(controller.state.blockedByEditor, "the user is not told why nothing opened")
+            collecting.cancelAndJoin()
         }
 
     // ------------------------------------------------------ writing in a cell

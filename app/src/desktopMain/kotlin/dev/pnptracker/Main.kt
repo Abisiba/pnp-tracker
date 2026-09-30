@@ -225,10 +225,13 @@ fun main() {
     // write started from a pool happen on the very same task, through the very
     // same transaction, as one started from the table.
     val taskProgress = TaskProgressStore(database.taskProgressDao(), diagnostics = diagnostics)
+    // One setup store behind the table and the history: a game deleted from the
+    // one is brought back from the other through the same rows (PLAN 12.15).
+    val gameSetup = GameSetupStore(database.gameDao(), database.gameCellDao(), diagnostics = diagnostics)
     val gameTableController =
         GameTableController(
             table = GameTableStore(database.gameDao(), database.gameCellDao(), database.gameTableDao()),
-            setup = GameSetupStore(database.gameDao(), database.gameCellDao(), diagnostics = diagnostics),
+            setup = gameSetup,
             cells = CellTextStore(database.cellSegmentDao(), diagnostics = diagnostics),
             colors = colorCatalogue,
             taskCreation = TaskFromTextStore(database.taskFromTextDao(), diagnostics = diagnostics),
@@ -293,10 +296,11 @@ fun main() {
             diagnostics = diagnostics,
         )
 
-    // The history reads the same rows every write above it appends to, and can
-    // do nothing else: PLAN 5.12 keeps the record and the thing recorded in one
-    // transaction, so the section is given a source with no way to write.
-    val historyController = HistoryController(HistoryStore(database.historyDao()), diagnostics = diagnostics)
+    // The history reads the same rows every write above it appends to. Its source
+    // has no way to write: PLAN 5.12 keeps the record and the thing recorded in
+    // one transaction. The one thing it can do is bring a deleted game back, and
+    // that goes through the setup store's own transaction, with a line of its own.
+    val historyController = HistoryController(HistoryStore(database.historyDao()), games = gameSetup, diagnostics = diagnostics)
 
     application {
         // An error no typed boundary caught is recorded and then handled exactly as

@@ -76,6 +76,7 @@ class HistoryStore(
             gameName = row.gameName,
             taskId = row.taskId,
             taskName = row.taskName,
+            gameIsDeleted = row.gameIsDeleted,
         )
 
     /**

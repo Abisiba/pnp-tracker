@@ -28,6 +28,9 @@ data class HistoryEventRow(
     val gameId: EntityId,
     @ColumnInfo(name = "game_name")
     val gameName: String,
+    /** Whether the game is deleted now — not then: it decides whether it can be brought back. */
+    @ColumnInfo(name = "game_is_deleted")
+    val gameIsDeleted: Boolean,
     /** Absent only on the two kinds that are about the game itself. */
     @ColumnInfo(name = "task_id")
     val taskId: EntityId?,

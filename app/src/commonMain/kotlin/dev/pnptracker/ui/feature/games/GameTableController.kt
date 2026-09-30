@@ -643,6 +643,7 @@ class GameTableController(
             // `Escape` leave a name exactly as it was.
             if (row is RowWork.ConfirmingGameCompletion && row.isSaving) return
             if (row is RowWork.RenamingGame && row.isSaving) return
+            if (row is RowWork.ConfirmingGameDeletion && row.isSaving) return
             state = state.copy(rowWork = row.parent, blockedByEditor = false, focusRecall = state.focusRecall + 1).redrawn()
             return
         }
@@ -1887,6 +1888,92 @@ class GameTableController(
         // Still shown afterwards, so nothing has to move.
         if (state.view.includes(visible[at].copy(isCompleted = true))) return null
         val next = visible.getOrNull(at + 1) ?: visible.getOrNull(at - 1)
+        return next?.let { RowFocusTarget.Game(it.gameId) } ?: RowFocusTarget.ViewFilter
+    }
+
+    // ------------------------------------------------ a game's menu, and deleting it
+
+    /**
+     * Opens the game's menu over its handle.
+     *
+     * Only one thing at a time, as everywhere in the table: with a cell or a
+     * question open this changes nothing and says so. Asking again for the menu
+     * that is already open closes it, the way a second click on a menu button does.
+     */
+    fun openGameMenu(gameId: EntityId) {
+        val existing = state.rowWork
+        if (existing is RowWork.GameMenu && existing.gameId == gameId) {
+            closeGameMenu()
+            return
+        }
+        if (state.work != null || existing != null) {
+            state = blockedByOpenWork()
+            return
+        }
+        val row = rowOf(gameId) ?: return
+        state = state.copy(rowWork = RowWork.GameMenu(gameId, row.gameName), createdTask = null, blockedByEditor = false)
+    }
+
+    /** Closes the menu without doing anything. */
+    fun closeGameMenu() {
+        if (state.rowWork !is RowWork.GameMenu) return
+        state = state.copy(rowWork = null, focusRecall = state.focusRecall + 1)
+    }
+
+    /** `Oyunu sil` in the menu: asks first, naming the game. */
+    fun beginGameDeletion() {
+        val menu = state.rowWork as? RowWork.GameMenu ?: return
+        state = state.copy(rowWork = RowWork.ConfirmingGameDeletion(menu.gameId, menu.gameName))
+    }
+
+    /** `Vazgeç`: closes the question and the menu, and writes nothing. */
+    fun cancelGameDeletion() {
+        val confirming = state.rowWork as? RowWork.ConfirmingGameDeletion ?: return
+        if (confirming.isSaving) return
+        state = state.copy(rowWork = null, focusRecall = state.focusRecall + 1)
+    }
+
+    /**
+     * `Evet, sil`: takes the game out of view through its tombstone (PLAN 5.2).
+     *
+     * Sent once; a second answer arriving while the first is in flight does
+     * nothing. The row leaves with the next reading of the table, and the
+     * keyboard is handed to the row that takes its place. A refusal leaves the
+     * question standing with the reason on it.
+     */
+    suspend fun confirmGameDeletion() {
+        val confirming = state.rowWork as? RowWork.ConfirmingGameDeletion ?: return
+        if (confirming.isSaving) return
+        val landing = neighbourOf(confirming.gameId)
+        state = state.copy(rowWork = confirming.copy(isSaving = true, failure = null))
+        try {
+            setup.deleteGame(confirming.gameId)
+        } catch (refusal: GameSetupException) {
+            state =
+                state.copy(
+                    rowWork =
+                        (state.rowWork as? RowWork.ConfirmingGameDeletion ?: confirming).copy(
+                            isSaving = false,
+                            failure = refusal.failure,
+                        ),
+                    focusRecall = state.focusRecall + 1,
+                )
+            return
+        }
+        state =
+            state.copy(
+                rowWork = null,
+                blockedByEditor = false,
+                focusAfterRow = landing,
+                rowFocusRecall = state.rowFocusRecall + 1,
+            )
+    }
+
+    /** The row the keyboard goes to once [gameId]'s row has left the table. */
+    private fun neighbourOf(gameId: EntityId): RowFocusTarget {
+        val visible = (state.rows as? GameTableRowsState.Content)?.rows.orEmpty()
+        val at = visible.indexOfFirst { it.gameId == gameId }
+        val next = if (at < 0) null else visible.getOrNull(at + 1) ?: visible.getOrNull(at - 1)
         return next?.let { RowFocusTarget.Game(it.gameId) } ?: RowFocusTarget.ViewFilter
     }
 
