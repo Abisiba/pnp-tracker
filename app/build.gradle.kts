@@ -18,7 +18,7 @@ plugins {
 // The one version this application has (master §33 R5). Everything that says a
 // version — AppInfo, the backup documents, the launcher, the archive and the Arch
 // package — is derived from it; nothing else writes one down.
-version = "0.1.10"
+version = "0.1.11"
 
 /** Which system this build is running on; the installer is made only on Windows. */
 val onWindows: Boolean = System.getProperty("os.name").lowercase().contains("windows")
