@@ -11,6 +11,7 @@ import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.platform.settings.DesktopTableSizesStore
 import dev.pnptracker.ui.ComposeSceneHarness
 import dev.pnptracker.ui.RealStack
+import dev.pnptracker.ui.WatchedTableSizesStore
 import dev.pnptracker.ui.reads
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
@@ -62,8 +63,12 @@ class TableColumnOrderTest {
         fail("never happened: $what")
     }
 
+    /** The store of the table opened last, watched so a test waits on its writes and not on the file. */
+    private lateinit var sizesStore: WatchedTableSizesStore
+
     private fun openTable(stack: RealStack): Pair<ComposeSceneHarness, GameTableController> {
-        val table = stack.tableControllerWith(sizes = DesktopTableSizesStore(sizesFile))
+        sizesStore = WatchedTableSizesStore(DesktopTableSizesStore(sizesFile))
+        val table = stack.tableControllerWith(sizes = sizesStore)
         val screen = ComposeSceneHarness(width = 2000, height = 900) { GameTableScreen(table) }
         screen.settle("the table is read") { table.state.rows !is GameTableRowsState.Loading }
         return screen to table
@@ -135,6 +140,16 @@ class TableColumnOrderTest {
 
     private fun stored(): List<TableColumn> = runBlocking { DesktopTableSizesStore(sizesFile).read().columnOrder }
 
+    /**
+     * Waits until the table has finished writing what it shows, then reads the
+     * file once. Reading the file while it is replaced makes Windows refuse the
+     * write (WatchedWrites), so the file is never polled.
+     */
+    private fun ComposeSceneHarness.writtenOrder(table: GameTableController): List<TableColumn> {
+        settle("the order is written") { sizesStore.writes.settledOn(table.state.sizes) }
+        return stored()
+    }
+
     @Test
     fun `the table opens in today's order`() {
         RealStack().use { stack ->
@@ -169,7 +184,7 @@ class TableColumnOrderTest {
                         "the order was written before the drag ended",
                     )
                 }
-                screen.settle("the order is written") { Files.exists(sizesFile) && stored().first() == TableColumn.NOTES }
+                assertEquals(TableColumn.NOTES, screen.writtenOrder(table).first())
 
                 assertEquals(listOf("Notlar") + (HEADINGS - "Notlar"), screen.headings())
                 assertTrue(
@@ -198,7 +213,7 @@ class TableColumnOrderTest {
                     table.state.sizes.columnOrder
                         .first() == TableColumn.THREE_D
                 }
-                screen.settle("the order is written") { Files.exists(sizesFile) && stored() == table.state.sizes.columnOrder }
+                assertEquals(table.state.sizes.columnOrder, screen.writtenOrder(table))
             }
             val remembered = table.state.sizes.columnOrder
             assertTrue(remembered != DEFAULT_COLUMN_ORDER)
@@ -232,14 +247,15 @@ class TableColumnOrderTest {
                 makeHarmonies(screen, table)
                 table.resizeColumn(TableColumn.CARD, 320f)
                 screen.carry("Notlar", onto = "Oyun")
-                screen.settle("the order is written") { Files.exists(sizesFile) && stored().first() == TableColumn.NOTES }
+                assertEquals(TableColumn.NOTES, screen.writtenOrder(table).first())
 
                 assertTrue(screen.tabTo(MORE_ACTIONS, limit = 40), "the menu cannot be reached from the keyboard")
                 screen.press(Key.Enter)
                 screen.render()
                 screen.render()
                 assertTrue(screen.click(RESET_ORDER), "there is no way back to the default order")
-                screen.settle("the default order is written") { stored() == DEFAULT_COLUMN_ORDER }
+                screen.settle("the default order is shown") { table.state.sizes.columnOrder == DEFAULT_COLUMN_ORDER }
+                assertEquals(DEFAULT_COLUMN_ORDER, screen.writtenOrder(table))
 
                 assertEquals(HEADINGS, screen.headings())
                 assertEquals(320f, table.state.sizes.widthOf(TableColumn.CARD), "putting the order back reset a width")
@@ -254,7 +270,7 @@ class TableColumnOrderTest {
             screen.use {
                 val gameId = makeHarmonies(screen, table)
                 screen.carry("Notlar", onto = "Oyun")
-                screen.settle("the order is written") { Files.exists(sizesFile) && stored().first() == TableColumn.NOTES }
+                assertEquals(TableColumn.NOTES, screen.writtenOrder(table).first())
 
                 screen.mouseDoubleClick(screen.cellBounds("Notlar").center)
                 screen.settle("the notes editor opens") { table.state.work is CellWork.WritingText }
@@ -291,7 +307,7 @@ class TableColumnOrderTest {
                     }
 
                 screen.carry("3D Baskı", onto = "Notlar")
-                screen.settle("the order is written") { Files.exists(sizesFile) && stored().last() == TableColumn.THREE_D }
+                assertEquals(TableColumn.THREE_D, screen.writtenOrder(table).last())
 
                 val after =
                     runBlocking {

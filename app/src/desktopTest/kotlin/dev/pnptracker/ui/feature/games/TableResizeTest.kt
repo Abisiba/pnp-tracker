@@ -15,6 +15,7 @@ import dev.pnptracker.domain.model.EntityId
 import dev.pnptracker.platform.settings.DesktopTableSizesStore
 import dev.pnptracker.ui.ComposeSceneHarness
 import dev.pnptracker.ui.RealStack
+import dev.pnptracker.ui.WatchedTableSizesStore
 import dev.pnptracker.ui.reads
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -73,9 +74,13 @@ class TableResizeTest {
         fail("never happened: $what")
     }
 
+    /** The store of the table opened last, watched so a test waits on its writes and not on the file. */
+    private lateinit var sizesStore: WatchedTableSizesStore
+
     /** Harmonies, with a word in its 3D cell, on a screen that remembers its sizes. */
     private fun openTable(stack: RealStack): Pair<ComposeSceneHarness, GameTableController> {
-        val table = stack.tableControllerWith(sizes = DesktopTableSizesStore(sizesFile))
+        sizesStore = WatchedTableSizesStore(DesktopTableSizesStore(sizesFile))
+        val table = stack.tableControllerWith(sizes = sizesStore)
         val screen = ComposeSceneHarness(width = 1500, height = 900) { GameTableScreen(table) }
         screen.settle("the table is read") { table.state.rows !is GameTableRowsState.Loading }
         return screen to table
@@ -258,10 +263,12 @@ class TableResizeTest {
                 // Each drag's write runs off the screen's thread and one after
                 // the other. Closing the screen cancels a write still waiting its
                 // turn, which on a slow disk left the file with the width and
-                // without the height, so the file is waited on before the close.
-                first.settle("both drags are on disk") {
-                    runBlocking { DesktopTableSizesStore(sizesFile).read() } == table.state.sizes
-                }
+                // without the height, so the writes are waited on before the close
+                // — through the store, and the file read once afterwards: reading
+                // it while it is replaced makes Windows refuse the write
+                // (WatchedWrites).
+                first.settle("both drags are written") { table.state.sizes.let(sizesStore.writes::settledOn) }
+                assertEquals(table.state.sizes, runBlocking { DesktopTableSizesStore(sizesFile).read() }, "the drags are not on disk")
             }
 
             // A new controller over the same file, which is what a restart is.
